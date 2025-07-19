@@ -1,0 +1,26 @@
+# Copy this file to .env and fill in your actual values
+
+# Database
+DATABASE_URL="file:./database/matchexec.db"
+
+# Discord Bot
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
+DISCORD_CLIENT_ID=your_discord_client_id_here
+DISCORD_GUILD_ID=your_discord_guild_id_here
+
+# Web Server
+PORT=3000
+NODE_ENV=development
+SESSION_SECRET=your_session_secret_here
+
+# External APIs
+OVERWATCH_API_KEY=your_overwatch_api_key_here
+MARVEL_RIVALS_API_KEY=your_marvel_rivals_api_key_here
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE_PATH=./logs/app.log
+
+# Statistics & Scheduling
+STATS_UPDATE_INTERVAL=300000
+EMBED_UPDATE_INTERVAL=600000 

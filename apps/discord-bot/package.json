@@ -1,0 +1,25 @@
+{
+  "name": "@matchexec/discord-bot",
+  "version": "1.0.0",
+  "description": "Discord.js bot for MatchExec multi-game statistics",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/ --ext .ts",
+    "deploy-commands": "ts-node src/deploy-commands.ts"
+  },
+  "dependencies": {
+    "@matchexec/shared": "*",
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "nodemon": "^3.0.0"
+  }
+} 
