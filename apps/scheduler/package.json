@@ -1,0 +1,25 @@
+{
+  "name": "@matchexec/scheduler",
+  "version": "1.0.0",
+  "description": "Task scheduler for MatchExec using node-cron",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/ --ext .ts"
+  },
+  "dependencies": {
+    "@matchexec/shared": "*",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "nodemon": "^3.0.0"
+  }
+} 
