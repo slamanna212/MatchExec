@@ -1,0 +1,122 @@
+[
+    {
+        "id": "antarctic-peninsula",
+        "name": "Antarctic Peninsula",
+        "type": "Control",
+        "location": "Antarctica",
+        "thumbnailUrl": "/assets/games/overwatch2/maps/antarctic-peninsula.webp"
+      },    
+    {
+        "id": "busan",
+        "name": "Busan",
+        "type": "Control",
+        "location": "South Korea",
+        "thumbnailUrl": "/assets/games/overwatch2/maps/busan.webp"
+      },    
+    {
+      "id": "ilios",
+      "name": "Ilios",
+      "type": "Control",
+      "location": "Greece",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/ilios.webp"
+    },
+    {
+      "id": "lijiang-tower",
+      "name": "Lijiang Tower",
+      "type": "Control",
+      "location": "China",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "nepal",
+      "name": "Nepal",
+      "type": "Control",
+      "location": "Nepal",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "oasis",
+      "name": "Oasis",
+      "type": "Control",
+      "location": "Saudi Arabia",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "esperance",
+      "name": "Esperance",
+      "type": "Control",
+      "location": "Australia",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "kings-row",
+      "name": "King’s Row",
+      "type": "Hybrid",
+      "location": "United Kingdom",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "eichenwalde",
+      "name": "Eichenwalde",
+      "type": "Hybrid",
+      "location": "Germany",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "hollywood",
+      "name": "Hollywood",
+      "type": "Hybrid",
+      "location": "United States",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "numbani",
+      "name": "Numbani",
+      "type": "Hybrid",
+      "location": "Nigeria",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "dorado",
+      "name": "Dorado",
+      "type": "Escort",
+      "location": "Mexico",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "junkertown",
+      "name": "Junkertown",
+      "type": "Escort",
+      "location": "Australia",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "rialto",
+      "name": "Rialto",
+      "type": "Escort",
+      "location": "Italy",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "route-66",
+      "name": "Route 66",
+      "type": "Escort",
+      "location": "United States",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "watchpoint-gibraltar",
+      "name": "Watchpoint: Gibraltar",
+      "type": "Escort",
+      "location": "Gibraltar",
+      "thumbnailUrl": ""
+    },
+    {
+      "id": "new-junk-city",
+      "name": "New Junk City",
+      "type": "Push",
+      "location": "Australia",
+      "thumbnailUrl": ""
+    }
+]
+  
