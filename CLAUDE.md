@@ -69,6 +69,49 @@ docker run -p 3000:3000 --env-file .env matchexec
 
 ## Database
 
+The project uses SQLite for data persistence with automated migrations and seeding at startup.
+
+### Schema
+
+The database includes tables for:
+
+- **games**: Game information (Overwatch 2, Marvel Rivals, etc.)
+- **game_modes**: Game modes for each game (Control, Escort, etc.)
+- **game_maps**: Maps available for each game and mode
+- **tournaments**: Tournament records with status tracking
+- **tournament_participants**: Players registered for tournaments
+- **tournament_matches**: Individual matches within tournaments
+- **data_versions**: Tracks seeded data versions to avoid re-seeding
+- **migrations**: Migration execution tracking
+
+### Migrations
+
+Database migrations are automatically executed at startup. Migration files are stored in `/migrations/` and run in alphabetical order. Each migration is tracked to prevent duplicate execution.
+
+### Data Seeding
+
+Game data is automatically seeded from JSON files in `/data/games/`. Each game directory should contain:
+
+- `game.json`: Game metadata with `dataVersion` field
+- `modes.json`: Available game modes (optional)
+- `maps.json`: Available maps (optional)
+
+The seeder checks `dataVersion` in each game.json and only re-seeds when the version changes, preventing duplicate data insertion.
+
+### Usage
+
+```typescript
+import { initializeDatabase } from './lib/database';
+
+// Initialize database with migrations and seeding
+const db = await initializeDatabase();
+
+// Use database instance
+const games = await db.all('SELECT * FROM games');
+```
+
+The database is initialized automatically when any process starts, ensuring consistent schema and data across all processes.
+
 
 ## Technology Stack
 
