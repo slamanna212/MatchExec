@@ -1,0 +1,14 @@
+{
+  "id": "overwatch2",
+  "name": "Overwatch 2",
+  "genre": "First-Person Shooter",
+  "developer": "Blizzard Entertainment",
+  "releaseDate": "2022-10-04",
+  "version": "1.0.0",
+  "description": "A team-based multiplayer first-person shooter featuring hero-based combat and objective-driven matches.",
+  "minPlayers": 2,
+  "maxPlayers": 12,
+  "assets": {
+    "iconUrl": "/assets/games/overwatch2/icon.png"
+  }
+}

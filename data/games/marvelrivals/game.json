@@ -1,0 +1,15 @@
+{
+  "id": "marvel-rivals",
+  "name": "Marvel Rivals",
+  "genre": "Hero Shooter",
+  "developer": "Second Dinner Studios",
+  "releaseDate": "2023-04-18",
+  "version": "1.0.0",
+  "description": "A fast-paced, team-based hero shooter where iconic Marvel characters clash in objective-driven matches.",
+  "minPlayers": 2,
+  "maxPlayers": 12,
+  "assets": {
+    "iconUrl": "/assets/games/marvel-rivals/icon.png",
+    "heroImageUrl": "/assets/games/marvel-rivals/hero.jpg"
+  }
+}
