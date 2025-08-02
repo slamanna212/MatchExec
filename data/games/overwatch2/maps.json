@@ -25,22 +25,29 @@
       "name": "Lijiang Tower",
       "type": "Control",
       "location": "China",
-      "thumbnailUrl": ""
+      "thumbnailUrl": "/assets/games/overwatch2/maps/lijiang-tower.webp"
     },
     {
       "id": "nepal",
       "name": "Nepal",
       "type": "Control",
       "location": "Nepal",
-      "thumbnailUrl": ""
+      "thumbnailUrl": "/assets/games/overwatch2/maps/nepal.webp"
     },
     {
       "id": "oasis",
       "name": "Oasis",
       "type": "Control",
       "location": "Saudi Arabia",
-      "thumbnailUrl": ""
+      "thumbnailUrl": "/assets/games/overwatch2/maps/oasis.webp"
     },
+    {
+      "id": "samoa",
+      "name": "Samoa",
+      "type": "Control",
+      "location": "Samoa",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+    },    
     {
       "id": "esperance",
       "name": "Esperance",
