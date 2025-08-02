@@ -1,0 +1,43 @@
+{
+  "name": "tournament-bot",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "dev:all": "pm2 start ecosystem.dev.config.js",
+    "dev:stop": "pm2 stop ecosystem.dev.config.js",
+    "dev:restart": "pm2 restart ecosystem.dev.config.js",
+    "dev:logs": "pm2 logs",
+    "build:processes": "tsc processes/**/*.ts --outDir dist",
+    "prod:start": "pm2 start ecosystem.config.js",
+    "prod:stop": "pm2 stop ecosystem.config.js"
+  },
+  "dependencies": {
+    "@heroui/react": "^2.8.2",
+    "@heroui/theme": "^2.4.20",
+    "@types/sqlite3": "^5.1.0",
+    "discord.js": "^14.21.0",
+    "framer-motion": "^12.23.12",
+    "next": "15.4.5",
+    "node-cron": "^4.2.1",
+    "pm2": "^6.0.8",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "sqlite3": "^5.1.7",
+    "tsx": "^4.20.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
