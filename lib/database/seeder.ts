@@ -88,15 +88,21 @@ export class DatabaseSeeder {
     // Seed modes if they exist
     const modesPath = path.join(gamePath, 'modes.json');
     if (fs.existsSync(modesPath)) {
-      const modesData: ModeData[] = JSON.parse(fs.readFileSync(modesPath, 'utf8'));
-      await this.seedModes(gameData.id, modesData);
+      const modesContent = fs.readFileSync(modesPath, 'utf8').trim();
+      if (modesContent) {
+        const modesData: ModeData[] = JSON.parse(modesContent);
+        await this.seedModes(gameData.id, modesData);
+      }
     }
 
     // Seed maps if they exist
     const mapsPath = path.join(gamePath, 'maps.json');
     if (fs.existsSync(mapsPath)) {
-      const mapsData: MapData[] = JSON.parse(fs.readFileSync(mapsPath, 'utf8'));
-      await this.seedMaps(gameData.id, mapsData);
+      const mapsContent = fs.readFileSync(mapsPath, 'utf8').trim();
+      if (mapsContent) {
+        const mapsData: MapData[] = JSON.parse(mapsContent);
+        await this.seedMaps(gameData.id, mapsData);
+      }
     }
 
     // Update data version
