@@ -1,31 +1,29 @@
 'use client'
 
-import { Card, CardBody, CardHeader } from '@heroui/react';
+import { Card, Text, Stack, List } from '@mantine/core';
 
 export default function GamesPage() {
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Games</h1>
-        <p className="text-default-500 mt-2">Manage available games and their configurations</p>
-      </div>
+      <Stack gap="xl">
+        <div>
+          <Text size="xl" fw={700}>Games</Text>
+          <Text c="dimmed" mt="xs">Manage available games and their configurations</Text>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-xl font-semibold">Game Management</h2>
-        </CardHeader>
-        <CardBody>
-          <p className="text-default-600">
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Game Management</Text>
+          <Text c="dimmed" mb="md">
             This page will contain game management features including:
-          </p>
-          <ul className="list-disc list-inside mt-4 space-y-2 text-default-600">
-            <li>View all available games</li>
-            <li>Configure game modes and maps</li>
-            <li>Add new games to the system</li>
-            <li>Edit game settings and metadata</li>
-          </ul>
-        </CardBody>
-      </Card>
+          </Text>
+          <List>
+            <List.Item>View all available games</List.Item>
+            <List.Item>Configure game modes and maps</List.Item>
+            <List.Item>Add new games to the system</List.Item>
+            <List.Item>Edit game settings and metadata</List.Item>
+          </List>
+        </Card>
+      </Stack>
     </div>
   );
 }

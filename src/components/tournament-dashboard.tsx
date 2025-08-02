@@ -3,14 +3,16 @@
 import { useState, useEffect } from 'react';
 import { 
   Card, 
-  CardBody, 
-  CardHeader, 
+  Text, 
   Button, 
-  Chip,
+  Badge,
   Avatar,
   Divider,
-  Spinner
-} from '@heroui/react';
+  Loader,
+  Group,
+  Stack,
+  Grid
+} from '@mantine/core';
 import { Tournament, Game } from '@/shared/types';
 import { CreateTournamentModal } from './create-tournament-modal';
 
@@ -58,12 +60,12 @@ export function TournamentDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'created': return 'default';
-      case 'registration': return 'primary';
-      case 'ongoing': return 'warning';
-      case 'completed': return 'success';
-      case 'cancelled': return 'danger';
-      default: return 'default';
+      case 'created': return 'gray';
+      case 'registration': return 'blue';
+      case 'ongoing': return 'yellow';
+      case 'completed': return 'green';
+      case 'cancelled': return 'red';
+      default: return 'gray';
     }
   };
 
@@ -75,95 +77,95 @@ export function TournamentDashboard() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <Spinner size="lg" />
+        <Loader size="lg" />
       </div>
     );
   }
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <div className="flex justify-between items-center mb-8">
+      <Group justify="space-between" mb="xl">
         <div>
-          <h1 className="text-3xl font-bold">Tournament Dashboard</h1>
-          <p className="text-default-500 mt-2">Manage and view all tournaments</p>
+          <Text size="xl" fw={700}>Tournament Dashboard</Text>
+          <Text c="dimmed" mt="xs">Manage and view all tournaments</Text>
         </div>
         <Button 
-          color="primary" 
           size="lg"
-          onPress={() => setCreateModalOpen(true)}
+          onClick={() => setCreateModalOpen(true)}
         >
           Create Tournament
         </Button>
-      </div>
+      </Group>
 
-      <Divider className="mb-8" />
+      <Divider mb="xl" />
 
       {tournaments.length === 0 ? (
-        <Card className="p-8">
-          <CardBody className="text-center">
-            <h3 className="text-xl font-semibold mb-2">No tournaments yet</h3>
-            <p className="text-default-500 mb-4">
+        <Card p="xl">
+          <Stack align="center">
+            <Text size="xl" fw={600}>No tournaments yet</Text>
+            <Text c="dimmed" mb="md">
               Create your first tournament to get started
-            </p>
+            </Text>
             <Button 
-              color="primary"
-              onPress={() => setCreateModalOpen(true)}
+              onClick={() => setCreateModalOpen(true)}
             >
               Create Tournament
             </Button>
-          </CardBody>
+          </Stack>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Grid>
           {tournaments.map((tournament) => (
-            <Card key={tournament.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="flex gap-3">
-                <Avatar
-                  src={tournament.game_icon}
-                  name={tournament.game_name}
-                  size="md"
-                />
-                <div className="flex flex-col flex-1">
-                  <p className="text-md font-semibold">{tournament.name}</p>
-                  <p className="text-small text-default-500">{tournament.game_name}</p>
-                </div>
-                <Chip 
-                  color={getStatusColor(tournament.status)} 
-                  size="sm"
-                  variant="flat"
-                >
-                  {tournament.status}
-                </Chip>
-              </CardHeader>
-              <Divider />
-              <CardBody>
-                <div className="space-y-2">
+            <Grid.Col key={tournament.id} span={{ base: 12, md: 6, lg: 4 }}>
+              <Card shadow="sm" padding="lg" radius="md" withBorder>
+                <Group mb="md">
+                  <Avatar
+                    src={tournament.game_icon}
+                    alt={tournament.game_name}
+                    size="md"
+                  />
+                  <Stack gap="xs" style={{ flex: 1 }}>
+                    <Text fw={600}>{tournament.name}</Text>
+                    <Text size="sm" c="dimmed">{tournament.game_name}</Text>
+                  </Stack>
+                  <Badge 
+                    color={getStatusColor(tournament.status)} 
+                    size="sm"
+                  >
+                    {tournament.status}
+                  </Badge>
+                </Group>
+                
+                <Divider mb="md" />
+                
+                <Stack gap="xs">
                   {tournament.description && (
-                    <p className="text-small text-default-600">{tournament.description}</p>
+                    <Text size="sm" c="dimmed">{tournament.description}</Text>
                   )}
-                  <div className="flex justify-between text-small">
-                    <span className="text-default-500">Max Participants:</span>
-                    <span>{tournament.max_participants}</span>
-                  </div>
-                  <div className="flex justify-between text-small">
-                    <span className="text-default-500">Created:</span>
-                    <span>{new Date(tournament.created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <Button size="sm" variant="flat" className="flex-1">
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Max Participants:</Text>
+                    <Text size="sm">{tournament.max_participants}</Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Created:</Text>
+                    <Text size="sm">{new Date(tournament.created_at).toLocaleDateString()}</Text>
+                  </Group>
+                </Stack>
+                
+                <Group mt="md" gap="xs">
+                  <Button size="sm" variant="light" style={{ flex: 1 }}>
                     View Details
                   </Button>
                   {tournament.status === 'created' && (
-                    <Button size="sm" color="primary" variant="flat">
+                    <Button size="sm">
                       Start Registration
                     </Button>
                   )}
-                </div>
-              </CardBody>
-            </Card>
+                </Group>
+              </Card>
+            </Grid.Col>
           ))}
-        </div>
+        </Grid>
       )}
 
       <CreateTournamentModal

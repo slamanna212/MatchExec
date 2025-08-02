@@ -1,12 +1,12 @@
 # MatchExec Tournament Bot
 
-A Discord tournament management bot built with Next.js, React, HeroUI, and PM2 multi-process architecture.
+A Discord tournament management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
 
 ## Architecture
 
 This project uses a multi-process architecture managed by PM2:
 
-1. **Web App** (`src/app/`): Next.js application with HeroUI components
+1. **Web App** (`src/app/`): Next.js application with Mantine UI components
 2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for tournament commands
 3. **Scheduler** (`processes/scheduler/`): Cron jobs for tournament management
 4. **Worker** (`processes/worker/`): Background job processing
@@ -49,9 +49,9 @@ docker run -p 3000:3000 --env-file .env matchexec
 ## Project Structure
 
 ├── src/app/                 # Next.js application
-│   ├── layout.tsx          # Root layout with HeroUI provider
+│   ├── layout.tsx          # Root layout with Mantine provider
 │   ├── page.tsx            # Home page
-│   ├── providers.tsx       # HeroUI provider setup
+│   ├── providers.tsx       # Mantine provider setup
 │   └── globals.css         # Global styles
 ├── processes/
 │   ├── discord-bot/        # Discord bot process
@@ -116,7 +116,7 @@ The database is initialized automatically when any process starts, ensuring cons
 ## Technology Stack
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **UI Library**: HeroUI
+- **UI Library**: Mantine
 - **Discord**: Discord.js
 - **Process Management**: PM2
 - **Database**: SQLite

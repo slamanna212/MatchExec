@@ -1,11 +1,17 @@
 'use client'
 
-import { HeroUIProvider } from '@heroui/react'
+import { MantineProvider, createTheme } from '@mantine/core'
+import '@mantine/core/styles.css'
+
+const theme = createTheme({
+  colorScheme: 'auto',
+  primaryColor: 'blue',
+})
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <HeroUIProvider theme="purple">
+    <MantineProvider theme={theme} defaultColorScheme="auto">
       {children}
-    </HeroUIProvider>
+    </MantineProvider>
   )
 }

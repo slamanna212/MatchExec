@@ -1,49 +1,39 @@
 'use client'
 
-import { Card, CardBody, CardHeader } from '@heroui/react';
+import { Card, Text, Stack } from '@mantine/core';
 
 export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-default-500 mt-2">Configure application and tournament settings</p>
-      </div>
+      <Stack gap="xl">
+        <div>
+          <Text size="xl" fw={700}>Settings</Text>
+          <Text c="dimmed" mt="xs">Configure application and tournament settings</Text>
+        </div>
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Discord Configuration</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="text-default-600">
+        <Stack gap="lg">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Discord Configuration</Text>
+            <Text c="dimmed">
               Configure Discord bot settings and permissions.
-            </p>
-          </CardBody>
-        </Card>
+            </Text>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Tournament Defaults</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="text-default-600">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Tournament Defaults</Text>
+            <Text c="dimmed">
               Set default values for tournament creation and management.
-            </p>
-          </CardBody>
-        </Card>
+            </Text>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Notification Settings</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="text-default-600">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Notification Settings</Text>
+            <Text c="dimmed">
               Configure how and when notifications are sent to participants.
-            </p>
-          </CardBody>
-        </Card>
-      </div>
+            </Text>
+          </Card>
+        </Stack>
+      </Stack>
     </div>
   );
 }

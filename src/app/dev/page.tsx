@@ -1,77 +1,69 @@
 'use client'
 
-import { Card, CardBody, CardHeader, Chip } from '@heroui/react';
+import { Card, Text, Badge, Grid, Stack, Group, List } from '@mantine/core';
 
 export default function DevPage() {
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Developer Tools</h1>
-        <p className="text-default-500 mt-2">Development utilities and system information</p>
-      </div>
+      <Stack gap="xl">
+        <div>
+          <Text size="xl" fw={700}>Developer Tools</Text>
+          <Text c="dimmed" mt="xs">Development utilities and system information</Text>
+        </div>
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader className="flex justify-between">
-            <h2 className="text-xl font-semibold">System Status</h2>
-            <Chip color="success" variant="flat">Online</Chip>
-          </CardHeader>
-          <CardBody>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-small text-default-500">Database</p>
-                <p className="font-semibold">SQLite Connected</p>
-              </div>
-              <div>
-                <p className="text-small text-default-500">Discord Bot</p>
-                <p className="font-semibold">Not Connected</p>
-              </div>
-              <div>
-                <p className="text-small text-default-500">Scheduler</p>
-                <p className="font-semibold">Running</p>
-              </div>
-              <div>
-                <p className="text-small text-default-500">Worker</p>
-                <p className="font-semibold">Running</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+        <Stack gap="lg">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group justify="space-between" mb="md">
+              <Text size="lg" fw={600}>System Status</Text>
+              <Badge color="green">Online</Badge>
+            </Group>
+            <Grid>
+              <Grid.Col span={6}>
+                <Text size="sm" c="dimmed">Database</Text>
+                <Text fw={600}>SQLite Connected</Text>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="sm" c="dimmed">Discord Bot</Text>
+                <Text fw={600}>Not Connected</Text>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="sm" c="dimmed">Scheduler</Text>
+                <Text fw={600}>Running</Text>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="sm" c="dimmed">Worker</Text>
+                <Text fw={600}>Running</Text>
+              </Grid.Col>
+            </Grid>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Database Tools</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="text-default-600 mb-4">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Database Tools</Text>
+            <Text c="dimmed" mb="md">
               Tools for database management and debugging.
-            </p>
-            <ul className="list-disc list-inside space-y-2 text-default-600">
-              <li>View database schema</li>
-              <li>Run SQL queries</li>
-              <li>Manage data seeding</li>
-              <li>Clear tournament data</li>
-            </ul>
-          </CardBody>
-        </Card>
+            </Text>
+            <List>
+              <List.Item>View database schema</List.Item>
+              <List.Item>Run SQL queries</List.Item>
+              <List.Item>Manage data seeding</List.Item>
+              <List.Item>Clear tournament data</List.Item>
+            </List>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Process Management</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="text-default-600 mb-4">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Process Management</Text>
+            <Text c="dimmed" mb="md">
               Monitor and control PM2 processes.
-            </p>
-            <ul className="list-disc list-inside space-y-2 text-default-600">
-              <li>View process status</li>
-              <li>Restart individual processes</li>
-              <li>View process logs</li>
-              <li>Monitor resource usage</li>
-            </ul>
-          </CardBody>
-        </Card>
-      </div>
+            </Text>
+            <List>
+              <List.Item>View process status</List.Item>
+              <List.Item>Restart individual processes</List.Item>
+              <List.Item>View process logs</List.Item>
+              <List.Item>Monitor resource usage</List.Item>
+            </List>
+          </Card>
+        </Stack>
+      </Stack>
     </div>
   );
 }

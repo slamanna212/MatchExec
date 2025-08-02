@@ -1,120 +1,104 @@
 'use client'
 
-import { useState } from 'react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import { useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import {
+  AppShell,
   Navbar,
-  NavbarBrand,
-  NavbarContent,
-  NavbarItem,
-  NavbarMenu,
-  NavbarMenuItem,
-  NavbarMenuToggle,
-  Link as HeroUILink
-} from '@heroui/react';
+  Header,
+  Text,
+  NavLink,
+  Burger,
+  Group,
+  ActionIcon,
+  useMantineColorScheme
+} from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import {
-  HomeIcon,
-  GamepadIcon,
-  SettingsIcon,
-  CodeIcon
-} from 'lucide-react';
+  IconTournament,
+  IconDeviceGamepad2,
+  IconSettings,
+  IconCode,
+  IconSun,
+  IconMoon
+} from '@tabler/icons-react'
 
-const menuItems = [
-  { name: 'Matches', href: '/', icon: HomeIcon },
-  { name: 'Games', href: '/games', icon: GamepadIcon },
-  { name: 'Settings', href: '/settings', icon: SettingsIcon },
-  { name: 'Dev', href: '/dev', icon: CodeIcon },
-];
+interface NavigationProps {
+  children: React.ReactNode
+}
 
-export function Navigation() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const pathname = usePathname();
+export function Navigation({ children }: NavigationProps) {
+  const [opened, { toggle }] = useDisclosure()
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  const isActive = (href: string) => {
-    if (href === '/') {
-      return pathname === '/';
-    }
-    return pathname.startsWith(href);
-  };
+  const navigationItems = [
+    { label: 'Matches', href: '/', icon: IconTournament },
+    { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
+    { label: 'Settings', href: '/settings', icon: IconSettings },
+    { label: 'Dev', href: '/dev', icon: IconCode },
+  ]
 
   return (
-    <Navbar 
-      isMenuOpen={isMenuOpen}
-      onMenuOpenChange={setIsMenuOpen}
-      maxWidth="full"
-      position="sticky"
-      className="border-b border-divider"
+    <AppShell
+      header={{ height: { base: 60, md: 0 } }}
+      navbar={{
+        width: { base: 200, md: 250 },
+        breakpoint: 'md',
+        collapsed: { mobile: !opened },
+      }}
+      padding="md"
     >
-      <NavbarContent>
-        <NavbarMenuToggle className="sm:hidden" />
-        <NavbarBrand>
-          <p className="font-bold text-xl text-primary">MatchExec</p>
-        </NavbarBrand>
-      </NavbarContent>
+      <AppShell.Header hiddenFrom="md">
+        <Group h="100%" px="md" justify="space-between">
+          <Group>
+            <Burger opened={opened} onClick={toggle} size="sm" />
+            <Text size="lg" fw={700}>MatchExec</Text>
+          </Group>
+          <ActionIcon
+            variant="outline"
+            size={30}
+            onClick={() => toggleColorScheme()}
+          >
+            {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
+          </ActionIcon>
+        </Group>
+      </AppShell.Header>
 
-      <NavbarContent className="hidden sm:flex gap-4" justify="center">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          
-          return (
-            <NavbarItem key={item.name} isActive={active}>
-              <HeroUILink
-                as={Link}
-                href={item.href}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors no-underline ${
-                  active 
-                    ? 'text-primary bg-primary/10' 
-                    : 'text-default-600 hover:text-primary hover:bg-default-100'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="font-medium">{item.name}</span>
-              </HeroUILink>
-            </NavbarItem>
-          );
-        })}
-      </NavbarContent>
+      <AppShell.Navbar p="md">
+        <AppShell.Section>
+          <Group justify="space-between" mb="md" visibleFrom="md">
+            <Text size="xl" fw={700}>MatchExec</Text>
+            <ActionIcon
+              variant="outline"
+              size={30}
+              onClick={() => toggleColorScheme()}
+            >
+              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
+            </ActionIcon>
+          </Group>
+        </AppShell.Section>
 
-      <NavbarContent justify="end">
-        <NavbarItem className="hidden sm:flex">
-          <span className="text-tiny text-default-400">v1.0.0</span>
-        </NavbarItem>
-      </NavbarContent>
+        <AppShell.Section grow>
+          {navigationItems.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              leftSection={<item.icon size="1rem" />}
+              active={pathname === item.href}
+              onClick={(event) => {
+                event.preventDefault()
+                router.push(item.href)
+                toggle() // Close mobile menu after navigation
+              }}
+            />
+          ))}
+        </AppShell.Section>
+      </AppShell.Navbar>
 
-      <NavbarMenu>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          
-          return (
-            <NavbarMenuItem key={item.name}>
-              <HeroUILink
-                as={Link}
-                href={item.href}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors no-underline ${
-                  active 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-default-700 hover:text-default-900 hover:bg-default-100'
-                }`}
-                onPress={() => setIsMenuOpen(false)}
-              >
-                <Icon size={20} />
-                <span className="font-medium">{item.name}</span>
-              </HeroUILink>
-            </NavbarMenuItem>
-          );
-        })}
-        
-        <NavbarMenuItem>
-          <div className="pt-4 border-t border-divider mt-4">
-            <div className="text-tiny text-default-400 text-center">
-              Version 1.0.0
-            </div>
-          </div>
-        </NavbarMenuItem>
-      </NavbarMenu>
-    </Navbar>
-  );
+      <AppShell.Main>{children}</AppShell.Main>
+    </AppShell>
+  )
 }
