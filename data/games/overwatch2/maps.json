@@ -1,4 +1,5 @@
 [
+  ***START CONTROL***  
     {
         "id": "antarctic-peninsula",
         "name": "Antarctic Peninsula",
@@ -47,42 +48,60 @@
       "type": "Control",
       "location": "Samoa",
       "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
-    },    
-    {
-      "id": "esperance",
-      "name": "Esperance",
-      "type": "Control",
-      "location": "Australia",
-      "thumbnailUrl": ""
     },
+***END CONTROL***
+***START HYBRID***
     {
-      "id": "kings-row",
-      "name": "King’s Row",
+      "id": "blizzard-world",
+      "name": "Blizzard World",
       "type": "Hybrid",
-      "location": "United Kingdom",
-      "thumbnailUrl": ""
+      "location": "Irvine, California, United States",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/blizzard-world.webp"
     },
     {
       "id": "eichenwalde",
       "name": "Eichenwalde",
       "type": "Hybrid",
-      "location": "Germany",
-      "thumbnailUrl": ""
+      "location": "Stuttgart, Germany",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/eichenwalde.webp"
     },
     {
       "id": "hollywood",
       "name": "Hollywood",
       "type": "Hybrid",
-      "location": "United States",
-      "thumbnailUrl": ""
+      "location": "Los Angeles, United States",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/hollywood.webp"
+    },    
+    {
+      "id": "kings-row",
+      "name": "Kings Row",
+      "type": "Hybrid",
+      "location": "London, United Kingdom",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/kings-row.webp"
+    },
+    {
+      "id": "midtown",
+      "name": "Midtown",
+      "type": "Hybrid",
+      "location": "Manhattan, New York, United States",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/midtown.webp"
     },
     {
       "id": "numbani",
       "name": "Numbani",
       "type": "Hybrid",
-      "location": "Nigeria",
-      "thumbnailUrl": ""
+      "location": "Numbani, Nigeria, Africa",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/numbani.webp"
+    },    
+    {
+      "id": "paraiso",
+      "name": "Paraiso",
+      "type": "Hybrid",
+      "location": "Rio de Janeiro, Brazil",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
     },
+***END HYBRID***
+***START ESCORT***
     {
       "id": "dorado",
       "name": "Dorado",
