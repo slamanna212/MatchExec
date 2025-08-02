@@ -153,14 +153,38 @@
       "location": "Samoa",
       "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
     },
+    {
+      "id": "colosseo",
+      "name": "Colosseo",
+      "type": "Push",
+      "location": "Rome, Italy",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+    },
+    {
+      "id": "esperanca",
+      "name": "Esperança",
+      "type": "Push",
+      "location": "Portugal",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+    },
+    {
+      "id": "new-queen-street",
+      "name": "New Queen Street",
+      "type": "Push",
+      "location": "Toronto, Canada",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/new-queen-street.webp"
+    },    
+    {
+      "id": "runasapi",
+      "name": "Runasapi",
+      "type": "Push",
+      "location": "Peru",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/runasapi.webp"
+    },
 
 
 
 
-
-
-***START PUSH***
-***END PUSH***
 ***START FLASHPOINT***
 ***END FLASHPOINT***
 ***START CLASH***
