@@ -9,6 +9,6 @@
   "minPlayers": 2,
   "maxPlayers": 12,
   "assets": {
-    "iconUrl": "/assets/games/overwatch2/icon.png"
+    "iconUrl": "/assets/games/overwatch2/icon.webp"
   }
 }
