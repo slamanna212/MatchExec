@@ -32,10 +32,8 @@ export default function RootLayout({
         <Providers>
           <div className="min-h-screen bg-background">
             <Navigation />
-            <main className="lg:pl-64 pt-16 lg:pt-0">
-              <div className="p-6">
-                {children}
-              </div>
+            <main className="p-6">
+              {children}
             </main>
           </div>
         </Providers>

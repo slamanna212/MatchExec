@@ -1,3 +1,5 @@
+'use client'
+
 import { Card, CardBody, CardHeader, Chip } from '@heroui/react';
 
 export default function DevPage() {
