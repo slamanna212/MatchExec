@@ -1,0 +1,46 @@
+[
+    {
+      "id": "control",
+      "name": "Control",
+      "settings": {
+        "roundsToWin": 2,
+        "roundTimeSeconds": 180,
+        "capturePercentToWin": 100
+      },
+      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds."
+    },
+    {
+      "id": "escort",
+      "name": "Escort",
+      "settings": {
+        "initialTimeSeconds": 360,
+        "timeBonusPerCheckpointSeconds": 30,
+        "maxCheckpoints": 3,
+        "payloadSpeed": 1.0
+      },
+      "description": "Attackers escort a payload to its destination while defenders try to stop them."
+    },
+    {
+      "id": "hybrid",
+      "name": "Hybrid",
+      "settings": {
+        "assaultRoundsToWin": 1,
+        "assaultTimeSeconds": 180,
+        "escortInitialTimeSeconds": 360,
+        "escortTimeBonusPerCheckpointSeconds": 30,
+        "payloadSpeed": 1.0
+      },
+      "description": "Attackers first capture a point, then escort a payload on the next segment."
+    },
+    {
+      "id": "push",
+      "name": "Push",
+      "settings": {
+        "rounds": 2,
+        "roundTimeSeconds": 210,
+        "robotPushSpeed": 1.0
+      },
+      "description": "Both teams vie to push a robot into the enemy base across multiple rounds."
+    }
+  ]
+  
