@@ -1,11 +1,29 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
-import { Game } from '@/shared/types';
 
 export async function GET() {
   try {
     const db = await getDbInstance();
-    const games = await db.all<Game>('SELECT * FROM games ORDER BY name');
+    
+    const games = await db.all(`
+      SELECT 
+        g.id,
+        g.name,
+        g.genre,
+        g.developer,
+        g.min_players as minPlayers,
+        g.max_players as maxPlayers,
+        g.icon_url as iconUrl,
+        g.cover_url as coverUrl,
+        COUNT(DISTINCT gm.id) as mapCount,
+        COUNT(DISTINCT gmo.id) as modeCount
+      FROM games g
+      LEFT JOIN game_maps gm ON g.id = gm.game_id
+      LEFT JOIN game_modes gmo ON g.id = gmo.game_id
+      GROUP BY g.id, g.name, g.genre, g.developer, g.min_players, g.max_players, g.icon_url, g.cover_url
+      ORDER BY g.name
+    `);
+
     return NextResponse.json(games);
   } catch (error) {
     console.error('Error fetching games:', error);

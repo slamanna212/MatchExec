@@ -53,7 +53,7 @@
       "name": "Watchpoint: Gibraltar",
       "type": "Escort",
       "location": "Gibraltar",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
+      "thumbnailUrl": "/assets/games/overwatch2/maps/watchpoint-gibraltar.webp"
     },
     {
       "id": "blizzard-world",
@@ -158,14 +158,14 @@
       "name": "Colosseo",
       "type": "Push",
       "location": "Rome, Italy",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+      "thumbnailUrl": "/assets/games/overwatch2/maps/colosseo.webp"
     },
     {
       "id": "esperanca",
       "name": "Esperança",
       "type": "Push",
       "location": "Portugal",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+      "thumbnailUrl": "/assets/games/overwatch2/maps/esperanca.webp"
     },
     {
       "id": "new-queen-street",

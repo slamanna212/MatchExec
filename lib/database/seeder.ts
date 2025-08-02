@@ -15,6 +15,7 @@ interface GameData {
   maxPlayers: number;
   assets: {
     iconUrl: string;
+    coverUrl?: string;
   };
 }
 
@@ -121,8 +122,8 @@ export class DatabaseSeeder {
     await this.db.run(`
       INSERT OR REPLACE INTO games (
         id, name, genre, developer, release_date, version, description,
-        min_players, max_players, icon_url, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        min_players, max_players, icon_url, cover_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       gameData.id,
       gameData.name,
@@ -133,7 +134,8 @@ export class DatabaseSeeder {
       gameData.description,
       gameData.minPlayers,
       gameData.maxPlayers,
-      gameData.assets.iconUrl
+      gameData.assets.iconUrl,
+      gameData.assets.coverUrl || null
     ]);
   }
 

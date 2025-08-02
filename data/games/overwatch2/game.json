@@ -5,11 +5,12 @@
   "developer": "Blizzard Entertainment",
   "releaseDate": "2022-10-04",
   "version": "1.0.0",
-  "dataVersion": "1.0.0",
+  "dataVersion": "1.1.0",
   "description": "A team-based multiplayer first-person shooter featuring hero-based combat and objective-driven matches.",
   "minPlayers": 2,
   "maxPlayers": 12,
   "assets": {
-    "iconUrl": "/assets/games/overwatch2/icon.webp"
+    "iconUrl": "/assets/games/overwatch2/icon.webp",
+    "coverUrl": "/assets/games/overwatch2/cover.jpg"
   }
 }
