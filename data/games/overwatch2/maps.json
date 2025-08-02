@@ -54,61 +54,7 @@
       "type": "Escort",
       "location": "Gibraltar",
       "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
-    }
-
-
-  ***START CONTROL***  
-    {
-        "id": "antarctic-peninsula",
-        "name": "Antarctic Peninsula",
-        "type": "Control",
-        "location": "Antarctica",
-        "thumbnailUrl": "/assets/games/overwatch2/maps/antarctic-peninsula.webp"
-      },    
-    {
-        "id": "busan",
-        "name": "Busan",
-        "type": "Control",
-        "location": "South Korea",
-        "thumbnailUrl": "/assets/games/overwatch2/maps/busan.webp"
-      },    
-    {
-      "id": "ilios",
-      "name": "Ilios",
-      "type": "Control",
-      "location": "Greece",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/ilios.webp"
     },
-    {
-      "id": "lijiang-tower",
-      "name": "Lijiang Tower",
-      "type": "Control",
-      "location": "China",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/lijiang-tower.webp"
-    },
-    {
-      "id": "nepal",
-      "name": "Nepal",
-      "type": "Control",
-      "location": "Nepal",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/nepal.webp"
-    },
-    {
-      "id": "oasis",
-      "name": "Oasis",
-      "type": "Control",
-      "location": "Saudi Arabia",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/oasis.webp"
-    },
-    {
-      "id": "samoa",
-      "name": "Samoa",
-      "type": "Control",
-      "location": "Samoa",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
-    },
-***END CONTROL***
-***START HYBRID***
     {
       "id": "blizzard-world",
       "name": "Blizzard World",
@@ -158,7 +104,56 @@
       "location": "Rio de Janeiro, Brazil",
       "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
     },
-***END HYBRID***
+    {
+        "id": "antarctic-peninsula",
+        "name": "Antarctic Peninsula",
+        "type": "Control",
+        "location": "Antarctica",
+        "thumbnailUrl": "/assets/games/overwatch2/maps/antarctic-peninsula.webp"
+      },    
+    {
+        "id": "busan",
+        "name": "Busan",
+        "type": "Control",
+        "location": "South Korea",
+        "thumbnailUrl": "/assets/games/overwatch2/maps/busan.webp"
+      },    
+    {
+      "id": "ilios",
+      "name": "Ilios",
+      "type": "Control",
+      "location": "Greece",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/ilios.webp"
+    },
+    {
+      "id": "lijiang-tower",
+      "name": "Lijiang Tower",
+      "type": "Control",
+      "location": "China",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/lijiang-tower.webp"
+    },
+    {
+      "id": "nepal",
+      "name": "Nepal",
+      "type": "Control",
+      "location": "Nepal",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/nepal.webp"
+    },
+    {
+      "id": "oasis",
+      "name": "Oasis",
+      "type": "Control",
+      "location": "Saudi Arabia",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/oasis.webp"
+    },
+    {
+      "id": "samoa",
+      "name": "Samoa",
+      "type": "Control",
+      "location": "Samoa",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/samoa.webp"
+    },
+
 
 
 
