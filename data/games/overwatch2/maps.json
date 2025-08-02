@@ -1,4 +1,62 @@
 [
+    {
+      "id": "circuit-royal",
+      "name": "Circuit Royal",
+      "type": "Escort",
+      "location": "Monte Carlo, Monaco",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/circuit-royal.webp"
+    },
+    {
+      "id": "dorado",
+      "name": "Dorado",
+      "type": "Escort",
+      "location": "Veracruz, Mexico",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/dorado.webp"
+    },
+    {
+      "id": "havana",
+      "name": "Havana",
+      "type": "Escort",
+      "location": "Havana, Cuba",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/havana.webp"
+    },
+    {
+      "id": "junkertown",
+      "name": "Junkertown",
+      "type": "Escort",
+      "location": "Central Australia",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/junkertown.webp"
+    },
+    {
+      "id": "rialto",
+      "name": "Rialto",
+      "type": "Escort",
+      "location": "Venice, Italy",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/rialto.webp"
+    },
+    {
+      "id": "route-66",
+      "name": "Route 66",
+      "type": "Escort",
+      "location": "Deadlock Gorge, Arizona, United States",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/route-66.webp"
+    },
+    {
+      "id": "shambali-monastery",
+      "name": "Shambali Monastery",
+      "type": "Escort",
+      "location": "Nepal",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/shambali-monastery.webp"
+    },
+    {
+      "id": "watchpoint-gibraltar",
+      "name": "Watchpoint: Gibraltar",
+      "type": "Escort",
+      "location": "Gibraltar",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
+    }
+
+
   ***START CONTROL***  
     {
         "id": "antarctic-peninsula",
@@ -101,48 +159,29 @@
       "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
     },
 ***END HYBRID***
-***START ESCORT***
+
+
+
+
+
+***START PUSH***
+***END PUSH***
+***START FLASHPOINT***
+***END FLASHPOINT***
+***START CLASH***
+***END CLASH***
+
+
+
+
+
+
     {
-      "id": "dorado",
-      "name": "Dorado",
-      "type": "Escort",
-      "location": "Mexico",
-      "thumbnailUrl": ""
-    },
-    {
-      "id": "junkertown",
-      "name": "Junkertown",
-      "type": "Escort",
-      "location": "Australia",
-      "thumbnailUrl": ""
-    },
-    {
-      "id": "rialto",
-      "name": "Rialto",
-      "type": "Escort",
-      "location": "Italy",
-      "thumbnailUrl": ""
-    },
-    {
-      "id": "route-66",
-      "name": "Route 66",
-      "type": "Escort",
-      "location": "United States",
-      "thumbnailUrl": ""
-    },
-    {
-      "id": "watchpoint-gibraltar",
-      "name": "Watchpoint: Gibraltar",
-      "type": "Escort",
-      "location": "Gibraltar",
-      "thumbnailUrl": ""
-    },
-    {
-      "id": "new-junk-city",
-      "name": "New Junk City",
-      "type": "Push",
-      "location": "Australia",
-      "thumbnailUrl": ""
+      "id": "paraiso",
+      "name": "Paraiso",
+      "type": "Hybrid",
+      "location": "Rio de Janeiro, Brazil",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
     }
 ]
   
