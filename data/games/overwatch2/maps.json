@@ -202,27 +202,19 @@
       "location": "India",
       "thumbnailUrl": "/assets/games/overwatch2/maps/suravasa.webp"
     },
-
-
-
-
-
-***START FLASHPOINT***
-***END FLASHPOINT***
-***START CLASH***
-***END CLASH***
-
-
-
-
-
-
     {
-      "id": "paraiso",
-      "name": "Paraiso",
-      "type": "Hybrid",
-      "location": "Rio de Janeiro, Brazil",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/paraiso.webp"
+      "id": "hanaoka",
+      "name": "Hanaoka",
+      "type": "Clash",
+      "location": "Tokyo, Japan",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/hanaoka.webp"
+    },
+    {
+      "id": "throne-of-anubis",
+      "name": "Throne of Anubis",
+      "type": "Clash",
+      "location": "Giza Plateau, Egypt",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/throne-of-anubis.webp"
     }
 ]
   
