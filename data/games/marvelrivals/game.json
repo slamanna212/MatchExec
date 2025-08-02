@@ -1,5 +1,5 @@
 {
-  "id": "marvel-rivals",
+  "id": "marvelrivals",
   "name": "Marvel Rivals",
   "genre": "Hero Shooter",
   "developer": "Second Dinner Studios",
@@ -9,7 +9,6 @@
   "minPlayers": 2,
   "maxPlayers": 12,
   "assets": {
-    "iconUrl": "/assets/games/marvel-rivals/icon.png",
-    "heroImageUrl": "/assets/games/marvel-rivals/hero.jpg"
+    "iconUrl": "/assets/games/marvelrivals/icon.png",
   }
 }
