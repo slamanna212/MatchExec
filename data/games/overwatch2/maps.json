@@ -181,6 +181,28 @@
       "location": "Peru",
       "thumbnailUrl": "/assets/games/overwatch2/maps/runasapi.webp"
     },
+    {
+      "id": "aatlis",
+      "name": "Aatlis",
+      "type": "Flashpoint",
+      "location": "Morocco",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/aatlis.webp"
+    },
+    {
+      "id": "new-junk-city",
+      "name": "New Junk City",
+      "type": "Flashpoint",
+      "location": "Central Australia",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/new-junk-city.webp"
+    },
+    {
+      "id": "suravasa",
+      "name": "Suravasa",
+      "type": "Flashpoint",
+      "location": "India",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/suravasa.webp"
+    },
+
 
 
 
