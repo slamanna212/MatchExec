@@ -21,8 +21,6 @@ This project uses a multi-process architecture managed by PM2:
 ### Setup
 ```bash
 npm install
-cp .env.example .env
-# Configure your DISCORD_BOT_TOKEN in .env
 ```
 
 ### Running in Development
