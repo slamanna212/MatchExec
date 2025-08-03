@@ -11,6 +11,7 @@ export async function GET() {
         g.name,
         g.genre,
         g.developer,
+        g.description,
         g.min_players as minPlayers,
         g.max_players as maxPlayers,
         g.icon_url as iconUrl,
@@ -20,7 +21,7 @@ export async function GET() {
       FROM games g
       LEFT JOIN game_maps gm ON g.id = gm.game_id
       LEFT JOIN game_modes gmo ON g.id = gmo.game_id
-      GROUP BY g.id, g.name, g.genre, g.developer, g.min_players, g.max_players, g.icon_url, g.cover_url
+      GROUP BY g.id, g.name, g.genre, g.developer, g.description, g.min_players, g.max_players, g.icon_url, g.cover_url
       ORDER BY g.name
     `);
 

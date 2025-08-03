@@ -8,6 +8,7 @@ interface Game {
   name: string;
   genre: string;
   developer: string;
+  description: string;
   minPlayers: number;
   maxPlayers: number;
   iconUrl: string;
@@ -83,6 +84,9 @@ export default function GamesPage() {
                     </Badge>
                     <Text size="sm" c="dimmed" mt="xs">
                       {game.developer}
+                    </Text>
+                    <Text size="sm" mt="xs">
+                      {game.description}
                     </Text>
                     <Group mt={{ base: "xs", md: "md" }} gap="xl">
                       <div>
