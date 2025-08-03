@@ -8,8 +8,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers:
-      - "slamanna212"
     assignees:
       - "slamanna212"
     commit-message:
@@ -27,8 +25,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 5
-    reviewers:
-      - "slamanna212"
     assignees:
       - "slamanna212"
     commit-message:
@@ -47,8 +43,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 5
-    reviewers:
-      - "slamanna212"
     assignees:
       - "slamanna212"
     commit-message:
