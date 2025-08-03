@@ -3,7 +3,7 @@
 import { Card, Text, Stack, TextInput, Button, Switch, Group, PasswordInput, Alert } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import { IconInfoCircle } from '@tabler/icons-react';
+import { IconInfoCircle, IconClock } from '@tabler/icons-react';
 
 interface DiscordSettings {
   application_id?: string;
@@ -14,10 +14,20 @@ interface DiscordSettings {
   participant_role_id?: string;
 }
 
+interface SchedulerSettings {
+  tournament_check_cron: string;
+  reminder_check_cron: string;
+  cleanup_check_cron: string;
+  report_generation_cron: string;
+  enabled: boolean;
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [schedulerSaving, setSchedulerSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<DiscordSettings>({
     initialValues: {
@@ -30,17 +40,36 @@ export default function SettingsPage() {
     },
   });
 
+  const schedulerForm = useForm<SchedulerSettings>({
+    initialValues: {
+      tournament_check_cron: '0 */5 * * * *',
+      reminder_check_cron: '0 0 */4 * * *',
+      cleanup_check_cron: '0 0 2 * * *',
+      report_generation_cron: '0 0 0 * * 0',
+      enabled: true,
+    },
+  });
+
   useEffect(() => {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const response = await fetch('/api/settings/discord');
-        if (response.ok) {
-          const data = await response.json();
-          form.setValues(data);
+        const [discordResponse, schedulerResponse] = await Promise.all([
+          fetch('/api/settings/discord'),
+          fetch('/api/settings/scheduler')
+        ]);
+        
+        if (discordResponse.ok) {
+          const discordData = await discordResponse.json();
+          form.setValues(discordData);
+        }
+        
+        if (schedulerResponse.ok) {
+          const schedulerData = await schedulerResponse.json();
+          schedulerForm.setValues(schedulerData);
         }
       } catch (error) {
-        console.error('Error fetching Discord settings:', error);
+        console.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -70,6 +99,31 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'An error occurred while saving settings.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSchedulerSubmit = async (values: SchedulerSettings) => {
+    setSchedulerSaving(true);
+    setSchedulerMessage(null);
+    
+    try {
+      const response = await fetch('/api/settings/scheduler', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (response.ok) {
+        setSchedulerMessage({ type: 'success', text: 'Scheduler settings saved successfully!' });
+      } else {
+        const errorData = await response.json();
+        setSchedulerMessage({ type: 'error', text: errorData.error || 'Failed to save scheduler settings.' });
+      }
+    } catch (error) {
+      console.error('Error saving scheduler settings:', error);
+      setSchedulerMessage({ type: 'error', text: 'An error occurred while saving scheduler settings.' });
+    } finally {
+      setSchedulerSaving(false);
     }
   };
 
@@ -173,6 +227,76 @@ export default function SettingsPage() {
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={saving} disabled={loading}>
                     Save Discord Settings
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group mb="md">
+              <IconClock size="1.2rem" />
+              <Text size="lg" fw={600}>Scheduler Configuration</Text>
+            </Group>
+
+            {schedulerMessage && (
+              <Alert color={schedulerMessage.type === 'success' ? 'green' : 'red'} mb="md">
+                {schedulerMessage.text}
+              </Alert>
+            )}
+
+            <form onSubmit={schedulerForm.onSubmit(handleSchedulerSubmit)}>
+              <Stack gap="md">
+                <Group>
+                  <Switch
+                    label="Enable Scheduler"
+                    description="Enable or disable all scheduled tasks"
+                    {...schedulerForm.getInputProps('enabled', { type: 'checkbox' })}
+                    disabled={loading}
+                  />
+                </Group>
+
+                <TextInput
+                  label="Tournament Check"
+                  placeholder="0 */5 * * * *"
+                  description="Cron expression for checking tournament start times (format: second minute hour day month dayOfWeek)"
+                  {...schedulerForm.getInputProps('tournament_check_cron')}
+                  disabled={loading || !schedulerForm.values.enabled}
+                />
+
+                <TextInput
+                  label="Reminder Check"
+                  placeholder="0 0 */4 * * *"
+                  description="Cron expression for sending participant reminders"
+                  {...schedulerForm.getInputProps('reminder_check_cron')}
+                  disabled={loading || !schedulerForm.values.enabled}
+                />
+
+                <TextInput
+                  label="Data Cleanup"
+                  placeholder="0 0 2 * * *"
+                  description="Cron expression for cleaning up old tournament data"
+                  {...schedulerForm.getInputProps('cleanup_check_cron')}
+                  disabled={loading || !schedulerForm.values.enabled}
+                />
+
+                <TextInput
+                  label="Report Generation"
+                  placeholder="0 0 0 * * 0"
+                  description="Cron expression for generating tournament reports"
+                  {...schedulerForm.getInputProps('report_generation_cron')}
+                  disabled={loading || !schedulerForm.values.enabled}
+                />
+
+                <Alert color="blue" icon={<IconInfoCircle size="1rem" />}>
+                  <Text size="sm">
+                    For help with setting these, visit this website: <a href="https://crontab.guru/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>https://crontab.guru/</a>
+                  </Text>
+                </Alert>
+
+                <Group justify="flex-end" mt="lg">
+                  <Button type="submit" loading={schedulerSaving} disabled={loading}>
+                    Save Scheduler Settings
                   </Button>
                 </Group>
               </Stack>

@@ -109,3 +109,15 @@ export interface MapDataJson {
   mode: string;
   imageUrl?: string;
 }
+
+// Scheduler settings types
+export interface SchedulerSettings {
+  id: number;
+  tournament_check_cron: string;
+  reminder_check_cron: string;
+  cleanup_check_cron: string;
+  report_generation_cron: string;
+  enabled: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
