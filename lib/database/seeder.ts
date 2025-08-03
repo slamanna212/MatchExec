@@ -8,7 +8,7 @@ interface GameData {
   genre: string;
   developer: string;
   releaseDate: string;
-  version: string;
+  patch: string;
   dataVersion: string;
   description: string;
   minPlayers: number;
@@ -130,7 +130,7 @@ export class DatabaseSeeder {
       gameData.genre,
       gameData.developer,
       gameData.releaseDate,
-      gameData.version,
+      gameData.patch,
       gameData.description,
       gameData.minPlayers,
       gameData.maxPlayers,
