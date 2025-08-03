@@ -27,6 +27,34 @@
         "location": "Tokyo 2099",
         "thumbnailUrl": "/public/assets/games/marvelrivals/maps/shin-shibuya.webp"
       },
+      {
+        "id": "midtown",
+        "name": "Midtown",
+        "type": "Convoy",
+        "location": "Empire of Eternal Night",
+        "thumbnailUrl": "/public/assets/games/marvelrivals/maps/midtown.webp"
+      },
+      {
+          "id": "arakko",
+          "name": "Arakko",
+          "type": "Convoy",
+          "location": "Hellfire Gala",
+          "thumbnailUrl": "/public/assets/games/marvelrivals/maps/arakko.webp"
+        },
+        {
+          "id": "spider-islands",
+          "name": "Spider-Islands",
+          "type": "Convoy",
+          "location": "Tokyo 2099",
+          "thumbnailUrl": "/public/assets/games/marvelrivals/maps/spider-islands.webp"
+        },
+        {
+          "id": "yggdrasill-path",
+          "name": "Yggdrasill Path",
+          "type": "Convoy",
+          "location": "Yggsgard",
+          "thumbnailUrl": "/public/assets/games/marvelrivals/maps/yggdrasill-path.webp"
+        },
 
 
 
@@ -37,22 +65,6 @@
 
 
 
-
-
-    {
-      "id": "dorado",
-      "name": "Dorado",
-      "type": "Escort",
-      "location": "Veracruz, Mexico",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/dorado.webp"
-    },
-    {
-      "id": "havana",
-      "name": "Havana",
-      "type": "Escort",
-      "location": "Havana, Cuba",
-      "thumbnailUrl": "/assets/games/overwatch2/maps/havana.webp"
-    },
     {
         "id": "throne-of-anubis",
         "name": "Throne of Anubis",
