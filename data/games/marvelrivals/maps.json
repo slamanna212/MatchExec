@@ -1,0 +1,64 @@
+[
+    {
+      "id": "central-park",
+      "name": "Central Park",
+      "type": "Convergence",
+      "location": "Empire of Eternal Night",
+      "thumbnailUrl": "/public/assets/games/marvelrivals/maps/central-park.webp"
+    },
+    {
+        "id": "hall-of-djalia",
+        "name": "Hall of Djalia",
+        "type": "Convergence",
+        "location": "Intergalactic Empire of Wakanda",
+        "thumbnailUrl": "/public/assets/games/marvelrivals/maps/hall-of-djalia.webp"
+      },
+      {
+        "id": "symbiotic-surface",
+        "name": "Symbiotic Surface",
+        "type": "Convergence",
+        "location": "Klyntar",
+        "thumbnailUrl": "/public/assets/games/marvelrivals/maps/symbiotic-surface.webp"
+      },
+      {
+        "id": "shin-shibuya",
+        "name": "Shin-Shibuya",
+        "type": "Convergence",
+        "location": "Tokyo 2099",
+        "thumbnailUrl": "/public/assets/games/marvelrivals/maps/shin-shibuya.webp"
+      },
+
+
+
+
+
+
+
+
+
+
+
+
+    {
+      "id": "dorado",
+      "name": "Dorado",
+      "type": "Escort",
+      "location": "Veracruz, Mexico",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/dorado.webp"
+    },
+    {
+      "id": "havana",
+      "name": "Havana",
+      "type": "Escort",
+      "location": "Havana, Cuba",
+      "thumbnailUrl": "/assets/games/overwatch2/maps/havana.webp"
+    },
+    {
+        "id": "throne-of-anubis",
+        "name": "Throne of Anubis",
+        "type": "Clash",
+        "location": "Giza Plateau, Egypt",
+        "thumbnailUrl": "/assets/games/overwatch2/maps/throne-of-anubis.webp"
+      }
+  ]
+        
