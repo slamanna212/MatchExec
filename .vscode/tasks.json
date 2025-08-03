@@ -48,6 +48,17 @@
             "problemMatcher": []
         },
         {
+            "label": "Install Dependencies",
+            "type": "shell",
+            "command": "npm install",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },        
+        {
             "label": "Lint Code",
             "type": "shell",
             "command": "npm run lint",
