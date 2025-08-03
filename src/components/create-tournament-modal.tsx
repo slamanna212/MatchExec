@@ -1,7 +1,7 @@
 'use client'
 
 import { Modal, Button, Text } from '@mantine/core';
-import { Tournament, Game } from '@/shared/types';
+import { Tournament, Game } from '../../shared/types';
 
 interface CreateTournamentModalProps {
   isOpen: boolean;

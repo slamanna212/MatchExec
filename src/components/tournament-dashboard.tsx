@@ -13,7 +13,7 @@ import {
   Stack,
   Grid
 } from '@mantine/core';
-import { Tournament, Game } from '@/shared/types';
+import { Tournament, Game } from '../../shared/types';
 import { CreateTournamentModal } from './create-tournament-modal';
 
 interface TournamentWithGame extends Tournament {

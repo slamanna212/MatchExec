@@ -1,6 +1,25 @@
-import { initializeDatabase } from '../../lib/database';
+import { Database, getDatabase } from '../../lib/database/connection';
+import { MigrationRunner } from '../../lib/database/migrations';
+import { DatabaseSeeder } from '../../lib/database/seeder';
 
-let dbPromise: Promise<any> | null = null;
+async function initializeDatabase(): Promise<Database> {
+  const db = getDatabase();
+  
+  // Connect to database
+  await db.connect();
+  
+  // Run migrations
+  const migrationRunner = new MigrationRunner(db);
+  await migrationRunner.runMigrations();
+  
+  // Seed database with game data
+  const seeder = new DatabaseSeeder(db);
+  await seeder.seedDatabase();
+  
+  return db;
+}
+
+let dbPromise: Promise<Database> | null = null;
 
 export function getDbInstance() {
   if (!dbPromise) {

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDatabase } from '@/lib/database';
-import { SchedulerSettings } from '@/shared/types';
+import { getDbInstance } from '../../../../lib/database-init';
+import { SchedulerSettings } from '../../../../shared/types';
 
 export async function GET() {
   try {
-    const db = await initializeDatabase();
+    const db = await getDbInstance();
     
     const settings = await db.get<SchedulerSettings>(
       'SELECT * FROM scheduler_settings WHERE id = 1'
@@ -33,7 +33,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const db = await initializeDatabase();
+    const db = await getDbInstance();
     
     // Validate cron expressions (basic validation)
     const cronFields = [

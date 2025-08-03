@@ -32,9 +32,9 @@ class MatchExecScheduler {
 
   private async loadSchedulerSettings() {
     try {
-      const settings = await this.db.get<SchedulerSettings>(
+      const settings = await this.db.get(
         'SELECT * FROM scheduler_settings WHERE id = 1'
-      );
+      ) as SchedulerSettings;
 
       if (!settings || !settings.enabled) {
         console.log('⏸️ Scheduler is disabled');
@@ -69,7 +69,6 @@ class MatchExecScheduler {
             console.error(`❌ ${name} failed:`, error);
           }
         }, {
-          scheduled: true,
           timezone: 'UTC'
         });
         
