@@ -90,17 +90,19 @@
             "location": "Yggsgard",
             "thumbnailUrl": "/public/assets/games/marvelrivals/maps/royal-palace.webp"
           },
-
-
-
-
-
-    {
-        "id": "throne-of-anubis",
-        "name": "Throne of Anubis",
-        "type": "Clash",
-        "location": "Giza Plateau, Egypt",
-        "thumbnailUrl": "/assets/games/overwatch2/maps/throne-of-anubis.webp"
-      }
+          {
+            "id": "ninomaru",
+            "name": "Ninomaru",
+            "type": "Conquest",
+            "location": "Tokyo 2099",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/ninomaru.webp"
+          },
+          {
+            "id": "sanctum-sanctorum",
+            "name": "Sanctum Sanctorum",
+            "type": "Doom Match",
+            "location": "Empire of Eternal Night",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/sanctum-sanctorum.webp"
+          }
   ]
         
