@@ -13,5 +13,49 @@
             },
             "isBackground": true,
             "problemMatcher": []
-        }
+        },
+        {
+            "label": "Restart Dev Server",
+            "type": "shell",
+            "command": "npm run dev:restart",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },        
+        {
+            "label": "Stop Dev Server",
+            "type": "shell",
+            "command": "npm run dev:stop",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "View Dev Logs",
+            "type": "shell",
+            "command": "npm run dev:logs",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint Code",
+            "type": "shell",
+            "command": "npm run lint",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        }                     
 }
