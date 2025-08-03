@@ -1,0 +1,60 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "slamanna212"
+    assignees:
+      - "slamanna212"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+    labels:
+      - "dependencies"
+      - "automated"
+    
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "slamanna212"
+    assignees:
+      - "slamanna212"
+    commit-message:
+      prefix: "ci"
+      prefix-development: "ci"
+    labels:
+      - "github-actions"
+      - "dependencies"
+      - "automated"
+
+  # Enable version updates for Docker
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "slamanna212"
+    assignees:
+      - "slamanna212"
+    commit-message:
+      prefix: "docker"
+      prefix-development: "docker"
+    labels:
+      - "docker"
+      - "dependencies"
+      - "automated"

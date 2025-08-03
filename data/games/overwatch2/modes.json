@@ -1,0 +1,32 @@
+[
+    {
+      "id": "control",
+      "name": "Control",
+      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds."
+    },
+    {
+      "id": "escort",
+      "name": "Escort",
+      "description": "Attackers escort a payload to its destination while defenders try to stop them."
+    },
+    {
+      "id": "hybrid",
+      "name": "Hybrid",
+      "description": "Attackers first capture a point, then escort a payload on the next segment."
+    },
+    {
+      "id": "push",
+      "name": "Push",
+      "description": "Both teams vie to push a robot into the enemy base across multiple rounds."
+    },
+    {
+      "id": "flashpoint",
+      "name": "Flashpoint",
+      "description": "Like Control but faster points on the same map"
+    },
+    {
+      "id": "clash",
+      "name": "Clash",
+      "description": "Tug of War in Overwatch 2"
+    }
+  ]

@@ -1,0 +1,220 @@
+[
+    {
+      "id": "circuit-royal",
+      "name": "Circuit Royal",
+      "type": "Escort",
+      "location": "Monte Carlo, Monaco",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/circuit-royal.webp"
+    },
+    {
+      "id": "dorado",
+      "name": "Dorado",
+      "type": "Escort",
+      "location": "Veracruz, Mexico",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/dorado.webp"
+    },
+    {
+      "id": "havana",
+      "name": "Havana",
+      "type": "Escort",
+      "location": "Havana, Cuba",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/havana.webp"
+    },
+    {
+      "id": "junkertown",
+      "name": "Junkertown",
+      "type": "Escort",
+      "location": "Central Australia",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/junkertown.webp"
+    },
+    {
+      "id": "rialto",
+      "name": "Rialto",
+      "type": "Escort",
+      "location": "Venice, Italy",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/rialto.webp"
+    },
+    {
+      "id": "route-66",
+      "name": "Route 66",
+      "type": "Escort",
+      "location": "Deadlock Gorge, Arizona, United States",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/route-66.webp"
+    },
+    {
+      "id": "shambali-monastery",
+      "name": "Shambali Monastery",
+      "type": "Escort",
+      "location": "Nepal",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/shambali-monastery.webp"
+    },
+    {
+      "id": "watchpoint-gibraltar",
+      "name": "Watchpoint: Gibraltar",
+      "type": "Escort",
+      "location": "Gibraltar",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/watchpoint-gibraltar.webp"
+    },
+    {
+      "id": "blizzard-world",
+      "name": "Blizzard World",
+      "type": "Hybrid",
+      "location": "Irvine, California, United States",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/blizzard-world.webp"
+    },
+    {
+      "id": "eichenwalde",
+      "name": "Eichenwalde",
+      "type": "Hybrid",
+      "location": "Stuttgart, Germany",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/eichenwalde.webp"
+    },
+    {
+      "id": "hollywood",
+      "name": "Hollywood",
+      "type": "Hybrid",
+      "location": "Los Angeles, United States",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/hollywood.webp"
+    },    
+    {
+      "id": "kings-row",
+      "name": "Kings Row",
+      "type": "Hybrid",
+      "location": "London, United Kingdom",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/kings-row.webp"
+    },
+    {
+      "id": "midtown",
+      "name": "Midtown",
+      "type": "Hybrid",
+      "location": "Manhattan, New York, United States",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/midtown.webp"
+    },
+    {
+      "id": "numbani",
+      "name": "Numbani",
+      "type": "Hybrid",
+      "location": "Numbani, Nigeria, Africa",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/numbani.webp"
+    },    
+    {
+      "id": "paraiso",
+      "name": "Paraiso",
+      "type": "Hybrid",
+      "location": "Rio de Janeiro, Brazil",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/paraiso.webp"
+    },
+    {
+        "id": "antarctic-peninsula",
+        "name": "Antarctic Peninsula",
+        "type": "Control",
+        "location": "Antarctica",
+        "thumbnailUrl": "/public/assets/games/overwatch2/maps/antarctic-peninsula.webp"
+      },    
+    {
+        "id": "busan",
+        "name": "Busan",
+        "type": "Control",
+        "location": "South Korea",
+        "thumbnailUrl": "/public/assets/games/overwatch2/maps/busan.webp"
+      },    
+    {
+      "id": "ilios",
+      "name": "Ilios",
+      "type": "Control",
+      "location": "Greece",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/ilios.webp"
+    },
+    {
+      "id": "lijiang-tower",
+      "name": "Lijiang Tower",
+      "type": "Control",
+      "location": "China",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/lijiang-tower.webp"
+    },
+    {
+      "id": "nepal",
+      "name": "Nepal",
+      "type": "Control",
+      "location": "Nepal",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/nepal.webp"
+    },
+    {
+      "id": "oasis",
+      "name": "Oasis",
+      "type": "Control",
+      "location": "Saudi Arabia",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/oasis.webp"
+    },
+    {
+      "id": "samoa",
+      "name": "Samoa",
+      "type": "Control",
+      "location": "Samoa",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/samoa.webp"
+    },
+    {
+      "id": "colosseo",
+      "name": "Colosseo",
+      "type": "Push",
+      "location": "Rome, Italy",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/colosseo.webp"
+    },
+    {
+      "id": "esperanca",
+      "name": "Esperança",
+      "type": "Push",
+      "location": "Portugal",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/esperanca.webp"
+    },
+    {
+      "id": "new-queen-street",
+      "name": "New Queen Street",
+      "type": "Push",
+      "location": "Toronto, Canada",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/new-queen-street.webp"
+    },    
+    {
+      "id": "runasapi",
+      "name": "Runasapi",
+      "type": "Push",
+      "location": "Peru",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/runasapi.webp"
+    },
+    {
+      "id": "aatlis",
+      "name": "Aatlis",
+      "type": "Flashpoint",
+      "location": "Morocco",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/aatlis.webp"
+    },
+    {
+      "id": "new-junk-city",
+      "name": "New Junk City",
+      "type": "Flashpoint",
+      "location": "Central Australia",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/new-junk-city.webp"
+    },
+    {
+      "id": "suravasa",
+      "name": "Suravasa",
+      "type": "Flashpoint",
+      "location": "India",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/suravasa.webp"
+    },
+    {
+      "id": "hanaoka",
+      "name": "Hanaoka",
+      "type": "Clash",
+      "location": "Tokyo, Japan",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/hanaoka.webp"
+    },
+    {
+      "id": "throne-of-anubis",
+      "name": "Throne of Anubis",
+      "type": "Clash",
+      "location": "Giza Plateau, Egypt",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/throne-of-anubis.webp"
+    }
+]
+  
