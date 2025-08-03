@@ -55,11 +55,41 @@
           "location": "Yggsgard",
           "thumbnailUrl": "/public/assets/games/marvelrivals/maps/yggdrasill-path.webp"
         },
-
-
-
-
-
+        {
+            "id": "birnin-t-challa",
+            "name": "Birnin T'Challa",
+            "type": "Domination",
+            "location": "Intergalactic Empire of Wakanda",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/birnin-t-challa.webp"
+          },
+          {
+            "id": "celestial-husk",
+            "name": "Celestial Husk",
+            "type": "Domination",
+            "location": "Klyntar",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/celestial-husk.webp"
+          },
+          {
+            "id": "hell-heaven",
+            "name": "Hell's Heaven",
+            "type": "Domination",
+            "location": "Hydra Charteris Base",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/hell-heaven.webp"
+          },
+          {
+            "id": "krakoa",
+            "name": "Krakoa",
+            "type": "Domination",
+            "location": "Hellfire Gala",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/krakoa.webp"
+          },
+          {
+            "id": "royal-palace",
+            "name": "Royal Palace",
+            "type": "Domination",
+            "location": "Yggsgard",
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/royal-palace.webp"
+          },
 
 
 
