@@ -1,4 +1,4 @@
-import { initializeDatabase } from '../../lib/database-init';
+import { initializeDatabase } from '../../lib/database';
 
 class MatchExecWorker {
   private isRunning = false;

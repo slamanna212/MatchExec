@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType } from 'discord.js';
-import { initializeDatabase } from '../../lib/database-init';
+import { initializeDatabase } from '../../lib/database';
 import { Database } from '../../lib/database/connection';
 
 interface DiscordSettings {
@@ -7,7 +7,6 @@ interface DiscordSettings {
   guild_id: string;
   announcement_channel_id?: string;
   results_channel_id?: string;
-  moderator_role_id?: string;
   participant_role_id?: string;
 }
 
@@ -75,7 +74,6 @@ class MatchExecBot {
           guild_id,
           announcement_channel_id,
           results_channel_id,
-          moderator_role_id,
           participant_role_id
         FROM discord_settings 
         WHERE id = 1

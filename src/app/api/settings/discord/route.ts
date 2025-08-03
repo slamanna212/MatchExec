@@ -71,18 +71,37 @@ export async function PUT(request: NextRequest) {
     if (bot_token && bot_token !== '••••••••') {
       try {
         // Attempt to restart the Discord bot process via PM2
-        const { spawn } = require('child_process');
+        const { exec } = require('child_process');
         const isDev = process.env.NODE_ENV === 'development';
         const processName = isDev ? 'discord-bot-dev' : 'discord-bot';
         
-        spawn('npx', ['pm2', 'restart', processName], {
-          stdio: 'inherit',
-          shell: true
+        // First check if the process exists
+        exec(`npx pm2 describe ${processName}`, (error, stdout, stderr) => {
+          if (error) {
+            // Process doesn't exist, start it
+            console.log(`🚀 Starting ${processName} process (not currently running)`);
+            exec(`npx pm2 start ecosystem${isDev ? '.dev' : ''}.config.js --only ${processName}`, (startError) => {
+              if (startError) {
+                console.error(`❌ Error starting ${processName}:`, startError.message);
+              } else {
+                console.log(`✅ Successfully started ${processName} process`);
+              }
+            });
+          } else {
+            // Process exists, restart it
+            console.log(`🔄 Restarting ${processName} process`);
+            exec(`npx pm2 restart ${processName}`, (restartError) => {
+              if (restartError) {
+                console.error(`❌ Error restarting ${processName}:`, restartError.message);
+              } else {
+                console.log(`✅ Successfully restarted ${processName} process`);
+              }
+            });
+          }
         });
         
-        console.log(`🔄 Triggered restart of ${processName} process`);
       } catch (error) {
-        console.error('❌ Error restarting Discord bot:', error);
+        console.error('❌ Error managing Discord bot process:', error);
       }
     }
 
