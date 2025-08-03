@@ -45,3 +45,5 @@ Required environment variables (see `.env.example`):
 - `NODE_ENV`: Environment (development/production)
 - `PORT`: Web server port (default: 3000)
 
+# Settings we need to change 
+src/app/settings/page.tsx:118 - the discord permissions numbers need to change once we figure out perms

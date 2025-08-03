@@ -6,11 +6,11 @@ import { useEffect, useState } from 'react';
 import { IconInfoCircle } from '@tabler/icons-react';
 
 interface DiscordSettings {
+  application_id?: string;
   bot_token?: string;
   guild_id?: string;
   announcement_channel_id?: string;
   results_channel_id?: string;
-  moderator_role_id?: string;
   participant_role_id?: string;
 }
 
@@ -21,11 +21,11 @@ export default function SettingsPage() {
 
   const form = useForm<DiscordSettings>({
     initialValues: {
+      application_id: '',
       bot_token: '',
       guild_id: '',
       announcement_channel_id: '',
       results_channel_id: '',
-      moderator_role_id: '',
       participant_role_id: '',
     },
   });
@@ -84,11 +84,6 @@ export default function SettingsPage() {
         <Stack gap="lg">
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Text size="lg" fw={600} mb="md">Discord Configuration</Text>
-            
-            <Alert icon={<IconInfoCircle size="1rem" />} mb="md" variant="light">
-              Configure your Discord bot to enable tournament management features. 
-              You'll need to create a Discord application and invite the bot to your server.
-            </Alert>
 
             {message && (
               <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
@@ -98,6 +93,29 @@ export default function SettingsPage() {
 
             <form onSubmit={form.onSubmit(handleSubmit)}>
               <Stack gap="md">
+                <Group align="end">
+                  <TextInput
+                    label="Application ID"
+                    placeholder="Discord application ID"
+                    description="Application ID from Discord Developer Portal"
+                    {...form.getInputProps('application_id')}
+                    disabled={loading}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={!form.values.application_id || loading}
+                    onClick={() => {
+                      if (form.values.application_id) {
+                        const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=581636017618000&scope=bot%20applications.commands`;
+                        window.open(url, '_blank');
+                      }
+                    }}
+                  >
+                    Add Bot
+                  </Button>
+                </Group>
+
                 <PasswordInput
                   label="Bot Token"
                   placeholder="Your Discord bot token"
@@ -114,7 +132,7 @@ export default function SettingsPage() {
                   disabled={loading}
                 />
 
-                <Group grow>
+                <Group grow visibleFrom="md">
                   <TextInput
                     label="Announcement Channel"
                     placeholder="Channel ID for announcements"
@@ -129,20 +147,27 @@ export default function SettingsPage() {
                   />
                 </Group>
 
-                <Group grow>
+                <Stack hiddenFrom="md">
                   <TextInput
-                    label="Moderator Role"
-                    placeholder="Role ID for tournament moderators"
-                    {...form.getInputProps('moderator_role_id')}
+                    label="Announcement Channel"
+                    placeholder="Channel ID for announcements"
+                    {...form.getInputProps('announcement_channel_id')}
                     disabled={loading}
                   />
                   <TextInput
-                    label="Participant Role"
-                    placeholder="Role ID for tournament participants"
-                    {...form.getInputProps('participant_role_id')}
+                    label="Results Channel"
+                    placeholder="Channel ID for match results"
+                    {...form.getInputProps('results_channel_id')}
                     disabled={loading}
                   />
-                </Group>
+                </Stack>
+
+                <TextInput
+                  label="Participant Role"
+                  placeholder="Role ID for tournament participants"
+                  {...form.getInputProps('participant_role_id')}
+                  disabled={loading}
+                />
 
 
                 <Group justify="flex-end" mt="lg">
