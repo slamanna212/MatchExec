@@ -148,7 +148,7 @@ export function TournamentDashboard() {
                   </Group>
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">Created:</Text>
-                    <Text size="sm">{new Date(tournament.created_at).toLocaleDateString()}</Text>
+                    <Text size="sm">{new Date(tournament.created_at).toLocaleDateString('en-US')}</Text>
                   </Group>
                 </Stack>
                 
