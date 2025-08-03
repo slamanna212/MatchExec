@@ -28,7 +28,7 @@ interface NavigationProps {
 }
 
 export function Navigation({ children }: NavigationProps) {
-  const [opened, { toggle }] = useDisclosure()
+  const [opened, { toggle }] = useDisclosure(false)
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
   const router = useRouter()
   const pathname = usePathname()
@@ -46,7 +46,7 @@ export function Navigation({ children }: NavigationProps) {
       navbar={{
         width: { base: 200, md: 250 },
         breakpoint: 'md',
-        collapsed: { mobile: !opened },
+        collapsed: { mobile: !opened, desktop: false },
       }}
       padding="md"
     >
