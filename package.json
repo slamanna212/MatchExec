@@ -21,6 +21,7 @@
     "@mantine/notifications": "^8.2.2",
     "@tabler/icons-react": "^3.34.1",
     "@types/sqlite3": "^5.1.0",
+    "bufferutil": "^4.0.9",
     "discord.js": "^14.21.0",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.536.0",
