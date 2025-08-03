@@ -12,8 +12,6 @@ interface DiscordSettings {
   results_channel_id?: string;
   moderator_role_id?: string;
   participant_role_id?: string;
-  command_prefix?: string;
-  auto_role_assignment?: boolean;
 }
 
 export default function SettingsPage() {
@@ -29,8 +27,6 @@ export default function SettingsPage() {
       results_channel_id: '',
       moderator_role_id: '',
       participant_role_id: '',
-      command_prefix: '!',
-      auto_role_assignment: false,
     },
   });
 
@@ -148,23 +144,6 @@ export default function SettingsPage() {
                   />
                 </Group>
 
-                <Group grow>
-                  <TextInput
-                    label="Command Prefix"
-                    placeholder="!"
-                    description="Character to prefix bot commands"
-                    {...form.getInputProps('command_prefix')}
-                    disabled={loading}
-                  />
-                  <div>
-                    <Text size="sm" fw={500} mb="xs">Auto Role Assignment</Text>
-                    <Switch
-                      label="Automatically assign participant role when joining tournaments"
-                      {...form.getInputProps('auto_role_assignment', { type: 'checkbox' })}
-                      disabled={loading}
-                    />
-                  </div>
-                </Group>
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={saving} disabled={loading}>
@@ -175,19 +154,6 @@ export default function SettingsPage() {
             </form>
           </Card>
 
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Text size="lg" fw={600} mb="md">Tournament Defaults</Text>
-            <Text c="dimmed">
-              Set default values for tournament creation and management.
-            </Text>
-          </Card>
-
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Text size="lg" fw={600} mb="md">Notification Settings</Text>
-            <Text c="dimmed">
-              Configure how and when notifications are sent to participants.
-            </Text>
-          </Card>
         </Stack>
       </Stack>
     </div>
