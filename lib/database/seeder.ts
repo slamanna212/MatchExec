@@ -5,6 +5,7 @@ import { Database } from './connection';
 interface GameData {
   id: string;
   name: string;
+  color?: string;
   genre: string;
   developer: string;
   releaseDate: string;
@@ -122,12 +123,13 @@ export class DatabaseSeeder {
   private async seedGameData(gameData: GameData): Promise<void> {
     await this.db.run(`
       INSERT OR REPLACE INTO games (
-        id, name, genre, developer, release_date, version, description,
+        id, name, color, genre, developer, release_date, version, description,
         min_players, max_players, icon_url, cover_url, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       gameData.id,
       gameData.name,
+      gameData.color || null,
       gameData.genre,
       gameData.developer,
       gameData.releaseDate,
