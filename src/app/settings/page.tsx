@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Switch, Group, PasswordInput, Alert } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconInfoCircle, IconClock } from '@tabler/icons-react';
@@ -19,7 +19,6 @@ interface SchedulerSettings {
   reminder_check_cron: string;
   cleanup_check_cron: string;
   report_generation_cron: string;
-  enabled: boolean;
 }
 
 export default function SettingsPage() {
@@ -46,7 +45,6 @@ export default function SettingsPage() {
       reminder_check_cron: '0 0 */4 * * *',
       cleanup_check_cron: '0 0 2 * * *',
       report_generation_cron: '0 0 0 * * 0',
-      enabled: true,
     },
   });
 
@@ -247,21 +245,13 @@ export default function SettingsPage() {
 
             <form onSubmit={schedulerForm.onSubmit(handleSchedulerSubmit)}>
               <Stack gap="md">
-                <Group>
-                  <Switch
-                    label="Enable Scheduler"
-                    description="Enable or disable all scheduled tasks"
-                    {...schedulerForm.getInputProps('enabled', { type: 'checkbox' })}
-                    disabled={loading}
-                  />
-                </Group>
 
                 <TextInput
                   label="Match Check"
                   placeholder="0 */5 * * * *"
                   description="Cron expression for checking match start times (format: second minute hour day month dayOfWeek)"
                   {...schedulerForm.getInputProps('match_check_cron')}
-                  disabled={loading || !schedulerForm.values.enabled}
+                  disabled={loading}
                 />
 
                 <TextInput
@@ -269,7 +259,7 @@ export default function SettingsPage() {
                   placeholder="0 0 */4 * * *"
                   description="Cron expression for sending participant reminders"
                   {...schedulerForm.getInputProps('reminder_check_cron')}
-                  disabled={loading || !schedulerForm.values.enabled}
+                  disabled={loading}
                 />
 
                 <TextInput
@@ -277,7 +267,7 @@ export default function SettingsPage() {
                   placeholder="0 0 2 * * *"
                   description="Cron expression for cleaning up old match data"
                   {...schedulerForm.getInputProps('cleanup_check_cron')}
-                  disabled={loading || !schedulerForm.values.enabled}
+                  disabled={loading}
                 />
 
                 <TextInput
@@ -285,7 +275,7 @@ export default function SettingsPage() {
                   placeholder="0 0 0 * * 0"
                   description="Cron expression for generating match reports"
                   {...schedulerForm.getInputProps('report_generation_cron')}
-                  disabled={loading || !schedulerForm.values.enabled}
+                  disabled={loading}
                 />
 
                 <Alert color="blue" icon={<IconInfoCircle size="1rem" />}>

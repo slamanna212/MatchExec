@@ -36,8 +36,22 @@ class MatchExecScheduler {
         'SELECT * FROM scheduler_settings WHERE id = 1'
       ) as SchedulerSettings;
 
-      if (!settings || !settings.enabled) {
-        console.log('⏸️ Scheduler is disabled');
+      if (!settings) {
+        console.log('⚠️ No scheduler settings found, using defaults');
+        // Use default settings if none exist
+        const defaultSettings = {
+          match_check_cron: '0 */5 * * * *',
+          reminder_check_cron: '0 0 */4 * * *',
+          cleanup_check_cron: '0 0 2 * * *',
+          report_generation_cron: '0 0 0 * * 0'
+        };
+        
+        this.startCronJob('Match Check', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
+        this.startCronJob('Reminder Check', defaultSettings.reminder_check_cron, this.sendParticipantReminders.bind(this));
+        this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
+        this.startCronJob('Report Generation', defaultSettings.report_generation_cron, this.generateReports.bind(this));
+        
+        console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
 
