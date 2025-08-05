@@ -59,7 +59,16 @@ export default function SettingsPage() {
         
         if (discordResponse.ok) {
           const discordData = await discordResponse.json();
-          form.setValues(discordData);
+          // Ensure all values are strings, not null
+          const sanitizedData = {
+            application_id: discordData.application_id || '',
+            bot_token: discordData.bot_token || '',
+            guild_id: discordData.guild_id || '',
+            announcement_channel_id: discordData.announcement_channel_id || '',
+            results_channel_id: discordData.results_channel_id || '',
+            participant_role_id: discordData.participant_role_id || ''
+          };
+          form.setValues(sanitizedData);
         }
         
         if (schedulerResponse.ok) {

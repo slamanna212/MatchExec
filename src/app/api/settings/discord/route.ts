@@ -18,12 +18,24 @@ export async function GET() {
     `);
 
     // Don't expose the bot token in the response for security
+    // Also ensure all null values are converted to empty strings for React form inputs
     const safeSettings = settings ? {
-      ...settings,
-      bot_token: settings.bot_token ? '••••••••' : null
-    } : null;
+      application_id: settings.application_id || '',
+      bot_token: settings.bot_token ? '••••••••' : '',
+      guild_id: settings.guild_id || '',
+      announcement_channel_id: settings.announcement_channel_id || '',
+      results_channel_id: settings.results_channel_id || '',
+      participant_role_id: settings.participant_role_id || ''
+    } : {
+      application_id: '',
+      bot_token: '',
+      guild_id: '',
+      announcement_channel_id: '',
+      results_channel_id: '',
+      participant_role_id: ''
+    };
 
-    return NextResponse.json(safeSettings || {});
+    return NextResponse.json(safeSettings);
   } catch (error) {
     console.error('Error fetching Discord settings:', error);
     return NextResponse.json(
