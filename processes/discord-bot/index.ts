@@ -156,7 +156,6 @@ class MatchExecBot {
       `✅ Bot Online`,
       `⏱️ Uptime: ${uptimeString}`,
       `🏠 Guild: ${interaction.guildId}`,
-      `👥 Servers: ${this.client.guilds.cache.size}`,
       `📡 Ping: ${this.client.ws.ping}ms`,
       `🗄️ Database: ${this.db ? '✅ Connected' : '❌ Disconnected'}`
     ].join('\n');
