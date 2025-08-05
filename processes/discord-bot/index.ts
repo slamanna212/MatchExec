@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags } from 'discord.js';
 import { initializeDatabase } from '../../lib/database';
 import { Database } from '../../lib/database/connection';
 
@@ -130,7 +130,7 @@ class MatchExecBot {
         default:
           await interaction.reply({
             content: '❌ Unknown command.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
       }
     } catch (error) {
@@ -139,9 +139,9 @@ class MatchExecBot {
       const errorMessage = '❌ An error occurred while processing your command.';
       
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: errorMessage, ephemeral: true });
+        await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.reply({ content: errorMessage, ephemeral: true });
+        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
       }
     }
   }
@@ -162,7 +162,7 @@ class MatchExecBot {
 
     await interaction.reply({
       content: status,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
