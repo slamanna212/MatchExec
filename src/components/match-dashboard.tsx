@@ -12,7 +12,8 @@ import {
   Group,
   Stack,
   Grid,
-  Modal
+  Modal,
+  Image
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match } from '../../shared/types';
@@ -101,6 +102,7 @@ export function MatchDashboard() {
   };
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string}}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -108,10 +110,19 @@ export function MatchDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string}} = {};
+        
         maps.forEach((map: any) => {
           mapNamesObj[map.id] = map.name;
+          mapDetailsObj[map.id] = {
+            name: map.name,
+            imageUrl: map.imageUrl,
+            modeName: map.modeName
+          };
         });
+        
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
+        setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
       console.error('Error fetching map names:', error);
@@ -258,9 +269,14 @@ export function MatchDashboard() {
                   )}
                   
                   {match.maps && match.maps.length > 0 && (
-                    <Group justify="space-between">
+                    <Group justify="space-between" align="flex-start">
                       <Text size="sm" c="dimmed">Maps:</Text>
-                      <Text size="sm">{match.maps.map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')}</Text>
+                      <Text size="sm" ta="right" style={{ maxWidth: '60%' }}>
+                        {match.maps.length > 2 
+                          ? `${match.maps.slice(0, 2).map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')} +${match.maps.length - 2} more`
+                          : match.maps.map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')
+                        }
+                      </Text>
                     </Group>
                   )}
                   
@@ -351,14 +367,36 @@ export function MatchDashboard() {
 
               {selectedMatch.maps && selectedMatch.maps.length > 0 && (
                 <div>
-                  <Text size="sm" fw={500} c="dimmed" mb="xs">Maps:</Text>
-                  <Stack gap="xs" ml="md">
-                    {selectedMatch.maps.map(mapId => (
-                      <Text key={mapId} size="sm">
-                        • {mapNames[mapId] || formatMapName(mapId)}
-                      </Text>
-                    ))}
-                  </Stack>
+                  <Text size="sm" fw={500} c="dimmed" mb="md">Maps:</Text>
+                  <Grid>
+                    {selectedMatch.maps.map(mapId => {
+                      const mapDetail = mapDetails[mapId];
+                      return (
+                        <Grid.Col key={mapId} span={{ base: 12, sm: 6, md: 4 }}>
+                          <Card shadow="sm" padding="sm" radius="md" withBorder>
+                            <Card.Section>
+                              <Image
+                                src={mapDetail?.imageUrl}
+                                alt={mapDetail?.name || formatMapName(mapId)}
+                                height={100}
+                                fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                              />
+                            </Card.Section>
+                            <Stack gap={4} mt="xs">
+                              <Text fw={500} size="sm" lineClamp={1}>
+                                {mapDetail?.name || formatMapName(mapId)}
+                              </Text>
+                              {mapDetail?.modeName && (
+                                <Badge size="xs" variant="light">
+                                  {mapDetail.modeName}
+                                </Badge>
+                              )}
+                            </Stack>
+                          </Card>
+                        </Grid.Col>
+                      );
+                    })}
+                  </Grid>
                 </div>
               )}
 
