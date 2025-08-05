@@ -230,7 +230,7 @@ export function CreateMatchModal({
               min={new Date().toISOString().split('T')[0]}
             />
             <TextInput
-              label="Time (24-hour format)"
+              label="Time"
               type="time"
               required
               value={formData.time || ''}
