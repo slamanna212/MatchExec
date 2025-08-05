@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { Match } from '../../../shared/types';
 
+// Queue an announcement request that the Discord bot will process
+async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Add to announcement queue
+    await db.run(`
+      INSERT OR IGNORE INTO discord_announcement_queue (match_id, status)
+      VALUES (?, 'pending')
+    `, [matchId]);
+    
+    console.log('📢 Discord announcement queued for match:', matchId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord announcement:', error);
+    return false;
+  }
+}
+
 export async function GET() {
   try {
     const db = await getDbInstance();
@@ -39,7 +58,8 @@ export async function POST(request: NextRequest) {
       livestreamLink,
       rules,
       rounds,
-      maps
+      maps,
+      eventType = 'casual' // Default to casual if not specified
     } = body;
     
     if (!name || !gameId) {
@@ -89,6 +109,20 @@ export async function POST(request: NextRequest) {
       ...match,
       maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
     };
+
+    // Queue Discord announcement (don't block response if it fails)
+    try {
+      const discordSuccess = await queueDiscordAnnouncement(matchId);
+      
+      if (discordSuccess) {
+        console.log(`✅ Discord announcement queued for match: ${name}`);
+      } else {
+        console.warn(`⚠️ Failed to queue Discord announcement for match: ${name}`);
+      }
+    } catch (discordError) {
+      console.error('❌ Error queuing Discord announcement:', discordError);
+      // Don't fail the API request if Discord queueing fails
+    }
     
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
