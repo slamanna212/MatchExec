@@ -1,4 +1,6 @@
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message } from 'discord.js';
+import fs from 'fs';
+import path from 'path';
 import { initializeDatabase } from '../../lib/database';
 import { Database } from '../../lib/database/connection';
 
@@ -183,6 +185,7 @@ class MatchExecBot {
     maps?: string[];
     max_participants: number;
     guild_id: string;
+    livestream_link?: string;
   }) {
     if (!this.isReady || !this.settings?.announcement_channel_id) {
       console.warn('⚠️ Bot not ready or announcement channel not configured');
@@ -190,14 +193,15 @@ class MatchExecBot {
     }
 
     try {
-      // Create event embed
+      // Create event embed (without attachments)
       const embed = await this.createEventEmbed(
         eventData.name,
         eventData.description,
         eventData.game_id,
         eventData.type,
         eventData.maps || [],
-        eventData.max_participants
+        eventData.max_participants,
+        eventData.livestream_link
       );
 
       // Create signup button
@@ -213,10 +217,16 @@ class MatchExecBot {
       const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
 
       if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
-        await announcementChannel.send({
+        // Send main announcement
+        const message = await announcementChannel.send({
           embeds: [embed],
           components: [row]
         });
+
+        // Create maps thread if there are maps
+        if (eventData.maps && eventData.maps.length > 0) {
+          await this.createMapsThread(message, eventData.name, eventData.game_id, eventData.maps);
+        }
 
         console.log(`✅ Event announcement posted for: ${eventData.name}`);
         return true;
@@ -231,60 +241,199 @@ class MatchExecBot {
     }
   }
 
+
   private async createEventEmbed(
     name: string,
     description: string,
-    game: string,
+    gameId: string,
     type: string,
     maps: string[],
-    maxParticipants: number
+    maxParticipants: number,
+    livestreamLink?: string
   ): Promise<EmbedBuilder> {
+    // Get game data from database for nice name and color
+    let gameName = gameId;
+    let gameColor = type === 'competitive' ? 0xff6b35 : 0x4caf50; // fallback colors
+    
+    if (this.db) {
+      try {
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [gameId]);
+        
+        console.log('Game data from database:', gameData);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            // Convert hex string to number (remove # and parse as hex)
+            const colorHex = gameData.color.replace('#', '');
+            gameColor = parseInt(colorHex, 16);
+            console.log(`Using game color: ${gameData.color} -> ${gameColor} (0x${colorHex})`);
+          } else {
+            console.log('No color found for game, using fallback');
+          }
+        } else {
+          console.log('No game data found for ID:', gameId);
+        }
+      } catch (error) {
+        console.error('Error fetching game data:', error);
+      }
+    }
+
     const embed = new EmbedBuilder()
-      .setTitle(`🎮 ${name}`)
+      .setTitle(name)
       .setDescription(description)
-      .setColor(type === 'competitive' ? 0xff6b35 : 0x4caf50)
+      .setColor(gameColor)
       .addFields(
-        { name: '🎯 Game', value: game, inline: true },
-        { name: '🏆 Type', value: type === 'competitive' ? '🥇 Competitive' : '🎮 Casual', inline: true },
-        { name: '👥 Max Players', value: maxParticipants.toString(), inline: true }
+        { name: '🎯 Game', value: gameName, inline: true },
+        { name: '🏆 Type', value: type === 'competitive' ? '🥇 Competitive' : '🎮 Casual', inline: true }
       )
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
 
-    // Add maps if provided
+    // Add maps count if provided (but not the actual maps - those go in thread)
     if (maps.length > 0) {
-      // Try to get map images from database
-      let mapText = '';
-      for (const mapName of maps) {
-        if (this.db) {
-          try {
-            const mapData = await this.db.get<{name: string, image_url: string}>(`
-              SELECT name, image_url FROM game_maps 
-              WHERE LOWER(name) LIKE LOWER(?) 
-              LIMIT 1
-            `, [`%${mapName}%`]);
+      embed.addFields({ 
+        name: '🗺️ Maps', 
+        value: `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`, 
+        inline: false 
+      });
+    }
 
-            if (mapData?.image_url) {
-              mapText += `**${mapData.name}**\n`;
-              // Use first map image as thumbnail if available
-              if (!embed.data.thumbnail && mapData.image_url) {
-                embed.setThumbnail(mapData.image_url);
-              }
-            } else {
-              mapText += `**${mapName}**\n`;
-            }
-          } catch (error) {
-            mapText += `**${mapName}**\n`;
-          }
-        } else {
-          mapText += `**${mapName}**\n`;
-        }
-      }
-      
-      embed.addFields({ name: '🗺️ Maps', value: mapText || 'Maps will be announced', inline: false });
+    // Add livestream link if provided
+    if (livestreamLink && livestreamLink.trim()) {
+      embed.addFields({
+        name: '📺 Livestream',
+        value: `[Watch Live](${livestreamLink})`,
+        inline: true
+      });
     }
 
     return embed;
+  }
+
+  private async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]) {
+    try {
+      // Create thread
+      const thread = await message.startThread({
+        name: `${eventName} Maps`,
+        autoArchiveDuration: 1440, // 24 hours
+        reason: 'Map details for event'
+      });
+
+      // Create an embed for each map
+      for (const mapIdentifier of maps) {
+        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier);
+        if (mapEmbedData) {
+          const messageOptions: any = { embeds: [mapEmbedData.embed] };
+          if (mapEmbedData.attachment) {
+            messageOptions.files = [mapEmbedData.attachment];
+          }
+          await thread.send(messageOptions);
+        }
+      }
+
+      console.log(`✅ Created maps thread with ${maps.length} map embeds`);
+    } catch (error) {
+      console.error('❌ Error creating maps thread:', error);
+    }
+  }
+
+  private async createMapEmbed(gameId: string, mapIdentifier: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
+    if (!this.db) return null;
+
+    try {
+      // Get map data from database
+      const mapData = await this.db.get<{
+        name: string, 
+        image_url: string, 
+        location: string,
+        mode_id: string
+      }>(`
+        SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+        FROM game_maps gm
+        WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
+        LIMIT 1
+      `, [gameId, mapIdentifier, `%${mapIdentifier}%`]);
+
+      if (!mapData) {
+        // Fallback embed for unknown maps
+        return {
+          embed: new EmbedBuilder()
+            .setTitle(`🗺️ ${mapIdentifier}`)
+            .setDescription('Map details not available')
+            .setColor(0x95a5a6)
+        };
+      }
+
+      // Get game mode name
+      let modeName = mapData.mode_id;
+      if (this.db) {
+        try {
+          const modeData = await this.db.get<{name: string}>(`
+            SELECT name FROM game_modes WHERE id = ? AND game_id = ?
+          `, [mapData.mode_id, gameId]);
+          if (modeData) {
+            modeName = modeData.name;
+          }
+        } catch (error) {
+          console.error('Error fetching mode name:', error);
+        }
+      }
+
+      // Get game color for consistent styling
+      let gameColor = 0x95a5a6; // default gray
+      try {
+        const gameData = await this.db.get<{color: string}>(`
+          SELECT color FROM games WHERE id = ?
+        `, [gameId]);
+        if (gameData?.color) {
+          gameColor = parseInt(gameData.color.replace('#', ''), 16);
+        }
+      } catch (error) {
+        console.error('Error fetching game color for map embed:', error);
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🗺️ ${mapData.name}`)
+        .setColor(gameColor)
+        .addFields(
+          { name: '🎮 Mode', value: modeName, inline: true }
+        );
+
+      if (mapData.location) {
+        embed.addFields({ name: '📍 Location', value: mapData.location, inline: true });
+      }
+
+      // Add image if available - use as attachment for local files
+      if (mapData.image_url) {
+        try {
+          // Convert URL path to file system path for local files
+          const imagePath = path.join(process.cwd(), 'public', mapData.image_url.replace(/^\//, ''));
+          
+          if (fs.existsSync(imagePath)) {
+            // Create attachment for the map image
+            const attachment = new AttachmentBuilder(imagePath, {
+              name: `${mapData.name.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`
+            });
+            
+            // Use attachment://filename to reference the attached image
+            const attachmentName = `${mapData.name.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
+            embed.setImage(`attachment://${attachmentName}`);
+            
+            return { embed, attachment };
+          }
+        } catch (error) {
+          console.error(`Error handling map image for ${mapData.name}:`, error);
+        }
+      }
+
+      return { embed };
+    } catch (error) {
+      console.error('Error creating map embed:', error);
+      return null;
+    }
   }
 
   private async handleButtonInteraction(interaction: ButtonInteraction) {
@@ -432,7 +581,7 @@ class MatchExecBot {
     try {
       // Get pending announcements
       const pendingAnnouncements = await this.db.all(`
-        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps
+        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link
         FROM discord_announcement_queue daq
         JOIN matches m ON daq.match_id = m.id
         WHERE daq.status = 'pending'
@@ -461,7 +610,8 @@ class MatchExecBot {
             type: 'casual', // Default to casual, we'll need to add this field to matches table later
             maps: maps,
             max_participants: announcement.max_participants,
-            guild_id: announcement.guild_id
+            guild_id: announcement.guild_id,
+            livestream_link: announcement.livestream_link
           });
 
           if (success) {
