@@ -1,7 +1,7 @@
 'use client'
 
-import { TournamentDashboard } from '@/components/tournament-dashboard';
+import { MatchDashboard } from '@/components/match-dashboard';
 
 export default function Home() {
-  return <TournamentDashboard />;
+  return <MatchDashboard />;
 }

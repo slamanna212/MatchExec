@@ -15,7 +15,7 @@ interface DiscordSettings {
 }
 
 interface SchedulerSettings {
-  tournament_check_cron: string;
+  match_check_cron: string;
   reminder_check_cron: string;
   cleanup_check_cron: string;
   report_generation_cron: string;
@@ -42,7 +42,7 @@ export default function SettingsPage() {
 
   const schedulerForm = useForm<SchedulerSettings>({
     initialValues: {
-      tournament_check_cron: '0 */5 * * * *',
+      match_check_cron: '0 */5 * * * *',
       reminder_check_cron: '0 0 */4 * * *',
       cleanup_check_cron: '0 0 2 * * *',
       report_generation_cron: '0 0 0 * * 0',
@@ -132,7 +132,7 @@ export default function SettingsPage() {
       <Stack gap="xl">
         <div>
           <Text size="xl" fw={700}>Settings</Text>
-          <Text c="dimmed" mt="xs">Configure application and tournament settings</Text>
+          <Text c="dimmed" mt="xs">Configure application and match settings</Text>
         </div>
 
         <Stack gap="lg">
@@ -218,7 +218,7 @@ export default function SettingsPage() {
 
                 <TextInput
                   label="Participant Role"
-                  placeholder="Role ID for tournament participants"
+                  placeholder="Role ID for match participants"
                   {...form.getInputProps('participant_role_id')}
                   disabled={loading}
                 />
@@ -257,10 +257,10 @@ export default function SettingsPage() {
                 </Group>
 
                 <TextInput
-                  label="Tournament Check"
+                  label="Match Check"
                   placeholder="0 */5 * * * *"
-                  description="Cron expression for checking tournament start times (format: second minute hour day month dayOfWeek)"
-                  {...schedulerForm.getInputProps('tournament_check_cron')}
+                  description="Cron expression for checking match start times (format: second minute hour day month dayOfWeek)"
+                  {...schedulerForm.getInputProps('match_check_cron')}
                   disabled={loading || !schedulerForm.values.enabled}
                 />
 
@@ -275,7 +275,7 @@ export default function SettingsPage() {
                 <TextInput
                   label="Data Cleanup"
                   placeholder="0 0 2 * * *"
-                  description="Cron expression for cleaning up old tournament data"
+                  description="Cron expression for cleaning up old match data"
                   {...schedulerForm.getInputProps('cleanup_check_cron')}
                   disabled={loading || !schedulerForm.values.enabled}
                 />
@@ -283,7 +283,7 @@ export default function SettingsPage() {
                 <TextInput
                   label="Report Generation"
                   placeholder="0 0 0 * * 0"
-                  description="Cron expression for generating tournament reports"
+                  description="Cron expression for generating match reports"
                   {...schedulerForm.getInputProps('report_generation_cron')}
                   disabled={loading || !schedulerForm.values.enabled}
                 />

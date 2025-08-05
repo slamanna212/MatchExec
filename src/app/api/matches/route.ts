@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import { Tournament } from '../../../shared/types';
+import { Match } from '../../../shared/types';
 
 export async function GET() {
   try {
     const db = await getDbInstance();
-    const tournaments = await db.all<Tournament>(`
-      SELECT t.*, g.name as game_name, g.icon_url as game_icon
-      FROM tournaments t
-      LEFT JOIN games g ON t.game_id = g.id
-      ORDER BY t.created_at DESC
+    const matches = await db.all<Match>(`
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon
+      FROM matches m
+      LEFT JOIN games g ON m.game_id = g.id
+      ORDER BY m.created_at DESC
     `);
     
-    return NextResponse.json(tournaments);
+    return NextResponse.json(matches);
   } catch (error) {
-    console.error('Error fetching tournaments:', error);
+    console.error('Error fetching matches:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch tournaments' },
+      { error: 'Failed to fetch matches' },
       { status: 500 }
     );
   }
@@ -35,14 +35,14 @@ export async function POST(request: NextRequest) {
     }
     
     const db = await getDbInstance();
-    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     await db.run(`
-      INSERT INTO tournaments (
+      INSERT INTO matches (
         id, name, description, game_id, guild_id, channel_id, max_participants, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      tournamentId,
+      matchId,
       name,
       description || null,
       gameId,
@@ -52,16 +52,16 @@ export async function POST(request: NextRequest) {
       'created'
     ]);
     
-    const tournament = await db.get<Tournament>(
-      'SELECT * FROM tournaments WHERE id = ?',
-      [tournamentId]
+    const match = await db.get<Match>(
+      'SELECT * FROM matches WHERE id = ?',
+      [matchId]
     );
     
-    return NextResponse.json(tournament, { status: 201 });
+    return NextResponse.json(match, { status: 201 });
   } catch (error) {
-    console.error('Error creating tournament:', error);
+    console.error('Error creating match:', error);
     return NextResponse.json(
-      { error: 'Failed to create tournament' },
+      { error: 'Failed to create match' },
       { status: 500 }
     );
   }

@@ -35,7 +35,7 @@ class MatchExecBot {
       this.isReady = true;
       
       // Set bot status
-      this.client.user?.setActivity('Tournament Management', { type: ActivityType.Playing });
+      this.client.user?.setActivity('Match Management', { type: ActivityType.Playing });
       
       // Register slash commands
       await this.registerSlashCommands();

@@ -1,14 +1,14 @@
-# MatchExec Tournament Bot
+# MatchExec Match Bot
 
-A Discord tournament management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
+A Discord match management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
 
 ## Architecture
 
 This project uses a multi-process architecture managed by PM2:
 
 1. **Web App** (`src/app/`): Next.js application with Mantine UI components
-2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for tournament commands
-3. **Scheduler** (`processes/scheduler/`): Cron jobs for tournament management
+2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for match commands
+3. **Scheduler** (`processes/scheduler/`): Cron jobs for match management
 4. **Worker** (`processes/worker/`): Background job processing
 
 ## Development
@@ -76,9 +76,9 @@ The database includes tables for:
 - **games**: Game information (Overwatch 2, Marvel Rivals, etc.)
 - **game_modes**: Game modes for each game (Control, Escort, etc.)
 - **game_maps**: Maps available for each game and mode
-- **tournaments**: Tournament records with status tracking
-- **tournament_participants**: Players registered for tournaments
-- **tournament_matches**: Individual matches within tournaments
+- **matches**: Match records with status tracking
+- **match_participants**: Players registered for matches
+- **match_games**: Individual games within matches
 - **data_versions**: Tracks seeded data versions to avoid re-seeding
 - **migrations**: Migration execution tracking
 

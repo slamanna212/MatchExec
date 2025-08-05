@@ -46,9 +46,9 @@ class MatchExecScheduler {
       this.cronJobs = [];
 
       // Start new cron jobs based on settings
-      this.startCronJob('Tournament Check', settings.tournament_check_cron, this.checkTournamentStartTimes.bind(this));
+      this.startCronJob('Match Check', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
       this.startCronJob('Reminder Check', settings.reminder_check_cron, this.sendParticipantReminders.bind(this));
-      this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldTournaments.bind(this));
+      this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
       this.startCronJob('Report Generation', settings.report_generation_cron, this.generateReports.bind(this));
 
       console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
@@ -82,80 +82,80 @@ class MatchExecScheduler {
     }
   }
 
-  private async checkTournamentStartTimes() {
-    // Check for tournaments that should start
+  private async checkMatchStartTimes() {
+    // Check for matches that should start
     const now = new Date();
-    const tournaments = await this.db.all(
-      `SELECT * FROM tournaments 
+    const matches = await this.db.all(
+      `SELECT * FROM matches 
        WHERE status = 'registration' 
        AND start_date <= ? 
        AND start_date IS NOT NULL`,
       [now.toISOString()]
     );
 
-    for (const tournament of tournaments) {
-      console.log(`🏆 Starting tournament: ${tournament.name}`);
+    for (const match of matches) {
+      console.log(`🏆 Starting match: ${match.name}`);
       await this.db.run(
-        'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        ['ongoing', tournament.id]
+        'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['ongoing', match.id]
       );
     }
   }
 
   private async sendParticipantReminders() {
-    // Send reminders for upcoming tournaments
+    // Send reminders for upcoming matches
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    const upcomingTournaments = await this.db.all(
-      `SELECT t.*, COUNT(tp.id) as participant_count
-       FROM tournaments t
-       LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
-       WHERE t.start_date BETWEEN datetime('now') AND datetime('now', '+24 hours')
-       AND t.status = 'registration'
-       GROUP BY t.id`
+    const upcomingMatches = await this.db.all(
+      `SELECT m.*, COUNT(mp.id) as participant_count
+       FROM matches m
+       LEFT JOIN match_participants mp ON m.id = mp.match_id
+       WHERE m.start_date BETWEEN datetime('now') AND datetime('now', '+24 hours')
+       AND m.status = 'registration'
+       GROUP BY m.id`
     );
 
-    for (const tournament of upcomingTournaments) {
-      console.log(`📢 Sending reminders for tournament: ${tournament.name} (${tournament.participant_count} participants)`);
+    for (const match of upcomingMatches) {
+      console.log(`📢 Sending reminders for match: ${match.name} (${match.participant_count} participants)`);
       // TODO: Implement Discord notification logic
     }
   }
 
-  private async cleanupOldTournaments() {
-    // Clean up tournaments completed more than 30 days ago
+  private async cleanupOldMatches() {
+    // Clean up matches completed more than 30 days ago
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const result = await this.db.run(
-      `DELETE FROM tournaments 
+      `DELETE FROM matches 
        WHERE status = 'completed' 
        AND updated_at < ?`,
       [thirtyDaysAgo.toISOString()]
     );
 
     if (result.changes > 0) {
-      console.log(`🗑️ Cleaned up ${result.changes} old tournaments`);
+      console.log(`🗑️ Cleaned up ${result.changes} old matches`);
     }
   }
 
   private async generateReports() {
-    // Generate weekly tournament reports
+    // Generate weekly match reports
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     const stats = await this.db.get(
       `SELECT 
-         COUNT(*) as total_tournaments,
-         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tournaments,
-         COUNT(CASE WHEN status = 'ongoing' THEN 1 END) as ongoing_tournaments,
-         COUNT(CASE WHEN status = 'registration' THEN 1 END) as registration_tournaments
-       FROM tournaments 
+         COUNT(*) as total_matches,
+         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_matches,
+         COUNT(CASE WHEN status = 'ongoing' THEN 1 END) as ongoing_matches,
+         COUNT(CASE WHEN status = 'registration' THEN 1 END) as registration_matches
+       FROM matches 
        WHERE created_at >= ?`,
       [weekAgo.toISOString()]
     );
 
-    console.log(`📊 Weekly Report: ${stats.total_tournaments} total, ${stats.completed_tournaments} completed, ${stats.ongoing_tournaments} ongoing, ${stats.registration_tournaments} in registration`);
+    console.log(`📊 Weekly Report: ${stats.total_matches} total, ${stats.completed_matches} completed, ${stats.ongoing_matches} ongoing, ${stats.registration_matches} in registration`);
     // TODO: Store or send report somewhere
   }
 

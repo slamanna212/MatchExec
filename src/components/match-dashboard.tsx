@@ -13,34 +13,34 @@ import {
   Stack,
   Grid
 } from '@mantine/core';
-import { Tournament, Game } from '../../shared/types';
-import { CreateTournamentModal } from './create-tournament-modal';
+import { Match, Game } from '../../shared/types';
+import { CreateMatchModal } from './create-match-modal';
 
-interface TournamentWithGame extends Tournament {
+interface MatchWithGame extends Match {
   game_name?: string;
   game_icon?: string;
 }
 
-export function TournamentDashboard() {
-  const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
+export function MatchDashboard() {
+  const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchTournaments();
+    fetchMatches();
     fetchGames();
   }, []);
 
-  const fetchTournaments = async () => {
+  const fetchMatches = async () => {
     try {
-      const response = await fetch('/api/tournaments');
+      const response = await fetch('/api/matches');
       if (response.ok) {
         const data = await response.json();
-        setTournaments(data);
+        setMatches(data);
       }
     } catch (error) {
-      console.error('Error fetching tournaments:', error);
+      console.error('Error fetching matches:', error);
     } finally {
       setLoading(false);
     }
@@ -69,8 +69,8 @@ export function TournamentDashboard() {
     }
   };
 
-  const handleTournamentCreated = (tournament: Tournament) => {
-    setTournaments(prev => [tournament, ...prev]);
+  const handleMatchCreated = (match: Match) => {
+    setMatches(prev => [match, ...prev]);
     setCreateModalOpen(false);
   };
 
@@ -86,69 +86,69 @@ export function TournamentDashboard() {
     <div className="container mx-auto p-6 max-w-6xl">
       <Group justify="space-between" mb="xl">
         <div>
-          <Text size="xl" fw={700}>Tournament Dashboard</Text>
-          <Text c="dimmed" mt="xs">Manage and view all tournaments</Text>
+          <Text size="xl" fw={700}>Match Dashboard</Text>
+          <Text c="dimmed" mt="xs">Manage and view all matches</Text>
         </div>
         <Button 
           size="lg"
           onClick={() => setCreateModalOpen(true)}
         >
-          Create Tournament
+          Create Match
         </Button>
       </Group>
 
       <Divider mb="xl" />
 
-      {tournaments.length === 0 ? (
+      {matches.length === 0 ? (
         <Card p="xl">
           <Stack align="center">
-            <Text size="xl" fw={600}>No tournaments yet</Text>
+            <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed" mb="md">
-              Create your first tournament to get started
+              Create your first match to get started
             </Text>
             <Button 
               onClick={() => setCreateModalOpen(true)}
             >
-              Create Tournament
+              Create Match
             </Button>
           </Stack>
         </Card>
       ) : (
         <Grid>
-          {tournaments.map((tournament) => (
-            <Grid.Col key={tournament.id} span={{ base: 12, md: 6, lg: 4 }}>
+          {matches.map((match) => (
+            <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
               <Card shadow="sm" padding="lg" radius="md" withBorder>
                 <Group mb="md">
                   <Avatar
-                    src={tournament.game_icon}
-                    alt={tournament.game_name}
+                    src={match.game_icon}
+                    alt={match.game_name}
                     size="md"
                   />
                   <Stack gap="xs" style={{ flex: 1 }}>
-                    <Text fw={600}>{tournament.name}</Text>
-                    <Text size="sm" c="dimmed">{tournament.game_name}</Text>
+                    <Text fw={600}>{match.name}</Text>
+                    <Text size="sm" c="dimmed">{match.game_name}</Text>
                   </Stack>
                   <Badge 
-                    color={getStatusColor(tournament.status)} 
+                    color={getStatusColor(match.status)} 
                     size="sm"
                   >
-                    {tournament.status}
+                    {match.status}
                   </Badge>
                 </Group>
                 
                 <Divider mb="md" />
                 
                 <Stack gap="xs">
-                  {tournament.description && (
-                    <Text size="sm" c="dimmed">{tournament.description}</Text>
+                  {match.description && (
+                    <Text size="sm" c="dimmed">{match.description}</Text>
                   )}
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">Max Participants:</Text>
-                    <Text size="sm">{tournament.max_participants}</Text>
+                    <Text size="sm">{match.max_participants}</Text>
                   </Group>
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">Created:</Text>
-                    <Text size="sm">{new Date(tournament.created_at).toLocaleDateString('en-US')}</Text>
+                    <Text size="sm">{new Date(match.created_at).toLocaleDateString('en-US')}</Text>
                   </Group>
                 </Stack>
                 
@@ -156,7 +156,7 @@ export function TournamentDashboard() {
                   <Button size="sm" variant="light" style={{ flex: 1 }}>
                     View Details
                   </Button>
-                  {tournament.status === 'created' && (
+                  {match.status === 'created' && (
                     <Button size="sm">
                       Start Registration
                     </Button>
@@ -168,10 +168,10 @@ export function TournamentDashboard() {
         </Grid>
       )}
 
-      <CreateTournamentModal
+      <CreateMatchModal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        onTournamentCreated={handleTournamentCreated}
+        onMatchCreated={handleMatchCreated}
         games={games}
       />
     </div>
