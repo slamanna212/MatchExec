@@ -250,36 +250,35 @@ export function MatchDashboard() {
                 
                 <Divider mb="md" />
                 
-                <Stack gap="xs">
-                  {match.description && (
-                    <Text size="sm" c="dimmed">{match.description}</Text>
-                  )}
+                <Stack gap="xs" style={{ minHeight: '140px' }}>
+                  <div style={{ minHeight: '20px' }}>
+                    {match.description && (
+                      <Text size="sm" c="dimmed">{match.description}</Text>
+                    )}
+                  </div>
                   
-                  {match.rules && (
-                    <Group justify="space-between">
-                      <Text size="sm" c="dimmed">Rules:</Text>
-                      <Text size="sm" tt="capitalize">{match.rules}</Text>
-                    </Group>
-                  )}
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Rules:</Text>
+                    <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
+                  </Group>
                   
-                  {match.rounds && (
-                    <Group justify="space-between">
-                      <Text size="sm" c="dimmed">Rounds:</Text>
-                      <Text size="sm">{match.rounds}</Text>
-                    </Group>
-                  )}
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Rounds:</Text>
+                    <Text size="sm">{match.rounds || 'Not specified'}</Text>
+                  </Group>
                   
-                  {match.maps && match.maps.length > 0 && (
-                    <Group justify="space-between" align="flex-start">
-                      <Text size="sm" c="dimmed">Maps:</Text>
-                      <Text size="sm" ta="right" style={{ maxWidth: '60%' }}>
-                        {match.maps.length > 2 
-                          ? `${match.maps.slice(0, 2).map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')} +${match.maps.length - 2} more`
-                          : match.maps.map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')
-                        }
-                      </Text>
-                    </Group>
-                  )}
+                  <Group justify="space-between" align="center">
+                    <Text size="sm" c="dimmed">Maps:</Text>
+                    <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
+                      {match.maps && match.maps.length > 0 ? (
+                        match.maps.length > 1
+                          ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
+                          : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+                      ) : (
+                        'None selected'
+                      )}
+                    </Text>
+                  </Group>
                   
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">Max Participants:</Text>
