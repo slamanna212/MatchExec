@@ -84,8 +84,8 @@ export function MatchDashboard() {
   };
 
   const handleMatchCreated = (match: Match) => {
+    // Add the new match to the top of the list
     setMatches(prev => [match, ...prev]);
-    setCreateModalOpen(false);
   };
 
   if (loading) {

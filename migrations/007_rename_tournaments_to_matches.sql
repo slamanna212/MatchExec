@@ -1,3 +1,0 @@
--- This migration has already been applied - schema now uses 'matches' instead of 'tournaments'
--- If tables already have the new names, skip this migration
--- This is a no-op migration to maintain compatibility

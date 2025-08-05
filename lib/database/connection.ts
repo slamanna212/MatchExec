@@ -8,7 +8,7 @@ export class Database {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || process.env.DATABASE_PATH || './tournament.db';
+    this.dbPath = dbPath || process.env.DATABASE_PATH || './matchexec.db';
   }
 
   async connect(): Promise<void> {

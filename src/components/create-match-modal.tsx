@@ -139,11 +139,23 @@ export function CreateMatchModal({
         maps: formData.maps || []
       };
 
-      // TODO: Implement API call to create match
-      console.log('Creating match with data:', matchData);
-      
-      // For now, just close the modal
-      handleClose();
+      const response = await fetch('/api/matches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(matchData),
+      });
+
+      if (response.ok) {
+        const newMatch = await response.json();
+        onMatchCreated(newMatch);
+        handleClose();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to create match:', errorData.error);
+        // TODO: Show error to user
+      }
     } catch (error) {
       console.error('Error creating match:', error);
     }
