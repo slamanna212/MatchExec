@@ -1,20 +1,10 @@
 import { Database, getDatabase } from '../../lib/database/connection';
-import { MigrationRunner } from '../../lib/database/migrations';
-import { DatabaseSeeder } from '../../lib/database/seeder';
 
 async function initializeDatabase(): Promise<Database> {
   const db = getDatabase();
   
-  // Connect to database
+  // Connect to database (migrations should be run separately at startup)
   await db.connect();
-  
-  // Run migrations
-  const migrationRunner = new MigrationRunner(db);
-  await migrationRunner.runMigrations();
-  
-  // Seed database with game data
-  const seeder = new DatabaseSeeder(db);
-  await seeder.seedDatabase();
   
   return db;
 }
