@@ -2,13 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Checkbox } from '@mantine/core';
-import { Match, Game, GameMap } from '../../shared/types';
+import { Match, GameMap } from '../../shared/types';
+
+interface GameWithIcon {
+  id: string;
+  name: string;
+  genre: string;
+  developer: string;
+  description: string;
+  minPlayers: number;
+  maxPlayers: number;
+  iconUrl: string;
+  coverUrl: string;
+  mapCount: number;
+  modeCount: number;
+}
 
 interface CreateMatchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMatchCreated: (match: Match) => void;
-  games: Game[];
+  games: GameWithIcon[];
 }
 
 interface MatchFormData {
@@ -167,7 +181,7 @@ export function CreateMatchModal({
                 >
                   <Group>
                     <Avatar
-                      src={game.icon_url}
+                      src={game.iconUrl}
                       alt={game.name}
                       size="lg"
                     />
@@ -175,7 +189,7 @@ export function CreateMatchModal({
                       <Text fw={600}>{game.name}</Text>
                       <Text size="sm" c="dimmed">{game.genre}</Text>
                       <Badge size="xs" variant="light">
-                        {game.min_players}-{game.max_players} players
+                        {game.minPlayers}-{game.maxPlayers} players
                       </Badge>
                     </Stack>
                   </Group>

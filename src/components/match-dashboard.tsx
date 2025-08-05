@@ -13,7 +13,21 @@ import {
   Stack,
   Grid
 } from '@mantine/core';
-import { Match, Game } from '../../shared/types';
+import { Match } from '../../shared/types';
+
+interface GameWithIcon {
+  id: string;
+  name: string;
+  genre: string;
+  developer: string;
+  description: string;
+  minPlayers: number;
+  maxPlayers: number;
+  iconUrl: string;
+  coverUrl: string;
+  mapCount: number;
+  modeCount: number;
+}
 import { CreateMatchModal } from './create-match-modal';
 
 interface MatchWithGame extends Match {
@@ -23,7 +37,7 @@ interface MatchWithGame extends Match {
 
 export function MatchDashboard() {
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
