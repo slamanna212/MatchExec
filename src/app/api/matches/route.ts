@@ -12,7 +12,13 @@ export async function GET() {
       ORDER BY m.created_at DESC
     `);
     
-    return NextResponse.json(matches);
+    // Parse maps JSON for each match
+    const parsedMatches = matches.map(match => ({
+      ...match,
+      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
+    }));
+    
+    return NextResponse.json(parsedMatches);
   } catch (error) {
     console.error('Error fetching matches:', error);
     return NextResponse.json(
@@ -50,35 +56,25 @@ export async function POST(request: NextRequest) {
     const guildId = 'placeholder_guild';
     const channelId = 'placeholder_channel';
     
-    // Build description with additional match info
-    let fullDescription = description || '';
-    if (livestreamLink) {
-      fullDescription += `\n\nLivestream: ${livestreamLink}`;
-    }
-    if (rules) {
-      fullDescription += `\nRules: ${rules}`;
-    }
-    if (rounds) {
-      fullDescription += `\nRounds: ${rounds}`;
-    }
-    if (maps && maps.length > 0) {
-      fullDescription += `\nMaps: ${maps.join(', ')}`;
-    }
-    
     await db.run(`
       INSERT INTO matches (
-        id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date,
+        rules, rounds, maps, livestream_link
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       matchId,
       name,
-      fullDescription.trim() || null,
+      description || null,
       gameId,
       guildId,
       channelId,
       16, // Default max participants
       'created',
-      startDate ? new Date(startDate).toISOString() : null
+      startDate ? new Date(startDate).toISOString() : null,
+      rules || null,
+      rounds || null,
+      maps && maps.length > 0 ? JSON.stringify(maps) : null,
+      livestreamLink || null
     ]);
     
     const match = await db.get(`
@@ -88,7 +84,13 @@ export async function POST(request: NextRequest) {
       WHERE m.id = ?
     `, [matchId]);
     
-    return NextResponse.json(match, { status: 201 });
+    // Parse maps for the returned match
+    const parsedMatch = {
+      ...match,
+      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
+    };
+    
+    return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
     console.error('Error creating match:', error);
     return NextResponse.json(

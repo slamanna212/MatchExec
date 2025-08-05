@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Checkbox } from '@mantine/core';
+import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Checkbox, ActionIcon, Image } from '@mantine/core';
+import { IconPlus, IconX } from '@tabler/icons-react';
 import { Match, GameMap } from '../../shared/types';
 
 interface GameWithIcon {
@@ -37,9 +38,23 @@ interface MatchFormData {
   maps: string[];
 }
 
+interface GameMode {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 interface GameMapWithMode extends GameMap {
   modeName?: string;
   modeDescription?: string;
+}
+
+interface SelectedMapCard {
+  id: string;
+  name: string;
+  modeId: string;
+  modeName: string;
+  imageUrl?: string;
 }
 
 export function CreateMatchModal({
@@ -55,11 +70,21 @@ export function CreateMatchModal({
   });
   const [availableMaps, setAvailableMaps] = useState<GameMapWithMode[]>([]);
   const [loadingMaps, setLoadingMaps] = useState(false);
+  const [availableModes, setAvailableModes] = useState<GameMode[]>([]);
+  const [selectedMaps, setSelectedMaps] = useState<SelectedMapCard[]>([]);
+  const [showMapSelector, setShowMapSelector] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<string>('');
+  const [mapsForMode, setMapsForMode] = useState<GameMapWithMode[]>([]);
 
   const handleClose = () => {
     setStep(1);
     setFormData({ rules: 'casual', rounds: 1 });
     setAvailableMaps([]);
+    setAvailableModes([]);
+    setSelectedMaps([]);
+    setShowMapSelector(false);
+    setSelectedMode('');
+    setMapsForMode([]);
     onClose();
   };
 
@@ -78,13 +103,13 @@ export function CreateMatchModal({
     if (formData.name && formData.date && formData.time && formData.gameId) {
       setLoadingMaps(true);
       try {
-        const response = await fetch(`/api/games/${formData.gameId}/maps`);
-        if (response.ok) {
-          const maps = await response.json();
-          setAvailableMaps(maps);
+        const modesResponse = await fetch(`/api/games/${formData.gameId}/modes`);
+        if (modesResponse.ok) {
+          const modes = await modesResponse.json();
+          setAvailableModes(modes);
         }
       } catch (error) {
-        console.error('Error fetching maps:', error);
+        console.error('Error fetching modes:', error);
       } finally {
         setLoadingMaps(false);
       }
@@ -96,15 +121,48 @@ export function CreateMatchModal({
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleMapToggle = (mapId: string) => {
-    const currentMaps = formData.maps || [];
-    const isSelected = currentMaps.includes(mapId);
-    
-    if (isSelected) {
-      updateFormData('maps', currentMaps.filter(id => id !== mapId));
-    } else {
-      updateFormData('maps', [...currentMaps, mapId]);
+  const handleModeSelect = async (modeId: string) => {
+    setSelectedMode(modeId);
+    setLoadingMaps(true);
+    try {
+      const response = await fetch(`/api/games/${formData.gameId}/modes/${modeId}/maps`);
+      if (response.ok) {
+        const maps = await response.json();
+        setMapsForMode(maps);
+      }
+    } catch (error) {
+      console.error('Error fetching maps for mode:', error);
+    } finally {
+      setLoadingMaps(false);
     }
+  };
+
+  const handleMapSelect = (map: GameMapWithMode) => {
+    const mode = availableModes.find(m => m.id === selectedMode);
+    if (!mode) return;
+
+    const selectedMap: SelectedMapCard = {
+      id: map.id,
+      name: map.name,
+      modeId: selectedMode,
+      modeName: mode.name,
+      imageUrl: map.imageUrl
+    };
+
+    setSelectedMaps(prev => [...prev, selectedMap]);
+    updateFormData('maps', [...(formData.maps || []), map.id]);
+    setShowMapSelector(false);
+    setSelectedMode('');
+    setMapsForMode([]);
+  };
+
+  const handleRemoveMap = (mapId: string) => {
+    setSelectedMaps(prev => prev.filter(map => map.id !== mapId));
+    updateFormData('maps', (formData.maps || []).filter(id => id !== mapId));
+  };
+
+  const handleAddMapClick = () => {
+    setShowMapSelector(true);
   };
 
   const canCreateMatch = () => {
@@ -287,13 +345,144 @@ export function CreateMatchModal({
       {step === 3 && (
         <Stack>
           <Text mb="md">Maps & Rounds Configuration:</Text>
-          <Text size="sm" c="dimmed">This step will be implemented with full maps picker functionality.</Text>
+          
+          <NumberInput
+            label="Number of Rounds"
+            placeholder="Enter number of rounds"
+            required
+            value={formData.rounds || 1}
+            onChange={(value) => updateFormData('rounds', value)}
+            min={1}
+            max={10}
+          />
+
+          <Text size="sm" fw={500} mt="md">Selected Maps:</Text>
+          
+          <Grid>
+            {selectedMaps.map((map) => (
+              <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
+                <Card shadow="sm" padding="md" radius="md" withBorder>
+                  <Card.Section>
+                    <Image
+                      src={map.imageUrl}
+                      alt={map.name}
+                      height={120}
+                      fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                    />
+                  </Card.Section>
+                  
+                  <Group justify="space-between" mt="xs">
+                    <Stack gap={2} style={{ flex: 1 }}>
+                      <Text fw={500} size="sm">{map.name}</Text>
+                      <Badge size="xs" variant="light">{map.modeName}</Badge>
+                    </Stack>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={() => handleRemoveMap(map.id)}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  </Group>
+                </Card>
+              </Grid.Col>
+            ))}
+            
+            {!showMapSelector && (
+              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                <Card
+                  shadow="sm"
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  className="cursor-pointer hover:shadow-md transition-shadow border-dashed"
+                  onClick={handleAddMapClick}
+                  style={{ 
+                    borderStyle: 'dashed',
+                    borderColor: 'var(--mantine-color-gray-4)',
+                    backgroundColor: 'var(--mantine-color-gray-0)'
+                  }}
+                >
+                  <Stack align="center" justify="center" style={{ minHeight: 120 }}>
+                    <ActionIcon size="xl" variant="light">
+                      <IconPlus />
+                    </ActionIcon>
+                    <Text size="sm" c="dimmed">Add Map</Text>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            )}
+          </Grid>
+
+          {showMapSelector && (
+            <Card withBorder padding="md" mt="md">
+              <Text fw={500} mb="md">Select a Map</Text>
+              
+              <Select
+                label="Game Mode"
+                placeholder="Choose a game mode"
+                data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
+                value={selectedMode}
+                onChange={(value) => value && handleModeSelect(value)}
+                mb="md"
+              />
+
+              {selectedMode && (
+                <>
+                  {loadingMaps ? (
+                    <Text size="sm" c="dimmed">Loading maps...</Text>
+                  ) : (
+                    <Grid>
+                      {mapsForMode.map((map) => (
+                        <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
+                          <Card
+                            shadow="sm"
+                            padding="md"
+                            radius="md"
+                            withBorder
+                            className="cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => handleMapSelect(map)}
+                          >
+                            <Card.Section>
+                              <Image
+                                src={map.imageUrl}
+                                alt={map.name}
+                                height={80}
+                                fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                              />
+                            </Card.Section>
+                            <Text fw={500} size="sm" mt="xs">{map.name}</Text>
+                          </Card>
+                        </Grid.Col>
+                      ))}
+                    </Grid>
+                  )}
+                </>
+              )}
+
+              <Group justify="end" mt="md">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowMapSelector(false);
+                    setSelectedMode('');
+                    setMapsForMode([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Group>
+            </Card>
+          )}
           
           <Group justify="space-between" mt="md">
             <Button variant="outline" onClick={handleBack}>
               Back
             </Button>
-            <Button onClick={handleCreateMatch}>
+            <Button 
+              onClick={handleCreateMatch}
+              disabled={!selectedMaps.length}
+            >
               Create Match
             </Button>
           </Group>

@@ -33,6 +33,10 @@ import { CreateMatchModal } from './create-match-modal';
 interface MatchWithGame extends Match {
   game_name?: string;
   game_icon?: string;
+  rules?: string;
+  rounds?: number;
+  maps?: string[];
+  livestream_link?: string;
 }
 
 export function MatchDashboard() {
@@ -82,6 +86,47 @@ export function MatchDashboard() {
       default: return 'gray';
     }
   };
+
+  const formatMapName = (mapId: string) => {
+    // Convert map ID to proper display name
+    // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
+    return mapId
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
+
+  const fetchMapNames = async (gameId: string) => {
+    try {
+      const response = await fetch(`/api/games/${gameId}/maps`);
+      if (response.ok) {
+        const maps = await response.json();
+        const mapNamesObj: {[key: string]: string} = {};
+        maps.forEach((map: any) => {
+          mapNamesObj[map.id] = map.name;
+        });
+        setMapNames(prev => ({ ...prev, ...mapNamesObj }));
+      }
+    } catch (error) {
+      console.error('Error fetching map names:', error);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch all map names for games that have matches
+    const gameIds = new Set<string>();
+    matches.forEach(match => {
+      if (match.maps && match.maps.length > 0) {
+        gameIds.add(match.game_id);
+      }
+    });
+
+    gameIds.forEach(gameId => {
+      fetchMapNames(gameId);
+    });
+  }, [matches]);
 
   const handleMatchCreated = (match: Match) => {
     // Add the new match to the top of the list
@@ -156,6 +201,28 @@ export function MatchDashboard() {
                   {match.description && (
                     <Text size="sm" c="dimmed">{match.description}</Text>
                   )}
+                  
+                  {match.rules && (
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">Rules:</Text>
+                      <Text size="sm" tt="capitalize">{match.rules}</Text>
+                    </Group>
+                  )}
+                  
+                  {match.rounds && (
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">Rounds:</Text>
+                      <Text size="sm">{match.rounds}</Text>
+                    </Group>
+                  )}
+                  
+                  {match.maps && match.maps.length > 0 && (
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">Maps:</Text>
+                      <Text size="sm">{match.maps.map(mapId => mapNames[mapId] || formatMapName(mapId)).join(', ')}</Text>
+                    </Group>
+                  )}
+                  
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">Max Participants:</Text>
                     <Text size="sm">{match.max_participants}</Text>
