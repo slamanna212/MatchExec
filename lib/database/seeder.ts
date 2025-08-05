@@ -171,9 +171,9 @@ export class DatabaseSeeder {
       }
 
       await this.db.run(`
-        INSERT INTO game_maps (id, game_id, name, mode_id, image_url, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [map.id, gameId, map.name, modeId, imageUrl]);
+        INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
     }
   }
 

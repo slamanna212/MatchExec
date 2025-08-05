@@ -15,6 +15,7 @@ export async function GET(
         gm.name,
         gm.mode_id as modeId,
         gm.image_url as imageUrl,
+        gm.location,
         gmo.name as modeName,
         gmo.description as modeDescription
       FROM game_maps gm

@@ -102,7 +102,7 @@ export function MatchDashboard() {
   };
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string}}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -110,14 +110,15 @@ export function MatchDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string}} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
         
         maps.forEach((map: any) => {
           mapNamesObj[map.id] = map.name;
           mapDetailsObj[map.id] = {
             name: map.name,
             imageUrl: map.imageUrl,
-            modeName: map.modeName
+            modeName: map.modeName,
+            location: map.location
           };
         });
         
@@ -372,26 +373,34 @@ export function MatchDashboard() {
                     {selectedMatch.maps.map(mapId => {
                       const mapDetail = mapDetails[mapId];
                       return (
-                        <Grid.Col key={mapId} span={{ base: 12, sm: 6, md: 4 }}>
+                        <Grid.Col key={mapId} span={12}>
                           <Card shadow="sm" padding="sm" radius="md" withBorder>
-                            <Card.Section>
-                              <Image
-                                src={mapDetail?.imageUrl}
-                                alt={mapDetail?.name || formatMapName(mapId)}
-                                height={100}
-                                fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                              />
-                            </Card.Section>
-                            <Stack gap={4} mt="xs">
-                              <Text fw={500} size="sm" lineClamp={1}>
-                                {mapDetail?.name || formatMapName(mapId)}
-                              </Text>
-                              {mapDetail?.modeName && (
-                                <Badge size="xs" variant="light">
-                                  {mapDetail.modeName}
-                                </Badge>
-                              )}
-                            </Stack>
+                            <Group wrap="nowrap" align="center" gap="md">
+                              <div style={{ width: '50%' }}>
+                                <Image
+                                  src={mapDetail?.imageUrl}
+                                  alt={mapDetail?.name || formatMapName(mapId)}
+                                  height={60}
+                                  radius="sm"
+                                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                                />
+                              </div>
+                              <div style={{ width: '50%' }}>
+                                <Text fw={500} size="sm" lineClamp={1}>
+                                  {mapDetail?.name || formatMapName(mapId)}
+                                </Text>
+                                {mapDetail?.location && (
+                                  <Text size="xs" c="dimmed" lineClamp={1}>
+                                    {mapDetail.location}
+                                  </Text>
+                                )}
+                                {mapDetail?.modeName && (
+                                  <Badge size="xs" variant="light" mt={2}>
+                                    {mapDetail.modeName}
+                                  </Badge>
+                                )}
+                              </div>
+                            </Group>
                           </Card>
                         </Grid.Col>
                       );
