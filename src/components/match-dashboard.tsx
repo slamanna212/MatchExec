@@ -11,8 +11,10 @@ import {
   Loader,
   Group,
   Stack,
-  Grid
+  Grid,
+  Modal
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { Match } from '../../shared/types';
 
 interface GameWithIcon {
@@ -44,6 +46,8 @@ export function MatchDashboard() {
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
 
   useEffect(() => {
     fetchMatches();
@@ -131,6 +135,43 @@ export function MatchDashboard() {
   const handleMatchCreated = (match: Match) => {
     // Add the new match to the top of the list
     setMatches(prev => [match, ...prev]);
+  };
+
+  const handleViewDetails = (match: MatchWithGame) => {
+    setSelectedMatch(match);
+    setDetailsModalOpen(true);
+  };
+
+  const handleDeleteMatch = async (matchId: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Remove the match from the list
+        setMatches(prev => prev.filter(match => match.id !== matchId));
+        setDetailsModalOpen(false);
+      } else {
+        console.error('Failed to delete match');
+      }
+    } catch (error) {
+      console.error('Error deleting match:', error);
+    }
+  };
+
+  const confirmDelete = (match: MatchWithGame) => {
+    modals.openConfirmModal({
+      title: 'Delete Match',
+      children: (
+        <Text size="sm">
+          Are you sure you want to delete "{match.name}"? This action cannot be undone.
+        </Text>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => handleDeleteMatch(match.id),
+    });
   };
 
   if (loading) {
@@ -234,7 +275,12 @@ export function MatchDashboard() {
                 </Stack>
                 
                 <Group mt="md" gap="xs">
-                  <Button size="sm" variant="light" style={{ flex: 1 }}>
+                  <Button 
+                    size="sm" 
+                    variant="light" 
+                    style={{ flex: 1 }}
+                    onClick={() => handleViewDetails(match)}
+                  >
                     View Details
                   </Button>
                   {match.status === 'created' && (
@@ -255,6 +301,114 @@ export function MatchDashboard() {
         onMatchCreated={handleMatchCreated}
         games={games}
       />
+
+      <Modal
+        opened={detailsModalOpen}
+        onClose={() => setDetailsModalOpen(false)}
+        title="Match Details"
+        size="lg"
+      >
+        {selectedMatch && (
+          <Stack gap="md">
+            <Group>
+              <Avatar
+                src={selectedMatch.game_icon}
+                alt={selectedMatch.game_name}
+                size="lg"
+              />
+              <Stack gap="xs">
+                <Text size="xl" fw={600}>{selectedMatch.name}</Text>
+                <Text size="md" c="dimmed">{selectedMatch.game_name}</Text>
+                <Badge color={getStatusColor(selectedMatch.status)} size="sm">
+                  {selectedMatch.status}
+                </Badge>
+              </Stack>
+            </Group>
+
+            <Divider />
+
+            <Stack gap="sm">
+              {selectedMatch.description && (
+                <div>
+                  <Text size="sm" fw={500} c="dimmed">Description:</Text>
+                  <Text size="sm">{selectedMatch.description}</Text>
+                </div>
+              )}
+
+              {selectedMatch.rules && (
+                <Group justify="space-between">
+                  <Text size="sm" fw={500} c="dimmed">Rules:</Text>
+                  <Text size="sm" tt="capitalize">{selectedMatch.rules}</Text>
+                </Group>
+              )}
+
+              {selectedMatch.rounds && (
+                <Group justify="space-between">
+                  <Text size="sm" fw={500} c="dimmed">Rounds:</Text>
+                  <Text size="sm">{selectedMatch.rounds}</Text>
+                </Group>
+              )}
+
+              {selectedMatch.maps && selectedMatch.maps.length > 0 && (
+                <div>
+                  <Text size="sm" fw={500} c="dimmed" mb="xs">Maps:</Text>
+                  <Stack gap="xs" ml="md">
+                    {selectedMatch.maps.map(mapId => (
+                      <Text key={mapId} size="sm">
+                        • {mapNames[mapId] || formatMapName(mapId)}
+                      </Text>
+                    ))}
+                  </Stack>
+                </div>
+              )}
+
+              {selectedMatch.livestream_link && (
+                <Group justify="space-between">
+                  <Text size="sm" fw={500} c="dimmed">Livestream:</Text>
+                  <Text size="sm" component="a" href={selectedMatch.livestream_link} target="_blank">
+                    View Stream
+                  </Text>
+                </Group>
+              )}
+
+              <Group justify="space-between">
+                <Text size="sm" fw={500} c="dimmed">Max Participants:</Text>
+                <Text size="sm">{selectedMatch.max_participants}</Text>
+              </Group>
+
+              {selectedMatch.start_date && (
+                <Group justify="space-between">
+                  <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
+                  <Text size="sm">{new Date(selectedMatch.start_date).toLocaleString('en-US')}</Text>
+                </Group>
+              )}
+
+              <Group justify="space-between">
+                <Text size="sm" fw={500} c="dimmed">Created:</Text>
+                <Text size="sm">{new Date(selectedMatch.created_at).toLocaleString('en-US')}</Text>
+              </Group>
+            </Stack>
+
+            <Divider />
+            
+            <Group justify="space-between" mt="md">
+              <Button
+                color="red"
+                variant="light"
+                onClick={() => confirmDelete(selectedMatch)}
+              >
+                Delete Match
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDetailsModalOpen(false)}
+              >
+                Close
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </div>
   );
 }

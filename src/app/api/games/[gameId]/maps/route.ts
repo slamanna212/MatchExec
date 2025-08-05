@@ -3,11 +3,11 @@ import { getDbInstance } from '../../../../../lib/database-init';
 
 export async function GET(
   request: Request,
-  { params }: { params: { gameId: string } }
+  { params }: { params: Promise<{ gameId: string }> }
 ) {
   try {
     const db = await getDbInstance();
-    const { gameId } = params;
+    const { gameId } = await params;
     
     const maps = await db.all(`
       SELECT 
