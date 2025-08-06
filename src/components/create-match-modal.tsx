@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Checkbox, ActionIcon, Image, FileButton, Box } from '@mantine/core';
+import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash } from '@tabler/icons-react';
 import { Match, GameMap } from '../../shared/types';
 
@@ -66,8 +66,7 @@ export function CreateMatchModal({
 }: CreateMatchModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<Partial<MatchFormData>>({
-    rules: 'casual',
-    rounds: 1
+    rules: 'casual'
   });
   const [availableMaps, setAvailableMaps] = useState<GameMapWithMode[]>([]);
   const [loadingMaps, setLoadingMaps] = useState(false);
@@ -81,7 +80,7 @@ export function CreateMatchModal({
 
   const handleClose = () => {
     setStep(1);
-    setFormData({ rules: 'casual', rounds: 1 });
+    setFormData({ rules: 'casual' });
     setAvailableMaps([]);
     setAvailableModes([]);
     setSelectedMaps([]);
@@ -210,16 +209,24 @@ export function CreateMatchModal({
       imageUrl: map.imageUrl
     };
 
-    setSelectedMaps(prev => [...prev, selectedMap]);
-    updateFormData('maps', [...(formData.maps || []), map.id]);
+    const newSelectedMaps = [...selectedMaps, selectedMap];
+    const newMapIds = [...(formData.maps || []), map.id];
+    
+    setSelectedMaps(newSelectedMaps);
+    updateFormData('maps', newMapIds);
+    updateFormData('rounds', newMapIds.length); // Auto-calculate rounds based on map count
     setShowMapSelector(false);
     setSelectedMode('');
     setMapsForMode([]);
   };
 
   const handleRemoveMap = (mapId: string) => {
-    setSelectedMaps(prev => prev.filter(map => map.id !== mapId));
-    updateFormData('maps', (formData.maps || []).filter(id => id !== mapId));
+    const newSelectedMaps = selectedMaps.filter(map => map.id !== mapId);
+    const newMapIds = (formData.maps || []).filter(id => id !== mapId);
+    
+    setSelectedMaps(newSelectedMaps);
+    updateFormData('maps', newMapIds);
+    updateFormData('rounds', newMapIds.length); // Auto-calculate rounds based on map count
   };
 
   const handleAddMapClick = () => {
@@ -227,9 +234,7 @@ export function CreateMatchModal({
   };
 
   const canCreateMatch = () => {
-    return formData.rounds && 
-           formData.maps && 
-           formData.maps.length >= (formData.rounds || 0);
+    return formData.maps && formData.maps.length > 0;
   };
 
   const convertToUTC = (date: string, time: string): Date => {
@@ -254,7 +259,7 @@ export function CreateMatchModal({
         startDate: utcDateTime.toISOString(), // Convert to ISO string in UTC
         livestreamLink: formData.livestreamLink || '',
         rules: formData.rules,
-        rounds: formData.rounds || 1,
+        rounds: (formData.maps || []).length || 1, // Use map count as rounds
         maps: formData.maps || [],
         eventImageUrl: formData.eventImageUrl || null
       };
@@ -427,8 +432,8 @@ export function CreateMatchModal({
                     className="cursor-pointer hover:shadow-md transition-shadow"
                     style={{
                       borderStyle: 'dashed',
-                      borderColor: 'var(--mantine-color-gray-4)',
-                      backgroundColor: 'var(--mantine-color-gray-0)'
+                      borderColor: 'var(--mantine-color-default-border)',
+                      backgroundColor: 'var(--mantine-color-body)'
                     }}
                   >
                     <Stack align="center" justify="center" style={{ minHeight: 100 }}>
@@ -464,17 +469,13 @@ export function CreateMatchModal({
 
       {step === 3 && (
         <Stack>
-          <Text mb="md">Maps & Rounds Configuration:</Text>
+          <Text mb="md">Maps Configuration:</Text>
           
-          <NumberInput
-            label="Number of Rounds"
-            placeholder="Enter number of rounds"
-            required
-            value={formData.rounds || 1}
-            onChange={(value) => updateFormData('rounds', value)}
-            min={1}
-            max={10}
-          />
+          {selectedMaps.length > 0 && (
+            <Text size="sm" c="dimmed" mb="md">
+              <strong>Rounds:</strong> {selectedMaps.length} (based on selected maps)
+            </Text>
+          )}
 
           <Text size="sm" fw={500} mt="md">Selected Maps:</Text>
           
@@ -519,8 +520,8 @@ export function CreateMatchModal({
                   onClick={handleAddMapClick}
                   style={{ 
                     borderStyle: 'dashed',
-                    borderColor: 'var(--mantine-color-gray-4)',
-                    backgroundColor: 'var(--mantine-color-gray-0)'
+                    borderColor: 'var(--mantine-color-default-border)',
+                    backgroundColor: 'var(--mantine-color-body)'
                   }}
                 >
                   <Stack align="center" justify="center" style={{ minHeight: 120 }}>
