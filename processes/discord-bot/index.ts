@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message, ChannelType } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { initializeDatabase } from '../../lib/database';
@@ -223,9 +223,27 @@ class MatchExecBot {
           components: [row]
         });
 
+        let threadId: string | null = null;
+
         // Create maps thread if there are maps
         if (eventData.maps && eventData.maps.length > 0) {
-          await this.createMapsThread(message, eventData.name, eventData.game_id, eventData.maps);
+          const thread = await this.createMapsThread(message, eventData.name, eventData.game_id, eventData.maps);
+          threadId = thread?.id || null;
+        }
+
+        // Store Discord message information for later cleanup
+        if (this.db) {
+          try {
+            const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            await this.db.run(`
+              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id)
+              VALUES (?, ?, ?, ?, ?)
+            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId]);
+            
+            console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
+          } catch (error) {
+            console.error('❌ Error storing Discord message tracking:', error);
+          }
         }
 
         console.log(`✅ Event announcement posted for: ${eventData.name}`);
@@ -287,7 +305,7 @@ class MatchExecBot {
       .setColor(gameColor)
       .addFields(
         { name: '🎯 Game', value: gameName, inline: true },
-        { name: '🏆 Type', value: type === 'competitive' ? '🥇 Competitive' : '🎮 Casual', inline: true }
+        { name: '🏆 Ruleset', value: type === 'competitive' ? '🥇 Competitive' : '🎮 Casual', inline: true }
       )
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
@@ -313,18 +331,23 @@ class MatchExecBot {
     return embed;
   }
 
-  private async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]) {
+  private async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]): Promise<any> {
     try {
-      // Create thread
+      // Create thread - using public thread for better visibility
       const thread = await message.startThread({
         name: `${eventName} Maps`,
-        autoArchiveDuration: 1440, // 24 hours
+        autoArchiveDuration: 1440, // 24 hours (in minutes)
+        type: ChannelType.PublicThread,
         reason: 'Map details for event'
       });
 
+      console.log(`✅ Created PUBLIC thread: ${thread.name} (ID: ${thread.id}) in channel ${message.channelId}`);
+
       // Create an embed for each map
-      for (const mapIdentifier of maps) {
-        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier);
+      for (let i = 0; i < maps.length; i++) {
+        const mapIdentifier = maps[i];
+        const mapNumber = i + 1;
+        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber);
         if (mapEmbedData) {
           const messageOptions: any = { embeds: [mapEmbedData.embed] };
           if (mapEmbedData.attachment) {
@@ -335,12 +358,14 @@ class MatchExecBot {
       }
 
       console.log(`✅ Created maps thread with ${maps.length} map embeds`);
+      return thread;
     } catch (error) {
       console.error('❌ Error creating maps thread:', error);
+      return null;
     }
   }
 
-  private async createMapEmbed(gameId: string, mapIdentifier: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
+  private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
     if (!this.db) return null;
 
     try {
@@ -359,9 +384,10 @@ class MatchExecBot {
 
       if (!mapData) {
         // Fallback embed for unknown maps
+        const title = mapNumber ? `Map ${mapNumber}: ${mapIdentifier}` : `🗺️ ${mapIdentifier}`;
         return {
           embed: new EmbedBuilder()
-            .setTitle(`🗺️ ${mapIdentifier}`)
+            .setTitle(title)
             .setDescription('Map details not available')
             .setColor(0x95a5a6)
         };
@@ -395,8 +421,9 @@ class MatchExecBot {
         console.error('Error fetching game color for map embed:', error);
       }
 
+      const title = mapNumber ? `Map ${mapNumber}: ${mapData.name}` : `🗺️ ${mapData.name}`;
       const embed = new EmbedBuilder()
-        .setTitle(`🗺️ ${mapData.name}`)
+        .setTitle(title)
         .setColor(gameColor)
         .addFields(
           { name: '🎮 Mode', value: modeName, inline: true }
@@ -570,7 +597,19 @@ class MatchExecBot {
       await this.processAnnouncementQueue();
     }, 10000);
     
+    // Process deletion queue every 10 seconds
+    setInterval(async () => {
+      await this.processDeletionQueue();
+    }, 10000);
+    
+    // Clean up expired match messages every hour
+    setInterval(async () => {
+      await this.cleanupExpiredMatches();
+    }, 3600000); // 1 hour
+    
     console.log('✅ Announcement queue processor started');
+    console.log('✅ Deletion queue processor started');
+    console.log('✅ Expired match cleanup scheduler started');
   }
 
   private async processAnnouncementQueue() {
@@ -646,6 +685,134 @@ class MatchExecBot {
       }
     } catch (error) {
       console.error('❌ Error processing announcement queue:', error);
+    }
+  }
+
+  private async processDeletionQueue() {
+    if (!this.db || !this.isReady) {
+      return;
+    }
+
+    try {
+      // Get pending deletions
+      const pendingDeletions = await this.db.all(`
+        SELECT * FROM discord_deletion_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const deletion of pendingDeletions) {
+        try {
+          const success = await this.deleteMatchAnnouncement(deletion.match_id);
+
+          if (success) {
+            // Mark as completed
+            await this.db.run(`
+              UPDATE discord_deletion_queue 
+              SET status = 'completed', processed_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [deletion.id]);
+            
+            console.log(`✅ Processed deletion for match: ${deletion.match_id}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_deletion_queue 
+              SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = 'Deletion failed'
+              WHERE id = ?
+            `, [deletion.id]);
+            
+            console.log(`❌ Failed to delete messages for match: ${deletion.match_id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing deletion for match ${deletion.match_id}:`, error);
+          
+          // Mark as failed with error message
+          await this.db.run(`
+            UPDATE discord_deletion_queue 
+            SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
+            WHERE id = ?
+          `, [error.message || 'Unknown error', deletion.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing deletion queue:', error);
+    }
+  }
+
+  async deleteMatchAnnouncement(matchId: string): Promise<boolean> {
+    if (!this.db || !this.isReady) {
+      console.warn('⚠️ Bot not ready or database not available for message deletion');
+      return false;
+    }
+
+    try {
+      // Get Discord message info for this match
+      const messageRecords = await this.db.all(`
+        SELECT message_id, channel_id, thread_id 
+        FROM discord_match_messages 
+        WHERE match_id = ?
+      `, [matchId]);
+
+      for (const record of messageRecords) {
+        try {
+          // Delete the main message
+          const channel = await this.client.channels.fetch(record.channel_id);
+          if (channel?.isTextBased() && 'messages' in channel) {
+            try {
+              const message = await channel.messages.fetch(record.message_id);
+              await message.delete();
+              console.log(`✅ Deleted Discord message for match: ${matchId}`);
+            } catch (error) {
+              console.warn(`⚠️ Could not delete message ${record.message_id}:`, error.message);
+            }
+          }
+
+          // Thread will be automatically deleted when the parent message is deleted
+          
+        } catch (error) {
+          console.error(`❌ Error deleting Discord message for match ${matchId}:`, error);
+        }
+      }
+
+      // Remove tracking records
+      await this.db.run(`
+        DELETE FROM discord_match_messages WHERE match_id = ?
+      `, [matchId]);
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error in deleteMatchAnnouncement:', error);
+      return false;
+    }
+  }
+
+  private async cleanupExpiredMatches() {
+    if (!this.db || !this.isReady) {
+      return;
+    }
+
+    try {
+      // Find matches that are more than 1 day old
+      const expiredMatches = await this.db.all(`
+        SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id
+        FROM discord_match_messages dmm
+        JOIN matches m ON dmm.match_id = m.id
+        WHERE DATE(m.scheduled_at) < DATE('now', '-1 day')
+      `);
+
+      console.log(`🧹 Found ${expiredMatches.length} expired match announcements to clean up`);
+
+      for (const match of expiredMatches) {
+        await this.deleteMatchAnnouncement(match.match_id);
+      }
+
+      if (expiredMatches.length > 0) {
+        console.log(`✅ Cleaned up ${expiredMatches.length} expired match announcements`);
+      }
+    } catch (error) {
+      console.error('❌ Error cleaning up expired matches:', error);
     }
   }
 
@@ -725,6 +892,11 @@ const bot = new MatchExecBot();
 
 // Export bot instance for use by other processes
 export const getBotInstance = () => bot;
+
+// Export method for deleting match announcements
+export const deleteMatchDiscordAnnouncement = async (matchId: string) => {
+  return await bot.deleteMatchAnnouncement(matchId);
+};
 
 // Handle process signals
 process.on('SIGINT', async () => {
