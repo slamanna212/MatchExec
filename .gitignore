@@ -43,3 +43,6 @@ next-env.d.ts
 # database
 matchexec.db
 *.db
+
+# uploaded files
+/public/uploads/
