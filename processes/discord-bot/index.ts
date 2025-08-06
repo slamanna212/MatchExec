@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message, ChannelType } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message, ChannelType, GuildScheduledEventCreateOptions, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { initializeDatabase } from '../../lib/database';
@@ -187,6 +187,7 @@ class MatchExecBot {
     guild_id: string;
     livestream_link?: string;
     event_image_url?: string;
+    start_date?: string;
   }) {
     if (!this.isReady || !this.settings?.announcement_channel_id) {
       console.warn('⚠️ Bot not ready or announcement channel not configured');
@@ -234,6 +235,7 @@ class MatchExecBot {
         const message = await announcementChannel.send(messageOptions);
 
         let threadId: string | null = null;
+        let discordEventId: string | null = null;
 
         // Create maps thread if there are maps
         if (eventData.maps && eventData.maps.length > 0) {
@@ -241,14 +243,19 @@ class MatchExecBot {
           threadId = thread?.id || null;
         }
 
+        // Create Discord server event
+        if (eventData.start_date) {
+          discordEventId = await this.createDiscordEvent(eventData, message);
+        }
+
         // Store Discord message information for later cleanup
         if (this.db) {
           try {
             const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             await this.db.run(`
-              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id)
-              VALUES (?, ?, ?, ?, ?)
-            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId]);
+              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId, discordEventId]);
             
             console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
           } catch (error) {
@@ -366,6 +373,95 @@ class MatchExecBot {
     }
 
     return { embed, attachment };
+  }
+
+  private async createDiscordEvent(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    type: 'competitive' | 'casual';
+    start_date: string;
+    livestream_link?: string;
+    event_image_url?: string;
+  }, message: Message): Promise<string | null> {
+    try {
+      const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
+      if (!guild) {
+        console.warn('⚠️ Guild not found for Discord event creation');
+        return null;
+      }
+
+      // Get game name for better event description
+      let gameName = eventData.game_id;
+      if (this.db) {
+        try {
+          const gameData = await this.db.get<{name: string}>(`
+            SELECT name FROM games WHERE id = ?
+          `, [eventData.game_id]);
+          if (gameData) {
+            gameName = gameData.name;
+          }
+        } catch (error) {
+          console.error('Error fetching game name for Discord event:', error);
+        }
+      }
+
+      const startTime = new Date(eventData.start_date);
+      const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours duration
+
+      // Create event description with match details and link to announcement
+      let eventDescription = eventData.description || 'Join us for this exciting match!';
+      eventDescription += `\n\n🎯 Game: ${gameName}`;
+      eventDescription += `\n🏆 Type: ${eventData.type === 'competitive' ? 'Competitive' : 'Casual'}`;
+      
+      if (eventData.livestream_link) {
+        eventDescription += `\n📺 Livestream: ${eventData.livestream_link}`;
+      }
+
+      // Add link to the announcement message
+      eventDescription += `\n\n📢 View full details: https://discord.com/channels/${guild.id}/${message.channelId}/${message.id}`;
+
+      const eventOptions: GuildScheduledEventCreateOptions = {
+        name: eventData.name,
+        description: eventDescription.substring(0, 1000), // Discord limit
+        scheduledStartTime: startTime,
+        scheduledEndTime: endTime,
+        privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+        entityType: GuildScheduledEventEntityType.External,
+        entityMetadata: {
+          location: eventData.livestream_link || 'Discord Server'
+        }
+      };
+
+      // Add cover image if event image is provided
+      if (eventData.event_image_url) {
+        try {
+          // Convert URL path to file system path for local files
+          const imagePath = path.join(process.cwd(), 'public', eventData.event_image_url.replace(/^\//, ''));
+          
+          if (fs.existsSync(imagePath)) {
+            // Read the image file as a buffer
+            const imageBuffer = fs.readFileSync(imagePath);
+            eventOptions.image = imageBuffer;
+            console.log(`✅ Added cover image to Discord event: ${eventData.event_image_url}`);
+          } else {
+            console.warn(`⚠️ Event image not found for Discord event: ${imagePath}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error adding cover image to Discord event:`, error);
+        }
+      }
+
+      const discordEvent = await guild.scheduledEvents.create(eventOptions);
+      
+      console.log(`✅ Created Discord event: ${discordEvent.name} (ID: ${discordEvent.id})`);
+      return discordEvent.id;
+
+    } catch (error) {
+      console.error('❌ Error creating Discord event:', error);
+      return null;
+    }
   }
 
   private async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]): Promise<any> {
@@ -657,7 +753,7 @@ class MatchExecBot {
     try {
       // Get pending announcements
       const pendingAnnouncements = await this.db.all(`
-        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link, m.event_image_url
+        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link, m.event_image_url, m.start_date, m.rules
         FROM discord_announcement_queue daq
         JOIN matches m ON daq.match_id = m.id
         WHERE daq.status = 'pending'
@@ -683,12 +779,13 @@ class MatchExecBot {
             name: announcement.name,
             description: announcement.description || 'No description provided',
             game_id: announcement.game_id,
-            type: 'casual', // Default to casual, we'll need to add this field to matches table later
+            type: announcement.rules || 'casual', // Use rules field from database
             maps: maps,
             max_participants: announcement.max_participants,
             guild_id: announcement.guild_id,
             livestream_link: announcement.livestream_link,
-            event_image_url: announcement.event_image_url
+            event_image_url: announcement.event_image_url,
+            start_date: announcement.start_date
           });
 
           if (success) {
@@ -793,7 +890,7 @@ class MatchExecBot {
 
       // Get Discord message info for this match
       const messageRecords = await this.db.all(`
-        SELECT message_id, channel_id, thread_id 
+        SELECT message_id, channel_id, thread_id, discord_event_id 
         FROM discord_match_messages 
         WHERE match_id = ?
       `, [matchId]);
@@ -809,6 +906,22 @@ class MatchExecBot {
               console.log(`✅ Deleted Discord message for match: ${matchId}`);
             } catch (error) {
               console.warn(`⚠️ Could not delete message ${record.message_id}:`, error.message);
+            }
+          }
+
+          // Delete Discord event if it exists
+          if (record.discord_event_id) {
+            try {
+              const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
+              if (guild) {
+                const event = await guild.scheduledEvents.fetch(record.discord_event_id);
+                if (event) {
+                  await event.delete();
+                  console.log(`✅ Deleted Discord event for match: ${matchId}`);
+                }
+              }
+            } catch (error) {
+              console.warn(`⚠️ Could not delete Discord event ${record.discord_event_id}:`, error.message);
             }
           }
 
@@ -861,10 +974,10 @@ class MatchExecBot {
     try {
       // Find matches that are more than 1 day old
       const expiredMatches = await this.db.all(`
-        SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id, m.event_image_url
+        SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id, dmm.discord_event_id, m.event_image_url
         FROM discord_match_messages dmm
         JOIN matches m ON dmm.match_id = m.id
-        WHERE DATE(m.scheduled_at) < DATE('now', '-1 day')
+        WHERE DATE(m.start_date) < DATE('now', '-1 day')
       `);
 
       console.log(`🧹 Found ${expiredMatches.length} expired match announcements to clean up`);
