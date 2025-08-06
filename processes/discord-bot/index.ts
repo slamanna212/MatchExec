@@ -186,6 +186,7 @@ class MatchExecBot {
     max_participants: number;
     guild_id: string;
     livestream_link?: string;
+    event_image_url?: string;
   }) {
     if (!this.isReady || !this.settings?.announcement_channel_id) {
       console.warn('⚠️ Bot not ready or announcement channel not configured');
@@ -193,15 +194,16 @@ class MatchExecBot {
     }
 
     try {
-      // Create event embed (without attachments)
-      const embed = await this.createEventEmbed(
+      // Create event embed with attachment  
+      const { embed, attachment } = await this.createEventEmbedWithAttachment(
         eventData.name,
         eventData.description,
         eventData.game_id,
         eventData.type,
         eventData.maps || [],
         eventData.max_participants,
-        eventData.livestream_link
+        eventData.livestream_link,
+        eventData.event_image_url
       );
 
       // Create signup button
@@ -217,11 +219,19 @@ class MatchExecBot {
       const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
 
       if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
-        // Send main announcement
-        const message = await announcementChannel.send({
+        // Prepare message options
+        const messageOptions: any = {
           embeds: [embed],
           components: [row]
-        });
+        };
+
+        // Add attachment if image exists
+        if (attachment) {
+          messageOptions.files = [attachment];
+        }
+
+        // Send main announcement
+        const message = await announcementChannel.send(messageOptions);
 
         let threadId: string | null = null;
 
@@ -260,15 +270,16 @@ class MatchExecBot {
   }
 
 
-  private async createEventEmbed(
+  private async createEventEmbedWithAttachment(
     name: string,
     description: string,
     gameId: string,
     type: string,
     maps: string[],
     maxParticipants: number,
-    livestreamLink?: string
-  ): Promise<EmbedBuilder> {
+    livestreamLink?: string,
+    eventImageUrl?: string
+  ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     // Get game data from database for nice name and color
     let gameName = gameId;
     let gameColor = type === 'competitive' ? 0xff6b35 : 0x4caf50; // fallback colors
@@ -328,7 +339,33 @@ class MatchExecBot {
       });
     }
 
-    return embed;
+    let attachment: AttachmentBuilder | undefined;
+
+    // Add event image if provided - use as attachment like map images
+    if (eventImageUrl && eventImageUrl.trim()) {
+      try {
+        // Convert URL path to file system path for local files
+        const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
+        
+        if (fs.existsSync(imagePath)) {
+          // Create attachment for the event image
+          attachment = new AttachmentBuilder(imagePath, {
+            name: `event_image.${path.extname(imagePath).slice(1)}`
+          });
+          
+          // Use attachment://filename to reference the attached image
+          embed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
+          
+          console.log(`✅ Added event image attachment: ${eventImageUrl}`);
+        } else {
+          console.warn(`⚠️ Event image not found: ${imagePath}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error handling event image ${eventImageUrl}:`, error);
+      }
+    }
+
+    return { embed, attachment };
   }
 
   private async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]): Promise<any> {
@@ -620,7 +657,7 @@ class MatchExecBot {
     try {
       // Get pending announcements
       const pendingAnnouncements = await this.db.all(`
-        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link
+        SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link, m.event_image_url
         FROM discord_announcement_queue daq
         JOIN matches m ON daq.match_id = m.id
         WHERE daq.status = 'pending'
@@ -650,7 +687,8 @@ class MatchExecBot {
             maps: maps,
             max_participants: announcement.max_participants,
             guild_id: announcement.guild_id,
-            livestream_link: announcement.livestream_link
+            livestream_link: announcement.livestream_link,
+            event_image_url: announcement.event_image_url
           });
 
           if (success) {
@@ -748,6 +786,11 @@ class MatchExecBot {
     }
 
     try {
+      // Get match info including event image for cleanup
+      const matchData = await this.db.get(`
+        SELECT event_image_url FROM matches WHERE id = ?
+      `, [matchId]);
+
       // Get Discord message info for this match
       const messageRecords = await this.db.all(`
         SELECT message_id, channel_id, thread_id 
@@ -776,6 +819,11 @@ class MatchExecBot {
         }
       }
 
+      // Clean up event image if it exists
+      if (matchData?.event_image_url) {
+        await this.cleanupEventImage(matchData.event_image_url);
+      }
+
       // Remove tracking records
       await this.db.run(`
         DELETE FROM discord_match_messages WHERE match_id = ?
@@ -788,6 +836,23 @@ class MatchExecBot {
     }
   }
 
+  private async cleanupEventImage(imageUrl: string): Promise<void> {
+    try {
+      // Call the deletion API endpoint
+      const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/upload/event-image?imageUrl=${encodeURIComponent(imageUrl)}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        console.log(`✅ Cleaned up event image: ${imageUrl}`);
+      } else {
+        console.warn(`⚠️ Failed to clean up event image: ${imageUrl}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error cleaning up event image ${imageUrl}:`, error);
+    }
+  }
+
   private async cleanupExpiredMatches() {
     if (!this.db || !this.isReady) {
       return;
@@ -796,7 +861,7 @@ class MatchExecBot {
     try {
       // Find matches that are more than 1 day old
       const expiredMatches = await this.db.all(`
-        SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id
+        SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id, m.event_image_url
         FROM discord_match_messages dmm
         JOIN matches m ON dmm.match_id = m.id
         WHERE DATE(m.scheduled_at) < DATE('now', '-1 day')

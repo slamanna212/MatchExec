@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       rules,
       rounds,
       maps,
+      eventImageUrl,
       eventType = 'casual' // Default to casual if not specified
     } = body;
     
@@ -79,8 +80,8 @@ export async function POST(request: NextRequest) {
     await db.run(`
       INSERT INTO matches (
         id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date,
-        rules, rounds, maps, livestream_link
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        rules, rounds, maps, livestream_link, event_image_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       matchId,
       name,
@@ -94,7 +95,8 @@ export async function POST(request: NextRequest) {
       rules || null,
       rounds || null,
       maps && maps.length > 0 ? JSON.stringify(maps) : null,
-      livestreamLink || null
+      livestreamLink || null,
+      eventImageUrl || null
     ]);
     
     const match = await db.get(`

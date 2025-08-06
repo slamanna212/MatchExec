@@ -9,9 +9,9 @@ export async function DELETE(
     const db = await getDbInstance();
     const { matchId } = await params;
     
-    // Check if match exists
+    // Check if match exists and get event image for cleanup
     const existingMatch = await db.get(
-      'SELECT id FROM matches WHERE id = ?',
+      'SELECT id, event_image_url FROM matches WHERE id = ?',
       [matchId]
     );
     
@@ -33,6 +33,20 @@ export async function DELETE(
       console.log('🗑️ Discord deletion queued for match:', matchId);
     } catch (error) {
       console.error('❌ Error queuing Discord deletion:', error);
+    }
+    
+    // Clean up event image if it exists
+    if (existingMatch.event_image_url) {
+      try {
+        const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/upload/event-image?imageUrl=${encodeURIComponent(existingMatch.event_image_url)}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          console.log(`✅ Cleaned up event image for match: ${matchId}`);
+        }
+      } catch (error) {
+        console.error('Error cleaning up event image:', error);
+      }
     }
     
     // Delete the match (CASCADE will handle related records)
