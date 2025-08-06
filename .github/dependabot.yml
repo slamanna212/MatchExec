@@ -7,6 +7,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    target-branch: "dev"
     open-pull-requests-limit: 10
     assignees:
       - "slamanna212"
@@ -24,6 +25,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    target-branch: "dev"
     open-pull-requests-limit: 5
     assignees:
       - "slamanna212"
@@ -42,6 +44,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    target-branch: "dev"
     open-pull-requests-limit: 5
     assignees:
       - "slamanna212"
