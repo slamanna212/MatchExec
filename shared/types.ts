@@ -33,8 +33,8 @@ export interface GameMap {
   updated_at: Date;
 }
 
-// Tournament-related types
-export interface Tournament {
+// Match-related types
+export interface Match {
   id: string;
   name: string;
   description?: string;
@@ -49,17 +49,17 @@ export interface Tournament {
   updated_at: Date;
 }
 
-export interface TournamentParticipant {
+export interface MatchParticipant {
   id: string;
-  tournament_id: string;
+  match_id: string;
   user_id: string;
   username: string;
   joined_at: Date;
 }
 
-export interface TournamentMatch {
+export interface MatchGame {
   id: string;
-  tournament_id: string;
+  match_id: string;
   round: number;
   participant1_id: string;
   participant2_id: string;
@@ -113,7 +113,7 @@ export interface MapDataJson {
 // Scheduler settings types
 export interface SchedulerSettings {
   id: number;
-  tournament_check_cron: string;
+  match_check_cron: string;
   reminder_check_cron: string;
   cleanup_check_cron: string;
   report_generation_cron: string;

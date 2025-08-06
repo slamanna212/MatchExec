@@ -12,11 +12,10 @@ export async function GET() {
     
     if (!settings) {
       return NextResponse.json({
-        tournament_check_cron: '0 */5 * * * *',
+        match_check_cron: '0 */5 * * * *',
         reminder_check_cron: '0 0 */4 * * *',
         cleanup_check_cron: '0 0 2 * * *',
-        report_generation_cron: '0 0 0 * * 0',
-        enabled: true
+        report_generation_cron: '0 0 0 * * 0'
       });
     }
     
@@ -37,7 +36,7 @@ export async function PUT(request: NextRequest) {
     
     // Validate cron expressions (basic validation)
     const cronFields = [
-      'tournament_check_cron',
+      'match_check_cron',
       'reminder_check_cron', 
       'cleanup_check_cron',
       'report_generation_cron'
@@ -57,19 +56,18 @@ export async function PUT(request: NextRequest) {
     
     await db.run(
       `UPDATE scheduler_settings 
-       SET tournament_check_cron = ?, 
+       SET match_check_cron = ?, 
            reminder_check_cron = ?, 
            cleanup_check_cron = ?, 
            report_generation_cron = ?,
-           enabled = ?,
+           enabled = 1,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
       [
-        body.tournament_check_cron,
+        body.match_check_cron,
         body.reminder_check_cron,
         body.cleanup_check_cron,
-        body.report_generation_cron,
-        body.enabled ? 1 : 0
+        body.report_generation_cron
       ]
     );
     

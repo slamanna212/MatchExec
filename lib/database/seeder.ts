@@ -5,6 +5,7 @@ import { Database } from './connection';
 interface GameData {
   id: string;
   name: string;
+  color?: string;
   genre: string;
   developer: string;
   releaseDate: string;
@@ -28,8 +29,9 @@ interface ModeData {
 interface MapData {
   id: string;
   name: string;
-  mode: string;
-  imageUrl?: string;
+  type: string;
+  location?: string;
+  thumbnailUrl?: string;
 }
 
 export class DatabaseSeeder {
@@ -121,12 +123,13 @@ export class DatabaseSeeder {
   private async seedGameData(gameData: GameData): Promise<void> {
     await this.db.run(`
       INSERT OR REPLACE INTO games (
-        id, name, genre, developer, release_date, version, description,
+        id, name, color, genre, developer, release_date, version, description,
         min_players, max_players, icon_url, cover_url, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       gameData.id,
       gameData.name,
+      gameData.color || null,
       gameData.genre,
       gameData.developer,
       gameData.releaseDate,
@@ -156,10 +159,23 @@ export class DatabaseSeeder {
     await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
 
     for (const map of mapsData) {
+      // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
+      // Special handling for "Doom Match" -> "doom-match"
+      let modeId = map.type.toLowerCase();
+      if (modeId === 'doom match') {
+        modeId = 'doom-match';
+      }
+      
+      // Fix image URL by removing /public prefix for Next.js static assets
+      let imageUrl = map.thumbnailUrl || null;
+      if (imageUrl && imageUrl.startsWith('/public/')) {
+        imageUrl = imageUrl.replace('/public/', '/');
+      }
+
       await this.db.run(`
-        INSERT INTO game_maps (id, game_id, name, mode_id, image_url, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [map.id, gameId, map.name, map.mode, map.imageUrl || null]);
+        INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
     }
   }
 

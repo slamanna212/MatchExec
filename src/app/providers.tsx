@@ -1,6 +1,7 @@
 'use client'
 
 import { MantineProvider, createTheme } from '@mantine/core'
+import { ModalsProvider } from '@mantine/modals'
 import '@mantine/core/styles.css'
 
 const theme = createTheme({
@@ -10,7 +11,9 @@ const theme = createTheme({
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme} defaultColorScheme="dark">
-      {children}
+      <ModalsProvider>
+        {children}
+      </ModalsProvider>
     </MantineProvider>
   )
 }

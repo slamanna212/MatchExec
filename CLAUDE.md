@@ -1,14 +1,14 @@
-# MatchExec Tournament Bot
+# MatchExec Match Bot
 
-A Discord tournament management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
+A Discord match management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
 
 ## Architecture
 
 This project uses a multi-process architecture managed by PM2:
 
 1. **Web App** (`src/app/`): Next.js application with Mantine UI components
-2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for tournament commands
-3. **Scheduler** (`processes/scheduler/`): Cron jobs for tournament management
+2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for match commands
+3. **Scheduler** (`processes/scheduler/`): Cron jobs for match management
 4. **Worker** (`processes/worker/`): Background job processing
 
 ## Development
@@ -76,15 +76,15 @@ The database includes tables for:
 - **games**: Game information (Overwatch 2, Marvel Rivals, etc.)
 - **game_modes**: Game modes for each game (Control, Escort, etc.)
 - **game_maps**: Maps available for each game and mode
-- **tournaments**: Tournament records with status tracking
-- **tournament_participants**: Players registered for tournaments
-- **tournament_matches**: Individual matches within tournaments
+- **matches**: Match records with status tracking
+- **match_participants**: Players registered for matches
+- **match_games**: Individual games within matches
 - **data_versions**: Tracks seeded data versions to avoid re-seeding
 - **migrations**: Migration execution tracking
 
 ### Migrations
 
-Database migrations are automatically executed at startup. Migration files are stored in `/migrations/` and run in alphabetical order. Each migration is tracked to prevent duplicate execution.
+Database migrations are executed once at application startup. Migration files are stored in `/migrations/` and run in alphabetical order. Each migration is tracked to prevent duplicate execution.
 
 ### Data Seeding
 
@@ -96,19 +96,34 @@ Game data is automatically seeded from JSON files in `/data/games/`. Each game d
 
 The seeder checks `dataVersion` in each game.json and only re-seeds when the version changes, preventing duplicate data insertion.
 
+### Migration and Seeding
+
+Database migrations and seeding are handled at application startup, not during runtime:
+
+```bash
+# Run migrations and seeding manually
+npm run migrate
+
+# Start development (automatically runs migrations first)
+npm run dev:all
+
+# Start production (automatically runs migrations first)  
+npm run prod:start
+```
+
 ### Usage
 
 ```typescript
-import { initializeDatabase } from './lib/database';
+import { getDbInstance } from './src/lib/database-init';
 
-// Initialize database with migrations and seeding
-const db = await initializeDatabase();
+// Get database instance (migrations should already be run)
+const db = await getDbInstance();
 
 // Use database instance
 const games = await db.all('SELECT * FROM games');
 ```
 
-The database is initialized automatically when any process starts, ensuring consistent schema and data across all processes.
+Individual processes only connect to the database - migrations run once at startup for performance and reliability.
 
 
 ## Technology Stack
@@ -134,3 +149,4 @@ The database is initialized automatically when any process starts, ensuring cons
 - `npm run build:processes`: Compile TypeScript processes
 - `npm run prod:start`: Start all processes with PM2 (production)
 - `npm run prod:stop`: Stop production PM2 processes
+- `npm run migrate`: Run database migrations and seeding manually

@@ -1,11 +1,12 @@
 {
   "id": "overwatch2",
   "name": "Overwatch 2",
+  "color" : "#FA9C1D",
   "genre": "First-Person Shooter",
   "developer": "Blizzard Entertainment",
   "releaseDate": "2022-10-04",
   "patch": "2025-07-24",
-  "dataVersion": "1.1.0",
+  "dataVersion": "1.6.0",
   "description": "A team-based multiplayer first-person shooter featuring hero-based combat and objective-driven matches.",
   "minPlayers": 2,
   "maxPlayers": 12,
