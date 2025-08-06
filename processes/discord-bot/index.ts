@@ -10,6 +10,7 @@ interface DiscordSettings {
   announcement_channel_id?: string;
   results_channel_id?: string;
   participant_role_id?: string;
+  event_duration_minutes?: number;
 }
 
 class MatchExecBot {
@@ -84,7 +85,8 @@ class MatchExecBot {
           guild_id,
           announcement_channel_id,
           results_channel_id,
-          participant_role_id
+          participant_role_id,
+          event_duration_minutes
         FROM discord_settings 
         WHERE id = 1
       `);
@@ -245,7 +247,8 @@ class MatchExecBot {
 
         // Create Discord server event
         if (eventData.start_date) {
-          discordEventId = await this.createDiscordEvent(eventData, message);
+          const rounds = eventData.maps?.length || 1;
+          discordEventId = await this.createDiscordEvent(eventData, message, rounds);
         }
 
         // Store Discord message information for later cleanup
@@ -384,7 +387,7 @@ class MatchExecBot {
     start_date: string;
     livestream_link?: string;
     event_image_url?: string;
-  }, message: Message): Promise<string | null> {
+  }, message: Message, rounds: number = 1): Promise<string | null> {
     try {
       const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
       if (!guild) {
@@ -407,8 +410,10 @@ class MatchExecBot {
         }
       }
 
+      // Calculate event duration based on settings and rounds
+      const durationMinutes = (this.settings?.event_duration_minutes || 45) * rounds;
       const startTime = new Date(eventData.start_date);
-      const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours duration
+      const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
 
       // Create event description with match details and link to announcement
       let eventDescription = eventData.description || 'Join us for this exciting match!';
@@ -455,7 +460,7 @@ class MatchExecBot {
 
       const discordEvent = await guild.scheduledEvents.create(eventOptions);
       
-      console.log(`✅ Created Discord event: ${discordEvent.name} (ID: ${discordEvent.id})`);
+      console.log(`✅ Created Discord event: ${discordEvent.name} (ID: ${discordEvent.id}) - Duration: ${durationMinutes} minutes (${rounds} rounds × ${this.settings?.event_duration_minutes || 45} min/round)`);
       return discordEvent.id;
 
     } catch (error) {

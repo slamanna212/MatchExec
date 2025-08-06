@@ -12,27 +12,30 @@ export async function GET() {
         guild_id,
         announcement_channel_id,
         results_channel_id,
-        participant_role_id
+        participant_role_id,
+        event_duration_minutes
       FROM discord_settings 
       WHERE id = 1
     `);
 
     // Don't expose the bot token in the response for security
-    // Also ensure all null values are converted to empty strings for React form inputs
+    // Also ensure all null values are converted to appropriate defaults for React form inputs
     const safeSettings = settings ? {
       application_id: settings.application_id || '',
       bot_token: settings.bot_token ? '••••••••' : '',
       guild_id: settings.guild_id || '',
       announcement_channel_id: settings.announcement_channel_id || '',
       results_channel_id: settings.results_channel_id || '',
-      participant_role_id: settings.participant_role_id || ''
+      participant_role_id: settings.participant_role_id || '',
+      event_duration_minutes: settings.event_duration_minutes || 45
     } : {
       application_id: '',
       bot_token: '',
       guild_id: '',
       announcement_channel_id: '',
       results_channel_id: '',
-      participant_role_id: ''
+      participant_role_id: '',
+      event_duration_minutes: 45
     };
 
     return NextResponse.json(safeSettings);
@@ -56,7 +59,8 @@ export async function PUT(request: NextRequest) {
       guild_id,
       announcement_channel_id,
       results_channel_id,
-      participant_role_id
+      participant_role_id,
+      event_duration_minutes
     } = body;
 
     // Update the settings (there should only be one row with id = 1)
@@ -68,6 +72,7 @@ export async function PUT(request: NextRequest) {
         announcement_channel_id = ?,
         results_channel_id = ?,
         participant_role_id = ?,
+        event_duration_minutes = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
     `, [
@@ -76,7 +81,8 @@ export async function PUT(request: NextRequest) {
       guild_id,
       announcement_channel_id,
       results_channel_id,
-      participant_role_id
+      participant_role_id,
+      event_duration_minutes || 45
     ]);
 
     // If bot token was updated, trigger bot restart

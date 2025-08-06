@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconInfoCircle, IconClock } from '@tabler/icons-react';
@@ -12,6 +12,7 @@ interface DiscordSettings {
   announcement_channel_id?: string;
   results_channel_id?: string;
   participant_role_id?: string;
+  event_duration_minutes?: number;
 }
 
 interface SchedulerSettings {
@@ -36,6 +37,7 @@ export default function SettingsPage() {
       announcement_channel_id: '',
       results_channel_id: '',
       participant_role_id: '',
+      event_duration_minutes: 45,
     },
   });
 
@@ -59,14 +61,15 @@ export default function SettingsPage() {
         
         if (discordResponse.ok) {
           const discordData = await discordResponse.json();
-          // Ensure all values are strings, not null
+          // Ensure all values are proper types, not null
           const sanitizedData = {
             application_id: discordData.application_id || '',
             bot_token: discordData.bot_token || '',
             guild_id: discordData.guild_id || '',
             announcement_channel_id: discordData.announcement_channel_id || '',
             results_channel_id: discordData.results_channel_id || '',
-            participant_role_id: discordData.participant_role_id || ''
+            participant_role_id: discordData.participant_role_id || '',
+            event_duration_minutes: discordData.event_duration_minutes || 45
           };
           form.setValues(sanitizedData);
         }
@@ -230,6 +233,15 @@ export default function SettingsPage() {
                   disabled={loading}
                 />
 
+                <NumberInput
+                  label="Event Duration (per round/map)"
+                  placeholder="45"
+                  description="Duration in minutes for Discord events (default: 45 minutes per round/map)"
+                  min={5}
+                  max={720}
+                  {...form.getInputProps('event_duration_minutes')}
+                  disabled={loading}
+                />
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={saving} disabled={loading}>
