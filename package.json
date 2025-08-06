@@ -17,7 +17,7 @@
     "prod:stop": "npx pm2 stop ecosystem.config.js"
   },
   "dependencies": {
-    "@mantine/core": "^8.2.2",
+    "@mantine/core": "^8.2.3",
     "@mantine/dates": "^8.2.3",
     "@mantine/form": "^8.2.2",
     "@mantine/hooks": "^8.2.3",
