@@ -77,6 +77,7 @@ export function CreateMatchModal({
   const [mapsForMode, setMapsForMode] = useState<GameMapWithMode[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [startSignups, setStartSignups] = useState(true);
 
   const handleClose = () => {
     setStep(1);
@@ -89,6 +90,7 @@ export function CreateMatchModal({
     setMapsForMode([]);
     setUploadingImage(false);
     setImagePreview(null);
+    setStartSignups(true);
     onClose();
   };
 
@@ -274,7 +276,35 @@ export function CreateMatchModal({
 
       if (response.ok) {
         const newMatch = await response.json();
-        onMatchCreated(newMatch);
+        
+        // If "Start Signups" is checked, automatically transition to gather stage
+        if (startSignups) {
+          try {
+            const transitionResponse = await fetch(`/api/matches/${newMatch.id}/transition`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ newStatus: 'gather' }),
+            });
+
+            if (transitionResponse.ok) {
+              const updatedMatch = await transitionResponse.json();
+              onMatchCreated(updatedMatch);
+              console.log(`✅ Match created and moved to gather stage - Discord announcement will be posted`);
+            } else {
+              // Still report the created match, even if transition failed
+              onMatchCreated(newMatch);
+              console.warn('Match created but failed to start signups automatically');
+            }
+          } catch (transitionError) {
+            console.error('Error transitioning match to gather stage:', transitionError);
+            onMatchCreated(newMatch);
+          }
+        } else {
+          onMatchCreated(newMatch);
+        }
+        
         handleClose();
       } else {
         const errorData = await response.json();
@@ -600,12 +630,19 @@ export function CreateMatchModal({
             <Button variant="outline" onClick={handleBack}>
               Back
             </Button>
-            <Button 
-              onClick={handleCreateMatch}
-              disabled={!selectedMaps.length}
-            >
-              Create Match
-            </Button>
+            <Group align="center" gap="md">
+              <Checkbox
+                label="Start Signups"
+                checked={startSignups}
+                onChange={(event) => setStartSignups(event.currentTarget.checked)}
+              />
+              <Button 
+                onClick={handleCreateMatch}
+                disabled={!selectedMaps.length}
+              >
+                Create Match
+              </Button>
+            </Group>
           </Group>
         </Stack>
       )}

@@ -44,6 +44,24 @@ interface MatchWithGame extends Match {
   livestream_link?: string;
 }
 
+interface MatchParticipant {
+  id: string;
+  user_id: string;
+  username: string;
+  joined_at: string;
+  signup_data: any;
+}
+
+interface SignupField {
+  id: string;
+  label: string;
+  type: string;
+}
+
+interface SignupConfig {
+  fields: SignupField[];
+}
+
 export function MatchDashboard() {
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [games, setGames] = useState<GameWithIcon[]>([]);
@@ -51,6 +69,9 @@ export function MatchDashboard() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
+  const [participants, setParticipants] = useState<MatchParticipant[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const { colorScheme } = useMantineColorScheme();
 
   useEffect(() => {
@@ -160,9 +181,32 @@ export function MatchDashboard() {
     setMatches(prev => [match, ...prev]);
   };
 
+  const fetchParticipants = async (matchId: string) => {
+    setParticipantsLoading(true);
+    try {
+      const response = await fetch(`/api/matches/${matchId}/participants`);
+      if (response.ok) {
+        const data = await response.json();
+        setParticipants(data.participants);
+        setSignupConfig(data.signupConfig);
+      } else {
+        console.error('Failed to fetch participants');
+        setParticipants([]);
+        setSignupConfig(null);
+      }
+    } catch (error) {
+      console.error('Error fetching participants:', error);
+      setParticipants([]);
+      setSignupConfig(null);
+    } finally {
+      setParticipantsLoading(false);
+    }
+  };
+
   const handleViewDetails = (match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
+    fetchParticipants(match.id);
   };
 
   const handleDeleteMatch = async (matchId: string) => {
@@ -180,6 +224,84 @@ export function MatchDashboard() {
       }
     } catch (error) {
       console.error('Error deleting match:', error);
+    }
+  };
+
+  const handleStatusTransition = async (matchId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/transition`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newStatus }),
+      });
+
+      if (response.ok) {
+        const updatedMatch = await response.json();
+        // Update the match in the list
+        setMatches(prev => prev.map(match => 
+          match.id === matchId ? updatedMatch : match
+        ));
+        
+        if (newStatus === 'gather') {
+          console.log(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
+        }
+      } else {
+        console.error('Failed to transition match status');
+      }
+    } catch (error) {
+      console.error('Error transitioning match status:', error);
+    }
+  };
+
+  const getNextStatusButton = (match: MatchWithGame) => {
+    switch (match.status) {
+      case 'created':
+        return (
+          <Button 
+            size="sm" 
+            onClick={() => handleStatusTransition(match.id, 'gather')}
+          >
+            Start Signups
+          </Button>
+        );
+      case 'gather':
+        return (
+          <Button 
+            size="sm" 
+            color="orange"
+            onClick={() => handleStatusTransition(match.id, 'assign')}
+          >
+            Close Signups
+          </Button>
+        );
+      case 'assign':
+        return (
+          <Button 
+            size="sm" 
+            color="yellow"
+            onClick={() => handleStatusTransition(match.id, 'battle')}
+          >
+            Start Battle
+          </Button>
+        );
+      case 'battle':
+        return (
+          <Button 
+            size="sm" 
+            color="green"
+            onClick={() => handleStatusTransition(match.id, 'complete')}
+          >
+            End Match
+          </Button>
+        );
+      case 'complete':
+        return null; // No further transitions
+      case 'cancelled':
+        return null; // No further transitions
+      default:
+        return null;
     }
   };
 
@@ -314,11 +436,7 @@ export function MatchDashboard() {
                   >
                     View Details
                   </Button>
-                  {match.status === 'created' && (
-                    <Button size="sm">
-                      Start Gather
-                    </Button>
-                  )}
+                  {getNextStatusButton(match)}
                 </Group>
               </Card>
             </Grid.Col>
@@ -456,6 +574,73 @@ export function MatchDashboard() {
                 <Text size="sm">{new Date(selectedMatch.created_at).toLocaleString('en-US')}</Text>
               </Group>
             </Stack>
+
+            <Divider />
+
+            <div>
+              <Group justify="space-between" mb="md">
+                <Text size="lg" fw={600}>Participants</Text>
+                <Badge size="lg" variant="light">
+                  {participants.length}/{selectedMatch.max_participants}
+                </Badge>
+              </Group>
+              
+              {participantsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader size="md" />
+                </div>
+              ) : participants.length === 0 ? (
+                <Card p="lg" withBorder>
+                  <Stack align="center">
+                    <Text size="md" c="dimmed">No participants yet</Text>
+                    <Text size="sm" c="dimmed">
+                      Participants will appear here once signups begin
+                    </Text>
+                  </Stack>
+                </Card>
+              ) : (
+                <Stack gap="xs">
+                  {participants.map((participant, index) => (
+                    <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
+                      <Group justify="space-between" align="center">
+                        <Group align="center">
+                          <Avatar size="sm" color="blue">
+                            {index + 1}
+                          </Avatar>
+                          <div>
+                            <Text fw={500} size="sm">{participant.username}</Text>
+                            <Text size="xs" c="dimmed">
+                              Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
+                            </Text>
+                          </div>
+                        </Group>
+                        
+                        {participant.signup_data && (
+                          <Stack gap="xs" align="flex-end">
+                            {Object.entries(participant.signup_data).map(([key, value]) => {
+                              // Find the label from signup config
+                              const field = signupConfig?.fields.find(f => f.id === key);
+                              const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
+                              
+                              return (
+                                <Group key={key} gap="xs">
+                                  <Text size="xs" c="dimmed">
+                                    {displayLabel}:
+                                  </Text>
+                                  <Badge size="xs" variant="light">
+                                    {String(value)}
+                                  </Badge>
+                                </Group>
+                              );
+                            })}
+                          </Stack>
+                        )}
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+            </div>
 
             <Divider />
             

@@ -112,19 +112,9 @@ export async function POST(request: NextRequest) {
       maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
     };
 
-    // Queue Discord announcement (don't block response if it fails)
-    try {
-      const discordSuccess = await queueDiscordAnnouncement(matchId);
-      
-      if (discordSuccess) {
-        console.log(`✅ Discord announcement queued for match: ${name}`);
-      } else {
-        console.warn(`⚠️ Failed to queue Discord announcement for match: ${name}`);
-      }
-    } catch (discordError) {
-      console.error('❌ Error queuing Discord announcement:', discordError);
-      // Don't fail the API request if Discord queueing fails
-    }
+    // Discord announcement will be triggered when match transitions to "gather" stage
+    // Match created in "created" status - no announcement yet
+    console.log(`✅ Match created in "created" status: ${name}`);
     
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
