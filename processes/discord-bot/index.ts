@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { initializeDatabase } from '../../lib/database';
 import { Database } from '../../lib/database/connection';
+import { SignupFormLoader, SignupField } from '../../lib/signup-forms';
 
 interface DiscordSettings {
   bot_token: string;
@@ -627,8 +628,8 @@ class MatchExecBot {
           SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
         `, [eventId]);
 
-        const eventData = await this.db.get<{max_participants: number}>(`
-          SELECT max_participants FROM matches WHERE id = ?
+        const eventData = await this.db.get<{max_participants: number, game_id: string}>(`
+          SELECT max_participants, game_id FROM matches WHERE id = ?
         `, [eventId]);
 
         if (participantCount?.count >= (eventData?.max_participants || 16)) {
@@ -638,37 +639,47 @@ class MatchExecBot {
           });
           return;
         }
+
+        // Load the game-specific signup form
+        const signupForm = await SignupFormLoader.loadSignupForm(eventData?.game_id || '');
+        if (!signupForm) {
+          await interaction.reply({
+            content: '❌ Could not load signup form. Please try again.',
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        // Create dynamic modal based on signup form
+        const modal = new ModalBuilder()
+          .setCustomId(`signup_form_${eventId}`)
+          .setTitle('Event Sign Up');
+
+        const rows: ActionRowBuilder<TextInputBuilder>[] = [];
+
+        for (let i = 0; i < Math.min(signupForm.fields.length, 5); i++) { // Discord modal limit is 5 components
+          const field = signupForm.fields[i];
+          
+          const textInput = new TextInputBuilder()
+            .setCustomId(field.id)
+            .setLabel(field.label)
+            .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+            .setRequired(field.required)
+            .setMaxLength(field.type === 'largetext' ? 1000 : 100);
+
+          if (field.placeholder) {
+            textInput.setPlaceholder(field.placeholder);
+          }
+
+          const row = new ActionRowBuilder<TextInputBuilder>()
+            .addComponents(textInput);
+          
+          rows.push(row);
+        }
+
+        modal.addComponents(...rows);
+        await interaction.showModal(modal);
       }
-
-      // Show signup form modal
-      const modal = new ModalBuilder()
-        .setCustomId(`signup_form_${eventId}`)
-        .setTitle('Event Sign Up');
-
-      const usernameInput = new TextInputBuilder()
-        .setCustomId('username')
-        .setLabel('In-game Username')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Enter your in-game username')
-        .setRequired(true)
-        .setMaxLength(50);
-
-      const notesInput = new TextInputBuilder()
-        .setCustomId('notes')
-        .setLabel('Additional Notes (Optional)')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Any additional information or preferences')
-        .setRequired(false)
-        .setMaxLength(500);
-
-      const firstRow = new ActionRowBuilder<TextInputBuilder>()
-        .addComponents(usernameInput);
-      const secondRow = new ActionRowBuilder<TextInputBuilder>()
-        .addComponents(notesInput);
-
-      modal.addComponents(firstRow, secondRow);
-
-      await interaction.showModal(modal);
 
     } catch (error) {
       console.error('❌ Error handling signup button:', error);
@@ -683,31 +694,78 @@ class MatchExecBot {
     if (!interaction.customId.startsWith('signup_form_')) return;
 
     const eventId = interaction.customId.replace('signup_form_', '');
-    const username = interaction.fields.getTextInputValue('username');
-    const notes = interaction.fields.getTextInputValue('notes') || null;
 
     try {
       if (this.db) {
+        // Get game ID to load the signup form structure
+        const eventData = await this.db.get<{game_id: string}>(`
+          SELECT game_id FROM matches WHERE id = ?
+        `, [eventId]);
+
+        if (!eventData) {
+          throw new Error('Event not found');
+        }
+
+        // Load signup form to get field structure
+        const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
+        if (!signupForm) {
+          throw new Error('Could not load signup form');
+        }
+
+        // Collect all form data
+        const signupData: {[key: string]: string} = {};
+        let displayUsername = interaction.user.username; // fallback
+
+        for (const field of signupForm.fields) {
+          try {
+            const value = interaction.fields.getTextInputValue(field.id);
+            signupData[field.id] = value;
+
+            // Use the first field as the display username (usually username/battlenet_name)
+            if (field.id === 'username' || field.id === 'battlenet_name') {
+              displayUsername = value;
+            }
+          } catch (e) {
+            // Field might not exist in modal if we hit the 5-field limit
+            if (field.required) {
+              throw new Error(`Required field ${field.id} is missing`);
+            }
+          }
+        }
+
         // Generate participant ID
         const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // Add participant to database
+        // Add participant to database with signup data
         await this.db.run(`
-          INSERT INTO match_participants (id, match_id, user_id, username)
-          VALUES (?, ?, ?, ?)
-        `, [participantId, eventId, interaction.user.id, username]);
+          INSERT INTO match_participants (id, match_id, user_id, username, signup_data)
+          VALUES (?, ?, ?, ?, ?)
+        `, [participantId, eventId, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
 
         // Get current participant count
         const participantCount = await this.db.get<{count: number}>(`
           SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
         `, [eventId]);
 
+        // Create confirmation message with submitted data
+        let confirmationMessage = `✅ Successfully signed up for the event!\n`;
+        
+        // Show key information from the signup form
+        for (const field of signupForm.fields.slice(0, 3)) { // Show first 3 fields
+          if (signupData[field.id]) {
+            const label = field.label.replace(/\s*\(Optional\)\s*$/i, ''); // Remove "(Optional)" from display
+            confirmationMessage += `**${label}:** ${signupData[field.id]}\n`;
+          }
+        }
+        
+        confirmationMessage += `**Participants:** ${participantCount?.count || 1}`;
+
         await interaction.reply({
-          content: `✅ Successfully signed up for the event!\n**Username:** ${username}\n**Participants:** ${participantCount?.count || 1}`,
+          content: confirmationMessage,
           flags: MessageFlags.Ephemeral
         });
 
-        console.log(`✅ User ${interaction.user.tag} (${username}) signed up for event ${eventId}`);
+        console.log(`✅ User ${interaction.user.tag} (${displayUsername}) signed up for event ${eventId}:`, signupData);
       } else {
         throw new Error('Database not available');
       }
@@ -722,7 +780,7 @@ class MatchExecBot {
         });
       } else {
         await interaction.reply({
-          content: '❌ Failed to sign up. Please try again.',
+          content: `❌ Failed to sign up: ${error.message}. Please try again.`,
           flags: MessageFlags.Ephemeral
         });
       }

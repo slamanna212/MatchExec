@@ -1,11 +1,25 @@
 -- Update match status to support new 5-step flow
 -- Creation > Gather > Assign > Battle > Complete
 
--- Drop the old CHECK constraint and recreate the table with new constraint
--- SQLite doesn't support ALTER COLUMN directly, so we need to recreate the table
+-- First, update existing status values to match new flow
+UPDATE matches SET status = 'gather' WHERE status = 'registration';
+UPDATE matches SET status = 'battle' WHERE status = 'ongoing';  
+UPDATE matches SET status = 'complete' WHERE status = 'completed';
 
--- Create new table with updated status constraint
-CREATE TABLE matches_new (
+-- Since SQLite doesn't support modifying CHECK constraints directly,
+-- we need to disable foreign key enforcement temporarily and recreate the table
+PRAGMA foreign_keys=OFF;
+
+BEGIN TRANSACTION;
+
+-- Create temporary backup of data
+CREATE TEMPORARY TABLE matches_backup AS SELECT * FROM matches;
+
+-- Drop the original table
+DROP TABLE matches;
+
+-- Recreate table with new status constraint (matching existing columns exactly)
+CREATE TABLE matches (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
@@ -23,28 +37,19 @@ CREATE TABLE matches_new (
   maps TEXT,
   livestream_link TEXT,
   event_image_url TEXT,
-  discord_event_id TEXT,
   FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
--- Copy existing data, updating old status values to new ones
-INSERT INTO matches_new 
-SELECT 
-  id, name, description, game_id, guild_id, channel_id, max_participants,
-  CASE 
-    WHEN status = 'registration' THEN 'gather'
-    WHEN status = 'ongoing' THEN 'battle'
-    WHEN status = 'completed' THEN 'complete'
-    ELSE status
-  END as status,
-  start_date, end_date, created_at, updated_at,
-  rules, rounds, maps, livestream_link, event_image_url, discord_event_id
-FROM matches;
+-- Restore data from backup
+INSERT INTO matches SELECT * FROM matches_backup;
 
--- Drop old table and rename new one
-DROP TABLE matches;
-ALTER TABLE matches_new RENAME TO matches;
+-- Drop the temporary backup
+DROP TABLE matches_backup;
 
 -- Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_matches_guild_id ON matches(guild_id);
 CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
+
+COMMIT;
+
+PRAGMA foreign_keys=ON;

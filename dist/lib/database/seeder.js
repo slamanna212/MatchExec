@@ -154,9 +154,10 @@ var DatabaseSeeder = /** @class */ (function () {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, this.db.run("\n      INSERT OR REPLACE INTO games (\n        id, name, genre, developer, release_date, version, description,\n        min_players, max_players, icon_url, cover_url, updated_at\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)\n    ", [
+                    case 0: return [4 /*yield*/, this.db.run("\n      INSERT OR REPLACE INTO games (\n        id, name, color, genre, developer, release_date, version, description,\n        min_players, max_players, icon_url, cover_url, updated_at\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)\n    ", [
                             gameData.id,
                             gameData.name,
+                            gameData.color || null,
                             gameData.genre,
                             gameData.developer,
                             gameData.releaseDate,
