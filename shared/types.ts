@@ -42,12 +42,22 @@ export interface Match {
   guild_id: string;
   channel_id: string;
   max_participants: number;
-  status: 'created' | 'registration' | 'ongoing' | 'completed' | 'cancelled';
+  status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   start_date?: Date;
   end_date?: Date;
   created_at: Date;
   updated_at: Date;
 }
+
+// Match progress constants
+export const MATCH_FLOW_STEPS = {
+  created: { name: 'Creation', progress: 20 },
+  gather: { name: 'Gather', progress: 40 },
+  assign: { name: 'Assign', progress: 60 },
+  battle: { name: 'Battle', progress: 80 },
+  complete: { name: 'Complete', progress: 100 },
+  cancelled: { name: 'Cancelled', progress: 0 }
+} as const;
 
 export interface MatchParticipant {
   id: string;

@@ -13,10 +13,11 @@ import {
   Stack,
   Grid,
   Modal,
-  Image
+  Image,
+  RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match } from '../../shared/types';
+import { Match, MATCH_FLOW_STEPS } from '../../shared/types';
 
 interface GameWithIcon {
   id: string;
@@ -84,9 +85,10 @@ export function MatchDashboard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'created': return 'gray';
-      case 'registration': return 'blue';
-      case 'ongoing': return 'yellow';
-      case 'completed': return 'green';
+      case 'gather': return 'blue';
+      case 'assign': return 'orange';
+      case 'battle': return 'yellow';
+      case 'complete': return 'green';
       case 'cancelled': return 'red';
       default: return 'gray';
     }
@@ -240,12 +242,16 @@ export function MatchDashboard() {
                     <Text fw={600}>{match.name}</Text>
                     <Text size="sm" c="dimmed">{match.game_name}</Text>
                   </Stack>
-                  <Badge 
-                    color={getStatusColor(match.status)} 
-                    size="sm"
-                  >
-                    {match.status}
-                  </Badge>
+                  <RingProgress
+                    size={50}
+                    thickness={4}
+                    sections={[
+                      { 
+                        value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
+                        color: getStatusColor(match.status) + '.8'
+                      }
+                    ]}
+                  />
                 </Group>
                 
                 <Divider mb="md" />
@@ -301,7 +307,7 @@ export function MatchDashboard() {
                   </Button>
                   {match.status === 'created' && (
                     <Button size="sm">
-                      Start Registration
+                      Start Gather
                     </Button>
                   )}
                 </Group>
@@ -332,13 +338,20 @@ export function MatchDashboard() {
                 alt={selectedMatch.game_name}
                 size="lg"
               />
-              <Stack gap="xs">
+              <Stack gap="xs" style={{ flex: 1 }}>
                 <Text size="xl" fw={600}>{selectedMatch.name}</Text>
                 <Text size="md" c="dimmed">{selectedMatch.game_name}</Text>
-                <Badge color={getStatusColor(selectedMatch.status)} size="sm">
-                  {selectedMatch.status}
-                </Badge>
               </Stack>
+              <RingProgress
+                size={60}
+                thickness={6}
+                sections={[
+                  { 
+                    value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
+                    color: getStatusColor(selectedMatch.status) + '.8'
+                  }
+                ]}
+              />
             </Group>
 
             <Divider />
