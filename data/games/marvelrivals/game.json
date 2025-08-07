@@ -10,6 +10,7 @@
   "description": "A fast-paced, team-based hero shooter where iconic Marvel characters clash in objective-driven matches.",
   "minPlayers": 2,
   "maxPlayers": 12,
+  "maxSignups": 20,
   "assets": {
     "iconUrl": "/assets/games/marvelrivals/icon.png",
     "coverUrl": "/assets/games/marvelrivals/cover.webp"

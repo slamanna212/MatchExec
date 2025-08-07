@@ -10,6 +10,7 @@
   "description": "A team-based multiplayer first-person shooter featuring hero-based combat and objective-driven matches.",
   "minPlayers": 2,
   "maxPlayers": 12,
+  "maxSignups": 20,
   "assets": {
     "iconUrl": "/assets/games/overwatch2/icon.webp",
     "coverUrl": "/assets/games/overwatch2/cover.jpg"

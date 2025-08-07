@@ -73,6 +73,10 @@ export async function POST(request: NextRequest) {
     const db = await getDbInstance();
     const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // Get the game's max signups setting
+    const game = await db.get('SELECT max_signups FROM games WHERE id = ?', [gameId]);
+    const maxParticipants = game?.max_signups || 20; // fallback to 20 if not found
+    
     // For now, use placeholder values for Discord fields until they're configured
     const guildId = 'placeholder_guild';
     const channelId = 'placeholder_channel';
@@ -89,7 +93,7 @@ export async function POST(request: NextRequest) {
       gameId,
       guildId,
       channelId,
-      16, // Default max participants
+      maxParticipants,
       'created',
       startDate ? new Date(startDate).toISOString() : null,
       rules || null,
