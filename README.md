@@ -47,3 +47,9 @@ Required environment variables (see `.env.example`):
 
 # Settings we need to change 
 src/app/settings/page.tsx:118 - the discord permissions numbers need to change once we figure out perms
+
+
+
+
+# 5 Stages of a Match
+Created - Gather - Assign - Battle - Complete 

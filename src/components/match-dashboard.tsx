@@ -14,7 +14,8 @@ import {
   Grid,
   Modal,
   Image,
-  RingProgress
+  RingProgress,
+  useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS } from '../../shared/types';
@@ -50,6 +51,7 @@ export function MatchDashboard() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
+  const { colorScheme } = useMantineColorScheme();
 
   useEffect(() => {
     fetchMatches();
@@ -92,6 +94,13 @@ export function MatchDashboard() {
       case 'cancelled': return 'red';
       default: return 'gray';
     }
+  };
+
+  const getStatusColorForProgress = (status: string, isDark: boolean) => {
+    if (status === 'created' && isDark) {
+      return 'white';
+    }
+    return getStatusColor(status) + '.8';
   };
 
   const formatMapName = (mapId: string) => {
@@ -248,7 +257,7 @@ export function MatchDashboard() {
                     sections={[
                       { 
                         value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
-                        color: getStatusColor(match.status) + '.8'
+                        color: getStatusColorForProgress(match.status, colorScheme === 'dark')
                       }
                     ]}
                   />
@@ -348,7 +357,7 @@ export function MatchDashboard() {
                 sections={[
                   { 
                     value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
-                    color: getStatusColor(selectedMatch.status) + '.8'
+                    color: getStatusColorForProgress(selectedMatch.status, colorScheme === 'dark')
                   }
                 ]}
               />
