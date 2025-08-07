@@ -207,7 +207,8 @@ class MatchExecBot {
         eventData.maps || [],
         eventData.max_participants,
         eventData.livestream_link,
-        eventData.event_image_url
+        eventData.event_image_url,
+        eventData.start_date
       );
 
       // Create signup button
@@ -289,7 +290,8 @@ class MatchExecBot {
     maps: string[],
     maxParticipants: number,
     livestreamLink?: string,
-    eventImageUrl?: string
+    eventImageUrl?: string,
+    startDate?: string
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     // Get game data from database for nice name and color
     let gameName = gameId;
@@ -331,6 +333,18 @@ class MatchExecBot {
       )
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
+
+    // Add match time and countdown if start date is provided
+    if (startDate) {
+      const startTime = new Date(startDate);
+      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+      
+      // Add match time in EDT and countdown
+      embed.addFields(
+        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+        { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true }
+      );
+    }
 
     // Add maps count if provided (but not the actual maps - those go in thread)
     if (maps.length > 0) {

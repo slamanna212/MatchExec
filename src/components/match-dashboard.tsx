@@ -277,15 +277,7 @@ export function MatchDashboard() {
           </Button>
         );
       case 'assign':
-        return (
-          <Button 
-            size="sm" 
-            color="yellow"
-            onClick={() => handleStatusTransition(match.id, 'battle')}
-          >
-            Start Battle
-          </Button>
-        );
+        return null; // Battle starts automatically at scheduled time
       case 'battle':
         return (
           <Button 
