@@ -57,7 +57,7 @@ export class MigrationRunner {
     try {
       const rows = await this.db.all<{ name: string }>('SELECT name FROM migrations');
       return rows.map(row => row.name);
-    } catch (error) {
+    } catch {
       // If migrations table doesn't exist yet, return empty array
       return [];
     }

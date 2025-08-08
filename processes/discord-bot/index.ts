@@ -248,9 +248,12 @@ class MatchExecBot {
         }
 
         // Create Discord server event
-        if (eventData.start_date) {
+        if (eventData.start_date && typeof eventData.start_date === 'string') {
           const rounds = eventData.maps?.length || 1;
-          discordEventId = await this.createDiscordEvent(eventData, message, rounds);
+          discordEventId = await this.createDiscordEvent({
+            ...eventData,
+            start_date: eventData.start_date
+          }, message, rounds);
         }
 
         // Store Discord message information for later cleanup
@@ -490,7 +493,6 @@ class MatchExecBot {
       const thread = await message.startThread({
         name: `${eventName} Maps`,
         autoArchiveDuration: 1440, // 24 hours (in minutes)
-        type: ChannelType.PublicThread,
         reason: 'Map details for event'
       });
 
@@ -642,11 +644,14 @@ class MatchExecBot {
           SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
         `, [eventId]);
 
-        const eventData = await this.db.get<{max_participants: number, game_id: string}>(`
-          SELECT max_participants, game_id FROM matches WHERE id = ?
+        const eventData = await this.db.get<{max_signups: number, game_id: string}>(`
+          SELECT m.game_id, g.max_signups 
+          FROM matches m 
+          JOIN games g ON m.game_id = g.id 
+          WHERE m.id = ?
         `, [eventId]);
 
-        if (participantCount?.count >= (eventData?.max_participants || 16)) {
+        if ((participantCount?.count ?? 0) >= (eventData?.max_signups || 16)) {
           await interaction.reply({
             content: '❌ This event is full!',
             flags: MessageFlags.Ephemeral
@@ -787,14 +792,14 @@ class MatchExecBot {
     } catch (error) {
       console.error('❌ Error processing signup:', error);
       
-      if (error.message?.includes('UNIQUE constraint failed')) {
+      if (error instanceof Error && error.message?.includes('UNIQUE constraint failed')) {
         await interaction.reply({
           content: '❌ You are already signed up for this event!',
           flags: MessageFlags.Ephemeral
         });
       } else {
         await interaction.reply({
-          content: `❌ Failed to sign up: ${error.message}. Please try again.`,
+          content: `❌ Failed to sign up: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
           flags: MessageFlags.Ephemeral
         });
       }
@@ -835,7 +840,20 @@ class MatchExecBot {
 
     try {
       // Get pending announcements
-      const pendingAnnouncements = await this.db.all(`
+      const pendingAnnouncements = await this.db.all<{
+        id: string;
+        match_id: string;
+        name: string;
+        description: string;
+        game_id: string;
+        max_participants: number;
+        guild_id: string;
+        maps?: string;
+        livestream_link?: string;
+        event_image_url?: string;
+        start_date?: string;
+        rules?: 'competitive' | 'casual';
+      }>(`
         SELECT daq.*, m.name, m.description, m.game_id, m.max_participants, m.guild_id, m.maps, m.livestream_link, m.event_image_url, m.start_date, m.rules
         FROM discord_announcement_queue daq
         JOIN matches m ON daq.match_id = m.id
@@ -898,7 +916,7 @@ class MatchExecBot {
             UPDATE discord_announcement_queue 
             SET status = 'failed', error_message = ?
             WHERE id = ?
-          `, [error.message || 'Unknown error', announcement.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
         }
       }
     } catch (error) {
@@ -913,7 +931,12 @@ class MatchExecBot {
 
     try {
       // Get pending deletions
-      const pendingDeletions = await this.db.all(`
+      const pendingDeletions = await this.db.all<{
+        id: string;
+        match_id: string;
+        status: string;
+        created_at: string;
+      }>(`
         SELECT * FROM discord_deletion_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -951,7 +974,7 @@ class MatchExecBot {
             UPDATE discord_deletion_queue 
             SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
             WHERE id = ?
-          `, [error.message || 'Unknown error', deletion.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', deletion.id]);
         }
       }
     } catch (error) {
@@ -966,7 +989,13 @@ class MatchExecBot {
 
     try {
       // Get pending status updates
-      const pendingUpdates = await this.db.all(`
+      const pendingUpdates = await this.db.all<{
+        id: string;
+        match_id: string;
+        new_status: string;
+        status: string;
+        created_at: string;
+      }>(`
         SELECT * FROM discord_status_update_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC

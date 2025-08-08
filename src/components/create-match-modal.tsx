@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash } from '@tabler/icons-react';
 import { Match, GameMap } from '../../shared/types';
@@ -68,7 +68,6 @@ export function CreateMatchModal({
   const [formData, setFormData] = useState<Partial<MatchFormData>>({
     rules: 'casual'
   });
-  const [availableMaps, setAvailableMaps] = useState<GameMapWithMode[]>([]);
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [availableModes, setAvailableModes] = useState<GameMode[]>([]);
   const [selectedMaps, setSelectedMaps] = useState<SelectedMapCard[]>([]);
@@ -123,7 +122,7 @@ export function CreateMatchModal({
     }
   };
 
-  const updateFormData = (field: keyof MatchFormData, value: any) => {
+  const updateFormData = (field: keyof MatchFormData, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -235,9 +234,6 @@ export function CreateMatchModal({
     setShowMapSelector(true);
   };
 
-  const canCreateMatch = () => {
-    return formData.maps && formData.maps.length > 0;
-  };
 
   const convertToUTC = (date: string, time: string): Date => {
     // Combine date and time strings into a local Date object

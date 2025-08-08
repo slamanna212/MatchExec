@@ -39,15 +39,15 @@ export async function GET(
     // Fetch signup form configuration to get field labels
     let signupConfig = null;
     try {
-      const fs = require('fs');
-      const path = require('path');
+      const fs = await import('fs');
+      const path = await import('path');
       const signupPath = path.join(process.cwd(), 'data', 'games', match.game_id, 'signup.json');
       
       if (fs.existsSync(signupPath)) {
         const signupData = fs.readFileSync(signupPath, 'utf8');
         signupConfig = JSON.parse(signupData);
       }
-    } catch (error) {
+    } catch {
       console.log('No signup form config found for game:', match.game_id);
     }
     

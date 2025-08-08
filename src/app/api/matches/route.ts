@@ -2,24 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { Match } from '../../../shared/types';
 
-// Queue an announcement request that the Discord bot will process
-async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
-  try {
-    const db = await getDbInstance();
-    
-    // Add to announcement queue
-    await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, status)
-      VALUES (?, 'pending')
-    `, [matchId]);
-    
-    console.log('📢 Discord announcement queued for match:', matchId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error queuing Discord announcement:', error);
-    return false;
-  }
-}
 
 export async function GET() {
   try {
@@ -60,7 +42,6 @@ export async function POST(request: NextRequest) {
       rounds,
       maps,
       eventImageUrl,
-      eventType = 'casual' // Default to casual if not specified
     } = body;
     
     if (!name || !gameId) {

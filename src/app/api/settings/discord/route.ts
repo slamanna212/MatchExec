@@ -89,12 +89,12 @@ export async function PUT(request: NextRequest) {
     if (bot_token && bot_token !== '••••••••') {
       try {
         // Attempt to restart the Discord bot process via PM2
-        const { exec } = require('child_process');
+        const { exec } = await import('child_process');
         const isDev = process.env.NODE_ENV === 'development';
         const processName = isDev ? 'discord-bot-dev' : 'discord-bot';
         
         // First check if the process exists
-        exec(`npx pm2 describe ${processName}`, (error, stdout, stderr) => {
+        exec(`npx pm2 describe ${processName}`, (error) => {
           if (error) {
             // Process doesn't exist, start it
             console.log(`🚀 Starting ${processName} process (not currently running)`);

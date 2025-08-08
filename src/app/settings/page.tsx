@@ -104,7 +104,7 @@ export default function SettingsPage() {
     }
 
     fetchSettings();
-  }, []);
+  }, [form, schedulerForm, uiForm]);
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);

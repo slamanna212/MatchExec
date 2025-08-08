@@ -50,7 +50,7 @@ interface MatchParticipant {
   user_id: string;
   username: string;
   joined_at: string;
-  signup_data: any;
+  signup_data: Record<string, unknown>;
 }
 
 interface SignupField {
@@ -172,7 +172,7 @@ export function MatchDashboard() {
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
         
-        maps.forEach((map: any) => {
+        maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
           mapNamesObj[map.id] = map.name;
           mapDetailsObj[map.id] = {
             name: map.name,
@@ -359,7 +359,7 @@ export function MatchDashboard() {
       title: 'Delete Match',
       children: (
         <Text size="sm">
-          Are you sure you want to delete "{match.name}"? This action cannot be undone.
+          Are you sure you want to delete &quot;{match.name}&quot;? This action cannot be undone.
         </Text>
       ),
       labels: { confirm: 'Delete', cancel: 'Cancel' },

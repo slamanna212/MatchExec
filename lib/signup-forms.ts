@@ -54,19 +54,28 @@ export class SignupFormLoader {
     }
   }
 
-  private static isValidSignupForm(data: any): data is SignupForm {
-    return (
-      data &&
-      Array.isArray(data.fields) &&
-      data.fields.every((field: any) => 
-        field.id && 
-        field.type && 
-        ['text', 'largetext'].includes(field.type) &&
-        field.label &&
-        typeof field.required === 'boolean'
-      ) &&
-      data.submitButton &&
-      data.submitButton.text
+  private static isValidSignupForm(data: unknown): data is SignupForm {
+    if (!data || typeof data !== 'object') return false;
+    
+    const obj = data as Record<string, unknown>;
+    
+    return !!(
+      Array.isArray(obj.fields) &&
+      obj.fields.every((field: unknown) => {
+        if (!field || typeof field !== 'object') return false;
+        const f = field as Record<string, unknown>;
+        return !!(
+          f.id && 
+          f.type && 
+          ['text', 'largetext'].includes(f.type as string) &&
+          f.label &&
+          typeof f.required === 'boolean'
+        );
+      }) &&
+      obj.submitButton &&
+      typeof obj.submitButton === 'object' &&
+      obj.submitButton !== null &&
+      (obj.submitButton as Record<string, unknown>).text
     );
   }
 

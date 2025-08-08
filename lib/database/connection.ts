@@ -1,7 +1,4 @@
 import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
 
 export class Database {
   private db: sqlite3.Database | null = null;
@@ -40,7 +37,7 @@ export class Database {
     });
   }
 
-  async run(sql: string, params: any[] = []): Promise<{ lastID?: number; changes?: number }> {
+  async run(sql: string, params: unknown[] = []): Promise<{ lastID?: number; changes?: number }> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {
@@ -54,7 +51,7 @@ export class Database {
     });
   }
 
-  async get<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+  async get<T = unknown>(sql: string, params: unknown[] = []): Promise<T | undefined> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {
@@ -68,7 +65,7 @@ export class Database {
     });
   }
 
-  async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  async all<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {
