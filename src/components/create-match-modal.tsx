@@ -48,6 +48,7 @@ interface GameMode {
 interface GameMapWithMode extends GameMap {
   modeName?: string;
   modeDescription?: string;
+  imageUrl?: string; // API returns camelCase version
 }
 
 interface SelectedMapCard {
@@ -206,7 +207,7 @@ export function CreateMatchModal({
       name: map.name,
       modeId: selectedMode,
       modeName: mode.name,
-      imageUrl: map.image_url
+      imageUrl: map.imageUrl
     };
 
     const newSelectedMaps = [...selectedMaps, selectedMap];
@@ -591,7 +592,7 @@ export function CreateMatchModal({
                           >
                             <Card.Section>
                               <Image
-                                src={map.image_url}
+                                src={map.imageUrl}
                                 alt={map.name}
                                 height={80}
                                 fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
