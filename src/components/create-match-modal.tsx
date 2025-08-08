@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Modal, Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash } from '@tabler/icons-react';
-import { Match, GameMap } from '../../shared/types';
+import { Match, GameMap } from '@/shared/types';
 
 interface GameWithIcon {
   id: string;

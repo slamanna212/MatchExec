@@ -1,5 +1,33 @@
 import fs from 'fs';
 import path from 'path';
+import { 
+  Client, 
+  GatewayIntentBits, 
+  SlashCommandBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  ActionRowBuilder, 
+  EmbedBuilder, 
+  ChannelType, 
+  PermissionFlagsBits,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  GuildScheduledEventPrivacyLevel,
+  GuildScheduledEventEntityType,
+  ComponentType,
+  Events,
+  ActivityType,
+  REST,
+  Routes,
+  ChatInputCommandInteraction,
+  ButtonInteraction,
+  ModalSubmitInteraction,
+  MessageFlags,
+  Message,
+  GuildScheduledEventCreateOptions,
+  AttachmentBuilder
+} from 'discord.js';
 import { initializeDatabase } from '../../lib/database';
 import { Database } from '../../lib/database/connection';
 import { SignupFormLoader, SignupField } from '../../lib/signup-forms';

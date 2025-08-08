@@ -18,7 +18,7 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS } from '../../shared/types';
+import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 
 interface GameWithIcon {
   id: string;

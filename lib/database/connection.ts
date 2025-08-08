@@ -1,11 +1,12 @@
-import sqlite3 from 'sqlite3';
+import * as sqlite3 from 'sqlite3';
+import * as path from 'path';
 
 export class Database {
   private db: sqlite3.Database | null = null;
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || process.env.DATABASE_PATH || './app/data/matchexec.db';
+    this.dbPath = dbPath || process.env.DATABASE_PATH || path.join(process.cwd(), 'app', 'data', 'matchexec.db');
   }
 
   async connect(): Promise<void> {

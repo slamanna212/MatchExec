@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDbInstance } from '../../../../../../../lib/database-init';
+import { getDbInstance } from '../../../../../../../lib/database-init.js';
 
 export async function GET(
   request: Request,
