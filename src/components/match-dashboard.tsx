@@ -75,12 +75,37 @@ export function MatchDashboard() {
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
   const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
   const { colorScheme } = useMantineColorScheme();
 
+  // Fetch UI settings on component mount
   useEffect(() => {
+    const fetchUISettings = async () => {
+      try {
+        const response = await fetch('/api/settings/ui');
+        if (response.ok) {
+          const uiSettings = await response.json();
+          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
+        }
+      } catch (error) {
+        console.error('Error fetching UI settings:', error);
+      }
+    };
+
     fetchMatches();
     fetchGames();
+    fetchUISettings();
   }, []);
+
+  // Set up auto-refresh with configurable interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchMatches();
+    }, refreshInterval * 1000);
+
+    // Cleanup interval on unmount or when refreshInterval changes
+    return () => clearInterval(intervalId);
+  }, [refreshInterval]);
 
   const fetchMatches = async () => {
     try {
@@ -211,6 +236,18 @@ export function MatchDashboard() {
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
   };
+
+  // Auto-refresh participants when details modal is open
+  useEffect(() => {
+    if (detailsModalOpen && selectedMatch) {
+      // Use the same refresh interval for participants
+      const participantsInterval = setInterval(() => {
+        fetchParticipants(selectedMatch.id);
+      }, refreshInterval * 1000);
+
+      return () => clearInterval(participantsInterval);
+    }
+  }, [detailsModalOpen, selectedMatch, refreshInterval]);
 
   const handleDeleteMatch = async (matchId: string) => {
     try {

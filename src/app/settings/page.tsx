@@ -3,7 +3,7 @@
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import { IconInfoCircle, IconClock } from '@tabler/icons-react';
+import { IconInfoCircle, IconClock, IconSettings } from '@tabler/icons-react';
 
 interface DiscordSettings {
   application_id?: string;
@@ -22,12 +22,18 @@ interface SchedulerSettings {
   report_generation_cron: string;
 }
 
+interface UISettings {
+  auto_refresh_interval_seconds: number;
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [schedulerSaving, setSchedulerSaving] = useState(false);
+  const [uiSaving, setUiSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<DiscordSettings>({
     initialValues: {
@@ -50,13 +56,20 @@ export default function SettingsPage() {
     },
   });
 
+  const uiForm = useForm<UISettings>({
+    initialValues: {
+      auto_refresh_interval_seconds: 30,
+    },
+  });
+
   useEffect(() => {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, schedulerResponse] = await Promise.all([
+        const [discordResponse, schedulerResponse, uiResponse] = await Promise.all([
           fetch('/api/settings/discord'),
-          fetch('/api/settings/scheduler')
+          fetch('/api/settings/scheduler'),
+          fetch('/api/settings/ui')
         ]);
         
         if (discordResponse.ok) {
@@ -77,6 +90,11 @@ export default function SettingsPage() {
         if (schedulerResponse.ok) {
           const schedulerData = await schedulerResponse.json();
           schedulerForm.setValues(schedulerData);
+        }
+
+        if (uiResponse.ok) {
+          const uiData = await uiResponse.json();
+          uiForm.setValues(uiData);
         }
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -134,6 +152,31 @@ export default function SettingsPage() {
       setSchedulerMessage({ type: 'error', text: 'An error occurred while saving scheduler settings.' });
     } finally {
       setSchedulerSaving(false);
+    }
+  };
+
+  const handleUISubmit = async (values: UISettings) => {
+    setUiSaving(true);
+    setUiMessage(null);
+    
+    try {
+      const response = await fetch('/api/settings/ui', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (response.ok) {
+        setUiMessage({ type: 'success', text: 'UI settings saved successfully!' });
+      } else {
+        const errorData = await response.json();
+        setUiMessage({ type: 'error', text: errorData.error || 'Failed to save UI settings.' });
+      }
+    } catch (error) {
+      console.error('Error saving UI settings:', error);
+      setUiMessage({ type: 'error', text: 'An error occurred while saving UI settings.' });
+    } finally {
+      setUiSaving(false);
     }
   };
 
@@ -308,6 +351,45 @@ export default function SettingsPage() {
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={schedulerSaving} disabled={loading}>
                     Save Scheduler Settings
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group mb="md">
+              <IconSettings size="1.2rem" />
+              <Text size="lg" fw={600}>UI Settings</Text>
+            </Group>
+
+            {uiMessage && (
+              <Alert color={uiMessage.type === 'success' ? 'green' : 'red'} mb="md">
+                {uiMessage.text}
+              </Alert>
+            )}
+
+            <form onSubmit={uiForm.onSubmit(handleUISubmit)}>
+              <Stack gap="md">
+                <NumberInput
+                  label="Auto Refresh Interval"
+                  placeholder="30"
+                  description="How often (in seconds) the match dashboard should automatically refresh"
+                  min={5}
+                  max={300}
+                  {...uiForm.getInputProps('auto_refresh_interval_seconds')}
+                  disabled={loading}
+                />
+
+                <Alert color="blue" icon={<IconInfoCircle size="1rem" />}>
+                  <Text size="sm">
+                    Lower values provide more real-time updates but may increase server load. Recommended: 15-60 seconds.
+                  </Text>
+                </Alert>
+
+                <Group justify="flex-end" mt="lg">
+                  <Button type="submit" loading={uiSaving} disabled={loading}>
+                    Save UI Settings
                   </Button>
                 </Group>
               </Stack>
