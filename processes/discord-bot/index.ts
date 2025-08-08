@@ -1096,25 +1096,32 @@ class MatchExecBot {
             
             if (newStatus === 'assign') {
               // Remove the signup button when signups are closed
-              await message.edit({
-                embeds: message.embeds,
-                components: [] // Remove all components (buttons)
-              });
-              
-              console.log(`✅ Removed signup button for match ${matchId} - signups closed`);
-              
-              // Optionally add a footer message to indicate signups are closed
               const embed = message.embeds[0];
               if (embed) {
                 const updatedEmbed = EmbedBuilder.from(embed);
                 updatedEmbed.setFooter({ text: 'MatchExec • Signups are now closed!' });
                 
+                // Handle image properly - convert attachment references to inline images
+                if (embed.image?.url?.startsWith('attachment://')) {
+                  // Remove the image since we can't preserve attachments in edits
+                  updatedEmbed.setImage(null);
+                }
+                
                 await message.edit({
                   embeds: [updatedEmbed],
-                  components: []
+                  components: [], // Remove all components (buttons)
+                  files: [] // Clear any attachments to prevent duplication
+                });
+              } else {
+                // Fallback if no embed found
+                await message.edit({
+                  embeds: message.embeds,
+                  components: [], // Remove all components (buttons)
+                  files: [] // Clear any attachments to prevent duplication
                 });
               }
               
+              console.log(`✅ Updated message for match ${matchId} - signups closed`);
             }
           }
         } catch (error) {
