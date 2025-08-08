@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { 
   Card, 
   Text, 
@@ -63,6 +63,125 @@ interface SignupConfig {
   fields: SignupField[];
 }
 
+interface MatchCardProps {
+  match: MatchWithGame;
+  mapNames: {[key: string]: string};
+  colorScheme: string;
+  onViewDetails: (match: MatchWithGame) => void;
+  onAssignPlayers: (match: MatchWithGame) => void;
+  onStatusTransition: (matchId: string, newStatus: string) => void;
+  formatMapName: (mapId: string) => string;
+  getStatusColor: (status: string) => string;
+  getStatusColorForProgress: (status: string, isDark: boolean) => string;
+  getNextStatusButton: (match: MatchWithGame) => JSX.Element | null;
+}
+
+const MatchCard = memo(({ 
+  match, 
+  mapNames, 
+  colorScheme, 
+  onViewDetails, 
+  onAssignPlayers, 
+  onStatusTransition, 
+  formatMapName, 
+  getStatusColor, 
+  getStatusColorForProgress, 
+  getNextStatusButton 
+}: MatchCardProps) => {
+  return (
+    <Card 
+      shadow="sm" 
+      padding="lg" 
+      radius="md" 
+      withBorder
+      style={{ cursor: 'pointer' }}
+      onClick={() => onViewDetails(match)}
+    >
+      <Group mb="md">
+        <Avatar
+          src={match.game_icon}
+          alt={match.game_name}
+          size="md"
+        />
+        <Stack gap="xs" style={{ flex: 1 }}>
+          <Text fw={600}>{match.name}</Text>
+          <Text size="sm" c="dimmed">{match.game_name}</Text>
+        </Stack>
+        <RingProgress
+          size={50}
+          thickness={4}
+          sections={[
+            { 
+              value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
+              color: getStatusColorForProgress(match.status, colorScheme === 'dark')
+            }
+          ]}
+        />
+      </Group>
+      
+      <Divider mb="md" />
+      
+      <Stack gap="xs" style={{ minHeight: '140px' }}>
+        <div style={{ minHeight: '20px' }}>
+          {match.description && (
+            <Text size="sm" c="dimmed">{match.description}</Text>
+          )}
+        </div>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Rules:</Text>
+          <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
+        </Group>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Rounds:</Text>
+          <Text size="sm">{match.rounds || 'Not specified'}</Text>
+        </Group>
+        
+        <Group justify="space-between" align="center">
+          <Text size="sm" c="dimmed">Maps:</Text>
+          <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
+            {match.maps && match.maps.length > 0 ? (
+              match.maps.length > 1
+                ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
+                : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+            ) : (
+              'None selected'
+            )}
+          </Text>
+        </Group>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Max Participants:</Text>
+          <Text size="sm">{match.max_participants}</Text>
+        </Group>
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Created:</Text>
+          <Text size="sm">{new Date(match.created_at).toLocaleDateString('en-US')}</Text>
+        </Group>
+      </Stack>
+      
+      <Group mt="md" gap="xs">
+        {(match.status === 'gather' || match.status === 'assign') && (
+          <Button 
+            size="sm" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssignPlayers(match);
+            }}
+            style={{ flex: 1 }}
+          >
+            Assign Players
+          </Button>
+        )}
+        {getNextStatusButton(match)}
+      </Group>
+    </Card>
+  );
+});
+
+MatchCard.displayName = 'MatchCard';
+
 export function MatchDashboard() {
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [games, setGames] = useState<GameWithIcon[]>([]);
@@ -97,29 +216,35 @@ export function MatchDashboard() {
     fetchUISettings();
   }, []);
 
-  // Set up auto-refresh with configurable interval
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchMatches();
-    }, refreshInterval * 1000);
-
-    // Cleanup interval on unmount or when refreshInterval changes
-    return () => clearInterval(intervalId);
-  }, [refreshInterval]);
-
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async (silent = false) => {
     try {
       const response = await fetch('/api/matches');
       if (response.ok) {
         const data = await response.json();
-        setMatches(data);
+        // Only update if data actually changed to prevent unnecessary rerenders
+        setMatches(prevMatches => {
+          const dataChanged = JSON.stringify(prevMatches) !== JSON.stringify(data);
+          return dataChanged ? data : prevMatches;
+        });
       }
     } catch (error) {
       console.error('Error fetching matches:', error);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
+
+  // Set up auto-refresh with configurable interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchMatches(true); // Silent refresh to prevent loading states
+    }, refreshInterval * 1000);
+
+    // Cleanup interval on unmount or when refreshInterval changes
+    return () => clearInterval(intervalId);
+  }, [refreshInterval, fetchMatches]);
 
   const fetchGames = async () => {
     try {
@@ -209,27 +334,42 @@ export function MatchDashboard() {
     setMatches(prev => [match, ...prev]);
   };
 
-  const fetchParticipants = async (matchId: string) => {
-    setParticipantsLoading(true);
+  const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
+    if (!silent) {
+      setParticipantsLoading(true);
+    }
     try {
       const response = await fetch(`/api/matches/${matchId}/participants`);
       if (response.ok) {
         const data = await response.json();
-        setParticipants(data.participants);
-        setSignupConfig(data.signupConfig);
+        // Only update if data actually changed
+        setParticipants(prevParticipants => {
+          const dataChanged = JSON.stringify(prevParticipants) !== JSON.stringify(data.participants);
+          return dataChanged ? data.participants : prevParticipants;
+        });
+        setSignupConfig(prevConfig => {
+          const configChanged = JSON.stringify(prevConfig) !== JSON.stringify(data.signupConfig);
+          return configChanged ? data.signupConfig : prevConfig;
+        });
       } else {
         console.error('Failed to fetch participants');
-        setParticipants([]);
-        setSignupConfig(null);
+        if (!silent) {
+          setParticipants([]);
+          setSignupConfig(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching participants:', error);
-      setParticipants([]);
-      setSignupConfig(null);
+      if (!silent) {
+        setParticipants([]);
+        setSignupConfig(null);
+      }
     } finally {
-      setParticipantsLoading(false);
+      if (!silent) {
+        setParticipantsLoading(false);
+      }
     }
-  };
+  }, []);
 
   const handleViewDetails = (match: MatchWithGame) => {
     setSelectedMatch(match);
@@ -242,12 +382,12 @@ export function MatchDashboard() {
     if (detailsModalOpen && selectedMatch) {
       // Use the same refresh interval for participants
       const participantsInterval = setInterval(() => {
-        fetchParticipants(selectedMatch.id);
+        fetchParticipants(selectedMatch.id, true); // Silent refresh
       }, refreshInterval * 1000);
 
       return () => clearInterval(participantsInterval);
     }
-  }, [detailsModalOpen, selectedMatch, refreshInterval]);
+  }, [detailsModalOpen, selectedMatch, refreshInterval, fetchParticipants]);
 
   const handleDeleteMatch = async (matchId: string) => {
     try {
@@ -368,6 +508,92 @@ export function MatchDashboard() {
     });
   };
 
+  // Memoize expensive match card rendering
+  const memoizedMatchCards = useMemo(() => {
+    return matches.map((match) => (
+      <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
+        <MatchCard 
+          match={match}
+          mapNames={mapNames}
+          colorScheme={colorScheme}
+          onViewDetails={handleViewDetails}
+          onAssignPlayers={handleAssignPlayers}
+          onStatusTransition={handleStatusTransition}
+          formatMapName={formatMapName}
+          getStatusColor={getStatusColor}
+          getStatusColorForProgress={getStatusColorForProgress}
+          getNextStatusButton={getNextStatusButton}
+        />
+      </Grid.Col>
+    ));
+  }, [matches, mapNames, colorScheme]);
+
+  // Memoize participants list to prevent unnecessary rerenders
+  const memoizedParticipantsList = useMemo(() => {
+    if (participantsLoading) {
+      return (
+        <div className="flex justify-center py-4">
+          <Loader size="md" />
+        </div>
+      );
+    }
+    
+    if (participants.length === 0) {
+      return (
+        <Card p="lg" withBorder>
+          <Stack align="center">
+            <Text size="md" c="dimmed">No participants yet</Text>
+            <Text size="sm" c="dimmed">
+              Participants will appear here once signups begin
+            </Text>
+          </Stack>
+        </Card>
+      );
+    }
+    
+    return (
+      <Stack gap="xs">
+        {participants.map((participant, index) => (
+          <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
+            <Group justify="space-between" align="center">
+              <Group align="center">
+                <Avatar size="sm" color="blue">
+                  {index + 1}
+                </Avatar>
+                <div>
+                  <Text fw={500} size="sm">{participant.username}</Text>
+                  <Text size="xs" c="dimmed">
+                    Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
+                  </Text>
+                </div>
+              </Group>
+              
+              {participant.signup_data && (
+                <Stack gap="xs" align="flex-end">
+                  {Object.entries(participant.signup_data).map(([key, value]) => {
+                    const field = signupConfig?.fields.find(f => f.id === key);
+                    const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
+                    
+                    return (
+                      <Group key={key} gap="xs">
+                        <Text size="xs" c="dimmed">
+                          {displayLabel}:
+                        </Text>
+                        <Badge size="xs" variant="light">
+                          {String(value)}
+                        </Badge>
+                      </Group>
+                    );
+                  })}
+                </Stack>
+              )}
+            </Group>
+          </Card>
+        ))}
+      </Stack>
+    );
+  }, [participants, participantsLoading, signupConfig]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -409,98 +635,7 @@ export function MatchDashboard() {
         </Card>
       ) : (
         <Grid>
-          {matches.map((match) => (
-            <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
-              <Card 
-                shadow="sm" 
-                padding="lg" 
-                radius="md" 
-                withBorder
-                style={{ cursor: 'pointer' }}
-                onClick={() => handleViewDetails(match)}
-              >
-                <Group mb="md">
-                  <Avatar
-                    src={match.game_icon}
-                    alt={match.game_name}
-                    size="md"
-                  />
-                  <Stack gap="xs" style={{ flex: 1 }}>
-                    <Text fw={600}>{match.name}</Text>
-                    <Text size="sm" c="dimmed">{match.game_name}</Text>
-                  </Stack>
-                  <RingProgress
-                    size={50}
-                    thickness={4}
-                    sections={[
-                      { 
-                        value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
-                        color: getStatusColorForProgress(match.status, colorScheme === 'dark')
-                      }
-                    ]}
-                  />
-                </Group>
-                
-                <Divider mb="md" />
-                
-                <Stack gap="xs" style={{ minHeight: '140px' }}>
-                  <div style={{ minHeight: '20px' }}>
-                    {match.description && (
-                      <Text size="sm" c="dimmed">{match.description}</Text>
-                    )}
-                  </div>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Rules:</Text>
-                    <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
-                  </Group>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Rounds:</Text>
-                    <Text size="sm">{match.rounds || 'Not specified'}</Text>
-                  </Group>
-                  
-                  <Group justify="space-between" align="center">
-                    <Text size="sm" c="dimmed">Maps:</Text>
-                    <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
-                      {match.maps && match.maps.length > 0 ? (
-                        match.maps.length > 1
-                          ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
-                          : mapNames[match.maps[0]] || formatMapName(match.maps[0])
-                      ) : (
-                        'None selected'
-                      )}
-                    </Text>
-                  </Group>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Max Participants:</Text>
-                    <Text size="sm">{match.max_participants}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Created:</Text>
-                    <Text size="sm">{new Date(match.created_at).toLocaleDateString('en-US')}</Text>
-                  </Group>
-                </Stack>
-                
-                <Group mt="md" gap="xs">
-                  {(match.status === 'gather' || match.status === 'assign') && (
-                    <Button 
-                      size="sm" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAssignPlayers(match);
-                      }}
-                      style={{ flex: 1 }}
-                    >
-                      Assign Players
-                    </Button>
-                  )}
-                  {getNextStatusButton(match)}
-                </Group>
-              </Card>
-            </Grid.Col>
-          ))}
+          {memoizedMatchCards}
         </Grid>
       )}
 
@@ -652,61 +787,7 @@ export function MatchDashboard() {
                 </Badge>
               </Group>
               
-              {participantsLoading ? (
-                <div className="flex justify-center py-4">
-                  <Loader size="md" />
-                </div>
-              ) : participants.length === 0 ? (
-                <Card p="lg" withBorder>
-                  <Stack align="center">
-                    <Text size="md" c="dimmed">No participants yet</Text>
-                    <Text size="sm" c="dimmed">
-                      Participants will appear here once signups begin
-                    </Text>
-                  </Stack>
-                </Card>
-              ) : (
-                <Stack gap="xs">
-                  {participants.map((participant, index) => (
-                    <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
-                      <Group justify="space-between" align="center">
-                        <Group align="center">
-                          <Avatar size="sm" color="blue">
-                            {index + 1}
-                          </Avatar>
-                          <div>
-                            <Text fw={500} size="sm">{participant.username}</Text>
-                            <Text size="xs" c="dimmed">
-                              Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
-                            </Text>
-                          </div>
-                        </Group>
-                        
-                        {participant.signup_data && (
-                          <Stack gap="xs" align="flex-end">
-                            {Object.entries(participant.signup_data).map(([key, value]) => {
-                              // Find the label from signup config
-                              const field = signupConfig?.fields.find(f => f.id === key);
-                              const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
-                              
-                              return (
-                                <Group key={key} gap="xs">
-                                  <Text size="xs" c="dimmed">
-                                    {displayLabel}:
-                                  </Text>
-                                  <Badge size="xs" variant="light">
-                                    {String(value)}
-                                  </Badge>
-                                </Group>
-                              );
-                            })}
-                          </Stack>
-                        )}
-                      </Group>
-                    </Card>
-                  ))}
-                </Stack>
-              )}
+              {memoizedParticipantsList}
             </div>
 
             <Divider />
