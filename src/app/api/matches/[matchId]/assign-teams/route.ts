@@ -3,10 +3,10 @@ import { getDbInstance } from '../../../../../lib/database-init';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
-    const { matchId } = params;
+    const { matchId } = await params;
     const body = await request.json();
     const { teamAssignments } = body;
 
