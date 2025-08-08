@@ -34,6 +34,7 @@ interface GameWithIcon {
   modeCount: number;
 }
 import { CreateMatchModal } from './create-match-modal';
+import { AssignPlayersModal } from './assign-players-modal';
 
 interface MatchWithGame extends Match {
   game_name?: string;
@@ -72,6 +73,8 @@ export function MatchDashboard() {
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
+  const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
+  const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
   const { colorScheme } = useMantineColorScheme();
 
   useEffect(() => {
@@ -261,7 +264,11 @@ export function MatchDashboard() {
         return (
           <Button 
             size="sm" 
-            onClick={() => handleStatusTransition(match.id, 'gather')}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'gather');
+            }}
+            style={{ flex: 1 }}
           >
             Start Signups
           </Button>
@@ -271,7 +278,11 @@ export function MatchDashboard() {
           <Button 
             size="sm" 
             color="orange"
-            onClick={() => handleStatusTransition(match.id, 'assign')}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'assign');
+            }}
+            style={{ flex: 1 }}
           >
             Close Signups
           </Button>
@@ -283,7 +294,11 @@ export function MatchDashboard() {
           <Button 
             size="sm" 
             color="green"
-            onClick={() => handleStatusTransition(match.id, 'complete')}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'complete');
+            }}
+            style={{ flex: 1 }}
           >
             End Match
           </Button>
@@ -295,6 +310,11 @@ export function MatchDashboard() {
       default:
         return null;
     }
+  };
+
+  const handleAssignPlayers = (match: MatchWithGame) => {
+    setSelectedMatchForAssignment(match);
+    setAssignPlayersModalOpen(true);
   };
 
   const confirmDelete = (match: MatchWithGame) => {
@@ -354,7 +374,14 @@ export function MatchDashboard() {
         <Grid>
           {matches.map((match) => (
             <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
-              <Card shadow="sm" padding="lg" radius="md" withBorder>
+              <Card 
+                shadow="sm" 
+                padding="lg" 
+                radius="md" 
+                withBorder
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleViewDetails(match)}
+              >
                 <Group mb="md">
                   <Avatar
                     src={match.game_icon}
@@ -420,14 +447,18 @@ export function MatchDashboard() {
                 </Stack>
                 
                 <Group mt="md" gap="xs">
-                  <Button 
-                    size="sm" 
-                    variant="light" 
-                    style={{ flex: 1 }}
-                    onClick={() => handleViewDetails(match)}
-                  >
-                    View Details
-                  </Button>
+                  {(match.status === 'gather' || match.status === 'assign') && (
+                    <Button 
+                      size="sm" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAssignPlayers(match);
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      Assign Players
+                    </Button>
+                  )}
                   {getNextStatusButton(match)}
                 </Group>
               </Card>
@@ -441,6 +472,13 @@ export function MatchDashboard() {
         onClose={() => setCreateModalOpen(false)}
         onMatchCreated={handleMatchCreated}
         games={games}
+      />
+
+      <AssignPlayersModal
+        isOpen={assignPlayersModalOpen}
+        onClose={() => setAssignPlayersModalOpen(false)}
+        matchId={selectedMatchForAssignment?.id || ''}
+        matchName={selectedMatchForAssignment?.name || ''}
       />
 
       <Modal
