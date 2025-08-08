@@ -45,7 +45,6 @@ export class DatabaseSeeder {
   }
 
   async seedDatabase(): Promise<void> {
-    console.log('Starting database seeding...');
 
     const gameDirectories = this.getGameDirectories();
 
@@ -53,12 +52,10 @@ export class DatabaseSeeder {
       await this.seedGame(gameDir);
     }
 
-    console.log('Database seeding completed');
   }
 
   private getGameDirectories(): string[] {
     if (!fs.existsSync(this.dataDir)) {
-      console.log('No games data directory found');
       return [];
     }
 
@@ -71,7 +68,6 @@ export class DatabaseSeeder {
     const gameJsonPath = path.join(gamePath, 'game.json');
 
     if (!fs.existsSync(gameJsonPath)) {
-      console.log(`No game.json found for ${gameDir}, skipping`);
       return;
     }
 
@@ -80,11 +76,9 @@ export class DatabaseSeeder {
     // Check if we need to seed this game
     const existingVersion = await this.getExistingDataVersion(gameData.id);
     if (existingVersion === gameData.dataVersion) {
-      console.log(`Game ${gameData.id} already seeded with version ${gameData.dataVersion}, skipping`);
       return;
     }
 
-    console.log(`Seeding game: ${gameData.name} (${gameData.id})`);
 
     // Seed game data
     await this.seedGameData(gameData);

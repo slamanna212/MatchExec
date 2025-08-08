@@ -15,7 +15,6 @@ export class Database {
         if (err) {
           reject(err);
         } else {
-          console.log(`Connected to SQLite database at ${this.dbPath}`);
           resolve();
         }
       });
@@ -30,7 +29,6 @@ export class Database {
         if (err) {
           reject(err);
         } else {
-          console.log('Database connection closed');
           this.db = null;
           resolve();
         }

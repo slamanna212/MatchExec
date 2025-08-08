@@ -9,7 +9,6 @@ class MatchExecWorker {
     try {
       // Initialize database
       await initializeDatabase();
-      console.log('✅ Database initialized');
       
       this.isRunning = true;
       console.log('✅ Worker started successfully');

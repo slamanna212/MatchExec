@@ -13,7 +13,6 @@ class MatchExecScheduler {
     try {
       // Initialize database
       this.db = await initializeDatabase();
-      console.log('✅ Database initialized');
       
       this.isRunning = true;
       

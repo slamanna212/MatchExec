@@ -1253,7 +1253,6 @@ class MatchExecBot {
       
       // Initialize database
       this.db = await initializeDatabase();
-      console.log('✅ Database initialized');
 
       // Load settings
       this.settings = await this.loadSettings();

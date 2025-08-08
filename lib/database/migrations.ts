@@ -12,7 +12,6 @@ export class MigrationRunner {
   }
 
   async runMigrations(): Promise<void> {
-    console.log('Running database migrations...');
 
     // Ensure migrations table exists
     await this.createMigrationsTable();
@@ -29,7 +28,6 @@ export class MigrationRunner {
       }
     }
 
-    console.log('Database migrations completed');
   }
 
   private async createMigrationsTable(): Promise<void> {
@@ -44,7 +42,6 @@ export class MigrationRunner {
 
   private getMigrationFiles(): string[] {
     if (!fs.existsSync(this.migrationsDir)) {
-      console.log('No migrations directory found');
       return [];
     }
 
@@ -64,7 +61,6 @@ export class MigrationRunner {
   }
 
   private async executeMigration(filename: string): Promise<void> {
-    console.log(`Executing migration: ${filename}`);
     
     const migrationPath = path.join(this.migrationsDir, filename);
     const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -72,7 +68,6 @@ export class MigrationRunner {
     try {
       await this.db.exec(sql);
       await this.db.run('INSERT INTO migrations (name) VALUES (?)', [filename]);
-      console.log(`Migration ${filename} completed successfully`);
     } catch (error) {
       console.error(`Migration ${filename} failed:`, error);
       throw error;
