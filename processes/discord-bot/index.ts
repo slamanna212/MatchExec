@@ -329,7 +329,7 @@ class MatchExecBot {
       .setColor(gameColor)
       .addFields(
         { name: '🎯 Game', value: gameName, inline: true },
-        { name: '🏆 Ruleset', value: type === 'competitive' ? '🥇 Competitive' : '🎮 Casual', inline: true }
+        { name: '🏆 Ruleset', value: type === 'competitive' ? 'Competitive' : 'Casual', inline: true }
       )
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
