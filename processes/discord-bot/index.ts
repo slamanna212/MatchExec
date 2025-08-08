@@ -1,4 +1,3 @@
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, ChatInputCommandInteraction, ActivityType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction, AttachmentBuilder, Message, ChannelType, GuildScheduledEventCreateOptions, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { initializeDatabase } from '../../lib/database';
@@ -1033,7 +1032,7 @@ class MatchExecBot {
             UPDATE discord_status_update_queue 
             SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
             WHERE id = ?
-          `, [error.message || 'Unknown error', update.id]);
+          `, [(error as Error)?.message || 'Unknown error', update.id]);
         }
       }
     } catch (error) {
@@ -1063,9 +1062,9 @@ class MatchExecBot {
       for (const record of messageRecords) {
         try {
           // Get the message
-          const channel = await this.client.channels.fetch(record.channel_id);
+          const channel = await this.client.channels.fetch((record as any).channel_id);
           if (channel?.isTextBased() && 'messages' in channel) {
-            const message = await channel.messages.fetch(record.message_id);
+            const message = await channel.messages.fetch((record as any).message_id);
             
             if (newStatus === 'assign') {
               // Remove the signup button when signups are closed
@@ -1124,30 +1123,30 @@ class MatchExecBot {
       for (const record of messageRecords) {
         try {
           // Delete the main message
-          const channel = await this.client.channels.fetch(record.channel_id);
+          const channel = await this.client.channels.fetch((record as any).channel_id);
           if (channel?.isTextBased() && 'messages' in channel) {
             try {
-              const message = await channel.messages.fetch(record.message_id);
+              const message = await channel.messages.fetch((record as any).message_id);
               await message.delete();
               console.log(`✅ Deleted Discord message for match: ${matchId}`);
             } catch (error) {
-              console.warn(`⚠️ Could not delete message ${record.message_id}:`, error.message);
+              console.warn(`⚠️ Could not delete message ${(record as any).message_id}:`, (error as Error)?.message);
             }
           }
 
           // Delete Discord event if it exists
-          if (record.discord_event_id) {
+          if ((record as any).discord_event_id) {
             try {
               const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
               if (guild) {
-                const event = await guild.scheduledEvents.fetch(record.discord_event_id);
+                const event = await guild.scheduledEvents.fetch((record as any).discord_event_id);
                 if (event) {
-                  await event.delete();
+                  await event.delete('Match deleted');
                   console.log(`✅ Deleted Discord event for match: ${matchId}`);
                 }
               }
             } catch (error) {
-              console.warn(`⚠️ Could not delete Discord event ${record.discord_event_id}:`, error.message);
+              console.warn(`⚠️ Could not delete Discord event ${(record as any).discord_event_id}:`, (error as Error)?.message);
             }
           }
 
@@ -1159,8 +1158,8 @@ class MatchExecBot {
       }
 
       // Clean up event image if it exists
-      if (matchData?.event_image_url) {
-        await this.cleanupEventImage(matchData.event_image_url);
+      if ((matchData as any)?.event_image_url) {
+        await this.cleanupEventImage((matchData as any).event_image_url);
       }
 
       // Remove tracking records
@@ -1209,7 +1208,7 @@ class MatchExecBot {
       console.log(`🧹 Found ${expiredMatches.length} expired match announcements to clean up`);
 
       for (const match of expiredMatches) {
-        await this.deleteMatchAnnouncement(match.match_id);
+        await this.deleteMatchAnnouncement((match as any).match_id);
       }
 
       if (expiredMatches.length > 0) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { ParticipantDbRow, MatchDbRow } from '../../../../../../shared/types';
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +11,7 @@ export async function GET(
     const { matchId } = await params;
     
     // Check if match exists and get game info
-    const match = await db.get(
+    const match = await db.get<MatchDbRow>(
       'SELECT m.id, m.game_id, g.id as game_name FROM matches m JOIN games g ON m.game_id = g.id WHERE m.id = ?',
       [matchId]
     );
@@ -23,7 +24,7 @@ export async function GET(
     }
     
     // Fetch all participants for this match
-    const participants = await db.all(`
+    const participants = await db.all<ParticipantDbRow>(`
       SELECT id, user_id, username, joined_at, signup_data, team_assignment
       FROM match_participants 
       WHERE match_id = ?

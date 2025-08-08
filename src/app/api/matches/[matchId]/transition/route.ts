@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
-import { MATCH_FLOW_STEPS } from '../../../../../../shared/types';
+import { MATCH_FLOW_STEPS, MatchDbRow } from '../../../../../../shared/types';
 
 // Queue a Discord announcement request that the Discord bot will process
 async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
@@ -61,7 +61,7 @@ export async function POST(
     const db = await getDbInstance();
     
     // Get current match data
-    const currentMatch = await db.get(`
+    const currentMatch = await db.get<MatchDbRow>(` 
       SELECT * FROM matches WHERE id = ?
     `, [matchId]);
 
@@ -125,7 +125,7 @@ export async function POST(
     }
 
     // Get updated match data
-    const updatedMatch = await db.get(`
+    const updatedMatch = await db.get<MatchDbRow>(` 
       SELECT m.*, g.name as game_name, g.icon_url as game_icon
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
@@ -134,8 +134,8 @@ export async function POST(
 
     // Parse maps for the returned match
     const parsedMatch = {
-      ...updatedMatch,
-      maps: updatedMatch.maps ? (typeof updatedMatch.maps === 'string' ? JSON.parse(updatedMatch.maps) : updatedMatch.maps) : []
+      ...(updatedMatch || {}),
+      maps: updatedMatch?.maps ? (typeof updatedMatch.maps === 'string' ? JSON.parse(updatedMatch.maps) : updatedMatch.maps) : []
     };
 
     return NextResponse.json(parsedMatch);

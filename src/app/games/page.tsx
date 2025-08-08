@@ -62,7 +62,7 @@ export default function GamesPage() {
         <Grid>
           {games.map((game) => (
             <Grid.Col key={game.id} span={{ base: 12, md: 6 }}>
-              <Card shadow="sm" padding={{ base: "sm", md: "lg" }} radius="md" withBorder>
+              <Card shadow="sm" padding="lg" radius="md" withBorder>
                 <Group wrap="nowrap">
                   <div style={{ width: '50%', height: '50%', flexShrink: 0 }}>
                     {game.coverUrl && (

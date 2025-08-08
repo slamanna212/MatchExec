@@ -13,7 +13,7 @@ export interface EventAnnouncementData {
 export async function postEventAnnouncement(eventData: EventAnnouncementData): Promise<boolean> {
   try {
     // Import here to avoid build issues
-    const { getDbInstance } = await import('../lib/database-init');
+    const { getDbInstance } = await import('../src/lib/database-init');
     const db = await getDbInstance();
     
     // Add to announcement queue

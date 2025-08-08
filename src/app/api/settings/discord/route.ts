@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { DiscordSettingsDbRow } from '../../../../../shared/types';
 
 export async function GET() {
   try {
     const db = await getDbInstance();
     
-    const settings = await db.get(`
+    const settings = await db.get<DiscordSettingsDbRow>(` 
       SELECT 
         application_id,
         bot_token,

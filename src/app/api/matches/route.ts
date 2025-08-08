@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import { Match } from '../../../shared/types';
+import { MatchDbRow, GameDbRow } from '../../../../shared/types';
 
 
 export async function GET() {
   try {
     const db = await getDbInstance();
-    const matches = await db.all<Match>(`
+    const matches = await db.all<MatchDbRow>(` 
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Get the game's max signups setting
-    const game = await db.get('SELECT max_signups FROM games WHERE id = ?', [gameId]);
+    const game = await db.get<GameDbRow>('SELECT max_signups FROM games WHERE id = ?', [gameId]);
     const maxParticipants = game?.max_signups || 20; // fallback to 20 if not found
     
     // For now, use placeholder values for Discord fields until they're configured
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       eventImageUrl || null
     ]);
     
-    const match = await db.get(`
+    const match = await db.get<MatchDbRow>(`
       SELECT m.*, g.name as game_name, g.icon_url as game_icon
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
     
     // Parse maps for the returned match
     const parsedMatch = {
-      ...match,
-      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
+      ...(match || {}),
+      maps: match?.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
     };
 
     // Discord announcement will be triggered when match transitions to "gather" stage

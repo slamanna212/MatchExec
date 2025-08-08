@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { MatchDbRow } from '../../../../../shared/types';
 
 export async function DELETE(
   request: NextRequest,
@@ -10,7 +11,7 @@ export async function DELETE(
     const { matchId } = await params;
     
     // Check if match exists and get event image for cleanup
-    const existingMatch = await db.get(
+    const existingMatch = await db.get<MatchDbRow>(
       'SELECT id, event_image_url FROM matches WHERE id = ?',
       [matchId]
     );

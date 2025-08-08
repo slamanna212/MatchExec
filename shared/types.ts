@@ -49,6 +49,43 @@ export interface Match {
   updated_at: Date;
 }
 
+// Database row types (includes fields not in the base interface)
+export interface MatchDbRow extends Match {
+  maps?: string; // JSON string in database
+  event_image_url?: string;
+  rules?: string;
+  rounds?: number;
+  livestream_link?: string;
+}
+
+export interface ParticipantDbRow {
+  id: string;
+  match_id: string;
+  user_id: string;
+  discord_user_id: string;
+  username: string;
+  joined_at: Date;
+  signup_data?: string; // JSON string
+}
+
+export interface GameDbRow {
+  id: string;
+  name: string;
+  max_signups?: number;
+  [key: string]: unknown;
+}
+
+export interface DiscordSettingsDbRow {
+  application_id?: string;
+  bot_token?: string;
+  guild_id?: string;
+  announcement_channel_id?: string;
+  results_channel_id?: string;
+  participant_role_id?: string;
+  event_duration_minutes?: number;
+  [key: string]: unknown;
+}
+
 // Match progress constants
 export const MATCH_FLOW_STEPS = {
   created: { name: 'Creation', progress: 20 },
