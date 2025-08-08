@@ -812,6 +812,11 @@ class MatchExecBot {
       await this.processDeletionQueue();
     }, 10000);
     
+    // Process status update queue every 10 seconds
+    setInterval(async () => {
+      await this.processStatusUpdateQueue();
+    }, 10000);
+    
     // Clean up expired match messages every hour
     setInterval(async () => {
       await this.cleanupExpiredMatches();
@@ -819,6 +824,7 @@ class MatchExecBot {
     
     console.log('✅ Announcement queue processor started');
     console.log('✅ Deletion queue processor started');
+    console.log('✅ Status update queue processor started');
     console.log('✅ Expired match cleanup scheduler started');
   }
 
@@ -950,6 +956,120 @@ class MatchExecBot {
       }
     } catch (error) {
       console.error('❌ Error processing deletion queue:', error);
+    }
+  }
+
+  private async processStatusUpdateQueue() {
+    if (!this.db || !this.isReady) {
+      return;
+    }
+
+    try {
+      // Get pending status updates
+      const pendingUpdates = await this.db.all(`
+        SELECT * FROM discord_status_update_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const update of pendingUpdates) {
+        try {
+          const success = await this.updateMatchStatus(update.match_id, update.new_status);
+
+          if (success) {
+            // Mark as processed
+            await this.db.run(`
+              UPDATE discord_status_update_queue 
+              SET status = 'processed', processed_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [update.id]);
+            
+            console.log(`✅ Processed status update for match ${update.match_id} -> ${update.new_status}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_status_update_queue 
+              SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = 'Status update failed'
+              WHERE id = ?
+            `, [update.id]);
+            
+            console.log(`❌ Failed to update Discord message for match: ${update.match_id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing status update for match ${update.match_id}:`, error);
+          
+          // Mark as failed with error message
+          await this.db.run(`
+            UPDATE discord_status_update_queue 
+            SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
+            WHERE id = ?
+          `, [error.message || 'Unknown error', update.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing status update queue:', error);
+    }
+  }
+
+  async updateMatchStatus(matchId: string, newStatus: string): Promise<boolean> {
+    if (!this.db || !this.isReady) {
+      console.warn('⚠️ Bot not ready or database not available for message update');
+      return false;
+    }
+
+    try {
+      // Get Discord message info for this match
+      const messageRecords = await this.db.all(`
+        SELECT message_id, channel_id 
+        FROM discord_match_messages 
+        WHERE match_id = ?
+      `, [matchId]);
+
+      if (messageRecords.length === 0) {
+        console.warn(`⚠️ No Discord messages found for match: ${matchId}`);
+        return false;
+      }
+
+      for (const record of messageRecords) {
+        try {
+          // Get the message
+          const channel = await this.client.channels.fetch(record.channel_id);
+          if (channel?.isTextBased() && 'messages' in channel) {
+            const message = await channel.messages.fetch(record.message_id);
+            
+            if (newStatus === 'assign') {
+              // Remove the signup button when signups are closed
+              await message.edit({
+                embeds: message.embeds,
+                components: [] // Remove all components (buttons)
+              });
+              
+              console.log(`✅ Removed signup button for match ${matchId} - signups closed`);
+              
+              // Optionally add a footer message to indicate signups are closed
+              const embed = message.embeds[0];
+              if (embed) {
+                const updatedEmbed = EmbedBuilder.from(embed);
+                updatedEmbed.setFooter({ text: 'MatchExec • Signups are now closed!' });
+                
+                await message.edit({
+                  embeds: [updatedEmbed],
+                  components: []
+                });
+              }
+              
+            }
+          }
+        } catch (error) {
+          console.error(`❌ Error updating Discord message for match ${matchId}:`, error);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error in updateMatchStatus:', error);
+      return false;
     }
   }
 

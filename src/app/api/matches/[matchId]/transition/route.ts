@@ -21,6 +21,28 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
   }
 }
 
+// Queue a Discord status update request that the Discord bot will process
+async function queueDiscordStatusUpdate(matchId: string, newStatus: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Generate unique ID for the queue entry
+    const updateId = `discord_update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Add to status update queue
+    await db.run(`
+      INSERT INTO discord_status_update_queue (id, match_id, new_status, status)
+      VALUES (?, ?, ?, 'pending')
+    `, [updateId, matchId, newStatus]);
+    
+    console.log('🔄 Discord status update queued for match:', matchId, '-> status:', newStatus);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord status update:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
@@ -82,6 +104,22 @@ export async function POST(
         }
       } catch (discordError) {
         console.error('❌ Error queuing Discord announcement:', discordError);
+        // Don't fail the API request if Discord queueing fails
+      }
+    }
+
+    // Trigger Discord status update when entering "assign" stage (close signups)
+    if (newStatus === 'assign') {
+      try {
+        const discordUpdateSuccess = await queueDiscordStatusUpdate(matchId, newStatus);
+        
+        if (discordUpdateSuccess) {
+          console.log(`🔄 Discord status update queued for match entering assign stage: ${matchId}`);
+        } else {
+          console.warn(`⚠️ Failed to queue Discord status update for match: ${matchId}`);
+        }
+      } catch (discordError) {
+        console.error('❌ Error queuing Discord status update:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
     }
