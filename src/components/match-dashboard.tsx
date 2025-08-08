@@ -223,8 +223,23 @@ export function MatchDashboard() {
         const data = await response.json();
         // Only update if data actually changed to prevent unnecessary rerenders
         setMatches(prevMatches => {
-          const dataChanged = JSON.stringify(prevMatches) !== JSON.stringify(data);
-          return dataChanged ? data : prevMatches;
+          // More efficient comparison than JSON.stringify for arrays
+          if (prevMatches.length !== data.length) {
+            return data;
+          }
+          
+          // Check if any match has changed by comparing key properties
+          const hasChanges = data.some((match: MatchWithGame, index: number) => {
+            const prevMatch = prevMatches[index];
+            return !prevMatch || 
+              match.id !== prevMatch.id ||
+              match.status !== prevMatch.status ||
+              match.name !== prevMatch.name ||
+              match.created_at !== prevMatch.created_at ||
+              match.updated_at !== prevMatch.updated_at;
+          });
+          
+          return hasChanges ? data : prevMatches;
         });
       }
     } catch (error) {
@@ -344,12 +359,32 @@ export function MatchDashboard() {
         const data = await response.json();
         // Only update if data actually changed
         setParticipants(prevParticipants => {
-          const dataChanged = JSON.stringify(prevParticipants) !== JSON.stringify(data.participants);
-          return dataChanged ? data.participants : prevParticipants;
+          // More efficient comparison for participants array
+          if (prevParticipants.length !== data.participants.length) {
+            return data.participants;
+          }
+          
+          const hasChanges = data.participants.some((participant: MatchParticipant, index: number) => {
+            const prevParticipant = prevParticipants[index];
+            return !prevParticipant ||
+              participant.id !== prevParticipant.id ||
+              participant.username !== prevParticipant.username ||
+              participant.joined_at !== prevParticipant.joined_at;
+          });
+          
+          return hasChanges ? data.participants : prevParticipants;
         });
         setSignupConfig(prevConfig => {
-          const configChanged = JSON.stringify(prevConfig) !== JSON.stringify(data.signupConfig);
-          return configChanged ? data.signupConfig : prevConfig;
+          // Simple reference check for signup config since it rarely changes
+          if (!prevConfig && !data.signupConfig) return prevConfig;
+          if (!prevConfig || !data.signupConfig) return data.signupConfig;
+          
+          // Compare field count as a quick check
+          if (prevConfig.fields.length !== data.signupConfig.fields.length) {
+            return data.signupConfig;
+          }
+          
+          return prevConfig;
         });
       } else {
         console.error('Failed to fetch participants');
