@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbInstance } from '../../../../../lib/database-init.js';
+import { getDbInstance } from '../../../../../lib/database-init';
 import { MATCH_FLOW_STEPS, MatchDbRow } from '@/shared/types';
 
 // Queue a Discord announcement request that the Discord bot will process

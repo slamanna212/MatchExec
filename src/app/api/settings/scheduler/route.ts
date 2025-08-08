@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbInstance } from '../../../../lib/database-init.js';
+import { getDbInstance } from '../../../../lib/database-init';
 import { SchedulerSettings } from '@/shared/types';
 
 export async function GET() {

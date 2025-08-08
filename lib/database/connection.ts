@@ -6,7 +6,7 @@ export class Database {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || process.env.DATABASE_PATH || path.join(process.cwd(), 'app', 'data', 'matchexec.db');
+    this.dbPath = dbPath || process.env.DATABASE_PATH || path.join(process.cwd(), 'app_data', 'data', 'matchexec.db');
   }
 
   async connect(): Promise<void> {

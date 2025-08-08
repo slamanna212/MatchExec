@@ -104,7 +104,7 @@ export default function SettingsPage() {
     }
 
     fetchSettings();
-  }, [form, schedulerForm, uiForm]);
+  }, []); // Empty dependency array - only run once on mount
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);
