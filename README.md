@@ -41,7 +41,7 @@ npx tsx processes/worker/index.ts
 Required environment variables (see `.env.example`):
 
 - `DISCORD_BOT_TOKEN`: Your Discord bot token
-- `DATABASE_PATH`: Path to SQLite database file
+- `DATABASE_PATH`: Path to SQLite database file (defaults to ./app/data/matchexec.db)
 - `NODE_ENV`: Environment (development/production)
 - `PORT`: Web server port (default: 3000)
 
