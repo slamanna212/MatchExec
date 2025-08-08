@@ -23,10 +23,10 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
-    const { matchId } = params;
+    const { matchId } = await params;
     const { newStatus } = await request.json();
 
     if (!newStatus || !MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS]) {

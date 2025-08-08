@@ -25,7 +25,7 @@ export async function GET() {
   try {
     const db = await getDbInstance();
     const matches = await db.all<Match>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       ORDER BY m.created_at DESC
