@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconInfoCircle, IconClock, IconSettings } from '@tabler/icons-react';
@@ -12,7 +12,10 @@ interface DiscordSettings {
   announcement_channel_id?: string;
   results_channel_id?: string;
   participant_role_id?: string;
+  announcement_role_id?: string;
+  mention_everyone?: boolean;
   event_duration_minutes?: number;
+  match_reminder_minutes?: number;
 }
 
 interface SchedulerSettings {
@@ -43,7 +46,10 @@ export default function SettingsPage() {
       announcement_channel_id: '',
       results_channel_id: '',
       participant_role_id: '',
+      announcement_role_id: '',
+      mention_everyone: false,
       event_duration_minutes: 45,
+      match_reminder_minutes: 10,
     },
   });
 
@@ -82,7 +88,10 @@ export default function SettingsPage() {
             announcement_channel_id: discordData.announcement_channel_id || '',
             results_channel_id: discordData.results_channel_id || '',
             participant_role_id: discordData.participant_role_id || '',
-            event_duration_minutes: discordData.event_duration_minutes || 45
+            announcement_role_id: discordData.announcement_role_id || '',
+            mention_everyone: discordData.mention_everyone || false,
+            event_duration_minutes: discordData.event_duration_minutes || 45,
+            match_reminder_minutes: discordData.match_reminder_minutes || 10
           };
           form.setValues(sanitizedData);
         }
@@ -276,15 +285,75 @@ export default function SettingsPage() {
                   disabled={loading}
                 />
 
-                <NumberInput
-                  label="Event Duration (per round/map)"
-                  placeholder="45"
-                  description="Duration in minutes for Discord events (default: 45 minutes per round/map)"
-                  min={5}
-                  max={720}
-                  {...form.getInputProps('event_duration_minutes')}
-                  disabled={loading}
-                />
+                <Stack gap="sm">
+                  <Text size="sm" fw={500}>Announcement Role</Text>
+                  <Text size="xs" c="dimmed">Role to mention in match announcements</Text>
+                  
+                  <Group align="center" gap="md">
+                    <TextInput
+                      placeholder="Role ID for announcements"
+                      {...form.getInputProps('announcement_role_id')}
+                      disabled={loading || form.values.mention_everyone}
+                      style={{ flex: 1 }}
+                    />
+                    
+                    <Checkbox
+                      label={<Text fw="bold">@Everyone</Text>}
+                      size="md"
+                      {...form.getInputProps('mention_everyone', { type: 'checkbox' })}
+                      disabled={loading}
+                      onChange={(event) => {
+                        form.setFieldValue('mention_everyone', event.currentTarget.checked);
+                        // Clear the role ID when @everyone is checked
+                        if (event.currentTarget.checked) {
+                          form.setFieldValue('announcement_role_id', '');
+                        }
+                      }}
+                    />
+                  </Group>
+                </Stack>
+
+                <Group grow visibleFrom="md">
+                  <NumberInput
+                    label="Event Duration (per round/map)"
+                    placeholder="45"
+                    description="Duration in minutes for Discord events"
+                    min={5}
+                    max={720}
+                    {...form.getInputProps('event_duration_minutes')}
+                    disabled={loading}
+                  />
+                  <NumberInput
+                    label="Match Reminder Minutes"
+                    placeholder="10"
+                    description="Minutes before match start to send reminder"
+                    min={1}
+                    max={1440}
+                    {...form.getInputProps('match_reminder_minutes')}
+                    disabled={loading}
+                  />
+                </Group>
+
+                <Stack hiddenFrom="md">
+                  <NumberInput
+                    label="Event Duration (per round/map)"
+                    placeholder="45"
+                    description="Duration in minutes for Discord events"
+                    min={5}
+                    max={720}
+                    {...form.getInputProps('event_duration_minutes')}
+                    disabled={loading}
+                  />
+                  <NumberInput
+                    label="Match Reminder Minutes"
+                    placeholder="10"
+                    description="Minutes before match start to send reminder"
+                    min={1}
+                    max={1440}
+                    {...form.getInputProps('match_reminder_minutes')}
+                    disabled={loading}
+                  />
+                </Stack>
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={saving} disabled={loading}>

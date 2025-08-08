@@ -116,22 +116,124 @@ class MatchExecScheduler {
   }
 
   private async sendParticipantReminders() {
-    // Send reminders for upcoming matches
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Check for matches that need reminder queue entries created
+    await this.queueMatchReminders();
     
-    const upcomingMatches = await this.db.all(
-      `SELECT m.*, COUNT(mp.id) as participant_count
-       FROM matches m
-       LEFT JOIN match_participants mp ON m.id = mp.match_id
-       WHERE m.start_date BETWEEN datetime('now') AND datetime('now', '+24 hours')
-       AND m.status = 'registration'
-       GROUP BY m.id`
-    );
+    // Process existing reminder queue
+    await this.processReminderQueue();
+  }
 
-    for (const match of upcomingMatches) {
-      console.log(`📢 Sending reminders for match: ${match.name} (${match.participant_count} participants)`);
-      // TODO: Implement Discord notification logic
+  private async queueMatchReminders() {
+    try {
+      // Get Discord settings to know the reminder minutes
+      const discordSettings = await this.db.get(
+        'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
+      );
+      
+      if (!discordSettings?.match_reminder_minutes) {
+        console.log('⚠️ No Discord reminder settings found, skipping reminder queue');
+        return;
+      }
+
+      const reminderMinutes = discordSettings.match_reminder_minutes;
+
+      // Find matches that have start times and need reminders
+      const upcomingMatches = await this.db.all(
+        `SELECT m.id, m.name, m.start_date
+         FROM matches m
+         WHERE m.start_date IS NOT NULL 
+         AND m.status IN ('gather', 'assign', 'battle')
+         AND datetime(m.start_date, '-${reminderMinutes} minutes') <= datetime('now', '+1 hour')
+         AND NOT EXISTS (
+           SELECT 1 FROM discord_reminder_queue drq 
+           WHERE drq.match_id = m.id 
+           AND drq.status != 'failed'
+         )`
+      );
+
+      for (const match of upcomingMatches) {
+        const startDate = new Date(match.start_date);
+        const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
+        
+        // Only queue if reminder time is in the future
+        if (reminderTime > new Date()) {
+          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          await this.db.run(`
+            INSERT INTO discord_reminder_queue (id, match_id, reminder_time, status)
+            VALUES (?, ?, ?, 'pending')
+          `, [reminderId, match.id, reminderTime.toISOString()]);
+          
+          console.log(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error queueing match reminders:', error);
+    }
+  }
+
+  private async processReminderQueue() {
+    try {
+      // Get reminders that are due
+      const dueReminders = await this.db.all(`
+        SELECT drq.id, drq.match_id, drq.reminder_time
+        FROM discord_reminder_queue drq
+        WHERE drq.status = 'pending'
+        AND drq.reminder_time <= datetime('now')
+        LIMIT 5
+      `);
+
+      for (const reminder of dueReminders) {
+        try {
+          // Queue the Discord reminder - similar to how announcements work
+          const success = await this.queueDiscordReminder(reminder.match_id);
+          
+          if (success) {
+            await this.db.run(`
+              UPDATE discord_reminder_queue 
+              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [reminder.id]);
+            
+            console.log(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
+          } else {
+            await this.db.run(`
+              UPDATE discord_reminder_queue 
+              SET status = 'failed', error_message = 'Failed to queue Discord reminder'
+              WHERE id = ?
+            `, [reminder.id]);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing reminder ${reminder.id}:`, error);
+          
+          await this.db.run(`
+            UPDATE discord_reminder_queue 
+            SET status = 'failed', error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing reminder queue:', error);
+    }
+  }
+
+  private async queueDiscordReminder(matchId: string): Promise<boolean> {
+    try {
+      // Generate unique ID for the queue entry
+      const reminderId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Add to Discord reminder queue that the bot will process
+      await this.db.run(`
+        INSERT INTO discord_match_reminder_queue (id, match_id, status)
+        VALUES (?, ?, 'pending')
+      `, [reminderId, matchId]);
+      
+      console.log('📢 Discord match reminder queued for match:', matchId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error queuing Discord match reminder:', error);
+      return false;
     }
   }
 

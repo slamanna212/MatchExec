@@ -38,7 +38,10 @@ interface DiscordSettings {
   announcement_channel_id?: string;
   results_channel_id?: string;
   participant_role_id?: string;
+  announcement_role_id?: string;
+  mention_everyone?: boolean;
   event_duration_minutes?: number;
+  match_reminder_minutes?: number;
 }
 
 class MatchExecBot {
@@ -114,7 +117,10 @@ class MatchExecBot {
           announcement_channel_id,
           results_channel_id,
           participant_role_id,
-          event_duration_minutes
+          announcement_role_id,
+          mention_everyone,
+          event_duration_minutes,
+          match_reminder_minutes
         FROM discord_settings 
         WHERE id = 1
       `);
@@ -251,8 +257,17 @@ class MatchExecBot {
       const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
 
       if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
+        // Determine what to mention based on settings
+        let mentionText = '';
+        if (this.settings.mention_everyone) {
+          mentionText = '@everyone';
+        } else if (this.settings.announcement_role_id) {
+          mentionText = `<@&${this.settings.announcement_role_id}>`;
+        }
+
         // Prepare message options
         const messageOptions: any = {
+          content: mentionText, // Add the mention above the embed
           embeds: [embed],
           components: [row]
         };
@@ -849,6 +864,11 @@ class MatchExecBot {
       await this.processStatusUpdateQueue();
     }, 10000);
     
+    // Process reminder queue every 10 seconds
+    setInterval(async () => {
+      await this.processReminderQueue();
+    }, 10000);
+    
     // Clean up expired match messages every hour
     setInterval(async () => {
       await this.cleanupExpiredMatches();
@@ -857,6 +877,7 @@ class MatchExecBot {
     console.log('✅ Announcement queue processor started');
     console.log('✅ Deletion queue processor started');
     console.log('✅ Status update queue processor started');
+    console.log('✅ Reminder queue processor started');
     console.log('✅ Expired match cleanup scheduler started');
   }
 
@@ -1066,6 +1087,201 @@ class MatchExecBot {
     } catch (error) {
       console.error('❌ Error processing status update queue:', error);
     }
+  }
+
+  private async processReminderQueue() {
+    if (!this.db || !this.isReady || !this.settings?.announcement_channel_id) {
+      return;
+    }
+
+    try {
+      // Get pending reminders
+      const pendingReminders = await this.db.all<{
+        id: string;
+        match_id: string;
+        status: string;
+        created_at: string;
+      }>(`
+        SELECT * FROM discord_match_reminder_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const reminder of pendingReminders) {
+        try {
+          const success = await this.postMatchReminder(reminder.match_id);
+
+          if (success) {
+            // Mark as processed
+            await this.db.run(`
+              UPDATE discord_match_reminder_queue 
+              SET status = 'processed', processed_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [reminder.id]);
+            
+            console.log(`✅ Processed match reminder for: ${reminder.match_id}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_match_reminder_queue 
+              SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = 'Reminder failed'
+              WHERE id = ?
+            `, [reminder.id]);
+            
+            console.log(`❌ Failed to post match reminder for: ${reminder.match_id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing reminder for match ${reminder.match_id}:`, error);
+          
+          // Mark as failed with error message
+          await this.db.run(`
+            UPDATE discord_match_reminder_queue 
+            SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing reminder queue:', error);
+    }
+  }
+
+  async postMatchReminder(matchId: string): Promise<boolean> {
+    if (!this.isReady || !this.settings?.announcement_channel_id) {
+      console.warn('⚠️ Bot not ready or announcement channel not configured');
+      return false;
+    }
+
+    try {
+      // Get match data with game information
+      const matchData = await this.db?.get<{
+        id: string;
+        name: string;
+        start_date?: string;
+        game_name?: string;
+        game_color?: string;
+        [key: string]: any;
+      }>(`
+        SELECT m.*, g.name as game_name, g.color as game_color
+        FROM matches m
+        LEFT JOIN games g ON m.game_id = g.id
+        WHERE m.id = ?
+      `, [matchId]);
+
+      if (!matchData) {
+        console.error('❌ Match not found for reminder:', matchId);
+        return false;
+      }
+
+      // Get team assignments
+      const participants = await this.db?.all(`
+        SELECT username, team_assignment, signup_data
+        FROM match_participants
+        WHERE match_id = ?
+        ORDER BY team_assignment, username
+      `, [matchId]);
+
+      if (!participants || participants.length === 0) {
+        console.error('❌ No participants found for match reminder:', matchId);
+        return false;
+      }
+
+      // Create reminder embed
+      const embed = await this.createReminderEmbed(matchData, participants);
+
+      // Get announcement channel
+      const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
+
+      if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
+        // Determine what to mention based on settings
+        let mentionText = '';
+        if (this.settings.mention_everyone) {
+          mentionText = '@everyone';
+        } else if (this.settings.announcement_role_id) {
+          mentionText = `<@&${this.settings.announcement_role_id}>`;
+        }
+
+        // Send reminder message
+        await announcementChannel.send({
+          content: mentionText,
+          embeds: [embed]
+        });
+
+        console.log(`✅ Match reminder posted for: ${matchData.name}`);
+        return true;
+      } else {
+        console.error('❌ Could not find or access announcement channel');
+        return false;
+      }
+
+    } catch (error) {
+      console.error('❌ Error posting match reminder:', error);
+      return false;
+    }
+  }
+
+  private async createReminderEmbed(matchData: {
+    name: string;
+    start_date?: string;
+    game_name?: string;
+    game_color?: string;
+    [key: string]: any;
+  }, participants: any[]): Promise<EmbedBuilder> {
+    // Parse game color or use default
+    let gameColor = 0x95a5a6; // default gray
+    if (matchData.game_color) {
+      try {
+        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
+      } catch (error) {
+        console.error('Error parsing game color:', error);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${matchData.name} is about to begin!`)
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Get ready to play!' });
+
+    // Add match time if available
+    if (matchData.start_date) {
+      const startTime = new Date(matchData.start_date);
+      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+      embed.addFields(
+        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true }
+      );
+    }
+
+    // Group participants by team
+    const blueTeam = participants.filter(p => p.team_assignment === 'blue');
+    const redTeam = participants.filter(p => p.team_assignment === 'red');
+    const reserves = participants.filter(p => p.team_assignment === 'reserve');
+
+    // Add team rosters
+    if (blueTeam.length > 0) {
+      const blueRoster = blueTeam.map(p => `• ${p.username}`).join('\n');
+      embed.addFields({ name: '🔵 Blue Team', value: blueRoster, inline: true });
+    }
+
+    if (redTeam.length > 0) {
+      const redRoster = redTeam.map(p => `• ${p.username}`).join('\n');
+      embed.addFields({ name: '🔴 Red Team', value: redRoster, inline: true });
+    }
+
+    // Add reserves if any
+    if (reserves.length > 0) {
+      const reserveRoster = reserves.map(p => `• ${p.username}`).join('\n');
+      embed.addFields({ name: '🟡 Reserves', value: reserveRoster, inline: false });
+    }
+
+    // Add game info
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    return embed;
   }
 
   async updateMatchStatus(matchId: string, newStatus: string): Promise<boolean> {

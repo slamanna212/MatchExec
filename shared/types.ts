@@ -82,7 +82,10 @@ export interface DiscordSettingsDbRow {
   announcement_channel_id?: string;
   results_channel_id?: string;
   participant_role_id?: string;
+  announcement_role_id?: string;
+  mention_everyone?: number; // SQLite stores booleans as integers
   event_duration_minutes?: number;
+  match_reminder_minutes?: number;
   [key: string]: unknown;
 }
 

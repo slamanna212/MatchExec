@@ -14,7 +14,10 @@ export async function GET() {
         announcement_channel_id,
         results_channel_id,
         participant_role_id,
-        event_duration_minutes
+        announcement_role_id,
+        mention_everyone,
+        event_duration_minutes,
+        match_reminder_minutes
       FROM discord_settings 
       WHERE id = 1
     `);
@@ -28,7 +31,10 @@ export async function GET() {
       announcement_channel_id: settings.announcement_channel_id || '',
       results_channel_id: settings.results_channel_id || '',
       participant_role_id: settings.participant_role_id || '',
-      event_duration_minutes: settings.event_duration_minutes || 45
+      announcement_role_id: settings.announcement_role_id || '',
+      mention_everyone: Boolean(settings.mention_everyone),
+      event_duration_minutes: settings.event_duration_minutes || 45,
+      match_reminder_minutes: settings.match_reminder_minutes || 10
     } : {
       application_id: '',
       bot_token: '',
@@ -36,7 +42,10 @@ export async function GET() {
       announcement_channel_id: '',
       results_channel_id: '',
       participant_role_id: '',
-      event_duration_minutes: 45
+      announcement_role_id: '',
+      mention_everyone: false,
+      event_duration_minutes: 45,
+      match_reminder_minutes: 10
     };
 
     return NextResponse.json(safeSettings);
@@ -61,7 +70,10 @@ export async function PUT(request: NextRequest) {
       announcement_channel_id,
       results_channel_id,
       participant_role_id,
-      event_duration_minutes
+      announcement_role_id,
+      mention_everyone,
+      event_duration_minutes,
+      match_reminder_minutes
     } = body;
 
     // Update the settings (there should only be one row with id = 1)
@@ -73,7 +85,10 @@ export async function PUT(request: NextRequest) {
         announcement_channel_id = ?,
         results_channel_id = ?,
         participant_role_id = ?,
+        announcement_role_id = ?,
+        mention_everyone = ?,
         event_duration_minutes = ?,
+        match_reminder_minutes = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
     `, [
@@ -83,7 +98,10 @@ export async function PUT(request: NextRequest) {
       announcement_channel_id,
       results_channel_id,
       participant_role_id,
-      event_duration_minutes || 45
+      announcement_role_id,
+      mention_everyone ? 1 : 0, // Convert boolean to integer for SQLite
+      event_duration_minutes || 45,
+      match_reminder_minutes || 10
     ]);
 
     // If bot token was updated, trigger bot restart
