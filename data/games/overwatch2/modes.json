@@ -22,11 +22,16 @@
     {
       "id": "flashpoint",
       "name": "Flashpoint",
-      "description": "Like Control but faster points on the same map"
+      "description": "Like Control but faster points on the same map."
     },
     {
       "id": "clash",
       "name": "Clash",
-      "description": "Tug of War in Overwatch 2"
-    }
+      "description": "Tug of War in Overwatch 2."
+    },
+    {
+      "id": "workshop",
+      "name": "Workshop",
+      "description": "Limited only by your imagination."
+    }    
   ]

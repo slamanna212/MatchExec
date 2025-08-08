@@ -215,6 +215,13 @@
       "type": "Clash",
       "location": "Giza Plateau, Egypt",
       "thumbnailUrl": "/public/assets/games/overwatch2/maps/throne-of-anubis.webp"
-    }
+    },
+    {
+      "id": "ow2-workshop",
+      "name": "Workshop Map",
+      "type": "Workshop",
+      "location": "Everywhere",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/ow2-workshop.jpg"
+    }    
 ]
   
