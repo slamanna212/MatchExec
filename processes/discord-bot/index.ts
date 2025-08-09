@@ -303,9 +303,9 @@ class MatchExecBot {
           try {
             const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             await this.db.run(`
-              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id)
-              VALUES (?, ?, ?, ?, ?, ?)
-            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId, discordEventId]);
+              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId, discordEventId, 'announcement']);
             
             console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
           } catch (error) {
@@ -797,11 +797,11 @@ class MatchExecBot {
         // Generate participant ID
         const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // Add participant to database with signup data
+        // Add participant to database with signup data and Discord user ID
         await this.db.run(`
-          INSERT INTO match_participants (id, match_id, user_id, username, signup_data)
-          VALUES (?, ?, ?, ?, ?)
-        `, [participantId, eventId, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
+          INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
 
         // Get current participant count
         const participantCount = await this.db.get<{count: number}>(`
@@ -1174,9 +1174,9 @@ class MatchExecBot {
         return false;
       }
 
-      // Get team assignments
+      // Get team assignments with Discord user IDs
       const participants = await this.db?.all(`
-        SELECT username, team_assignment, signup_data
+        SELECT username, discord_user_id, team_assignment, signup_data
         FROM match_participants
         WHERE match_id = ?
         ORDER BY team_assignment, username
@@ -1203,10 +1203,25 @@ class MatchExecBot {
         }
 
         // Send reminder message
-        await announcementChannel.send({
+        const reminderMessage = await announcementChannel.send({
           content: mentionText,
           embeds: [embed]
         });
+
+        // Store reminder message for later cleanup
+        if (this.db) {
+          try {
+            const messageRecordId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+            await this.db.run(`
+              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [messageRecordId, matchId, reminderMessage.id, reminderMessage.channelId, null, null, 'reminder']);
+            
+            console.log(`✅ Stored Discord reminder message tracking for match: ${matchId}`);
+          } catch (error) {
+            console.error('❌ Error storing Discord reminder message tracking:', error);
+          }
+        }
 
         console.log(`✅ Match reminder posted for: ${matchData.name}`);
         return true;
@@ -1259,20 +1274,20 @@ class MatchExecBot {
     const redTeam = participants.filter(p => p.team_assignment === 'red');
     const reserves = participants.filter(p => p.team_assignment === 'reserve');
 
-    // Add team rosters
+    // Add team rosters with Discord mentions
     if (blueTeam.length > 0) {
-      const blueRoster = blueTeam.map(p => `• ${p.username}`).join('\n');
+      const blueRoster = blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
       embed.addFields({ name: '🔵 Blue Team', value: blueRoster, inline: true });
     }
 
     if (redTeam.length > 0) {
-      const redRoster = redTeam.map(p => `• ${p.username}`).join('\n');
+      const redRoster = redTeam.map(p => this.formatPlayerMention(p)).join('\n');
       embed.addFields({ name: '🔴 Red Team', value: redRoster, inline: true });
     }
 
     // Add reserves if any
     if (reserves.length > 0) {
-      const reserveRoster = reserves.map(p => `• ${p.username}`).join('\n');
+      const reserveRoster = reserves.map(p => this.formatPlayerMention(p)).join('\n');
       embed.addFields({ name: '🟡 Reserves', value: reserveRoster, inline: false });
     }
 
@@ -1282,6 +1297,21 @@ class MatchExecBot {
     }
 
     return embed;
+  }
+
+  private formatPlayerMention(player: { username: string; discord_user_id?: string }): string {
+    if (player.discord_user_id) {
+      try {
+        // Use Discord mention format
+        return `• <@${player.discord_user_id}>`;
+      } catch (error) {
+        console.warn(`⚠️ Failed to format mention for Discord user ${player.discord_user_id}, falling back to username`);
+        return `• ${player.username}`;
+      }
+    }
+    
+    // Fallback to username if no Discord ID available
+    return `• ${player.username}`;
   }
 
   async updateMatchStatus(matchId: string, newStatus: string): Promise<boolean> {
@@ -1364,9 +1394,9 @@ class MatchExecBot {
         SELECT event_image_url FROM matches WHERE id = ?
       `, [matchId]);
 
-      // Get Discord message info for this match
+      // Get Discord message info for this match (both announcements and reminders)
       const messageRecords = await this.db.all(`
-        SELECT message_id, channel_id, thread_id, discord_event_id 
+        SELECT message_id, channel_id, thread_id, discord_event_id, message_type
         FROM discord_match_messages 
         WHERE match_id = ?
       `, [matchId]);
@@ -1379,9 +1409,11 @@ class MatchExecBot {
             try {
               const message = await channel.messages.fetch((record as any).message_id);
               await message.delete();
-              console.log(`✅ Deleted Discord message for match: ${matchId}`);
+              const messageType = (record as any).message_type || 'announcement';
+              console.log(`✅ Deleted Discord ${messageType} message for match: ${matchId}`);
             } catch (error) {
-              console.warn(`⚠️ Could not delete message ${(record as any).message_id}:`, (error as Error)?.message);
+              const messageType = (record as any).message_type || 'announcement';
+              console.warn(`⚠️ Could not delete ${messageType} message ${(record as any).message_id}:`, (error as Error)?.message);
             }
           }
 
@@ -1448,22 +1480,23 @@ class MatchExecBot {
     }
 
     try {
-      // Find matches that are more than 1 day old
+      // Find matches that are more than 1 day old OR completed/cancelled
       const expiredMatches = await this.db.all(`
         SELECT dmm.match_id, dmm.message_id, dmm.channel_id, dmm.thread_id, dmm.discord_event_id, m.event_image_url
         FROM discord_match_messages dmm
         JOIN matches m ON dmm.match_id = m.id
         WHERE DATE(m.start_date) < DATE('now', '-1 day')
+        OR m.status IN ('completed', 'cancelled')
       `);
 
-      console.log(`🧹 Found ${expiredMatches.length} expired match announcements to clean up`);
+      console.log(`🧹 Found ${expiredMatches.length} expired/completed match messages to clean up`);
 
       for (const match of expiredMatches) {
         await this.deleteMatchAnnouncement((match as any).match_id);
       }
 
       if (expiredMatches.length > 0) {
-        console.log(`✅ Cleaned up ${expiredMatches.length} expired match announcements`);
+        console.log(`✅ Cleaned up ${expiredMatches.length} expired/completed match messages`);
       }
     } catch (error) {
       console.error('❌ Error cleaning up expired matches:', error);

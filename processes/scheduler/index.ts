@@ -45,8 +45,7 @@ class MatchExecScheduler {
           report_generation_cron: '0 0 0 * * 0'
         };
         
-        this.startCronJob('Match Check', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
-        this.startCronJob('Reminder Check', defaultSettings.reminder_check_cron, this.sendParticipantReminders.bind(this));
+        this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
         this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
         this.startCronJob('Report Generation', defaultSettings.report_generation_cron, this.generateReports.bind(this));
         
@@ -59,8 +58,7 @@ class MatchExecScheduler {
       this.cronJobs = [];
 
       // Start new cron jobs based on settings
-      this.startCronJob('Match Check', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
-      this.startCronJob('Reminder Check', settings.reminder_check_cron, this.sendParticipantReminders.bind(this));
+      this.startCronJob('Match Check & Reminders', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
       this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
       this.startCronJob('Report Generation', settings.report_generation_cron, this.generateReports.bind(this));
 
@@ -113,15 +111,19 @@ class MatchExecScheduler {
         ['ongoing', match.id]
       );
     }
+
+    // Also handle match reminders during the same check
+    await this.handleMatchReminders();
   }
 
-  private async sendParticipantReminders() {
+  private async handleMatchReminders() {
     // Check for matches that need reminder queue entries created
     await this.queueMatchReminders();
     
     // Process existing reminder queue
     await this.processReminderQueue();
   }
+
 
   private async queueMatchReminders() {
     try {
