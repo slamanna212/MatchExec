@@ -1,6 +1,6 @@
-export const dynamic = 'force-dynamic';
-
 'use client'
+
+export const dynamic = 'force-dynamic';
 
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox } from '@mantine/core';
 import { useForm } from '@mantine/form';

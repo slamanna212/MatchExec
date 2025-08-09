@@ -1,6 +1,6 @@
-export const dynamic = 'force-dynamic';
-
 'use client'
+
+export const dynamic = 'force-dynamic';
 
 import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader } from '@mantine/core';
 import { useEffect, useState } from 'react';
