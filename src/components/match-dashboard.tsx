@@ -850,12 +850,24 @@ export function MatchDashboard() {
               >
                 Delete Match
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDetailsModalOpen(false)}
-              >
-                Close
-              </Button>
+              <Group>
+                {(selectedMatch.status === 'gather' || selectedMatch.status === 'assign') && (
+                  <Button
+                    onClick={() => {
+                      setDetailsModalOpen(false);
+                      handleAssignPlayers(selectedMatch);
+                    }}
+                  >
+                    Assign Players
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => setDetailsModalOpen(false)}
+                >
+                  Close
+                </Button>
+              </Group>
             </Group>
           </Stack>
         )}
