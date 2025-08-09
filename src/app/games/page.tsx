@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 'use client'
 
 import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader } from '@mantine/core';
