@@ -36,6 +36,21 @@ interface GameWithIcon {
 import { CreateMatchModal } from './create-match-modal';
 import { AssignPlayersModal } from './assign-players-modal';
 
+// Utility function to properly convert SQLite UTC timestamps to Date objects
+const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
+  if (!timestamp) return null;
+  
+  // Check if timestamp already includes timezone info (Z, +offset, or -offset at the end)
+  // Note: SQLite date format "2025-08-09 00:40:16" contains dashes but they're part of the date, not timezone
+  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
+    return new Date(timestamp);
+  }
+  
+  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
+  // We need to treat this as UTC, so append 'Z'
+  return new Date(timestamp + 'Z');
+};
+
 interface MatchWithGame extends Match {
   game_name?: string;
   game_icon?: string;
@@ -157,7 +172,7 @@ const MatchCard = memo(({
         </Group>
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Created:</Text>
-          <Text size="sm">{new Date(match.created_at).toLocaleDateString('en-US')}</Text>
+          <Text size="sm">{parseDbTimestamp(match.created_at)?.toLocaleDateString('en-US') || 'N/A'}</Text>
         </Group>
       </Stack>
       
@@ -598,7 +613,7 @@ export function MatchDashboard() {
                 <div>
                   <Text fw={500} size="sm">{participant.username}</Text>
                   <Text size="xs" c="dimmed">
-                    Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
+                    Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
                   </Text>
                 </div>
               </Group>
@@ -802,13 +817,13 @@ export function MatchDashboard() {
               {selectedMatch.start_date && (
                 <Group justify="space-between">
                   <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
-                  <Text size="sm">{new Date(selectedMatch.start_date).toLocaleString('en-US')}</Text>
+                  <Text size="sm">{parseDbTimestamp(selectedMatch.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
                 </Group>
               )}
 
               <Group justify="space-between">
                 <Text size="sm" fw={500} c="dimmed">Created:</Text>
-                <Text size="sm">{new Date(selectedMatch.created_at).toLocaleString('en-US')}</Text>
+                <Text size="sm">{parseDbTimestamp(selectedMatch.created_at)?.toLocaleString('en-US') || 'N/A'}</Text>
               </Group>
             </Stack>
 
