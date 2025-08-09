@@ -6,7 +6,7 @@
   "developer": "Blizzard Entertainment",
   "releaseDate": "2022-10-04",
   "patch": "2025-07-24",
-  "dataVersion": "1.6.3",
+  "dataVersion": "1.6.4",
   "description": "A team-based multiplayer first-person shooter featuring hero-based combat and objective-driven matches.",
   "minPlayers": 2,
   "maxPlayers": 12,
