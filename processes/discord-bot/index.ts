@@ -1433,6 +1433,35 @@ class MatchExecBot {
       embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
     }
 
+    // Add link to original match announcement
+    if (this.db) {
+      try {
+        const announcementMessage = await this.db.get<{
+          message_id: string;
+          channel_id: string;
+        }>(`
+          SELECT message_id, channel_id 
+          FROM discord_match_messages 
+          WHERE match_id = ? 
+          AND message_type = 'announcement' 
+          ORDER BY created_at ASC 
+          LIMIT 1
+        `, [matchData.id]);
+
+        if (announcementMessage && this.client.guilds.cache.first()) {
+          const guildId = this.client.guilds.cache.first()?.id;
+          const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+          embed.addFields({ 
+            name: '🔗 Match Details', 
+            value: `[View Original Match Post](${messageLink})`, 
+            inline: false 
+          });
+        }
+      } catch (error) {
+        console.error('Error adding match announcement link:', error);
+      }
+    }
+
     return embed;
   }
 
