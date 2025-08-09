@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     
     steps:
     - name: Checkout code
@@ -28,6 +31,6 @@ jobs:
       with:
         context: .
         push: true
-        tags: ghcr.io/${{ github.repository_owner }}/matchexec:dev
+        tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:dev
         cache-from: type=gha
         cache-to: type=gha,mode=max
