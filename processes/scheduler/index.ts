@@ -179,12 +179,12 @@ class MatchExecScheduler {
 
   private async processReminderQueue() {
     try {
-      // Get reminders that are due
+      // Get reminders that are due - fix datetime comparison for ISO format
       const dueReminders = await this.db.all(`
         SELECT drq.id, drq.match_id, drq.reminder_time
         FROM discord_reminder_queue drq
         WHERE drq.status = 'pending'
-        AND drq.reminder_time <= datetime('now')
+        AND datetime(drq.reminder_time) <= datetime('now')
         LIMIT 5
       `);
 

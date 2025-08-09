@@ -1396,7 +1396,8 @@ class MatchExecBot {
       const unixTimestamp = Math.floor(startTime.getTime() / 1000);
       embed.addFields(
         { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
-        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true }
+        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: true } // Empty field to force new line
       );
     }
 
@@ -1405,13 +1406,18 @@ class MatchExecBot {
     const redTeam = participants.filter(p => p.team_assignment === 'red');
     const reserves = participants.filter(p => p.team_assignment === 'reserve');
 
-    // Add team rosters with Discord mentions
-    if (blueTeam.length > 0) {
+    // Add team rosters with Discord mentions side by side
+    if (blueTeam.length > 0 && redTeam.length > 0) {
+      const blueRoster = blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
+      const redRoster = redTeam.map(p => this.formatPlayerMention(p)).join('\n');
+      embed.addFields(
+        { name: '🔵 Blue Team', value: blueRoster, inline: true },
+        { name: '🔴 Red Team', value: redRoster, inline: true }
+      );
+    } else if (blueTeam.length > 0) {
       const blueRoster = blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
       embed.addFields({ name: '🔵 Blue Team', value: blueRoster, inline: true });
-    }
-
-    if (redTeam.length > 0) {
+    } else if (redTeam.length > 0) {
       const redRoster = redTeam.map(p => this.formatPlayerMention(p)).join('\n');
       embed.addFields({ name: '🔴 Red Team', value: redRoster, inline: true });
     }
