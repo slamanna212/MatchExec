@@ -22,7 +22,7 @@ interface GameWithIcon {
 interface CreateMatchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onMatchCreated: (match: Match) => void;
+  onMatchCreated: (match: Match | Record<string, unknown>) => void;
   games: GameWithIcon[];
 }
 

@@ -9,7 +9,6 @@ FROM base AS builder
 RUN npm ci
 COPY . .
 RUN npm run build
-RUN npm run build:processes
 
 FROM base AS runner
 WORKDIR /app
@@ -22,7 +21,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 COPY --from=builder /app/processes ./processes
-COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data

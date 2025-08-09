@@ -12,7 +12,7 @@
     "dev:stop": "npx pm2 stop ecosystem.dev.config.js",
     "dev:restart": "npx pm2 restart ecosystem.dev.config.js",
     "dev:logs": "npx pm2 logs",
-    "build:processes": "tsc processes/**/*.ts --outDir dist",
+    "build:processes": "npx tsx --tsconfig tsconfig.json processes/discord-bot/index.ts && npx tsx --tsconfig tsconfig.json processes/scheduler/index.ts && npx tsx --tsconfig tsconfig.json processes/worker/index.ts",
     "prod:start": "npm run migrate && npx pm2 start ecosystem.config.js",
     "prod:stop": "npx pm2 stop ecosystem.config.js"
   },

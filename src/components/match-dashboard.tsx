@@ -363,9 +363,10 @@ export function MatchDashboard() {
     });
   }, [matches]);
 
-  const handleMatchCreated = (match: Match) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleMatchCreated = (match: any) => {
     // Add the new match to the top of the list
-    setMatches(prev => [match, ...prev]);
+    setMatches(prev => [match as MatchWithGame, ...prev]);
   };
 
   const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
