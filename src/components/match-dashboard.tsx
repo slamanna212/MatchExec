@@ -51,13 +51,17 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   return new Date(timestamp + 'Z');
 };
 
-interface MatchWithGame extends Match {
+interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
   game_icon?: string;
   rules?: string;
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  created_at: string;
+  updated_at: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 interface MatchParticipant {
