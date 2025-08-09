@@ -64,7 +64,7 @@ export default function SettingsPage() {
 
   const uiForm = useForm<UISettings>({
     initialValues: {
-      auto_refresh_interval_seconds: 30,
+      auto_refresh_interval_seconds: 10,
     },
   });
 
@@ -450,11 +450,6 @@ export default function SettingsPage() {
                   disabled={loading}
                 />
 
-                <Alert color="blue" icon={<IconInfoCircle size="1rem" />}>
-                  <Text size="sm">
-                    Lower values provide more real-time updates but may increase server load. Recommended: 15-60 seconds.
-                  </Text>
-                </Alert>
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={uiSaving} disabled={loading}>

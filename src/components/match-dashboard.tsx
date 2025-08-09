@@ -209,7 +209,7 @@ export function MatchDashboard() {
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
   const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
-  const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
+  const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const { colorScheme } = useMantineColorScheme();
 
   // Fetch UI settings on component mount

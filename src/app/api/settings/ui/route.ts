@@ -9,7 +9,7 @@ export async function GET() {
       SELECT * FROM ui_settings WHERE id = 1
     `);
 
-    return NextResponse.json(settings || { auto_refresh_interval_seconds: 30 });
+    return NextResponse.json(settings || { auto_refresh_interval_seconds: 10 });
   } catch (error) {
     console.error('Error fetching UI settings:', error);
     return NextResponse.json(
