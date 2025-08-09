@@ -55,7 +55,7 @@ export default function SettingsPage() {
 
   const schedulerForm = useForm<SchedulerSettings>({
     initialValues: {
-      match_check_cron: '0 */5 * * * *',
+      match_check_cron: '0 */1 * * * *',
       reminder_check_cron: '0 0 */4 * * *',
       cleanup_check_cron: '0 0 2 * * *',
       report_generation_cron: '0 0 0 * * 0',
@@ -381,7 +381,7 @@ export default function SettingsPage() {
 
                 <TextInput
                   label="Match Check"
-                  placeholder="0 */5 * * * *"
+                  placeholder="0 */1 * * * *"
                   description="Cron expression for checking match start times (format: second minute hour day month dayOfWeek)"
                   {...schedulerForm.getInputProps('match_check_cron')}
                   disabled={loading}
