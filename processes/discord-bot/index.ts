@@ -869,6 +869,11 @@ class MatchExecBot {
       await this.processReminderQueue();
     }, 10000);
     
+    // Process match start notification queue every 10 seconds
+    setInterval(async () => {
+      await this.processMatchStartQueue();
+    }, 10000);
+    
     // Clean up expired match messages every hour
     setInterval(async () => {
       await this.cleanupExpiredMatches();
@@ -878,6 +883,7 @@ class MatchExecBot {
     console.log('✅ Deletion queue processor started');
     console.log('✅ Status update queue processor started');
     console.log('✅ Reminder queue processor started');
+    console.log('✅ Match start notification queue processor started');
     console.log('✅ Expired match cleanup scheduler started');
   }
 
@@ -1147,9 +1153,134 @@ class MatchExecBot {
     }
   }
 
+  private async processMatchStartQueue() {
+    if (!this.db || !this.isReady || !this.settings?.results_channel_id) {
+      return;
+    }
+
+    try {
+      // Get pending match start notifications
+      const pendingNotifications = await this.db.all<{
+        id: string;
+        match_id: string;
+        status: string;
+        created_at: string;
+      }>(`
+        SELECT * FROM discord_match_start_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const notification of pendingNotifications) {
+        try {
+          const success = await this.postMatchStartNotification(notification.match_id);
+
+          if (success) {
+            // Mark as processed
+            await this.db.run(`
+              UPDATE discord_match_start_queue 
+              SET status = 'processed', processed_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [notification.id]);
+            
+            console.log(`✅ Processed match start notification for: ${notification.match_id}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_match_start_queue 
+              SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = 'Notification failed'
+              WHERE id = ?
+            `, [notification.id]);
+            
+            console.log(`❌ Failed to post match start notification for: ${notification.match_id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing match start notification for ${notification.match_id}:`, error);
+          
+          // Mark as failed with error message
+          await this.db.run(`
+            UPDATE discord_match_start_queue 
+            SET status = 'failed', processed_at = CURRENT_TIMESTAMP, error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', notification.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing match start queue:', error);
+    }
+  }
+
+  async postMatchStartNotification(matchId: string): Promise<boolean> {
+    if (!this.isReady || !this.settings?.results_channel_id) {
+      console.warn('⚠️ Bot not ready or results channel not configured');
+      return false;
+    }
+
+    try {
+      // Get match data with game information
+      const matchData = await this.db?.get<{
+        id: string;
+        name: string;
+        start_date?: string;
+        game_name?: string;
+        game_color?: string;
+        [key: string]: any;
+      }>(`
+        SELECT m.*, g.name as game_name, g.color as game_color
+        FROM matches m
+        LEFT JOIN games g ON m.game_id = g.id
+        WHERE m.id = ?
+      `, [matchId]);
+
+      if (!matchData) {
+        console.error('❌ Match not found for start notification:', matchId);
+        return false;
+      }
+
+      // Create match start embed
+      const embed = await this.createMatchStartEmbed(matchData);
+
+      // Get results channel
+      const resultsChannel = await this.client.channels.fetch(this.settings.results_channel_id);
+
+      if (resultsChannel?.isTextBased() && 'send' in resultsChannel) {
+        // Send match start notification
+        const startMessage = await resultsChannel.send({
+          embeds: [embed]
+        });
+
+        // Store start notification message for later cleanup
+        if (this.db) {
+          try {
+            const messageRecordId = `discord_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+            await this.db.run(`
+              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [messageRecordId, matchId, startMessage.id, startMessage.channelId, null, null, 'start_notification']);
+            
+            console.log(`✅ Stored Discord match start notification tracking for match: ${matchId}`);
+          } catch (error) {
+            console.error('❌ Error storing Discord start notification message tracking:', error);
+          }
+        }
+
+        console.log(`✅ Match start notification posted for: ${matchData.name}`);
+        return true;
+      } else {
+        console.error('❌ Could not find or access results channel');
+        return false;
+      }
+
+    } catch (error) {
+      console.error('❌ Error posting match start notification:', error);
+      return false;
+    }
+  }
+
   async postMatchReminder(matchId: string): Promise<boolean> {
-    if (!this.isReady || !this.settings?.announcement_channel_id) {
-      console.warn('⚠️ Bot not ready or announcement channel not configured');
+    if (!this.isReady || !this.settings?.results_channel_id) {
+      console.warn('⚠️ Bot not ready or results channel not configured');
       return false;
     }
 
@@ -1190,10 +1321,10 @@ class MatchExecBot {
       // Create reminder embed
       const embed = await this.createReminderEmbed(matchData, participants);
 
-      // Get announcement channel
-      const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
+      // Get results channel
+      const resultsChannel = await this.client.channels.fetch(this.settings.results_channel_id);
 
-      if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
+      if (resultsChannel?.isTextBased() && 'send' in resultsChannel) {
         // Determine what to mention based on settings
         let mentionText = '';
         if (this.settings.mention_everyone) {
@@ -1203,7 +1334,7 @@ class MatchExecBot {
         }
 
         // Send reminder message
-        const reminderMessage = await announcementChannel.send({
+        const reminderMessage = await resultsChannel.send({
           content: mentionText,
           embeds: [embed]
         });
@@ -1226,7 +1357,7 @@ class MatchExecBot {
         console.log(`✅ Match reminder posted for: ${matchData.name}`);
         return true;
       } else {
-        console.error('❌ Could not find or access announcement channel');
+        console.error('❌ Could not find or access results channel');
         return false;
       }
 
@@ -1295,6 +1426,48 @@ class MatchExecBot {
     if (matchData.game_name) {
       embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
     }
+
+    return embed;
+  }
+
+  private async createMatchStartEmbed(matchData: {
+    name: string;
+    start_date?: string;
+    game_name?: string;
+    game_color?: string;
+    [key: string]: any;
+  }): Promise<EmbedBuilder> {
+    // Parse game color or use default
+    let gameColor = 0x00ff00; // green for "started"
+    if (matchData.game_color) {
+      try {
+        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
+      } catch (error) {
+        console.error('Error parsing game color:', error);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🏁 ${matchData.name} has started!`)
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
+
+    // Add game info
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    // Add match time if available
+    if (matchData.start_date) {
+      const startTime = new Date(matchData.start_date);
+      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+      embed.addFields(
+        { name: '🕐 Started At', value: `<t:${unixTimestamp}:F>`, inline: true }
+      );
+    }
+
+    embed.setDescription('The match is now underway. Players should check their team assignments and get ready to compete!');
 
     return embed;
   }

@@ -110,6 +110,9 @@ class MatchExecScheduler {
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['ongoing', match.id]
       );
+      
+      // Queue Discord notification for match starting
+      await this.queueMatchStartNotification(match.id);
     }
 
     // Also handle match reminders during the same check
@@ -235,6 +238,25 @@ class MatchExecScheduler {
       return true;
     } catch (error) {
       console.error('❌ Error queuing Discord match reminder:', error);
+      return false;
+    }
+  }
+
+  private async queueMatchStartNotification(matchId: string): Promise<boolean> {
+    try {
+      // Generate unique ID for the queue entry  
+      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Add to Discord match start notification queue that the bot will process
+      await this.db.run(`
+        INSERT INTO discord_match_start_queue (id, match_id, status)
+        VALUES (?, ?, 'pending')
+      `, [notificationId, matchId]);
+      
+      console.log('🏁 Discord match start notification queued for match:', matchId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error queuing Discord match start notification:', error);
       return false;
     }
   }
