@@ -88,7 +88,7 @@ interface MatchCardProps {
   formatMapName: (mapId: string) => string;
   getStatusColor: (status: string) => string;
   getStatusColorForProgress: (status: string, isDark: boolean) => string;
-  getNextStatusButton: (match: MatchWithGame) => JSX.Element | null;
+  getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
 const MatchCard = memo(({ 
