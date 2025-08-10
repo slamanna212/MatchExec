@@ -190,7 +190,7 @@ const MatchCard = memo(({
             }}
             style={{ flex: 1 }}
           >
-            Assign Players
+            Assign
           </Button>
         )}
         {getNextStatusButton(match)}
@@ -809,13 +809,27 @@ export function MatchDashboard() {
               {selectedMatch.start_date && (
                 <Group justify="space-between">
                   <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
-                  <Text size="sm">{parseDbTimestamp(selectedMatch.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
+                  <Text size="sm">{parseDbTimestamp(selectedMatch.start_date)?.toLocaleString('en-US', { 
+                    year: 'numeric', 
+                    month: 'numeric', 
+                    day: 'numeric', 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                  }) || 'N/A'}</Text>
                 </Group>
               )}
 
               <Group justify="space-between">
                 <Text size="sm" fw={500} c="dimmed">Created:</Text>
-                <Text size="sm">{parseDbTimestamp(selectedMatch.created_at)?.toLocaleString('en-US') || 'N/A'}</Text>
+                <Text size="sm">{parseDbTimestamp(selectedMatch.created_at)?.toLocaleString('en-US', { 
+                  year: 'numeric', 
+                  month: 'numeric', 
+                  day: 'numeric', 
+                  hour: 'numeric', 
+                  minute: '2-digit',
+                  hour12: true 
+                }) || 'N/A'}</Text>
               </Group>
             </Stack>
 
@@ -850,7 +864,7 @@ export function MatchDashboard() {
                       handleAssignPlayers(selectedMatch);
                     }}
                   >
-                    Assign Players
+                    Assign
                   </Button>
                 )}
                 <Button
