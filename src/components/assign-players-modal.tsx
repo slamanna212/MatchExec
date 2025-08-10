@@ -222,7 +222,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     <Modal
       opened={isOpen}
       onClose={onClose}
-      title={`Assign Players - ${matchName}`}
+      title={`Assign - ${matchName}`}
       size="xxl"
       centered
       styles={{
