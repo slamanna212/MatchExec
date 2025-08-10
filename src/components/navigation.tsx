@@ -61,27 +61,13 @@ export function Navigation({ children }: NavigationProps) {
             <Burger opened={opened} onClick={toggle} size="sm" />
             <Text size="lg" fw={700}>MatchExec</Text>
           </Group>
-          <ActionIcon
-            variant="outline"
-            size={30}
-            onClick={() => toggleColorScheme()}
-          >
-            {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-          </ActionIcon>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
         <AppShell.Section>
-          <Group justify="space-between" mb="md" visibleFrom="md">
+          <Group mb="md" visibleFrom="md">
             <Text size="xl" fw={700}>MatchExec</Text>
-            <ActionIcon
-              variant="outline"
-              size={30}
-              onClick={() => toggleColorScheme()}
-            >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-            </ActionIcon>
           </Group>
         </AppShell.Section>
 
@@ -122,6 +108,18 @@ export function Navigation({ children }: NavigationProps) {
               </div>
             );
           })}
+        </AppShell.Section>
+
+        <AppShell.Section>
+          <Group mt="md">
+            <ActionIcon
+              variant="outline"
+              size={30}
+              onClick={() => toggleColorScheme()}
+            >
+              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
+            </ActionIcon>
+          </Group>
         </AppShell.Section>
       </AppShell.Navbar>
 

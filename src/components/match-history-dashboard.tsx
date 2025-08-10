@@ -430,15 +430,6 @@ export function MatchHistoryDashboard() {
           <Text size="xl" fw={700}>Match History</Text>
           <Text c="dimmed" mt="xs">View completed matches</Text>
         </div>
-        <Group>
-          <Button 
-            component={Link}
-            href="/matches"
-            variant="outline"
-          >
-            Back to Active
-          </Button>
-        </Group>
       </Group>
 
       <Divider mb="xl" />
