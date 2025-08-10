@@ -1751,7 +1751,7 @@ class MatchExecBot {
 
     // Add game info
     if (matchData.game_name) {
-      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: false });
     }
 
     // Add match time if available
