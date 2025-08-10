@@ -676,14 +676,9 @@ export function MatchDashboard() {
         <Card p="xl">
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
-            <Text c="dimmed" mb="md">
+            <Text c="dimmed">
               Create a match to get started
             </Text>
-            <Button 
-              onClick={handleCreateMatch}
-            >
-              Create Match
-            </Button>
           </Stack>
         </Card>
       ) : (
