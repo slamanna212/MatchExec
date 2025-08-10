@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox, Select } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
@@ -19,6 +19,7 @@ interface DiscordSettings {
 interface ApplicationSettings {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
+  player_reminder_minutes?: number;
 }
 
 interface SchedulerSettings {
@@ -41,6 +42,28 @@ export default function SettingsPage() {
   const [appMessage, setAppMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [playerReminderValue, setPlayerReminderValue] = useState(2);
+  const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
+
+  // Helper functions for player reminder conversion
+  const minutesToValueUnit = (minutes: number) => {
+    if (minutes >= 1440 && minutes % 1440 === 0) {
+      return { value: minutes / 1440, unit: 'days' };
+    }
+    if (minutes >= 60 && minutes % 60 === 0) {
+      return { value: minutes / 60, unit: 'hours' };
+    }
+    return { value: minutes, unit: 'minutes' };
+  };
+
+  const valueUnitToMinutes = (value: number, unit: string) => {
+    switch (unit) {
+      case 'days': return value * 1440;
+      case 'hours': return value * 60;
+      case 'minutes': return value;
+      default: return value;
+    }
+  };
   
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
     match_check_cron: '0 */1 * * * *',
@@ -62,6 +85,7 @@ export default function SettingsPage() {
     initialValues: {
       event_duration_minutes: 45,
       match_reminder_minutes: 10,
+      player_reminder_minutes: 120,
     },
   });
 
@@ -101,9 +125,15 @@ export default function SettingsPage() {
           const appData = await appResponse.json();
           const sanitizedAppData = {
             event_duration_minutes: appData.event_duration_minutes || 45,
-            match_reminder_minutes: appData.match_reminder_minutes || 10
+            match_reminder_minutes: appData.match_reminder_minutes || 10,
+            player_reminder_minutes: appData.player_reminder_minutes || 120
           };
           appForm.setValues(sanitizedAppData);
+          
+          // Set player reminder display values
+          const playerReminderDisplay = minutesToValueUnit(sanitizedAppData.player_reminder_minutes);
+          setPlayerReminderValue(playerReminderDisplay.value);
+          setPlayerReminderUnit(playerReminderDisplay.unit);
         }
         
         if (schedulerResponse.ok) {
@@ -173,10 +203,17 @@ export default function SettingsPage() {
     setAppMessage(null);
     
     try {
+      // Convert player reminder display values to minutes
+      const playerReminderMinutes = valueUnitToMinutes(playerReminderValue, playerReminderUnit);
+      const payload = {
+        ...values,
+        player_reminder_minutes: playerReminderMinutes
+      };
+
       const response = await fetch('/api/settings/discord', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -280,6 +317,40 @@ export default function SettingsPage() {
                   {...appForm.getInputProps('match_reminder_minutes')}
                   disabled={loading}
                 />
+                <Stack gap="xs">
+                  <Text size="sm" fw={500}>Player Reminder</Text>
+                  <Text size="xs" c="dimmed">Time before match to send reminders to signed up players</Text>
+                  
+                  <Group gap="xs" align="flex-end">
+                    <NumberInput
+                      size="sm"
+                      placeholder="2"
+                      value={playerReminderValue}
+                      onChange={(value) => setPlayerReminderValue(Number(value) || 1)}
+                      min={1}
+                      max={playerReminderUnit === 'minutes' ? 1440 : playerReminderUnit === 'hours' ? 168 : 7}
+                      disabled={loading}
+                      style={{ width: 80 }}
+                    />
+                    <Select
+                      size="sm"
+                      placeholder="Unit"
+                      data={[
+                        { value: 'minutes', label: 'Minutes' },
+                        { value: 'hours', label: 'Hours' },
+                        { value: 'days', label: 'Days' }
+                      ]}
+                      value={playerReminderUnit}
+                      onChange={(selectedUnit) => {
+                        if (selectedUnit) {
+                          setPlayerReminderUnit(selectedUnit);
+                        }
+                      }}
+                      disabled={loading}
+                      style={{ minWidth: 100 }}
+                    />
+                  </Group>
+                </Stack>
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={appSaving} disabled={loading}>
