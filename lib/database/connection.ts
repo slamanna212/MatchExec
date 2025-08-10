@@ -1,5 +1,6 @@
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export class Database {
   private db: sqlite3.Database | null = null;
@@ -11,10 +12,22 @@ export class Database {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Ensure the directory exists before creating the database file
+      const dbDir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dbDir)) {
+        try {
+          fs.mkdirSync(dbDir, { recursive: true });
+        } catch (err) {
+          reject(new Error(`Failed to create database directory ${dbDir}: ${err}`));
+          return;
+        }
+      }
+
       this.db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) {
           reject(err);
         } else {
+          console.log(`Connected to SQLite database at ${this.dbPath}`);
           resolve();
         }
       });

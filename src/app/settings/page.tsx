@@ -122,14 +122,38 @@ export default function SettingsPage() {
     setMessage(null);
     
     try {
+      // Don't send the masked bot token, let the server keep the existing one
+      const payload = { ...values };
+      if (values.bot_token === '••••••••') {
+        delete payload.bot_token;
+      }
+
       const response = await fetch('/api/settings/discord', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Discord settings saved successfully!' });
+        // Refresh the form to get the latest data
+        const refreshResponse = await fetch('/api/settings/discord');
+        if (refreshResponse.ok) {
+          const refreshedData = await refreshResponse.json();
+          const sanitizedData = {
+            application_id: refreshedData.application_id || '',
+            bot_token: refreshedData.bot_token || '',
+            guild_id: refreshedData.guild_id || '',
+            announcement_channel_id: refreshedData.announcement_channel_id || '',
+            results_channel_id: refreshedData.results_channel_id || '',
+            participant_role_id: refreshedData.participant_role_id || '',
+            announcement_role_id: refreshedData.announcement_role_id || '',
+            mention_everyone: refreshedData.mention_everyone || false,
+            event_duration_minutes: refreshedData.event_duration_minutes || 45,
+            match_reminder_minutes: refreshedData.match_reminder_minutes || 10
+          };
+          form.setValues(sanitizedData);
+        }
       } else {
         setMessage({ type: 'error', text: 'Failed to save Discord settings.' });
       }
@@ -223,10 +247,37 @@ export default function SettingsPage() {
                   <Button
                     variant="outline"
                     disabled={!form.values.application_id || loading}
-                    onClick={() => {
+                    onClick={async () => {
                       if (form.values.application_id) {
-                        const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=581636017618000&scope=bot%20applications.commands`;
-                        window.open(url, '_blank');
+                        // Save the application ID first
+                        try {
+                          setSaving(true);
+                          const response = await fetch('/api/settings/discord', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify((() => {
+                              const payload = { ...form.values };
+                              if (form.values.bot_token === '••••••••') {
+                                delete payload.bot_token;
+                              }
+                              return payload;
+                            })()),
+                          });
+
+                          if (response.ok) {
+                            setMessage({ type: 'success', text: 'Application ID saved! Opening Discord authorization...' });
+                            // Open Discord authorization URL
+                            const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=581636017618000&scope=bot%20applications.commands`;
+                            window.open(url, '_blank');
+                          } else {
+                            setMessage({ type: 'error', text: 'Failed to save application ID.' });
+                          }
+                        } catch (error) {
+                          console.error('Error saving application ID:', error);
+                          setMessage({ type: 'error', text: 'An error occurred while saving application ID.' });
+                        } finally {
+                          setSaving(false);
+                        }
                       }
                     }}
                   >

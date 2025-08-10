@@ -76,33 +76,68 @@ export async function PUT(request: NextRequest) {
       match_reminder_minutes
     } = body;
 
-    // Update the settings (there should only be one row with id = 1)
+    // First ensure we have a settings row
     await db.run(`
-      UPDATE discord_settings SET
-        application_id = ?,
-        bot_token = COALESCE(?, bot_token),
-        guild_id = ?,
-        announcement_channel_id = ?,
-        results_channel_id = ?,
-        participant_role_id = ?,
-        announcement_role_id = ?,
-        mention_everyone = ?,
-        event_duration_minutes = ?,
-        match_reminder_minutes = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = 1
-    `, [
-      application_id,
-      bot_token === '••••••••' ? null : bot_token, // Don't update if masked
-      guild_id,
-      announcement_channel_id,
-      results_channel_id,
-      participant_role_id,
-      announcement_role_id,
-      mention_everyone ? 1 : 0, // Convert boolean to integer for SQLite
-      event_duration_minutes || 45,
-      match_reminder_minutes || 10
-    ]);
+      INSERT INTO discord_settings (id) VALUES (1)
+      ON CONFLICT(id) DO NOTHING
+    `);
+
+    // Update the settings - handle bot_token separately to avoid overwriting with null
+    if (bot_token && bot_token !== '••••••••') {
+      // Update with new bot token
+      await db.run(`
+        UPDATE discord_settings SET
+          application_id = ?,
+          bot_token = ?,
+          guild_id = ?,
+          announcement_channel_id = ?,
+          results_channel_id = ?,
+          participant_role_id = ?,
+          announcement_role_id = ?,
+          mention_everyone = ?,
+          event_duration_minutes = ?,
+          match_reminder_minutes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+      `, [
+        application_id,
+        bot_token,
+        guild_id,
+        announcement_channel_id,
+        results_channel_id,
+        participant_role_id,
+        announcement_role_id,
+        mention_everyone ? 1 : 0,
+        event_duration_minutes || 45,
+        match_reminder_minutes || 10
+      ]);
+    } else {
+      // Update without changing bot token
+      await db.run(`
+        UPDATE discord_settings SET
+          application_id = ?,
+          guild_id = ?,
+          announcement_channel_id = ?,
+          results_channel_id = ?,
+          participant_role_id = ?,
+          announcement_role_id = ?,
+          mention_everyone = ?,
+          event_duration_minutes = ?,
+          match_reminder_minutes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+      `, [
+        application_id,
+        guild_id,
+        announcement_channel_id,
+        results_channel_id,
+        participant_role_id,
+        announcement_role_id,
+        mention_everyone ? 1 : 0,
+        event_duration_minutes || 45,
+        match_reminder_minutes || 10
+      ]);
+    }
 
     // If bot token was updated, trigger bot restart
     if (bot_token && bot_token !== '••••••••') {
