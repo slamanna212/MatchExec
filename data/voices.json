@@ -8,16 +8,6 @@
       "path": "/public/assets/audio/wrestling-announcer"
     },
     {
-        "id": "80s-radio-dj",
-        "name": "80s Radio DJ",
-        "path": "/public/assets/audio/80s-radio-dj"
-      },
-      {
-        "id": "drill-sergeant",
-        "name": "Drill Sergeant",
-        "path": "/public/assets/audio/drill-sergeant"
-      },
-      {
         "id": "british-football",
         "name": "British Football",
         "path": "/public/assets/audio/british-football"
@@ -28,8 +18,8 @@
         "path": "/public/assets/audio/london-radio"
       },
       {
-        "id": "felicity",
-        "name": "Felicity",
-        "path": "/public/assets/audio/felicity"
-      },         
+        "id": "aria",
+        "name": "Aria",
+        "path": "/public/assets/audio/aria"
+      }         
 ]
