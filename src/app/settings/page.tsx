@@ -20,6 +20,8 @@ interface ApplicationSettings {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
   player_reminder_minutes?: number;
+  announcer_voice?: string;
+  voice_announcements_enabled?: boolean;
 }
 
 interface SchedulerSettings {
@@ -44,6 +46,7 @@ export default function SettingsPage() {
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
+  const [availableVoices, setAvailableVoices] = useState<Array<{id: string; name: string}>>([]);
 
   // Helper functions for player reminder conversion
   const minutesToValueUnit = (minutes: number) => {
@@ -86,6 +89,8 @@ export default function SettingsPage() {
       event_duration_minutes: 45,
       match_reminder_minutes: 10,
       player_reminder_minutes: 120,
+      announcer_voice: 'wrestling-announcer',
+      voice_announcements_enabled: false,
     },
   });
 
@@ -101,11 +106,12 @@ export default function SettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, appResponse, schedulerResponse, uiResponse] = await Promise.all([
+        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse] = await Promise.all([
           fetch('/api/settings/discord'),
           fetch('/api/settings/discord'), // We'll use the same endpoint for now
           fetch('/api/settings/scheduler'),
-          fetch('/api/settings/ui')
+          fetch('/api/settings/ui'),
+          fetch('/api/settings/voices')
         ]);
         
         if (discordResponse.ok) {
@@ -126,7 +132,9 @@ export default function SettingsPage() {
           const sanitizedAppData = {
             event_duration_minutes: appData.event_duration_minutes || 45,
             match_reminder_minutes: appData.match_reminder_minutes || 10,
-            player_reminder_minutes: appData.player_reminder_minutes || 120
+            player_reminder_minutes: appData.player_reminder_minutes || 120,
+            announcer_voice: appData.announcer_voice || 'wrestling-announcer',
+            voice_announcements_enabled: appData.voice_announcements_enabled || false
           };
           appForm.setValues(sanitizedAppData);
           
@@ -144,6 +152,14 @@ export default function SettingsPage() {
         if (uiResponse.ok) {
           const uiData = await uiResponse.json();
           uiForm.setValues(uiData);
+        }
+
+        if (voicesResponse.ok) {
+          const voicesData = await voicesResponse.json();
+          setAvailableVoices(voicesData.map((voice: {id: string; name: string}) => ({
+            value: voice.id,
+            label: voice.name
+          })));
         }
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -351,6 +367,22 @@ export default function SettingsPage() {
                     />
                   </Group>
                 </Stack>
+
+                <Checkbox
+                  label="Voice Announcements"
+                  description="Enable voice announcements in Discord voice channels"
+                  {...appForm.getInputProps('voice_announcements_enabled', { type: 'checkbox' })}
+                  disabled={loading}
+                />
+
+                <Select
+                  label="Announcer Voice"
+                  description="Select the voice style for match announcements"
+                  placeholder="Select a voice"
+                  data={availableVoices}
+                  {...appForm.getInputProps('announcer_voice')}
+                  disabled={loading || !appForm.values.voice_announcements_enabled}
+                />
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={appSaving} disabled={loading}>

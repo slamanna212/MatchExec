@@ -36,6 +36,15 @@ interface MapData {
   thumbnailUrl?: string;
 }
 
+interface VoiceData {
+  dataVersion: string;
+  voices: Array<{
+    id: string;
+    name: string;
+    path: string;
+  }>;
+}
+
 export class DatabaseSeeder {
   private db: Database;
   private dataDir: string;
@@ -46,13 +55,15 @@ export class DatabaseSeeder {
   }
 
   async seedDatabase(): Promise<void> {
-
+    // Seed games first
     const gameDirectories = this.getGameDirectories();
 
     for (const gameDir of gameDirectories) {
       await this.seedGame(gameDir);
     }
 
+    // Seed voice data
+    await this.seedVoices();
   }
 
   private getGameDirectories(): string[] {
@@ -214,5 +225,56 @@ export class DatabaseSeeder {
       INSERT OR REPLACE INTO data_versions (game_id, data_version, seeded_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `, [gameId, dataVersion]);
+  }
+
+  private async seedVoices(): Promise<void> {
+    const voicesJsonPath = path.join('./data', 'voices.json');
+    
+    if (!fs.existsSync(voicesJsonPath)) {
+      console.log('No voices.json file found, skipping voice seeding');
+      return;
+    }
+
+    const voiceData: VoiceData = JSON.parse(fs.readFileSync(voicesJsonPath, 'utf8'));
+
+    // Check if we need to seed voices
+    const existingVoiceVersion = await this.getExistingVoiceDataVersion();
+    if (existingVoiceVersion === voiceData.dataVersion) {
+      console.log(`Voice data version ${voiceData.dataVersion} already seeded`);
+      return;
+    }
+
+    console.log(`Seeding voice data version ${voiceData.dataVersion}`);
+
+    // Clear existing voice data
+    await this.db.run('DELETE FROM voices');
+
+    // Seed voice data
+    for (const voice of voiceData.voices) {
+      await this.db.run(`
+        INSERT INTO voices (id, name, path, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `, [voice.id, voice.name, voice.path]);
+    }
+
+    // Update voice data version
+    await this.updateVoiceDataVersion(voiceData.dataVersion);
+    
+    console.log(`✅ Seeded ${voiceData.voices.length} voice announcers`);
+  }
+
+  private async getExistingVoiceDataVersion(): Promise<string | null> {
+    const result = await this.db.get<{ data_version: string }>(
+      'SELECT data_version FROM voice_data_versions WHERE voice_type = ?',
+      ['voices']
+    );
+    return result?.data_version || null;
+  }
+
+  private async updateVoiceDataVersion(dataVersion: string): Promise<void> {
+    await this.db.run(`
+      INSERT OR REPLACE INTO voice_data_versions (voice_type, data_version, seeded_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+    `, ['voices', dataVersion]);
   }
 }

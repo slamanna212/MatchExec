@@ -33,6 +33,7 @@ interface MatchFormData {
   maps: string[];
   eventImageUrl?: string;
   playerNotifications?: boolean;
+  announcementVoiceChannel?: string;
 }
 
 interface GameMode {
@@ -76,6 +77,7 @@ export function CreateMatchPage() {
   const [startSignups, setStartSignups] = useState(true);
   const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
+  const [voiceChannels, setVoiceChannels] = useState<Array<{id: string; name: string}>>([]);
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -88,6 +90,21 @@ export function CreateMatchPage() {
         }
       } catch (error) {
         console.error('Error fetching games:', error);
+      }
+    };
+
+    const fetchVoiceChannels = async () => {
+      try {
+        const response = await fetch('/api/channels');
+        if (response.ok) {
+          const channelsData = await response.json();
+          setVoiceChannels(channelsData.map((channel: {id: string; name: string}) => ({
+            value: channel.id,
+            label: channel.name
+          })));
+        }
+      } catch (error) {
+        console.error('Error fetching voice channels:', error);
       }
     };
 
@@ -119,6 +136,7 @@ export function CreateMatchPage() {
     }
 
     fetchGames();
+    fetchVoiceChannels();
   }, []);
 
   // Save form data to session storage whenever it changes
@@ -376,7 +394,8 @@ export function CreateMatchPage() {
         rounds: (formData.maps || []).length || 1,
         maps: formData.maps || [],
         eventImageUrl: formData.eventImageUrl || null,
-        playerNotifications: formData.playerNotifications ?? true
+        playerNotifications: formData.playerNotifications ?? true,
+        announcementVoiceChannel: formData.announcementVoiceChannel || null
       };
 
       const response = await fetch('/api/matches', {
@@ -559,6 +578,16 @@ export function CreateMatchPage() {
               description="Send Discord DMs to registered players before match starts"
               checked={formData.playerNotifications ?? true}
               onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
+            />
+
+            <Select
+              label="Announcement Voice Channel"
+              description="Discord voice channel for match announcements (optional)"
+              placeholder="Select a voice channel"
+              data={voiceChannels}
+              value={formData.announcementVoiceChannel}
+              onChange={(value) => updateFormData('announcementVoiceChannel', value)}
+              clearable
             />
 
             <Box>

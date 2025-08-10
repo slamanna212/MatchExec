@@ -57,6 +57,7 @@ export interface MatchDbRow extends Match {
   rounds?: number;
   livestream_link?: string;
   player_notifications?: number; // SQLite stores booleans as integers
+  announcement_voice_channel?: string;
 }
 
 export interface ParticipantDbRow {
@@ -85,6 +86,8 @@ export interface DiscordSettingsDbRow {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
   player_reminder_minutes?: number;
+  announcer_voice?: string;
+  voice_announcements_enabled?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 

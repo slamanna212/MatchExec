@@ -14,7 +14,10 @@ export async function GET() {
         announcement_role_id,
         mention_everyone,
         event_duration_minutes,
-        match_reminder_minutes
+        match_reminder_minutes,
+        player_reminder_minutes,
+        announcer_voice,
+        voice_announcements_enabled
       FROM discord_settings 
       WHERE id = 1
     `);
@@ -28,7 +31,10 @@ export async function GET() {
       announcement_role_id: settings.announcement_role_id || '',
       mention_everyone: Boolean(settings.mention_everyone),
       event_duration_minutes: settings.event_duration_minutes || 45,
-      match_reminder_minutes: settings.match_reminder_minutes || 10
+      match_reminder_minutes: settings.match_reminder_minutes || 10,
+      player_reminder_minutes: settings.player_reminder_minutes || 120,
+      announcer_voice: settings.announcer_voice || 'wrestling-announcer',
+      voice_announcements_enabled: Boolean(settings.voice_announcements_enabled)
     } : {
       application_id: '',
       bot_token: '',
@@ -36,7 +42,10 @@ export async function GET() {
       announcement_role_id: '',
       mention_everyone: false,
       event_duration_minutes: 45,
-      match_reminder_minutes: 10
+      match_reminder_minutes: 10,
+      player_reminder_minutes: 120,
+      announcer_voice: 'wrestling-announcer',
+      voice_announcements_enabled: false
     };
 
     return NextResponse.json(safeSettings);
@@ -61,7 +70,10 @@ export async function PUT(request: NextRequest) {
       announcement_role_id,
       mention_everyone,
       event_duration_minutes,
-      match_reminder_minutes
+      match_reminder_minutes,
+      player_reminder_minutes,
+      announcer_voice,
+      voice_announcements_enabled
     } = body;
 
     // First ensure we have a settings row
@@ -82,6 +94,9 @@ export async function PUT(request: NextRequest) {
           mention_everyone = ?,
           event_duration_minutes = ?,
           match_reminder_minutes = ?,
+          player_reminder_minutes = ?,
+          announcer_voice = ?,
+          voice_announcements_enabled = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = 1
       `, [
@@ -91,7 +106,10 @@ export async function PUT(request: NextRequest) {
         announcement_role_id,
         mention_everyone ? 1 : 0,
         event_duration_minutes || 45,
-        match_reminder_minutes || 10
+        match_reminder_minutes || 10,
+        player_reminder_minutes || 120,
+        announcer_voice || 'wrestling-announcer',
+        voice_announcements_enabled ? 1 : 0
       ]);
     } else {
       // Update without changing bot token
@@ -103,6 +121,9 @@ export async function PUT(request: NextRequest) {
           mention_everyone = ?,
           event_duration_minutes = ?,
           match_reminder_minutes = ?,
+          player_reminder_minutes = ?,
+          announcer_voice = ?,
+          voice_announcements_enabled = ?,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = 1
       `, [
@@ -111,7 +132,10 @@ export async function PUT(request: NextRequest) {
         announcement_role_id,
         mention_everyone ? 1 : 0,
         event_duration_minutes || 45,
-        match_reminder_minutes || 10
+        match_reminder_minutes || 10,
+        player_reminder_minutes || 120,
+        announcer_voice || 'wrestling-announcer',
+        voice_announcements_enabled ? 1 : 0
       ]);
     }
 

@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       maps,
       eventImageUrl,
       playerNotifications,
+      announcementVoiceChannel,
     } = body;
     
     if (!name || !gameId) {
@@ -82,8 +83,8 @@ export async function POST(request: NextRequest) {
     await db.run(`
       INSERT INTO matches (
         id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date,
-        rules, rounds, maps, livestream_link, event_image_url, player_notifications
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcement_voice_channel
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       matchId,
       name,
@@ -99,7 +100,8 @@ export async function POST(request: NextRequest) {
       maps && maps.length > 0 ? JSON.stringify(maps) : null,
       livestreamLink || null,
       eventImageUrl || null,
-      playerNotifications ?? true
+      playerNotifications ?? true,
+      announcementVoiceChannel || null
     ]);
     
     const match = await db.get<MatchDbRow>(`

@@ -17,6 +17,7 @@
     "prod:stop": "npx pm2 stop ecosystem.config.js"
   },
   "dependencies": {
+    "@discordjs/voice": "^0.18.0",
     "@mantine/core": "^8.2.3",
     "@mantine/dates": "^8.2.3",
     "@mantine/form": "^8.2.3",
@@ -28,6 +29,7 @@
     "@types/sqlite3": "^5.1.0",
     "bufferutil": "^4.0.9",
     "discord.js": "^14.21.0",
+    "ffmpeg-static": "^5.2.0",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.536.0",
     "next": "15.4.5",
