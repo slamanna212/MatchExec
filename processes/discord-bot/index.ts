@@ -436,6 +436,17 @@ class MatchExecBot {
         WHERE m.id = ?
       `, [matchId]);
 
+      // Get announcement message info for linking
+      const announcementMessage = await this.db?.get<{
+        message_id: string;
+        channel_id: string;
+      }>(`
+        SELECT message_id, channel_id
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+        LIMIT 1
+      `, [matchId]);
+
       if (!matchData) {
         console.error('❌ Match not found for signup notification:', matchId);
         return false;
@@ -488,6 +499,16 @@ class MatchExecBot {
         embed.addFields({
           name: '📝 Player Info',
           value: displayFields.join('\n'),
+          inline: false
+        });
+      }
+
+      // Add link to full match info if announcement message exists
+      if (announcementMessage?.message_id && announcementMessage?.channel_id) {
+        const messageLink = `https://discord.com/channels/${this.guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+        embed.addFields({
+          name: '🔗 View Full Match Info',
+          value: `[Click here to see the complete event details](${messageLink})`,
           inline: false
         });
       }
