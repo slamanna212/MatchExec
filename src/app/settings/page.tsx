@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import { IconInfoCircle, IconClock, IconSettings } from '@tabler/icons-react';
+import { IconSettings } from '@tabler/icons-react';
+import SchedulerConfig from '@/components/SchedulerConfig';
 
 interface DiscordSettings {
   application_id?: string;
@@ -21,7 +22,6 @@ interface SchedulerSettings {
   match_check_cron: string;
   reminder_check_cron: string;
   cleanup_check_cron: string;
-  report_generation_cron: string;
   channel_refresh_cron: string;
 }
 
@@ -37,6 +37,13 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
+    match_check_cron: '0 */1 * * * *',
+    reminder_check_cron: '0 0 */4 * * *',
+    cleanup_check_cron: '0 0 2 * * *',
+    channel_refresh_cron: '0 0 0 * * *',
+  });
 
   const form = useForm<DiscordSettings>({
     initialValues: {
@@ -50,15 +57,7 @@ export default function SettingsPage() {
     },
   });
 
-  const schedulerForm = useForm<SchedulerSettings>({
-    initialValues: {
-      match_check_cron: '0 */1 * * * *',
-      reminder_check_cron: '0 0 */4 * * *',
-      cleanup_check_cron: '0 0 2 * * *',
-      report_generation_cron: '0 0 0 * * 0',
-      channel_refresh_cron: '0 0 0 * * *',
-    },
-  });
+
 
   const uiForm = useForm<UISettings>({
     initialValues: {
@@ -93,7 +92,7 @@ export default function SettingsPage() {
         
         if (schedulerResponse.ok) {
           const schedulerData = await schedulerResponse.json();
-          schedulerForm.setValues(schedulerData);
+          setSchedulerSettings(schedulerData);
         }
 
         if (uiResponse.ok) {
@@ -372,75 +371,14 @@ export default function SettingsPage() {
             </form>
           </Card>
 
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconClock size="1.2rem" />
-              <Text size="lg" fw={600}>Scheduler Configuration</Text>
-            </Group>
-
-            {schedulerMessage && (
-              <Alert color={schedulerMessage.type === 'success' ? 'green' : 'red'} mb="md">
-                {schedulerMessage.text}
-              </Alert>
-            )}
-
-            <form onSubmit={schedulerForm.onSubmit(handleSchedulerSubmit)}>
-              <Stack gap="md">
-
-                <TextInput
-                  label="Match Check"
-                  placeholder="0 */1 * * * *"
-                  description="Cron expression for checking match start times (format: second minute hour day month dayOfWeek)"
-                  {...schedulerForm.getInputProps('match_check_cron')}
-                  disabled={loading}
-                />
-
-                <TextInput
-                  label="Reminder Check"
-                  placeholder="0 0 */4 * * *"
-                  description="Cron expression for sending participant reminders"
-                  {...schedulerForm.getInputProps('reminder_check_cron')}
-                  disabled={loading}
-                />
-
-                <TextInput
-                  label="Data Cleanup"
-                  placeholder="0 0 2 * * *"
-                  description="Cron expression for cleaning up old match data"
-                  {...schedulerForm.getInputProps('cleanup_check_cron')}
-                  disabled={loading}
-                />
-
-                <TextInput
-                  label="Report Generation"
-                  placeholder="0 0 0 * * 0"
-                  description="Cron expression for generating match reports"
-                  {...schedulerForm.getInputProps('report_generation_cron')}
-                  disabled={loading}
-                />
-
-                <TextInput
-                  label="Channel Name Refresh"
-                  placeholder="0 0 0 * * *"
-                  description="Cron expression for refreshing Discord channel names"
-                  {...schedulerForm.getInputProps('channel_refresh_cron')}
-                  disabled={loading}
-                />
-
-                <Alert color="blue" icon={<IconInfoCircle size="1rem" />}>
-                  <Text size="sm">
-                    For help with setting these, visit this website: <a href="https://crontab.guru/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>https://crontab.guru/</a>
-                  </Text>
-                </Alert>
-
-                <Group justify="flex-end" mt="lg">
-                  <Button type="submit" loading={schedulerSaving} disabled={loading}>
-                    Save Scheduler Settings
-                  </Button>
-                </Group>
-              </Stack>
-            </form>
-          </Card>
+          <SchedulerConfig
+            value={schedulerSettings}
+            onChange={setSchedulerSettings}
+            onSubmit={handleSchedulerSubmit}
+            loading={loading}
+            saving={schedulerSaving}
+            message={schedulerMessage}
+          />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Group mb="md">

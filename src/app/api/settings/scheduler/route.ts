@@ -15,7 +15,6 @@ export async function GET() {
         match_check_cron: '0 */1 * * * *',
         reminder_check_cron: '0 0 */4 * * *',
         cleanup_check_cron: '0 0 2 * * *',
-        report_generation_cron: '0 0 0 * * 0',
         channel_refresh_cron: '0 0 0 * * *'
       });
     }
@@ -40,7 +39,6 @@ export async function PUT(request: NextRequest) {
       'match_check_cron',
       'reminder_check_cron', 
       'cleanup_check_cron',
-      'report_generation_cron',
       'channel_refresh_cron'
     ];
     
@@ -61,7 +59,6 @@ export async function PUT(request: NextRequest) {
        SET match_check_cron = ?, 
            reminder_check_cron = ?, 
            cleanup_check_cron = ?, 
-           report_generation_cron = ?,
            channel_refresh_cron = ?,
            enabled = 1,
            updated_at = CURRENT_TIMESTAMP
@@ -70,7 +67,6 @@ export async function PUT(request: NextRequest) {
         body.match_check_cron,
         body.reminder_check_cron,
         body.cleanup_check_cron,
-        body.report_generation_cron,
         body.channel_refresh_cron
       ]
     );
