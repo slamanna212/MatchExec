@@ -23,7 +23,6 @@ interface ApplicationSettings {
 
 interface SchedulerSettings {
   match_check_cron: string;
-  reminder_check_cron: string;
   cleanup_check_cron: string;
   channel_refresh_cron: string;
 }
@@ -45,7 +44,6 @@ export default function SettingsPage() {
   
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
     match_check_cron: '0 */1 * * * *',
-    reminder_check_cron: '0 0 */4 * * *',
     cleanup_check_cron: '0 0 2 * * *',
     channel_refresh_cron: '0 0 0 * * *',
   });

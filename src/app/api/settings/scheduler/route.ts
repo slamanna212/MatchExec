@@ -13,7 +13,6 @@ export async function GET() {
     if (!settings) {
       return NextResponse.json({
         match_check_cron: '0 */1 * * * *',
-        reminder_check_cron: '0 0 */4 * * *',
         cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *'
       });
@@ -37,7 +36,6 @@ export async function PUT(request: NextRequest) {
     // Validate cron expressions (basic validation)
     const cronFields = [
       'match_check_cron',
-      'reminder_check_cron', 
       'cleanup_check_cron',
       'channel_refresh_cron'
     ];
@@ -57,7 +55,6 @@ export async function PUT(request: NextRequest) {
     await db.run(
       `UPDATE scheduler_settings 
        SET match_check_cron = ?, 
-           reminder_check_cron = ?, 
            cleanup_check_cron = ?, 
            channel_refresh_cron = ?,
            enabled = 1,
@@ -65,7 +62,6 @@ export async function PUT(request: NextRequest) {
        WHERE id = 1`,
       [
         body.match_check_cron,
-        body.reminder_check_cron,
         body.cleanup_check_cron,
         body.channel_refresh_cron
       ]

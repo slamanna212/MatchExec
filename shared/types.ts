@@ -161,7 +161,6 @@ export interface MapDataJson {
 export interface SchedulerSettings {
   id: number;
   match_check_cron: string;
-  reminder_check_cron: string;
   cleanup_check_cron: string;
   channel_refresh_cron: string;
   enabled: boolean;

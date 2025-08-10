@@ -40,14 +40,12 @@ class MatchExecScheduler {
         // Use default settings if none exist
         const defaultSettings = {
           match_check_cron: '0 */1 * * * *',
-          reminder_check_cron: '0 0 */4 * * *',
           cleanup_check_cron: '0 0 2 * * *',
-          report_generation_cron: '0 0 0 * * 0'
+          channel_refresh_cron: '0 0 0 * * *'
         };
         
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
         this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
-        this.startCronJob('Report Generation', defaultSettings.report_generation_cron, this.generateReports.bind(this));
         
         console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
@@ -60,7 +58,9 @@ class MatchExecScheduler {
       // Start new cron jobs based on settings
       this.startCronJob('Match Check & Reminders', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
       this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
-      this.startCronJob('Report Generation', settings.report_generation_cron, this.generateReports.bind(this));
+      if (settings.channel_refresh_cron) {
+        this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
+      }
 
       console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
@@ -313,27 +313,7 @@ class MatchExecScheduler {
     }
   }
 
-  private async generateReports() {
-    // Generate weekly match reports
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const stats = await this.db.get(
-      `SELECT 
-         COUNT(*) as total_matches,
-         COUNT(CASE WHEN status = 'complete' THEN 1 END) as complete_matches,
-         COUNT(CASE WHEN status = 'battle' THEN 1 END) as battle_matches,
-         COUNT(CASE WHEN status = 'gather' THEN 1 END) as gather_matches,
-         COUNT(CASE WHEN status = 'assign' THEN 1 END) as assign_matches,
-         COUNT(CASE WHEN status = 'created' THEN 1 END) as created_matches
-       FROM matches 
-       WHERE created_at >= ?`,
-      [weekAgo.toISOString()]
-    );
-
-    console.log(`📊 Weekly Report: ${stats.total_matches} total, ${stats.complete_matches} completed, ${stats.battle_matches} in battle, ${stats.gather_matches} gathering, ${stats.assign_matches} assigning, ${stats.created_matches} created`);
-    // TODO: Store or send report somewhere
-  }
 
   private keepAlive() {
     // Keep the process alive
@@ -356,6 +336,33 @@ class MatchExecScheduler {
   async reloadSettings() {
     console.log('🔄 Reloading scheduler settings...');
     await this.loadSchedulerSettings();
+  }
+
+  private async refreshChannelNames() {
+    try {
+      console.log('🔄 Starting scheduled channel name refresh...');
+      
+      // Call the channel refresh API
+      const response = await fetch('http://localhost:3000/api/channels/refresh-names', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Channel refresh completed: ${result.updated_count}/${result.total_channels} channels updated`);
+        
+        if (result.errors && result.errors.length > 0) {
+          console.warn('⚠️ Some channels had errors during refresh:', result.errors);
+        }
+      } else {
+        console.error('❌ Channel refresh API returned error:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error during scheduled channel refresh:', error);
+    }
   }
 }
 
