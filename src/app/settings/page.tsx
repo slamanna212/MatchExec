@@ -380,47 +380,24 @@ export default function SettingsPage() {
 
             <form onSubmit={appForm.onSubmit(handleAppSubmit)}>
               <Stack gap="md">
-                <Group grow visibleFrom="md">
-                  <NumberInput
-                    label="Event Duration (per round/map)"
-                    placeholder="45"
-                    description="Duration in minutes for Discord events"
-                    min={5}
-                    max={720}
-                    {...appForm.getInputProps('event_duration_minutes')}
-                    disabled={loading}
-                  />
-                  <NumberInput
-                    label="Match Reminder Minutes"
-                    placeholder="10"
-                    description="Minutes before match start to send reminder"
-                    min={1}
-                    max={1440}
-                    {...appForm.getInputProps('match_reminder_minutes')}
-                    disabled={loading}
-                  />
-                </Group>
-
-                <Stack hiddenFrom="md">
-                  <NumberInput
-                    label="Event Duration (per round/map)"
-                    placeholder="45"
-                    description="Duration in minutes for Discord events"
-                    min={5}
-                    max={720}
-                    {...appForm.getInputProps('event_duration_minutes')}
-                    disabled={loading}
-                  />
-                  <NumberInput
-                    label="Match Reminder Minutes"
-                    placeholder="10"
-                    description="Minutes before match start to send reminder"
-                    min={1}
-                    max={1440}
-                    {...appForm.getInputProps('match_reminder_minutes')}
-                    disabled={loading}
-                  />
-                </Stack>
+                <NumberInput
+                  label="Event Duration (per round/map)"
+                  placeholder="45"
+                  description="Duration in minutes for Discord events"
+                  min={5}
+                  max={720}
+                  {...appForm.getInputProps('event_duration_minutes')}
+                  disabled={loading}
+                />
+                <NumberInput
+                  label="Match Reminder"
+                  placeholder="10"
+                  description="Minutes before match start to send reminder"
+                  min={1}
+                  max={1440}
+                  {...appForm.getInputProps('match_reminder_minutes')}
+                  disabled={loading}
+                />
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={appSaving} disabled={loading}>
