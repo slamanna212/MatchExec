@@ -14,6 +14,7 @@ export async function GET() {
         g.description,
         g.min_players as minPlayers,
         g.max_players as maxPlayers,
+        g.supports_all_modes as supportsAllModes,
         g.icon_url as iconUrl,
         g.cover_url as coverUrl,
         COUNT(DISTINCT gm.id) as mapCount,
@@ -21,7 +22,7 @@ export async function GET() {
       FROM games g
       LEFT JOIN game_maps gm ON g.id = gm.game_id
       LEFT JOIN game_modes gmo ON g.id = gmo.game_id
-      GROUP BY g.id, g.name, g.genre, g.developer, g.description, g.min_players, g.max_players, g.icon_url, g.cover_url
+      GROUP BY g.id, g.name, g.genre, g.developer, g.description, g.min_players, g.max_players, g.supports_all_modes, g.icon_url, g.cover_url
       ORDER BY g.name
     `);
 

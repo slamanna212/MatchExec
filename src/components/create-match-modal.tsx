@@ -13,6 +13,7 @@ interface GameWithIcon {
   description: string;
   minPlayers: number;
   maxPlayers: number;
+  supportsAllModes?: boolean;
   iconUrl: string;
   coverUrl: string;
   mapCount: number;
@@ -78,6 +79,8 @@ export function CreateMatchModal({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [startSignups, setStartSignups] = useState(true);
+  const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
+  const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
 
   const handleClose = () => {
     setStep(1);
@@ -90,6 +93,8 @@ export function CreateMatchModal({
     setUploadingImage(false);
     setImagePreview(null);
     setStartSignups(true);
+    setCurrentGameSupportsAllModes(false);
+    setAllMaps([]);
     onClose();
   };
 
@@ -108,13 +113,38 @@ export function CreateMatchModal({
     if (formData.name && formData.date && formData.time && formData.gameId) {
       setLoadingMaps(true);
       try {
+        // Get the selected game to check if it supports all modes
+        const selectedGame = games.find(game => game.id === formData.gameId);
+        const supportsAllModes = selectedGame?.supportsAllModes || false;
+        setCurrentGameSupportsAllModes(supportsAllModes);
+
+        // Fetch modes
         const modesResponse = await fetch(`/api/games/${formData.gameId}/modes`);
         if (modesResponse.ok) {
           const modes = await modesResponse.json();
           setAvailableModes(modes);
         }
+
+        // If game supports all modes, fetch all maps at once
+        if (supportsAllModes) {
+          const mapsResponse = await fetch(`/api/games/${formData.gameId}/maps`);
+          if (mapsResponse.ok) {
+            const maps = await mapsResponse.json();
+            // For flexible games, deduplicate maps by base name
+            const uniqueMaps: GameMapWithMode[] = [];
+            const seenMapNames = new Set<string>();
+            
+            for (const map of maps) {
+              if (!seenMapNames.has(map.name)) {
+                uniqueMaps.push(map);
+                seenMapNames.add(map.name);
+              }
+            }
+            setAllMaps(uniqueMaps);
+          }
+        }
       } catch (error) {
-        console.error('Error fetching modes:', error);
+        console.error('Error fetching game data:', error);
       } finally {
         setLoadingMaps(false);
       }
@@ -219,6 +249,32 @@ export function CreateMatchModal({
     setShowMapSelector(false);
     setSelectedMode('');
     setMapsForMode([]);
+  };
+
+  // New function for flexible games - select map with mode choice
+  const handleFlexibleMapSelect = (map: GameMapWithMode, modeId: string) => {
+    const mode = availableModes.find(m => m.id === modeId);
+    if (!mode) return;
+
+    // Extract base map ID (remove mode suffix if it exists)
+    const baseMapId = map.id.includes('-') ? map.id.split('-')[0] : map.id;
+    const combinedId = `${baseMapId}-${modeId}`;
+
+    const selectedMap: SelectedMapCard = {
+      id: combinedId,
+      name: map.name,
+      modeId: modeId,
+      modeName: mode.name,
+      imageUrl: map.imageUrl
+    };
+
+    const newSelectedMaps = [...selectedMaps, selectedMap];
+    const newMapIds = [...(formData.maps || []), combinedId];
+    
+    setSelectedMaps(newSelectedMaps);
+    updateFormData('maps', newMapIds);
+    updateFormData('rounds', newMapIds.length);
+    setShowMapSelector(false);
   };
 
   const handleRemoveMap = (mapId: string) => {
@@ -565,45 +621,85 @@ export function CreateMatchModal({
             <Card withBorder padding="md" mt="md">
               <Text fw={500} mb="md">Select a Map</Text>
               
-              <Select
-                label="Game Mode"
-                placeholder="Choose a game mode"
-                data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
-                value={selectedMode}
-                onChange={(value) => value && handleModeSelect(value)}
-                mb="md"
-              />
-
-              {selectedMode && (
+              {!currentGameSupportsAllModes ? (
+                // Traditional mode: select mode first, then maps for that mode
                 <>
-                  {loadingMaps ? (
-                    <Text size="sm" c="dimmed">Loading maps...</Text>
-                  ) : (
-                    <Grid>
-                      {mapsForMode.map((map) => (
-                        <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
-                          <Card
-                            shadow="sm"
-                            padding="md"
-                            radius="md"
-                            withBorder
-                            className="cursor-pointer hover:shadow-md transition-shadow"
-                            onClick={() => handleMapSelect(map)}
-                          >
-                            <Card.Section>
-                              <Image
-                                src={map.imageUrl}
-                                alt={map.name}
-                                height={80}
-                                fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                              />
-                            </Card.Section>
-                            <Text fw={500} size="sm" mt="xs">{map.name}</Text>
-                          </Card>
-                        </Grid.Col>
-                      ))}
-                    </Grid>
+                  <Select
+                    label="Game Mode"
+                    placeholder="Choose a game mode"
+                    data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
+                    value={selectedMode}
+                    onChange={(value) => value && handleModeSelect(value)}
+                    mb="md"
+                  />
+
+                  {selectedMode && (
+                    <>
+                      {loadingMaps ? (
+                        <Text size="sm" c="dimmed">Loading maps...</Text>
+                      ) : (
+                        <Grid>
+                          {mapsForMode.map((map) => (
+                            <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
+                              <Card
+                                shadow="sm"
+                                padding="md"
+                                radius="md"
+                                withBorder
+                                className="cursor-pointer hover:shadow-md transition-shadow"
+                                onClick={() => handleMapSelect(map)}
+                              >
+                                <Card.Section>
+                                  <Image
+                                    src={map.imageUrl}
+                                    alt={map.name}
+                                    height={80}
+                                    fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                                  />
+                                </Card.Section>
+                                <Text fw={500} size="sm" mt="xs">{map.name}</Text>
+                              </Card>
+                            </Grid.Col>
+                          ))}
+                        </Grid>
+                      )}
+                    </>
                   )}
+                </>
+              ) : (
+                // Flexible mode: show all maps with mode selection for each
+                <>
+                  <Text size="sm" c="dimmed" mb="md">
+                    Select any map and choose which mode to play on it.
+                  </Text>
+                  <Grid>
+                    {allMaps.map((map) => (
+                      <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
+                        <Card
+                          shadow="sm"
+                          padding="md"
+                          radius="md"
+                          withBorder
+                        >
+                          <Card.Section>
+                            <Image
+                              src={map.imageUrl}
+                              alt={map.name}
+                              height={80}
+                              fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                            />
+                          </Card.Section>
+                          <Text fw={500} size="sm" mt="xs" mb="xs">{map.name}</Text>
+                          <Select
+                            placeholder="Select mode"
+                            size="xs"
+                            data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
+                            onChange={(value) => value && handleFlexibleMapSelect(map, value)}
+                          />
+                        </Card>
+                      </Grid.Col>
+                    ))}
+                  </Grid>
                 </>
               )}
 

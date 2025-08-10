@@ -15,6 +15,7 @@ interface GameData {
   minPlayers: number;
   maxPlayers: number;
   maxSignups?: number;
+  supportsAllModes?: boolean;
   assets: {
     iconUrl: string;
     coverUrl?: string;
@@ -99,7 +100,7 @@ export class DatabaseSeeder {
       const mapsContent = fs.readFileSync(mapsPath, 'utf8').trim();
       if (mapsContent) {
         const mapsData: MapData[] = JSON.parse(mapsContent);
-        await this.seedMaps(gameData.id, mapsData);
+        await this.seedMaps(gameData.id, mapsData, gameData.supportsAllModes);
       }
     }
 
@@ -119,8 +120,8 @@ export class DatabaseSeeder {
     await this.db.run(`
       INSERT OR REPLACE INTO games (
         id, name, color, genre, developer, release_date, version, description,
-        min_players, max_players, max_signups, icon_url, cover_url, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        min_players, max_players, max_signups, supports_all_modes, icon_url, cover_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       gameData.id,
       gameData.name,
@@ -133,6 +134,7 @@ export class DatabaseSeeder {
       gameData.minPlayers,
       gameData.maxPlayers,
       gameData.maxSignups || null,
+      gameData.supportsAllModes ? 1 : 0,
       gameData.assets.iconUrl,
       gameData.assets.coverUrl || null
     ]);
@@ -150,28 +152,60 @@ export class DatabaseSeeder {
     }
   }
 
-  private async seedMaps(gameId: string, mapsData: MapData[]): Promise<void> {
+  private async seedMaps(gameId: string, mapsData: MapData[], supportsAllModes?: boolean): Promise<void> {
     // Clear existing maps for this game
     await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
 
-    for (const map of mapsData) {
-      // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
-      // Special handling for "Doom Match" -> "doom-match"
-      let modeId = map.type.toLowerCase();
-      if (modeId === 'doom match') {
-        modeId = 'doom-match';
-      }
+    if (supportsAllModes) {
+      // For games that support all modes on all maps (like Valorant)
+      // Get all modes for this game first
+      const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
       
-      // Fix image URL by removing /public prefix for Next.js static assets
-      let imageUrl = map.thumbnailUrl || null;
-      if (imageUrl && imageUrl.startsWith('/public/')) {
-        imageUrl = imageUrl.replace('/public/', '/');
-      }
+      for (const map of mapsData) {
+        // Fix image URL by removing /public prefix for Next.js static assets
+        let imageUrl = map.thumbnailUrl || null;
+        if (imageUrl && imageUrl.startsWith('/public/')) {
+          imageUrl = imageUrl.replace('/public/', '/');
+        }
 
-      await this.db.run(`
-        INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
+        if (modes.length > 0) {
+          // Create an entry for each map-mode combination
+          for (const mode of modes) {
+            const mapIdWithMode = `${map.id}-${mode.id}`;
+            await this.db.run(`
+              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `, [mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null]);
+          }
+        } else {
+          // Fallback: create with null mode_id
+          await this.db.run(`
+            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
+        }
+      }
+    } else {
+      // Traditional approach: map type defines the mode
+      for (const map of mapsData) {
+        // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
+        // Special handling for "Doom Match" -> "doom-match"
+        let modeId = map.type.toLowerCase();
+        if (modeId === 'doom match') {
+          modeId = 'doom-match';
+        }
+        
+        // Fix image URL by removing /public prefix for Next.js static assets
+        let imageUrl = map.thumbnailUrl || null;
+        if (imageUrl && imageUrl.startsWith('/public/')) {
+          imageUrl = imageUrl.replace('/public/', '/');
+        }
+
+        await this.db.run(`
+          INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
+      }
     }
   }
 
