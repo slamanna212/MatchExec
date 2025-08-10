@@ -679,7 +679,7 @@ export function MatchDashboard() {
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed" mb="md">
-              Create your first match to get started
+              Create a match to get started
             </Text>
             <Button 
               onClick={() => setCreateModalOpen(true)}

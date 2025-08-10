@@ -36,7 +36,6 @@ export function Navigation({ children }: NavigationProps) {
       label: 'Matches', 
       href: '/', 
       icon: IconTournament,
-      initiallyOpened: true,
       links: [
         { label: 'History', href: '/matches/history', icon: IconHistory }
       ]
@@ -87,36 +86,42 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Section>
 
         <AppShell.Section grow>
-          {navigationItems.map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              leftSection={<item.icon size="1rem" />}
-              active={pathname === item.href}
-              opened={item.initiallyOpened}
-              onClick={(event) => {
-                event.preventDefault()
-                router.push(item.href)
-                toggle() // Close mobile menu after navigation
-              }}
-            >
-              {item.links?.map((link) => (
+          {navigationItems.map((item) => {
+            // If item has links, don't handle click on parent (let it toggle)
+            const hasChildren = item.links && item.links.length > 0;
+            
+            return (
+              <div key={item.href}>
                 <NavLink
-                  key={link.href}
-                  href={link.href}
-                  label={link.label}
-                  leftSection={<link.icon size="1rem" />}
-                  active={pathname === link.href}
+                  href={item.href}
+                  label={item.label}
+                  leftSection={<item.icon size="1rem" />}
+                  active={pathname === item.href}
+                  childrenOffset={0}
                   onClick={(event) => {
                     event.preventDefault()
-                    router.push(link.href)
+                    router.push(item.href)
                     toggle() // Close mobile menu after navigation
                   }}
                 />
-              ))}
-            </NavLink>
-          ))}
+                {item.links?.map((link) => (
+                  <NavLink
+                    key={link.href}
+                    href={link.href}
+                    label={link.label}
+                    leftSection={<link.icon size="1rem" />}
+                    active={pathname === link.href}
+                    pl="xl"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      router.push(link.href)
+                      toggle() // Close mobile menu after navigation
+                    }}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </AppShell.Section>
       </AppShell.Navbar>
 
