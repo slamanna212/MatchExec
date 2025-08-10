@@ -8,7 +8,7 @@ export async function POST(
   try {
     const { matchId } = await params;
     const body = await request.json();
-    const { teamAssignments } = body;
+    const { teamAssignments, blueTeamVoiceChannel, redTeamVoiceChannel } = body;
 
     if (!teamAssignments || !Array.isArray(teamAssignments)) {
       return NextResponse.json({ error: 'Invalid team assignments data' }, { status: 400 });
@@ -29,6 +29,12 @@ export async function POST(
     });
 
     await Promise.all(updatePromises);
+
+    // Update voice channel assignments for teams
+    await db.run(
+      'UPDATE matches SET blue_team_voice_channel = ?, red_team_voice_channel = ? WHERE id = ?',
+      [blueTeamVoiceChannel || null, redTeamVoiceChannel || null, matchId]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

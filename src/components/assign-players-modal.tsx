@@ -25,6 +25,16 @@ interface MatchParticipant {
   team_assignment?: 'reserve' | 'blue' | 'red';
 }
 
+interface VoiceChannel {
+  value: string;
+  label: string;
+}
+
+interface VoiceChannelAssignments {
+  blueTeamVoiceChannel: string | null;
+  redTeamVoiceChannel: string | null;
+}
+
 interface AssignPlayersModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,20 +46,35 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
+  const [voiceChannelAssignments, setVoiceChannelAssignments] = useState<VoiceChannelAssignments>({
+    blueTeamVoiceChannel: null,
+    redTeamVoiceChannel: null
+  });
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/matches/${matchId}/participants`);
-      if (response.ok) {
-        const data = await response.json();
+      const [participantsResponse, voiceChannelsResponse] = await Promise.all([
+        fetch(`/api/matches/${matchId}/participants`),
+        fetch(`/api/matches/${matchId}/voice-channels`)
+      ]);
+      
+      if (participantsResponse.ok) {
+        const data = await participantsResponse.json();
         setParticipants(data.participants.map((p: MatchParticipant) => ({
           ...p,
           team_assignment: p.team_assignment || 'reserve'
         })));
       }
+      
+      if (voiceChannelsResponse.ok) {
+        const voiceData = await voiceChannelsResponse.json();
+        setVoiceChannels(voiceData.voiceChannels);
+        setVoiceChannelAssignments(voiceData.currentAssignments);
+      }
     } catch (error) {
-      console.error('Error fetching participants:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -84,7 +109,11 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ teamAssignments }),
+        body: JSON.stringify({ 
+          teamAssignments,
+          blueTeamVoiceChannel: voiceChannelAssignments.blueTeamVoiceChannel,
+          redTeamVoiceChannel: voiceChannelAssignments.redTeamVoiceChannel
+        }),
       });
 
       if (response.ok) {
@@ -154,6 +183,25 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             {teamParticipants.length}
           </Badge>
         </Group>
+        
+        {/* Voice Channel Selector for Blue and Red teams */}
+        {(team === 'blue' || team === 'red') && voiceChannels.length > 0 && (
+          <Select
+            label="Voice Channel"
+            placeholder="Select voice channel"
+            value={team === 'blue' ? voiceChannelAssignments.blueTeamVoiceChannel : voiceChannelAssignments.redTeamVoiceChannel}
+            onChange={(value) => setVoiceChannelAssignments(prev => ({
+              ...prev,
+              [team === 'blue' ? 'blueTeamVoiceChannel' : 'redTeamVoiceChannel']: value
+            }))}
+            data={[
+              { value: '', label: 'No voice channel' },
+              ...voiceChannels
+            ]}
+            mb="md"
+            clearable
+          />
+        )}
         
         <Stack gap="sm">
           {teamParticipants.length === 0 ? (

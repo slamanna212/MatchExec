@@ -1433,13 +1433,15 @@ class MatchExecBot {
     }
 
     try {
-      // Get match data with game information
+      // Get match data with game information and voice channels
       const matchData = await this.db?.get<{
         id: string;
         name: string;
         start_date?: string;
         game_name?: string;
         game_color?: string;
+        blue_team_voice_channel?: string;
+        red_team_voice_channel?: string;
         [key: string]: any;
       }>(`
         SELECT m.*, g.name as game_name, g.color as game_color
@@ -1453,8 +1455,16 @@ class MatchExecBot {
         return false;
       }
 
+      // Get team assignments with Discord user IDs
+      const participants = await this.db?.all(`
+        SELECT username, discord_user_id, team_assignment, signup_data
+        FROM match_participants
+        WHERE match_id = ?
+        ORDER BY team_assignment, username
+      `, [matchId]);
+
       // Create match start embed
-      const embed = await this.createMatchStartEmbed(matchData);
+      const embed = await this.createMatchStartEmbed(matchData, participants || []);
 
       let successCount = 0;
       let mainMessage: Message | null = null;
@@ -1731,8 +1741,10 @@ class MatchExecBot {
     start_date?: string;
     game_name?: string;
     game_color?: string;
+    blue_team_voice_channel?: string;
+    red_team_voice_channel?: string;
     [key: string]: any;
-  }): Promise<EmbedBuilder> {
+  }, participants: any[] = []): Promise<EmbedBuilder> {
     // Parse game color or use default
     let gameColor = 0x00ff00; // green for "started"
     if (matchData.game_color) {
@@ -1761,6 +1773,35 @@ class MatchExecBot {
       embed.addFields(
         { name: '🕐 Started At', value: `<t:${unixTimestamp}:F>`, inline: true }
       );
+    }
+
+    // Group participants by team
+    const blueTeam = participants.filter(p => p.team_assignment === 'blue');
+    const redTeam = participants.filter(p => p.team_assignment === 'red');
+
+    // Add team rosters with voice channels
+    if (blueTeam.length > 0 || redTeam.length > 0) {
+      const fields = [];
+
+      if (blueTeam.length > 0) {
+        let blueTeamValue = '';
+        if (matchData.blue_team_voice_channel) {
+          blueTeamValue += `🎙️ <#${matchData.blue_team_voice_channel}>\n\n`;
+        }
+        blueTeamValue += blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
+        fields.push({ name: '🔵 Blue Team', value: blueTeamValue, inline: true });
+      }
+
+      if (redTeam.length > 0) {
+        let redTeamValue = '';
+        if (matchData.red_team_voice_channel) {
+          redTeamValue += `🎙️ <#${matchData.red_team_voice_channel}>\n\n`;
+        }
+        redTeamValue += redTeam.map(p => this.formatPlayerMention(p)).join('\n');
+        fields.push({ name: '🔴 Red Team', value: redTeamValue, inline: true });
+      }
+
+      embed.addFields(...fields);
     }
 
     embed.setDescription('The match is now underway. Players should check their team assignments and get ready to compete!');
