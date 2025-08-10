@@ -504,8 +504,9 @@ class MatchExecBot {
       }
 
       // Add link to full match info if announcement message exists
-      if (announcementMessage?.message_id && announcementMessage?.channel_id) {
-        const messageLink = `https://discord.com/channels/${this.guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+      if (announcementMessage?.message_id && announcementMessage?.channel_id && this.client.guilds.cache.first()) {
+        const guildId = this.client.guilds.cache.first()?.id;
+        const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
         embed.addFields({
           name: '🔗 View Full Match Info',
           value: `[Click here to see the complete event details](${messageLink})`,
