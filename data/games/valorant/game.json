@@ -1,0 +1,18 @@
+{
+  "id": "valorant",
+  "name": "VALORANT",
+  "color": "#FF4655",
+  "genre": "Tactical First-Person Shooter",
+  "developer": "Riot Games",
+  "releaseDate": "2020-06-02",
+  "patch": "11.00",
+  "dataVersion": "1.0.0",
+  "description": "A 5v5 character-based tactical shooter featuring precise gunplay and unique agent abilities.",
+  "minPlayers": 2,
+  "maxPlayers": 10,
+  "maxSignups": 20,
+  "assets": {
+    "iconUrl": "/assets/games/valorant/icon.png",
+    "coverUrl": "/assets/games/valorant/cover.jpg"
+  }
+} 

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "standard",
+    "name": "Standard",
+    "description": "Standard 5v5 plant/defuse gameplay with first to 24 rounds winning."
+  },
+  {
+    "id": "swiftplay",
+    "name": "Swiftplay",
+    "description": "Faster-paced best-of-nine format. Same gameplay as Standard but shorter matches."
+  },
+  {
+    "id": "spike-rush",
+    "name": "Spike Rush",
+    "description": "Best-of-seven mode with random weapons and power-up orbs. Quick and chaotic fun."
+  },
+  {
+    "id": "deathmatch",
+    "name": "Deathmatch",
+    "description": "Free-for-all combat to practice aim and warm up. First to 40 kills or highest kills in 9 minutes wins."
+  },
+  {
+    "id": "escalation",
+    "name": "Escalation",
+    "description": "Team-based mode progressing through weapon tiers. First team to complete all tiers wins."
+  },
+  {
+    "id": "team-deathmatch",
+    "name": "Team Deathmatch",
+    "description": "5v5 team-based elimination mode. Work together to reach the kill target first."
+  }
+] 

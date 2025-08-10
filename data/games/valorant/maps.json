@@ -1,0 +1,86 @@
+[
+  {
+    "id": "ascent",
+    "name": "Ascent",
+    "type": "Two-Site",
+    "location": "Venice, Italy",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/ascent.webp"
+  },
+  {
+    "id": "bind",
+    "name": "Bind",
+    "type": "Two-Site",
+    "location": "Rabat, Morocco",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/bind.webp"
+  },
+  {
+    "id": "corrode",
+    "name": "Corrode",
+    "type": "Two-Site",
+    "location": "Unknown Location",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/corrode.webp"
+  },
+  {
+    "id": "fracture",
+    "name": "Fracture",
+    "type": "Two-Site",
+    "location": "Santa Fe, New Mexico, United States",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/fracture.webp"
+  },
+  {
+    "id": "haven",
+    "name": "Haven",
+    "type": "Three-Site",
+    "location": "Thimphu, Bhutan",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/haven.webp"
+  },
+  {
+    "id": "icebox",
+    "name": "Icebox",
+    "type": "Two-Site",
+    "location": "Bennett Island, Russia",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/icebox.webp"
+  },
+  {
+    "id": "lotus",
+    "name": "Lotus",
+    "type": "Three-Site",
+    "location": "Western Ghats, India",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/lotus.webp"
+  },
+  {
+    "id": "sunset",
+    "name": "Sunset",
+    "type": "Two-Site",
+    "location": "Los Angeles, California, United States",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/sunset.webp"
+  },
+  {
+    "id": "abyss",
+    "name": "Abyss",
+    "type": "Two-Site",
+    "location": "Unknown Location",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/abyss.webp"
+  },
+  {
+    "id": "breeze",
+    "name": "Breeze",
+    "type": "Two-Site",
+    "location": "Bermuda Triangle, Atlantic Ocean",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/breeze.webp"
+  },
+  {
+    "id": "pearl",
+    "name": "Pearl",
+    "type": "Two-Site",
+    "location": "Lisbon, Portugal",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/pearl.webp"
+  },
+  {
+    "id": "split",
+    "name": "Split",
+    "type": "Two-Site",
+    "location": "Tokyo, Japan",
+    "thumbnailUrl": "/public/assets/games/valorant/maps/split.webp"
+  }
+] 
