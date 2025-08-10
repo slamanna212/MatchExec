@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Card, 
   Text, 
@@ -33,7 +34,6 @@ interface GameWithIcon {
   mapCount: number;
   modeCount: number;
 }
-import { CreateMatchModal } from './create-match-modal';
 import { AssignPlayersModal } from './assign-players-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -202,10 +202,10 @@ const MatchCard = memo(({
 MatchCard.displayName = 'MatchCard';
 
 export function MatchDashboard() {
+  const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
@@ -363,10 +363,8 @@ export function MatchDashboard() {
     });
   }, [matches]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleMatchCreated = (match: any) => {
-    // Add the new match to the top of the list
-    setMatches(prev => [match as MatchWithGame, ...prev]);
+  const handleCreateMatch = () => {
+    router.push('/matches/create');
   };
 
   const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
@@ -665,8 +663,8 @@ export function MatchDashboard() {
           <Text c="dimmed" mt="xs">Manage and view all matches</Text>
         </div>
         <Button 
-          size="lg"
-          onClick={() => setCreateModalOpen(true)}
+          size="md"
+          onClick={handleCreateMatch}
         >
           Create Match
         </Button>
@@ -682,7 +680,7 @@ export function MatchDashboard() {
               Create a match to get started
             </Text>
             <Button 
-              onClick={() => setCreateModalOpen(true)}
+              onClick={handleCreateMatch}
             >
               Create Match
             </Button>
@@ -694,12 +692,6 @@ export function MatchDashboard() {
         </Grid>
       )}
 
-      <CreateMatchModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onMatchCreated={handleMatchCreated}
-        games={games}
-      />
 
       <AssignPlayersModal
         isOpen={assignPlayersModalOpen}
