@@ -252,6 +252,54 @@ export default function SettingsPage() {
 
         <Stack gap="lg">
           <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Application Settings</Text>
+
+            {appMessage && (
+              <Alert color={appMessage.type === 'success' ? 'green' : 'red'} mb="md">
+                {appMessage.text}
+              </Alert>
+            )}
+
+            <form onSubmit={appForm.onSubmit(handleAppSubmit)}>
+              <Stack gap="md">
+                <NumberInput
+                  label="Event Duration (per round/map)"
+                  placeholder="45"
+                  description="Duration in minutes for Discord events"
+                  min={5}
+                  max={720}
+                  {...appForm.getInputProps('event_duration_minutes')}
+                  disabled={loading}
+                />
+                <NumberInput
+                  label="Match Reminder"
+                  placeholder="10"
+                  description="Minutes before match start to send reminder"
+                  min={1}
+                  max={1440}
+                  {...appForm.getInputProps('match_reminder_minutes')}
+                  disabled={loading}
+                />
+
+                <Group justify="flex-end" mt="lg">
+                  <Button type="submit" loading={appSaving} disabled={loading}>
+                    Save Application Settings
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
+
+          <SchedulerConfig
+            value={schedulerSettings}
+            onChange={setSchedulerSettings}
+            onSubmit={handleSchedulerSubmit}
+            loading={loading}
+            saving={schedulerSaving}
+            message={schedulerMessage}
+          />
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Text size="lg" fw={600} mb="md">Discord Configuration</Text>
 
             {message && (
@@ -368,54 +416,6 @@ export default function SettingsPage() {
               </Stack>
             </form>
           </Card>
-
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Text size="lg" fw={600} mb="md">Application Settings</Text>
-
-            {appMessage && (
-              <Alert color={appMessage.type === 'success' ? 'green' : 'red'} mb="md">
-                {appMessage.text}
-              </Alert>
-            )}
-
-            <form onSubmit={appForm.onSubmit(handleAppSubmit)}>
-              <Stack gap="md">
-                <NumberInput
-                  label="Event Duration (per round/map)"
-                  placeholder="45"
-                  description="Duration in minutes for Discord events"
-                  min={5}
-                  max={720}
-                  {...appForm.getInputProps('event_duration_minutes')}
-                  disabled={loading}
-                />
-                <NumberInput
-                  label="Match Reminder"
-                  placeholder="10"
-                  description="Minutes before match start to send reminder"
-                  min={1}
-                  max={1440}
-                  {...appForm.getInputProps('match_reminder_minutes')}
-                  disabled={loading}
-                />
-
-                <Group justify="flex-end" mt="lg">
-                  <Button type="submit" loading={appSaving} disabled={loading}>
-                    Save Application Settings
-                  </Button>
-                </Group>
-              </Stack>
-            </form>
-          </Card>
-
-          <SchedulerConfig
-            value={schedulerSettings}
-            onChange={setSchedulerSettings}
-            onSubmit={handleSchedulerSubmit}
-            loading={loading}
-            saving={schedulerSaving}
-            message={schedulerMessage}
-          />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Group mb="md">
