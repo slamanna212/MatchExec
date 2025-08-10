@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import {
   AppShell,
   Text,
@@ -30,6 +31,12 @@ export function Navigation({ children }: NavigationProps) {
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
   const router = useRouter()
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+
+  // Fix hydration issues by ensuring component is mounted on client
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const navigationItems = [
     { 
@@ -45,6 +52,49 @@ export function Navigation({ children }: NavigationProps) {
     { label: 'Dev', href: '/dev', icon: IconCode },
   ]
 
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return (
+      <AppShell
+        header={{ height: { base: 60, md: 0 } }}
+        navbar={{
+          width: { base: 200, md: 250 },
+          breakpoint: 'md',
+          collapsed: { mobile: true, desktop: false },
+        }}
+        padding="md"
+      >
+        <AppShell.Header hiddenFrom="md">
+          <Group h="100%" px="md" justify="space-between">
+            <Group>
+              <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" />
+              <Text size="lg" fw={700}>MatchExec</Text>
+            </Group>
+            <ActionIcon variant="outline" size={30} onClick={() => {}} aria-label="Toggle color scheme">
+              <IconMoon size="16" />
+            </ActionIcon>
+          </Group>
+        </AppShell.Header>
+        <AppShell.Navbar p="md">
+          <AppShell.Section>
+            <Group mb="md" visibleFrom="md">
+              <Text size="xl" fw={700}>MatchExec</Text>
+            </Group>
+          </AppShell.Section>
+          <AppShell.Section grow />
+          <AppShell.Section>
+            <Group mt="md">
+              <ActionIcon variant="outline" size={30} onClick={() => {}}>
+                <IconMoon size="16" />
+              </ActionIcon>
+            </Group>
+          </AppShell.Section>
+        </AppShell.Navbar>
+        <AppShell.Main>{children}</AppShell.Main>
+      </AppShell>
+    )
+  }
+
   return (
     <AppShell
       header={{ height: { base: 60, md: 0 } }}
@@ -58,9 +108,26 @@ export function Navigation({ children }: NavigationProps) {
       <AppShell.Header hiddenFrom="md">
         <Group h="100%" px="md" justify="space-between">
           <Group>
-            <Burger opened={opened} onClick={toggle} size="sm" />
+            <Burger 
+              opened={opened} 
+              onClick={toggle} 
+              size="sm"
+              aria-label="Open navigation"
+            />
             <Text size="lg" fw={700}>MatchExec</Text>
           </Group>
+          <ActionIcon
+            variant="outline"
+            size={30}
+            onClick={() => toggleColorScheme()}
+            aria-label="Toggle color scheme"
+          >
+            {mounted ? (
+              colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />
+            ) : (
+              <IconMoon size="16" />
+            )}
+          </ActionIcon>
         </Group>
       </AppShell.Header>
 
@@ -82,12 +149,12 @@ export function Navigation({ children }: NavigationProps) {
                   href={item.href}
                   label={item.label}
                   leftSection={<item.icon size="1rem" />}
-                  active={pathname === item.href}
+                  active={mounted && pathname === item.href}
                   childrenOffset={0}
                   onClick={(event) => {
                     event.preventDefault()
                     router.push(item.href)
-                    toggle() // Close mobile menu after navigation
+                    if (opened) toggle() // Close mobile menu after navigation only if open
                   }}
                 />
                 {item.links?.map((link) => (
@@ -96,12 +163,12 @@ export function Navigation({ children }: NavigationProps) {
                     href={link.href}
                     label={link.label}
                     leftSection={<link.icon size="1rem" />}
-                    active={pathname === link.href}
+                    active={mounted && pathname === link.href}
                     pl="xl"
                     onClick={(event) => {
                       event.preventDefault()
                       router.push(link.href)
-                      toggle() // Close mobile menu after navigation
+                      if (opened) toggle() // Close mobile menu after navigation only if open
                     }}
                   />
                 ))}
@@ -117,7 +184,11 @@ export function Navigation({ children }: NavigationProps) {
               size={30}
               onClick={() => toggleColorScheme()}
             >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
+              {mounted ? (
+                colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />
+              ) : (
+                <IconMoon size="16" />
+              )}
             </ActionIcon>
           </Group>
         </AppShell.Section>
