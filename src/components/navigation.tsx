@@ -20,7 +20,11 @@ import {
   IconSun,
   IconMoon,
   IconHistory,
-  IconHash
+  IconHash,
+  IconApps,
+  IconClock,
+  IconBrandDiscord,
+  IconPaint
 } from '@tabler/icons-react'
 
 interface NavigationProps {
@@ -50,7 +54,17 @@ export function Navigation({ children }: NavigationProps) {
     },
     { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
     { label: 'Channels', href: '/channels', icon: IconHash },
-    { label: 'Settings', href: '/settings', icon: IconSettings },
+    { 
+      label: 'Settings', 
+      href: '/settings', 
+      icon: IconSettings,
+      links: [
+        { label: 'Application', href: '/settings#application', icon: IconApps },
+        { label: 'Scheduler', href: '/settings#scheduler', icon: IconClock },
+        { label: 'Discord', href: '/settings#discord', icon: IconBrandDiscord },
+        { label: 'UI', href: '/settings#ui', icon: IconPaint }
+      ]
+    },
     { label: 'Dev', href: '/dev', icon: IconCode },
   ]
 
@@ -144,6 +158,7 @@ export function Navigation({ children }: NavigationProps) {
           {navigationItems.map((item) => {
             // If item has links, don't handle click on parent (let it toggle)
             const hasChildren = item.links && item.links.length > 0;
+            const isSettingsPage = pathname?.startsWith('/settings');
             
             return (
               <div key={item.href}>
@@ -159,7 +174,8 @@ export function Navigation({ children }: NavigationProps) {
                     if (opened) toggle() // Close mobile menu after navigation only if open
                   }}
                 />
-                {item.links?.map((link) => (
+                {/* Only show nested links for Settings when on settings page */}
+                {item.links && (item.href === '/settings' ? isSettingsPage : true) && item.links.map((link) => (
                   <NavLink
                     key={link.href}
                     href={link.href}
@@ -169,7 +185,22 @@ export function Navigation({ children }: NavigationProps) {
                     pl="xl"
                     onClick={(event) => {
                       event.preventDefault()
-                      router.push(link.href)
+                      if (link.href.includes('#')) {
+                        // Handle hash links for same-page navigation
+                        const [path, hash] = link.href.split('#')
+                        if (pathname === path) {
+                          // Already on the correct page, just scroll to section
+                          const element = document.getElementById(hash)
+                          if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          }
+                        } else {
+                          // Navigate to page with hash
+                          router.push(link.href)
+                        }
+                      } else {
+                        router.push(link.href)
+                      }
                       if (opened) toggle() // Close mobile menu after navigation only if open
                     }}
                   />

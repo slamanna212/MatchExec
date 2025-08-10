@@ -251,7 +251,7 @@ export default function SettingsPage() {
         </div>
 
         <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Card shadow="sm" padding="lg" radius="md" withBorder id="application">
             <Text size="lg" fw={600} mb="md">Application Settings</Text>
 
             {appMessage && (
@@ -290,17 +290,19 @@ export default function SettingsPage() {
             </form>
           </Card>
 
-          <SchedulerConfig
-            value={schedulerSettings}
-            onChange={setSchedulerSettings}
-            onSubmit={handleSchedulerSubmit}
-            loading={loading}
-            saving={schedulerSaving}
-            message={schedulerMessage}
-          />
+          <div id="scheduler">
+            <SchedulerConfig
+              value={schedulerSettings}
+              onChange={setSchedulerSettings}
+              onSubmit={handleSchedulerSubmit}
+              loading={loading}
+              saving={schedulerSaving}
+              message={schedulerMessage}
+            />
+          </div>
 
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Text size="lg" fw={600} mb="md">Discord Configuration</Text>
+          <Card shadow="sm" padding="lg" radius="md" withBorder id="discord">
+            <Text size="lg" fw={600} mb="md">Discord Settings</Text>
 
             {message && (
               <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
@@ -417,7 +419,7 @@ export default function SettingsPage() {
             </form>
           </Card>
 
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Card shadow="sm" padding="lg" radius="md" withBorder id="ui">
             <Group mb="md">
               <IconSettings size="1.2rem" />
               <Text size="lg" fw={600}>UI Settings</Text>

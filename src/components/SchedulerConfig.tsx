@@ -246,7 +246,7 @@ export default function SchedulerConfig({
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Group mb="md">
         <IconClock size="1.2rem" />
-        <Text size="lg" fw={600}>Scheduler Configuration</Text>
+        <Text size="lg" fw={600}>Scheduler Settings</Text>
       </Group>
 
       {message && (
