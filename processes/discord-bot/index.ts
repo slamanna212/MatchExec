@@ -1558,13 +1558,15 @@ class MatchExecBot {
     }
 
     try {
-      // Get match data with game information
+      // Get match data with game information and voice channels
       const matchData = await this.db?.get<{
         id: string;
         name: string;
         start_date?: string;
         game_name?: string;
         game_color?: string;
+        blue_team_voice_channel?: string;
+        red_team_voice_channel?: string;
         [key: string]: any;
       }>(`
         SELECT m.*, g.name as game_name, g.color as game_color
@@ -1664,6 +1666,8 @@ class MatchExecBot {
     start_date?: string;
     game_name?: string;
     game_color?: string;
+    blue_team_voice_channel?: string;
+    red_team_voice_channel?: string;
     [key: string]: any;
   }, participants: any[]): Promise<EmbedBuilder> {
     // Parse game color or use default
@@ -1698,20 +1702,38 @@ class MatchExecBot {
     const redTeam = participants.filter(p => p.team_assignment === 'red');
     const reserves = participants.filter(p => p.team_assignment === 'reserve');
 
-    // Add team rosters with Discord mentions side by side
+    // Add team rosters with Discord mentions and voice channels side by side
     if (blueTeam.length > 0 && redTeam.length > 0) {
-      const blueRoster = blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
-      const redRoster = redTeam.map(p => this.formatPlayerMention(p)).join('\n');
+      let blueRosterValue = '';
+      if (matchData.blue_team_voice_channel) {
+        blueRosterValue += `🎙️ <#${matchData.blue_team_voice_channel}>\n\n`;
+      }
+      blueRosterValue += blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
+
+      let redRosterValue = '';
+      if (matchData.red_team_voice_channel) {
+        redRosterValue += `🎙️ <#${matchData.red_team_voice_channel}>\n\n`;
+      }
+      redRosterValue += redTeam.map(p => this.formatPlayerMention(p)).join('\n');
+
       embed.addFields(
-        { name: '🔵 Blue Team', value: blueRoster, inline: true },
-        { name: '🔴 Red Team', value: redRoster, inline: true }
+        { name: '🔵 Blue Team', value: blueRosterValue, inline: true },
+        { name: '🔴 Red Team', value: redRosterValue, inline: true }
       );
     } else if (blueTeam.length > 0) {
-      const blueRoster = blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
-      embed.addFields({ name: '🔵 Blue Team', value: blueRoster, inline: true });
+      let blueRosterValue = '';
+      if (matchData.blue_team_voice_channel) {
+        blueRosterValue += `🎙️ <#${matchData.blue_team_voice_channel}>\n\n`;
+      }
+      blueRosterValue += blueTeam.map(p => this.formatPlayerMention(p)).join('\n');
+      embed.addFields({ name: '🔵 Blue Team', value: blueRosterValue, inline: true });
     } else if (redTeam.length > 0) {
-      const redRoster = redTeam.map(p => this.formatPlayerMention(p)).join('\n');
-      embed.addFields({ name: '🔴 Red Team', value: redRoster, inline: true });
+      let redRosterValue = '';
+      if (matchData.red_team_voice_channel) {
+        redRosterValue += `🎙️ <#${matchData.red_team_voice_channel}>\n\n`;
+      }
+      redRosterValue += redTeam.map(p => this.formatPlayerMention(p)).join('\n');
+      embed.addFields({ name: '🔴 Red Team', value: redRosterValue, inline: true });
     }
 
     // Add reserves if any
