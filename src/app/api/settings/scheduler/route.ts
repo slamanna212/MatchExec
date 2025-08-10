@@ -12,7 +12,7 @@ export async function GET() {
     
     if (!settings) {
       return NextResponse.json({
-        match_check_cron: '0 */5 * * * *',
+        match_check_cron: '0 */1 * * * *',
         reminder_check_cron: '0 0 */4 * * *',
         cleanup_check_cron: '0 0 2 * * *',
         report_generation_cron: '0 0 0 * * 0',

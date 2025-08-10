@@ -132,7 +132,7 @@ END;
 -- Scheduler settings table
 CREATE TABLE IF NOT EXISTS scheduler_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  match_check_cron TEXT DEFAULT '0 */5 * * * *',
+  match_check_cron TEXT DEFAULT '0 */1 * * * *',
   reminder_check_cron TEXT DEFAULT '0 0 */4 * * *',
   cleanup_check_cron TEXT DEFAULT '0 0 2 * * *',
   report_generation_cron TEXT DEFAULT '0 0 0 * * 0',
