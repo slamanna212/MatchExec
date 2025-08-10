@@ -11,9 +11,6 @@ interface DiscordSettings {
   application_id?: string;
   bot_token?: string;
   guild_id?: string;
-  announcement_channel_id?: string;
-  results_channel_id?: string;
-  participant_role_id?: string;
   announcement_role_id?: string;
   mention_everyone?: boolean;
   event_duration_minutes?: number;
@@ -25,6 +22,7 @@ interface SchedulerSettings {
   reminder_check_cron: string;
   cleanup_check_cron: string;
   report_generation_cron: string;
+  channel_refresh_cron: string;
 }
 
 interface UISettings {
@@ -45,9 +43,6 @@ export default function SettingsPage() {
       application_id: '',
       bot_token: '',
       guild_id: '',
-      announcement_channel_id: '',
-      results_channel_id: '',
-      participant_role_id: '',
       announcement_role_id: '',
       mention_everyone: false,
       event_duration_minutes: 45,
@@ -61,6 +56,7 @@ export default function SettingsPage() {
       reminder_check_cron: '0 0 */4 * * *',
       cleanup_check_cron: '0 0 2 * * *',
       report_generation_cron: '0 0 0 * * 0',
+      channel_refresh_cron: '0 0 0 * * *',
     },
   });
 
@@ -87,9 +83,6 @@ export default function SettingsPage() {
             application_id: discordData.application_id || '',
             bot_token: discordData.bot_token || '',
             guild_id: discordData.guild_id || '',
-            announcement_channel_id: discordData.announcement_channel_id || '',
-            results_channel_id: discordData.results_channel_id || '',
-            participant_role_id: discordData.participant_role_id || '',
             announcement_role_id: discordData.announcement_role_id || '',
             mention_everyone: discordData.mention_everyone || false,
             event_duration_minutes: discordData.event_duration_minutes || 45,
@@ -144,9 +137,6 @@ export default function SettingsPage() {
             application_id: refreshedData.application_id || '',
             bot_token: refreshedData.bot_token || '',
             guild_id: refreshedData.guild_id || '',
-            announcement_channel_id: refreshedData.announcement_channel_id || '',
-            results_channel_id: refreshedData.results_channel_id || '',
-            participant_role_id: refreshedData.participant_role_id || '',
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
             event_duration_minutes: refreshedData.event_duration_minutes || 45,
@@ -301,42 +291,7 @@ export default function SettingsPage() {
                   disabled={loading}
                 />
 
-                <Group grow visibleFrom="md">
-                  <TextInput
-                    label="Announcement Channel"
-                    placeholder="Channel ID for announcements"
-                    {...form.getInputProps('announcement_channel_id')}
-                    disabled={loading}
-                  />
-                  <TextInput
-                    label="Results Channel"
-                    placeholder="Channel ID for match results"
-                    {...form.getInputProps('results_channel_id')}
-                    disabled={loading}
-                  />
-                </Group>
 
-                <Stack hiddenFrom="md">
-                  <TextInput
-                    label="Announcement Channel"
-                    placeholder="Channel ID for announcements"
-                    {...form.getInputProps('announcement_channel_id')}
-                    disabled={loading}
-                  />
-                  <TextInput
-                    label="Results Channel"
-                    placeholder="Channel ID for match results"
-                    {...form.getInputProps('results_channel_id')}
-                    disabled={loading}
-                  />
-                </Stack>
-
-                <TextInput
-                  label="Participant Role"
-                  placeholder="Role ID for match participants"
-                  {...form.getInputProps('participant_role_id')}
-                  disabled={loading}
-                />
 
                 <Stack gap="sm">
                   <Text size="sm" fw={500}>Announcement Role</Text>
@@ -461,6 +416,14 @@ export default function SettingsPage() {
                   placeholder="0 0 0 * * 0"
                   description="Cron expression for generating match reports"
                   {...schedulerForm.getInputProps('report_generation_cron')}
+                  disabled={loading}
+                />
+
+                <TextInput
+                  label="Channel Name Refresh"
+                  placeholder="0 0 0 * * *"
+                  description="Cron expression for refreshing Discord channel names"
+                  {...schedulerForm.getInputProps('channel_refresh_cron')}
                   disabled={loading}
                 />
 

@@ -79,9 +79,6 @@ export interface DiscordSettingsDbRow {
   application_id?: string;
   bot_token?: string;
   guild_id?: string;
-  announcement_channel_id?: string;
-  results_channel_id?: string;
-  participant_role_id?: string;
   announcement_role_id?: string;
   mention_everyone?: number; // SQLite stores booleans as integers
   event_duration_minutes?: number;

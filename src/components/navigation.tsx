@@ -19,7 +19,8 @@ import {
   IconCode,
   IconSun,
   IconMoon,
-  IconHistory
+  IconHistory,
+  IconHash
 } from '@tabler/icons-react'
 
 interface NavigationProps {
@@ -48,6 +49,7 @@ export function Navigation({ children }: NavigationProps) {
       ]
     },
     { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
+    { label: 'Channels', href: '/channels', icon: IconHash },
     { label: 'Settings', href: '/settings', icon: IconSettings },
     { label: 'Dev', href: '/dev', icon: IconCode },
   ]

@@ -35,13 +35,21 @@ import { SignupFormLoader, SignupField } from '../../lib/signup-forms';
 interface DiscordSettings {
   bot_token: string;
   guild_id: string;
-  announcement_channel_id?: string;
-  results_channel_id?: string;
-  participant_role_id?: string;
   announcement_role_id?: string;
   mention_everyone?: boolean;
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
+}
+
+interface DiscordChannel {
+  id: string;
+  discord_channel_id: string;
+  channel_name?: string;
+  channel_type: 'text' | 'voice';
+  send_announcements: boolean;
+  send_reminders: boolean;
+  send_match_start: boolean;
+  send_signup_updates: boolean;
 }
 
 class MatchExecBot {
@@ -114,9 +122,6 @@ class MatchExecBot {
         SELECT 
           bot_token,
           guild_id,
-          announcement_channel_id,
-          results_channel_id,
-          participant_role_id,
           announcement_role_id,
           mention_everyone,
           event_duration_minutes,
@@ -134,6 +139,48 @@ class MatchExecBot {
     } catch (error) {
       console.error('❌ Error loading Discord settings:', error);
       return null;
+    }
+  }
+
+  private async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates'): Promise<DiscordChannel[]> {
+    if (!this.db) {
+      return [];
+    }
+
+    try {
+      const columnMap = {
+        'announcements': 'send_announcements',
+        'reminders': 'send_reminders',
+        'match_start': 'send_match_start',
+        'signup_updates': 'send_signup_updates'
+      };
+
+      const column = columnMap[notificationType];
+      
+      const channels = await this.db.all<DiscordChannel>(`
+        SELECT 
+          id,
+          discord_channel_id,
+          channel_name,
+          channel_type,
+          send_announcements,
+          send_reminders,
+          send_match_start,
+          send_signup_updates
+        FROM discord_channels 
+        WHERE channel_type = 'text' AND ${column} = 1
+      `);
+
+      return channels.map(channel => ({
+        ...channel,
+        send_announcements: Boolean(channel.send_announcements),
+        send_reminders: Boolean(channel.send_reminders),
+        send_match_start: Boolean(channel.send_match_start),
+        send_signup_updates: Boolean(channel.send_signup_updates)
+      }));
+    } catch (error) {
+      console.error(`❌ Error loading channels for ${notificationType}:`, error);
+      return [];
     }
   }
 
@@ -225,8 +272,16 @@ class MatchExecBot {
     event_image_url?: string;
     start_date?: string;
   }) {
-    if (!this.isReady || !this.settings?.announcement_channel_id) {
-      console.warn('⚠️ Bot not ready or announcement channel not configured');
+    if (!this.isReady) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for announcements
+    const announcementChannels = await this.getChannelsForNotificationType('announcements');
+    
+    if (announcementChannels.length === 0) {
+      console.warn('⚠️ No channels configured for announcements');
       return false;
     }
 
@@ -253,72 +308,92 @@ class MatchExecBot {
       const row = new ActionRowBuilder<ButtonBuilder>()
         .addComponents(signupButton);
 
-      // Get announcement channel
-      const announcementChannel = await this.client.channels.fetch(this.settings.announcement_channel_id);
+      // Determine what to mention based on settings
+      let mentionText = '';
+      if (this.settings.mention_everyone) {
+        mentionText = '@everyone';
+      } else if (this.settings.announcement_role_id) {
+        mentionText = `<@&${this.settings.announcement_role_id}>`;
+      }
 
-      if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
-        // Determine what to mention based on settings
-        let mentionText = '';
-        if (this.settings.mention_everyone) {
-          mentionText = '@everyone';
-        } else if (this.settings.announcement_role_id) {
-          mentionText = `<@&${this.settings.announcement_role_id}>`;
-        }
+      // Prepare message options
+      const messageOptions: any = {
+        content: mentionText, // Add the mention above the embed
+        embeds: [embed],
+        components: [row]
+      };
 
-        // Prepare message options
-        const messageOptions: any = {
-          content: mentionText, // Add the mention above the embed
-          embeds: [embed],
-          components: [row]
-        };
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
 
-        // Add attachment if image exists
-        if (attachment) {
-          messageOptions.files = [attachment];
-        }
+      let successCount = 0;
+      let mainMessage: Message | null = null;
 
-        // Send main announcement
-        const message = await announcementChannel.send(messageOptions);
+      // Send to all configured announcement channels
+      for (const channelConfig of announcementChannels) {
+        try {
+          const announcementChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
 
-        let threadId: string | null = null;
-        let discordEventId: string | null = null;
-
-        // Create maps thread if there are maps
-        if (eventData.maps && eventData.maps.length > 0) {
-          const thread = await this.createMapsThread(message, eventData.name, eventData.game_id, eventData.maps);
-          threadId = thread?.id || null;
-        }
-
-        // Create Discord server event
-        if (eventData.start_date && typeof eventData.start_date === 'string') {
-          const rounds = eventData.maps?.length || 1;
-          discordEventId = await this.createDiscordEvent({
-            ...eventData,
-            start_date: eventData.start_date
-          }, message, rounds);
-        }
-
-        // Store Discord message information for later cleanup
-        if (this.db) {
-          try {
-            const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            await this.db.run(`
-              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [messageRecordId, eventData.id, message.id, message.channelId, threadId, discordEventId, 'announcement']);
+          if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
+            // Send announcement
+            const message = await announcementChannel.send(messageOptions);
             
-            console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
-          } catch (error) {
-            console.error('❌ Error storing Discord message tracking:', error);
+            if (!mainMessage) {
+              mainMessage = message; // Use first successful message for event creation
+            }
+            
+            successCount++;
           }
+        } catch (error) {
+          console.error(`❌ Failed to send announcement to channel ${channelConfig.discord_channel_id}:`, error);
         }
+      }
 
-        console.log(`✅ Event announcement posted for: ${eventData.name}`);
-        return true;
-      } else {
-        console.error('❌ Could not find or access announcement channel');
+      if (successCount === 0) {
+        console.error('❌ Failed to send announcement to any channels');
         return false;
       }
+
+      // Use the main message for thread and event creation
+      const message = mainMessage!;
+
+      let threadId: string | null = null;
+      let discordEventId: string | null = null;
+
+      // Create maps thread if there are maps
+      if (eventData.maps && eventData.maps.length > 0) {
+        const thread = await this.createMapsThread(message, eventData.name, eventData.game_id, eventData.maps);
+        threadId = thread?.id || null;
+      }
+
+      // Create Discord server event
+      if (eventData.start_date && typeof eventData.start_date === 'string') {
+        const rounds = eventData.maps?.length || 1;
+        discordEventId = await this.createDiscordEvent({
+          ...eventData,
+          start_date: eventData.start_date
+        }, message, rounds);
+      }
+
+      // Store Discord message information for later cleanup
+      if (this.db) {
+        try {
+          const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await this.db.run(`
+            INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [messageRecordId, eventData.id, message.id, message.channelId, threadId, discordEventId, 'announcement']);
+          
+          console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
+        } catch (error) {
+          console.error('❌ Error storing Discord message tracking:', error);
+        }
+      }
+
+      console.log(`✅ Event announcement posted to ${successCount} channel(s) for: ${eventData.name}`);
+      return true;
 
     } catch (error) {
       console.error('❌ Error posting event announcement:', error);
@@ -326,6 +401,130 @@ class MatchExecBot {
     }
   }
 
+  async sendSignupNotification(matchId: string, signupInfo: {
+    username: string;
+    discordUserId: string;
+    signupData: {[key: string]: string};
+    participantCount: number;
+  }): Promise<boolean> {
+    if (!this.isReady) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for signup updates
+    const signupChannels = await this.getChannelsForNotificationType('signup_updates');
+    
+    if (signupChannels.length === 0) {
+      console.log('ℹ️ No channels configured for signup updates');
+      return true; // Not an error, just no channels configured
+    }
+
+    try {
+      // Get match data
+      const matchData = await this.db?.get<{
+        id: string;
+        name: string;
+        game_id: string;
+        game_color?: string;
+        max_participants?: number;
+        [key: string]: any;
+      }>(`
+        SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
+        FROM matches m
+        LEFT JOIN games g ON m.game_id = g.id
+        WHERE m.id = ?
+      `, [matchId]);
+
+      if (!matchData) {
+        console.error('❌ Match not found for signup notification:', matchId);
+        return false;
+      }
+
+      // Parse game color or use default green
+      let gameColor = 0x00ff00; // default green for positive action
+      if (matchData.game_color) {
+        try {
+          gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
+        } catch (error) {
+          console.warn('⚠️ Invalid game color format, using default green:', matchData.game_color);
+        }
+      }
+
+      // Create signup embed
+      const embed = new EmbedBuilder()
+        .setTitle('🎮 New Player Signed Up!')
+        .setDescription(`**${signupInfo.username}** joined **${matchData.name}**`)
+        .setColor(gameColor)
+        .addFields(
+          { 
+            name: '👤 Player', 
+            value: `<@${signupInfo.discordUserId}>`, 
+            inline: true 
+          },
+          { 
+            name: '🎯 Match', 
+            value: matchData.name, 
+            inline: true 
+          },
+          { 
+            name: '👥 Total Players', 
+            value: `${signupInfo.participantCount}${matchData.max_signups ? `/${matchData.max_signups}` : ''}`, 
+            inline: true 
+          }
+        )
+        .setTimestamp();
+
+      // Add key signup data fields if available
+      const displayFields: string[] = [];
+      for (const [key, value] of Object.entries(signupInfo.signupData)) {
+        if (value && displayFields.length < 3) { // Limit to 3 additional fields
+          const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          displayFields.push(`**${fieldName}:** ${value}`);
+        }
+      }
+      
+      if (displayFields.length > 0) {
+        embed.addFields({
+          name: '📝 Player Info',
+          value: displayFields.join('\n'),
+          inline: false
+        });
+      }
+
+      let successCount = 0;
+
+      // Send to all configured signup update channels
+      for (const channelConfig of signupChannels) {
+        try {
+          const signupChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (signupChannel?.isTextBased() && 'send' in signupChannel) {
+            // Send signup notification
+            await signupChannel.send({
+              embeds: [embed]
+            });
+            
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send signup notification to any channels');
+        return false;
+      }
+
+      console.log(`✅ Signup notification sent to ${successCount} channel(s) for: ${matchData.name}`);
+      return true;
+
+    } catch (error) {
+      console.error('❌ Error sending signup notification:', error);
+      return false;
+    }
+  }
 
   private async createEventEmbedWithAttachment(
     name: string,
@@ -826,6 +1025,14 @@ class MatchExecBot {
           flags: MessageFlags.Ephemeral
         });
 
+        // Send signup notification to configured channels
+        await this.sendSignupNotification(eventId, {
+          username: displayUsername,
+          discordUserId: interaction.user.id,
+          signupData: signupData,
+          participantCount: participantCount?.count || 1
+        });
+
         console.log(`✅ User ${interaction.user.tag} (${displayUsername}) signed up for event ${eventId}:`, signupData);
       } else {
         throw new Error('Database not available');
@@ -888,7 +1095,7 @@ class MatchExecBot {
   }
 
   private async processAnnouncementQueue() {
-    if (!this.db || !this.isReady || !this.settings?.announcement_channel_id) {
+    if (!this.db || !this.isReady) {
       return;
     }
 
@@ -1096,7 +1303,7 @@ class MatchExecBot {
   }
 
   private async processReminderQueue() {
-    if (!this.db || !this.isReady || !this.settings?.announcement_channel_id) {
+    if (!this.db || !this.isReady) {
       return;
     }
 
@@ -1154,7 +1361,7 @@ class MatchExecBot {
   }
 
   private async processMatchStartQueue() {
-    if (!this.db || !this.isReady || !this.settings?.results_channel_id) {
+    if (!this.db || !this.isReady) {
       return;
     }
 
@@ -1212,8 +1419,16 @@ class MatchExecBot {
   }
 
   async postMatchStartNotification(matchId: string): Promise<boolean> {
-    if (!this.isReady || !this.settings?.results_channel_id) {
-      console.warn('⚠️ Bot not ready or results channel not configured');
+    if (!this.isReady) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for match start notifications
+    const matchStartChannels = await this.getChannelsForNotificationType('match_start');
+    
+    if (matchStartChannels.length === 0) {
+      console.warn('⚠️ No channels configured for match start notifications');
       return false;
     }
 
@@ -1241,36 +1456,55 @@ class MatchExecBot {
       // Create match start embed
       const embed = await this.createMatchStartEmbed(matchData);
 
-      // Get results channel
-      const resultsChannel = await this.client.channels.fetch(this.settings.results_channel_id);
+      let successCount = 0;
+      let mainMessage: Message | null = null;
 
-      if (resultsChannel?.isTextBased() && 'send' in resultsChannel) {
-        // Send match start notification
-        const startMessage = await resultsChannel.send({
-          embeds: [embed]
-        });
+      // Send to all configured match start channels
+      for (const channelConfig of matchStartChannels) {
+        try {
+          const matchStartChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
 
-        // Store start notification message for later cleanup
-        if (this.db) {
-          try {
-            const messageRecordId = `discord_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-            await this.db.run(`
-              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [messageRecordId, matchId, startMessage.id, startMessage.channelId, null, null, 'start_notification']);
+          if (matchStartChannel?.isTextBased() && 'send' in matchStartChannel) {
+            // Send match start notification
+            const startMessage = await matchStartChannel.send({
+              embeds: [embed]
+            });
             
-            console.log(`✅ Stored Discord match start notification tracking for match: ${matchId}`);
-          } catch (error) {
-            console.error('❌ Error storing Discord start notification message tracking:', error);
+            if (!mainMessage) {
+              mainMessage = startMessage;
+            }
+            
+            successCount++;
           }
+        } catch (error) {
+          console.error(`❌ Failed to send match start notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
+      }
 
-        console.log(`✅ Match start notification posted for: ${matchData.name}`);
-        return true;
-      } else {
-        console.error('❌ Could not find or access results channel');
+      if (successCount === 0) {
+        console.error('❌ Failed to send match start notification to any channels');
         return false;
       }
+
+      const startMessage = mainMessage!;
+
+      // Store start notification message for later cleanup
+      if (this.db) {
+        try {
+          const messageRecordId = `discord_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          await this.db.run(`
+            INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [messageRecordId, matchId, startMessage.id, startMessage.channelId, null, null, 'match_start']);
+          
+          console.log(`✅ Stored Discord match start notification tracking for match: ${matchId}`);
+        } catch (error) {
+          console.error('❌ Error storing Discord start notification message tracking:', error);
+        }
+      }
+
+      console.log(`✅ Match start notification posted to ${successCount} channel(s) for: ${matchData.name}`);
+      return true;
 
     } catch (error) {
       console.error('❌ Error posting match start notification:', error);
@@ -1279,8 +1513,16 @@ class MatchExecBot {
   }
 
   async postMatchReminder(matchId: string): Promise<boolean> {
-    if (!this.isReady || !this.settings?.results_channel_id) {
-      console.warn('⚠️ Bot not ready or results channel not configured');
+    if (!this.isReady) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for reminders
+    const reminderChannels = await this.getChannelsForNotificationType('reminders');
+    
+    if (reminderChannels.length === 0) {
+      console.warn('⚠️ No channels configured for reminders');
       return false;
     }
 
@@ -1321,45 +1563,64 @@ class MatchExecBot {
       // Create reminder embed
       const embed = await this.createReminderEmbed(matchData, participants);
 
-      // Get results channel
-      const resultsChannel = await this.client.channels.fetch(this.settings.results_channel_id);
+      // Determine what to mention based on settings
+      let mentionText = '';
+      if (this.settings.mention_everyone) {
+        mentionText = '@everyone';
+      } else if (this.settings.announcement_role_id) {
+        mentionText = `<@&${this.settings.announcement_role_id}>`;
+      }
 
-      if (resultsChannel?.isTextBased() && 'send' in resultsChannel) {
-        // Determine what to mention based on settings
-        let mentionText = '';
-        if (this.settings.mention_everyone) {
-          mentionText = '@everyone';
-        } else if (this.settings.announcement_role_id) {
-          mentionText = `<@&${this.settings.announcement_role_id}>`;
-        }
+      let successCount = 0;
+      let mainMessage: Message | null = null;
 
-        // Send reminder message
-        const reminderMessage = await resultsChannel.send({
-          content: mentionText,
-          embeds: [embed]
-        });
+      // Send to all configured reminder channels
+      for (const channelConfig of reminderChannels) {
+        try {
+          const reminderChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
 
-        // Store reminder message for later cleanup
-        if (this.db) {
-          try {
-            const messageRecordId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-            await this.db.run(`
-              INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [messageRecordId, matchId, reminderMessage.id, reminderMessage.channelId, null, null, 'reminder']);
+          if (reminderChannel?.isTextBased() && 'send' in reminderChannel) {
+            // Send reminder message
+            const reminderMessage = await reminderChannel.send({
+              content: mentionText,
+              embeds: [embed]
+            });
             
-            console.log(`✅ Stored Discord reminder message tracking for match: ${matchId}`);
-          } catch (error) {
-            console.error('❌ Error storing Discord reminder message tracking:', error);
+            if (!mainMessage) {
+              mainMessage = reminderMessage;
+            }
+            
+            successCount++;
           }
+        } catch (error) {
+          console.error(`❌ Failed to send reminder to channel ${channelConfig.discord_channel_id}:`, error);
         }
+      }
 
-        console.log(`✅ Match reminder posted for: ${matchData.name}`);
-        return true;
-      } else {
-        console.error('❌ Could not find or access results channel');
+      if (successCount === 0) {
+        console.error('❌ Failed to send reminder to any channels');
         return false;
       }
+
+      const reminderMessage = mainMessage!;
+
+      // Store reminder message for later cleanup
+      if (this.db) {
+        try {
+          const messageRecordId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          await this.db.run(`
+            INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [messageRecordId, matchId, reminderMessage.id, reminderMessage.channelId, null, null, 'reminder']);
+          
+          console.log(`✅ Stored Discord reminder message tracking for match: ${matchId}`);
+        } catch (error) {
+          console.error('❌ Error storing Discord reminder message tracking:', error);
+        }
+      }
+
+      console.log(`✅ Match reminder posted to ${successCount} channel(s) for: ${matchData.name}`);
+      return true;
 
     } catch (error) {
       console.error('❌ Error posting match reminder:', error);
