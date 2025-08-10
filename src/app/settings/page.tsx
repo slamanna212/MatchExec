@@ -14,6 +14,9 @@ interface DiscordSettings {
   guild_id?: string;
   announcement_role_id?: string;
   mention_everyone?: boolean;
+}
+
+interface ApplicationSettings {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
 }
@@ -32,9 +35,11 @@ interface UISettings {
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [appSaving, setAppSaving] = useState(false);
   const [schedulerSaving, setSchedulerSaving] = useState(false);
   const [uiSaving, setUiSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [appMessage, setAppMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
@@ -52,6 +57,11 @@ export default function SettingsPage() {
       guild_id: '',
       announcement_role_id: '',
       mention_everyone: false,
+    },
+  });
+
+  const appForm = useForm<ApplicationSettings>({
+    initialValues: {
       event_duration_minutes: 45,
       match_reminder_minutes: 10,
     },
@@ -69,8 +79,9 @@ export default function SettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, schedulerResponse, uiResponse] = await Promise.all([
+        const [discordResponse, appResponse, schedulerResponse, uiResponse] = await Promise.all([
           fetch('/api/settings/discord'),
+          fetch('/api/settings/discord'), // We'll use the same endpoint for now
           fetch('/api/settings/scheduler'),
           fetch('/api/settings/ui')
         ]);
@@ -78,16 +89,23 @@ export default function SettingsPage() {
         if (discordResponse.ok) {
           const discordData = await discordResponse.json();
           // Ensure all values are proper types, not null
-          const sanitizedData = {
+          const sanitizedDiscordData = {
             application_id: discordData.application_id || '',
             bot_token: discordData.bot_token || '',
             guild_id: discordData.guild_id || '',
             announcement_role_id: discordData.announcement_role_id || '',
             mention_everyone: discordData.mention_everyone || false,
-            event_duration_minutes: discordData.event_duration_minutes || 45,
-            match_reminder_minutes: discordData.match_reminder_minutes || 10
           };
-          form.setValues(sanitizedData);
+          form.setValues(sanitizedDiscordData);
+        }
+
+        if (appResponse.ok) {
+          const appData = await appResponse.json();
+          const sanitizedAppData = {
+            event_duration_minutes: appData.event_duration_minutes || 45,
+            match_reminder_minutes: appData.match_reminder_minutes || 10
+          };
+          appForm.setValues(sanitizedAppData);
         }
         
         if (schedulerResponse.ok) {
@@ -138,8 +156,6 @@ export default function SettingsPage() {
             guild_id: refreshedData.guild_id || '',
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
-            event_duration_minutes: refreshedData.event_duration_minutes || 45,
-            match_reminder_minutes: refreshedData.match_reminder_minutes || 10
           };
           form.setValues(sanitizedData);
         }
@@ -151,6 +167,30 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'An error occurred while saving settings.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAppSubmit = async (values: ApplicationSettings) => {
+    setAppSaving(true);
+    setAppMessage(null);
+    
+    try {
+      const response = await fetch('/api/settings/discord', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (response.ok) {
+        setAppMessage({ type: 'success', text: 'Application settings saved successfully!' });
+      } else {
+        setAppMessage({ type: 'error', text: 'Failed to save application settings.' });
+      }
+    } catch (error) {
+      console.error('Error saving application settings:', error);
+      setAppMessage({ type: 'error', text: 'An error occurred while saving application settings.' });
+    } finally {
+      setAppSaving(false);
     }
   };
 
@@ -320,6 +360,28 @@ export default function SettingsPage() {
                   </Group>
                 </Stack>
 
+
+
+                <Group justify="flex-end" mt="lg">
+                  <Button type="submit" loading={saving} disabled={loading}>
+                    Save Discord Settings
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Text size="lg" fw={600} mb="md">Application Settings</Text>
+
+            {appMessage && (
+              <Alert color={appMessage.type === 'success' ? 'green' : 'red'} mb="md">
+                {appMessage.text}
+              </Alert>
+            )}
+
+            <form onSubmit={appForm.onSubmit(handleAppSubmit)}>
+              <Stack gap="md">
                 <Group grow visibleFrom="md">
                   <NumberInput
                     label="Event Duration (per round/map)"
@@ -327,7 +389,7 @@ export default function SettingsPage() {
                     description="Duration in minutes for Discord events"
                     min={5}
                     max={720}
-                    {...form.getInputProps('event_duration_minutes')}
+                    {...appForm.getInputProps('event_duration_minutes')}
                     disabled={loading}
                   />
                   <NumberInput
@@ -336,7 +398,7 @@ export default function SettingsPage() {
                     description="Minutes before match start to send reminder"
                     min={1}
                     max={1440}
-                    {...form.getInputProps('match_reminder_minutes')}
+                    {...appForm.getInputProps('match_reminder_minutes')}
                     disabled={loading}
                   />
                 </Group>
@@ -348,7 +410,7 @@ export default function SettingsPage() {
                     description="Duration in minutes for Discord events"
                     min={5}
                     max={720}
-                    {...form.getInputProps('event_duration_minutes')}
+                    {...appForm.getInputProps('event_duration_minutes')}
                     disabled={loading}
                   />
                   <NumberInput
@@ -357,14 +419,14 @@ export default function SettingsPage() {
                     description="Minutes before match start to send reminder"
                     min={1}
                     max={1440}
-                    {...form.getInputProps('match_reminder_minutes')}
+                    {...appForm.getInputProps('match_reminder_minutes')}
                     disabled={loading}
                   />
                 </Stack>
 
                 <Group justify="flex-end" mt="lg">
-                  <Button type="submit" loading={saving} disabled={loading}>
-                    Save Discord Settings
+                  <Button type="submit" loading={appSaving} disabled={loading}>
+                    Save Application Settings
                   </Button>
                 </Group>
               </Stack>
