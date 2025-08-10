@@ -39,6 +39,7 @@ interface DiscordSettings {
   mention_everyone?: boolean;
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
+  player_reminder_minutes?: number;
 }
 
 interface DiscordChannel {
@@ -125,7 +126,8 @@ class MatchExecBot {
           announcement_role_id,
           mention_everyone,
           event_duration_minutes,
-          match_reminder_minutes
+          match_reminder_minutes,
+          player_reminder_minutes
         FROM discord_settings 
         WHERE id = 1
       `);
@@ -399,6 +401,205 @@ class MatchExecBot {
       console.error('❌ Error posting event announcement:', error);
       return false;
     }
+  }
+
+  async sendPlayerReminders(matchId: string): Promise<boolean> {
+    if (!this.isReady) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    if (!this.db) {
+      console.error('❌ Database not available');
+      return false;
+    }
+
+    try {
+      // Get match data with game information and voice channels
+      const matchData = await this.db.get<{
+        id: string;
+        name: string;
+        description?: string;
+        start_date?: string;
+        game_name?: string;
+        game_color?: string;
+        blue_team_voice_channel?: string;
+        red_team_voice_channel?: string;
+        event_image_url?: string;
+        [key: string]: any;
+      }>(`
+        SELECT m.*, g.name as game_name, g.color as game_color
+        FROM matches m
+        LEFT JOIN games g ON m.game_id = g.id
+        WHERE m.id = ?
+      `, [matchId]);
+
+      if (!matchData) {
+        console.error('❌ Match not found for player reminders:', matchId);
+        return false;
+      }
+
+      // Get participants with Discord user IDs
+      const participants = await this.db.all<{
+        discord_user_id: string;
+        username: string;
+        team_assignment?: string;
+        signup_data?: string;
+      }>(`
+        SELECT discord_user_id, username, team_assignment, signup_data
+        FROM match_participants
+        WHERE match_id = ? AND discord_user_id IS NOT NULL
+      `, [matchId]);
+
+      if (!participants || participants.length === 0) {
+        console.log('ℹ️ No participants with Discord IDs found for player reminders:', matchId);
+        return true; // Not an error, just no one to notify
+      }
+
+      // Get announcement message link for embed
+      const announcementMessage = await this.db.get<{
+        message_id: string;
+        channel_id: string;
+      }>(`
+        SELECT message_id, channel_id
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+        LIMIT 1
+      `, [matchId]);
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      // Send DM to each participant
+      for (const participant of participants) {
+        try {
+          const user = await this.client.users.fetch(participant.discord_user_id);
+          
+          // Create personalized embed for this player
+          const embed = await this.createPlayerReminderEmbed(
+            matchData, 
+            participant, 
+            announcementMessage
+          );
+
+          await user.send({
+            embeds: [embed]
+          });
+
+          successCount++;
+          console.log(`✅ Sent player reminder DM to ${participant.username} (${participant.discord_user_id})`);
+
+        } catch (error) {
+          failureCount++;
+          console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, error);
+        }
+      }
+
+      const totalParticipants = participants.length;
+      console.log(`📩 Player reminder results: ${successCount}/${totalParticipants} sent successfully, ${failureCount} failed`);
+
+      return successCount > 0; // Success if at least one DM was sent
+
+    } catch (error) {
+      console.error('❌ Error sending player reminders:', error);
+      return false;
+    }
+  }
+
+  private async createPlayerReminderEmbed(
+    matchData: {
+      name: string;
+      description?: string;
+      start_date?: string;
+      game_name?: string;
+      game_color?: string;
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+      [key: string]: any;
+    }, 
+    participant: {
+      username: string;
+      team_assignment?: string;
+      signup_data?: string;
+    },
+    announcementMessage?: {
+      message_id: string;
+      channel_id: string;
+    }
+  ): Promise<EmbedBuilder> {
+    // Parse game color or use default
+    let gameColor = 0x4caf50; // default green for reminder
+    if (matchData.game_color) {
+      try {
+        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
+      } catch (error) {
+        console.error('Error parsing game color:', error);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
+      .setDescription(matchData.description || 'Your match is starting soon!')
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
+
+    // Add match time if available
+    if (matchData.start_date) {
+      const startTime = new Date(matchData.start_date);
+      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+      embed.addFields(
+        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: true } // Empty field to force new line
+      );
+    }
+
+    // Add game info
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    // Add team assignment if available
+    if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
+      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' : 
+                       participant.team_assignment === 'red' ? '🔴' : '🟡';
+      const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
+      
+      embed.addFields({ 
+        name: '👥 Your Team', 
+        value: `${teamEmoji} ${teamName} Team`, 
+        inline: true 
+      });
+
+      // Add voice channel if assigned to a team with a voice channel
+      if (participant.team_assignment === 'blue' && matchData.blue_team_voice_channel) {
+        embed.addFields({
+          name: '🎙️ Voice Channel',
+          value: `<#${matchData.blue_team_voice_channel}>`,
+          inline: true
+        });
+      } else if (participant.team_assignment === 'red' && matchData.red_team_voice_channel) {
+        embed.addFields({
+          name: '🎙️ Voice Channel',
+          value: `<#${matchData.red_team_voice_channel}>`,
+          inline: true
+        });
+      }
+    }
+
+    // Add link to original announcement if available
+    if (announcementMessage && this.client.guilds.cache.first()) {
+      const guildId = this.client.guilds.cache.first()?.id;
+      const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+      embed.addFields({
+        name: '🔗 Match Details',
+        value: `[View Full Match Info](${messageLink})`,
+        inline: false
+      });
+    }
+
+    return embed;
   }
 
   async sendSignupNotification(matchId: string, signupInfo: {
@@ -1103,6 +1304,11 @@ class MatchExecBot {
       await this.processMatchStartQueue();
     }, 10000);
     
+    // Process player reminder queue every 10 seconds
+    setInterval(async () => {
+      await this.processPlayerReminderQueue();
+    }, 10000);
+    
     // Clean up expired match messages every hour
     setInterval(async () => {
       await this.cleanupExpiredMatches();
@@ -1113,6 +1319,7 @@ class MatchExecBot {
     console.log('✅ Status update queue processor started');
     console.log('✅ Reminder queue processor started');
     console.log('✅ Match start notification queue processor started');
+    console.log('✅ Player reminder queue processor started');
     console.log('✅ Expired match cleanup scheduler started');
   }
 
@@ -1437,6 +1644,65 @@ class MatchExecBot {
       }
     } catch (error) {
       console.error('❌ Error processing match start queue:', error);
+    }
+  }
+
+  private async processPlayerReminderQueue() {
+    if (!this.db || !this.isReady) {
+      return;
+    }
+
+    try {
+      // Get player reminders that are due
+      const dueReminders = await this.db.all<{
+        id: string;
+        match_id: string;
+        reminder_time: string;
+        status: string;
+      }>(`
+        SELECT * FROM discord_player_reminder_queue
+        WHERE status = 'pending'
+        AND datetime(reminder_time) <= datetime('now')
+        ORDER BY reminder_time ASC
+        LIMIT 5
+      `);
+
+      for (const reminder of dueReminders) {
+        try {
+          const success = await this.sendPlayerReminders(reminder.match_id);
+
+          if (success) {
+            // Mark as sent
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue 
+              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [reminder.id]);
+            
+            console.log(`✅ Processed player reminder DMs for match: ${reminder.match_id}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue 
+              SET status = 'failed', error_message = 'Failed to send player reminders'
+              WHERE id = ?
+            `, [reminder.id]);
+            
+            console.log(`❌ Failed to send player reminder DMs for match: ${reminder.match_id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing player reminders for match ${reminder.match_id}:`, error);
+          
+          // Mark as failed with error message
+          await this.db.run(`
+            UPDATE discord_player_reminder_queue 
+            SET status = 'failed', error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing player reminder queue:', error);
     }
   }
 
@@ -2136,6 +2402,11 @@ export const getBotInstance = () => bot;
 // Export method for deleting match announcements
 export const deleteMatchDiscordAnnouncement = async (matchId: string) => {
   return await bot.deleteMatchAnnouncement(matchId);
+};
+
+// Export method for sending player reminder DMs
+export const sendPlayerReminderDMs = async (matchId: string) => {
+  return await bot.sendPlayerReminders(matchId);
 };
 
 // Handle process signals

@@ -158,6 +158,9 @@ class MatchExecScheduler {
     // Check for matches that need reminder queue entries created
     await this.queueMatchReminders();
     
+    // Check for matches that need player reminder DMs
+    await this.queuePlayerReminders();
+    
     // Process existing reminder queue
     await this.processReminderQueue();
   }
@@ -255,6 +258,56 @@ class MatchExecScheduler {
       }
     } catch (error) {
       console.error('❌ Error processing reminder queue:', error);
+    }
+  }
+
+  private async queuePlayerReminders() {
+    try {
+      // Get Discord settings to know the player reminder minutes
+      const discordSettings = await this.db.get(
+        'SELECT player_reminder_minutes FROM discord_settings WHERE id = 1'
+      );
+      
+      if (!discordSettings?.player_reminder_minutes) {
+        console.log('⚠️ No player reminder settings found, skipping player reminder queue');
+        return;
+      }
+
+      const reminderMinutes = discordSettings.player_reminder_minutes;
+
+      // Find matches that have player_notifications enabled, start times, and need reminders
+      const upcomingMatches = await this.db.all(
+        `SELECT m.id, m.name, m.start_date, m.player_notifications
+         FROM matches m
+         WHERE m.start_date IS NOT NULL 
+         AND m.player_notifications = 1
+         AND m.status IN ('gather', 'assign', 'battle')
+         AND datetime(m.start_date, '-${reminderMinutes} minutes') <= datetime('now', '+1 hour')
+         AND NOT EXISTS (
+           SELECT 1 FROM discord_player_reminder_queue dprq 
+           WHERE dprq.match_id = m.id 
+           AND dprq.status != 'failed'
+         )`
+      );
+
+      for (const match of upcomingMatches) {
+        const startDate = new Date(match.start_date);
+        const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
+        
+        // Only queue if reminder time is in the future
+        if (reminderTime > new Date()) {
+          const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          await this.db.run(`
+            INSERT INTO discord_player_reminder_queue (id, match_id, reminder_time, status)
+            VALUES (?, ?, ?, 'pending')
+          `, [reminderId, match.id, reminderTime.toISOString()]);
+          
+          console.log(`📱 Queued player reminder DMs for match: ${match.name} at ${reminderTime.toISOString()}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error queueing player reminders:', error);
     }
   }
 

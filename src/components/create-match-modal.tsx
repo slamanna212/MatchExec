@@ -38,6 +38,7 @@ interface MatchFormData {
   rounds: number;
   maps: string[];
   eventImageUrl?: string;
+  playerNotifications?: boolean;
 }
 
 interface GameMode {
@@ -68,7 +69,8 @@ export function CreateMatchModal({
 }: CreateMatchModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<Partial<MatchFormData>>({
-    rules: 'casual'
+    rules: 'casual',
+    playerNotifications: true
   });
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [availableModes, setAvailableModes] = useState<GameMode[]>([]);
@@ -84,7 +86,7 @@ export function CreateMatchModal({
 
   const handleClose = () => {
     setStep(1);
-    setFormData({ rules: 'casual' });
+    setFormData({ rules: 'casual', playerNotifications: true });
     setAvailableModes([]);
     setSelectedMaps([]);
     setShowMapSelector(false);
@@ -315,7 +317,8 @@ export function CreateMatchModal({
         rules: formData.rules,
         rounds: (formData.maps || []).length || 1, // Use map count as rounds
         maps: formData.maps || [],
-        eventImageUrl: formData.eventImageUrl || null
+        eventImageUrl: formData.eventImageUrl || null,
+        playerNotifications: formData.playerNotifications ?? true
       };
 
       const response = await fetch('/api/matches', {
@@ -475,6 +478,13 @@ export function CreateMatchModal({
               { value: 'casual', label: 'Casual' },
               { value: 'competitive', label: 'Competitive' }
             ]}
+          />
+
+          <Checkbox
+            label="Player Notifications"
+            description="Send Discord DMs to registered players before match starts"
+            checked={formData.playerNotifications ?? true}
+            onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
           />
 
           <Box>
