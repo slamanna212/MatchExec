@@ -17,7 +17,7 @@ export async function GET() {
         g.supports_all_modes as supportsAllModes,
         g.icon_url as iconUrl,
         g.cover_url as coverUrl,
-        COUNT(DISTINCT gm.id) as mapCount,
+        COUNT(DISTINCT gm.name) as mapCount,
         COUNT(DISTINCT gmo.id) as modeCount
       FROM games g
       LEFT JOIN game_maps gm ON g.id = gm.game_id
