@@ -17,7 +17,8 @@ import {
   IconSettings,
   IconCode,
   IconSun,
-  IconMoon
+  IconMoon,
+  IconHistory
 } from '@tabler/icons-react'
 
 interface NavigationProps {
@@ -31,7 +32,15 @@ export function Navigation({ children }: NavigationProps) {
   const pathname = usePathname()
 
   const navigationItems = [
-    { label: 'Matches', href: '/', icon: IconTournament },
+    { 
+      label: 'Matches', 
+      href: '/', 
+      icon: IconTournament,
+      initiallyOpened: true,
+      links: [
+        { label: 'History', href: '/matches/history', icon: IconHistory }
+      ]
+    },
     { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
     { label: 'Settings', href: '/settings', icon: IconSettings },
     { label: 'Dev', href: '/dev', icon: IconCode },
@@ -85,12 +94,28 @@ export function Navigation({ children }: NavigationProps) {
               label={item.label}
               leftSection={<item.icon size="1rem" />}
               active={pathname === item.href}
+              opened={item.initiallyOpened}
               onClick={(event) => {
                 event.preventDefault()
                 router.push(item.href)
                 toggle() // Close mobile menu after navigation
               }}
-            />
+            >
+              {item.links?.map((link) => (
+                <NavLink
+                  key={link.href}
+                  href={link.href}
+                  label={link.label}
+                  leftSection={<link.icon size="1rem" />}
+                  active={pathname === link.href}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    router.push(link.href)
+                    toggle() // Close mobile menu after navigation
+                  }}
+                />
+              ))}
+            </NavLink>
           ))}
         </AppShell.Section>
       </AppShell.Navbar>

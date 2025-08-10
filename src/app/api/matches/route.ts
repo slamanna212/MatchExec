@@ -3,15 +3,31 @@ import { getDbInstance } from '../../../lib/database-init';
 import { MatchDbRow, GameDbRow } from '@/shared/types';
 
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+    
     const db = await getDbInstance();
-    const matches = await db.all<MatchDbRow>(` 
+    
+    let query = `
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
-      ORDER BY m.created_at DESC
-    `);
+    `;
+    
+    const params: string[] = [];
+    
+    if (status === 'complete') {
+      query += ` WHERE m.status = 'complete'`;
+    } else {
+      // Default behavior: show all matches EXCEPT completed ones
+      query += ` WHERE m.status != 'complete'`;
+    }
+    
+    query += ` ORDER BY m.created_at DESC`;
+    
+    const matches = await db.all<MatchDbRow>(query, params);
     
     // Parse maps JSON for each match
     const parsedMatches = matches.map(match => ({

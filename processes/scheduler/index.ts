@@ -94,29 +94,64 @@ class MatchExecScheduler {
   }
 
   private async checkMatchStartTimes() {
-    // Check for matches that should start
+    // Check for matches that should transition from 'assign' to 'battle' at their scheduled start time
     const now = new Date();
-    const matches = await this.db.all(
+    const matchesToStart = await this.db.all(
       `SELECT * FROM matches 
-       WHERE status = 'registration' 
+       WHERE status = 'assign' 
        AND start_date <= ? 
        AND start_date IS NOT NULL`,
       [now.toISOString()]
     );
 
-    for (const match of matches) {
-      console.log(`🏆 Starting match: ${match.name}`);
+    for (const match of matchesToStart) {
+      console.log(`🏆 Starting battle phase for match: ${match.name}`);
       await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        ['ongoing', match.id]
+        ['battle', match.id]
       );
       
       // Queue Discord notification for match starting
       await this.queueMatchStartNotification(match.id);
     }
 
+    // Check for matches that should be auto-completed (battle phase lasting too long)
+    await this.handleMatchCompletion();
+
     // Also handle match reminders during the same check
     await this.handleMatchReminders();
+  }
+
+  private async handleMatchCompletion() {
+    // Auto-complete matches that have been in battle phase for too long
+    // This prevents matches from staying in battle indefinitely
+    const autoCompleteThresholdHours = 24; // Matches in battle for more than 24 hours will be auto-completed
+    const thresholdTime = new Date();
+    thresholdTime.setHours(thresholdTime.getHours() - autoCompleteThresholdHours);
+
+    const matchesToComplete = await this.db.all(
+      `SELECT * FROM matches 
+       WHERE status = 'battle' 
+       AND updated_at < ?`,
+      [thresholdTime.toISOString()]
+    );
+
+    for (const match of matchesToComplete) {
+      console.log(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
+      await this.db.run(
+        'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['complete', match.id]
+      );
+      
+      // You could add additional logic here like:
+      // - Queue Discord notification for match completion
+      // - Generate match results/reports
+      // - Clean up related data
+    }
+
+    if (matchesToComplete.length > 0) {
+      console.log(`✅ Auto-completed ${matchesToComplete.length} matches that exceeded battle phase time limit`);
+    }
   }
 
   private async handleMatchReminders() {
@@ -268,7 +303,7 @@ class MatchExecScheduler {
 
     const result = await this.db.run(
       `DELETE FROM matches 
-       WHERE status = 'completed' 
+       WHERE status = 'complete' 
        AND updated_at < ?`,
       [thirtyDaysAgo.toISOString()]
     );
@@ -286,15 +321,17 @@ class MatchExecScheduler {
     const stats = await this.db.get(
       `SELECT 
          COUNT(*) as total_matches,
-         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_matches,
-         COUNT(CASE WHEN status = 'ongoing' THEN 1 END) as ongoing_matches,
-         COUNT(CASE WHEN status = 'registration' THEN 1 END) as registration_matches
+         COUNT(CASE WHEN status = 'complete' THEN 1 END) as complete_matches,
+         COUNT(CASE WHEN status = 'battle' THEN 1 END) as battle_matches,
+         COUNT(CASE WHEN status = 'gather' THEN 1 END) as gather_matches,
+         COUNT(CASE WHEN status = 'assign' THEN 1 END) as assign_matches,
+         COUNT(CASE WHEN status = 'created' THEN 1 END) as created_matches
        FROM matches 
        WHERE created_at >= ?`,
       [weekAgo.toISOString()]
     );
 
-    console.log(`📊 Weekly Report: ${stats.total_matches} total, ${stats.completed_matches} completed, ${stats.ongoing_matches} ongoing, ${stats.registration_matches} in registration`);
+    console.log(`📊 Weekly Report: ${stats.total_matches} total, ${stats.complete_matches} completed, ${stats.battle_matches} in battle, ${stats.gather_matches} gathering, ${stats.assign_matches} assigning, ${stats.created_matches} created`);
     // TODO: Store or send report somewhere
   }
 
