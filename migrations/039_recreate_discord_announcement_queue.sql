@@ -1,0 +1,38 @@
+-- Recreate discord_announcement_queue table without UNIQUE constraint on match_id
+-- This allows multiple timed announcements per match
+
+-- Create new table with the desired structure
+CREATE TABLE discord_announcement_queue_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  match_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'posted', 'failed', 'completed')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  posted_at DATETIME,
+  error_message TEXT,
+  announcement_type TEXT DEFAULT 'standard',
+  announcement_data TEXT,
+  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+);
+
+-- Copy existing data if table exists (check if columns exist to handle partial migrations)
+INSERT INTO discord_announcement_queue_new (id, match_id, status, created_at, posted_at, error_message, announcement_type, announcement_data)
+SELECT id, match_id, status, created_at, posted_at, error_message,
+       CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('discord_announcement_queue') WHERE name = 'announcement_type') > 0 
+            THEN COALESCE(announcement_type, 'standard') 
+            ELSE 'standard' END as announcement_type,
+       CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('discord_announcement_queue') WHERE name = 'announcement_data') > 0 
+            THEN announcement_data 
+            ELSE NULL END as announcement_data
+FROM discord_announcement_queue
+WHERE EXISTS (SELECT name FROM sqlite_master WHERE type='table' AND name='discord_announcement_queue');
+
+-- Drop old table if it exists
+DROP TABLE IF EXISTS discord_announcement_queue;
+
+-- Rename new table
+ALTER TABLE discord_announcement_queue_new RENAME TO discord_announcement_queue;
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_discord_announcements_status ON discord_announcement_queue(status);
+CREATE INDEX IF NOT EXISTS idx_discord_announcements_created_at ON discord_announcement_queue(created_at);
+CREATE INDEX IF NOT EXISTS idx_discord_announcements_match_id ON discord_announcement_queue(match_id);

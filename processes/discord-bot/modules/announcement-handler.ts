@@ -418,6 +418,179 @@ export class AnnouncementHandler {
     }
   }
 
+  async postTimedReminder(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    game_name?: string;
+    start_date: string;
+    event_image_url?: string;
+    _timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' };
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for reminders (not announcements)
+    const reminderChannels = await this.getChannelsForNotificationType('reminders');
+    
+    if (reminderChannels.length === 0) {
+      console.warn('⚠️ No channels configured for reminders');
+      return false;
+    }
+
+    try {
+      // Create reminder embed
+      const { embed, attachment } = await this.createTimedReminderEmbed(eventData);
+
+      // No mention text for reminders - they're just notifications
+      const messageOptions: any = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured reminder channels
+      for (const channelConfig of reminderChannels) {
+        try {
+          const reminderChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (reminderChannel?.isTextBased() && 'send' in reminderChannel) {
+            // Send reminder
+            await reminderChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send timed reminder to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send timed reminder to any channels');
+        return false;
+      }
+
+      console.log(`✅ Timed reminder posted to ${successCount} channel(s) for: ${eventData.name}`);
+      return { success: true, successCount };
+
+    } catch (error) {
+      console.error('❌ Error posting timed reminder:', error);
+      return false;
+    }
+  }
+
+  private async createTimedReminderEmbed(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    game_name?: string;
+    start_date: string;
+    event_image_url?: string;
+    _timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' };
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data for color if not provided
+    let gameName = eventData.game_name || eventData.game_id;
+    let gameColor = 0x3498db; // Blue color for reminders
+    
+    if (this.db && !eventData.game_name) {
+      try {
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [eventData.game_id]);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching game data for reminder:', error);
+      }
+    }
+
+    // Format the time away message
+    const { value, unit } = eventData._timingInfo;
+    const timeAwayText = `${value} ${unit}${value > 1 ? '' : unit === 'hours' ? '' : ''}`;
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`🔔 ${eventData.name}`)
+      .setDescription(`Match starting in **${timeAwayText}**!`)
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Match Reminder' });
+
+    // Add game info
+    embed.addFields({ name: '🎯 Game', value: gameName, inline: true });
+
+    // Add match time with Discord's time formatting
+    if (eventData.start_date) {
+      const startTime = new Date(eventData.start_date);
+      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+      
+      embed.addFields(
+        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+        { name: '⏰ Starts', value: `<t:${unixTimestamp}:R>`, inline: true }
+      );
+    }
+
+    // Try to find the original announcement message to link to
+    if (this.db) {
+      try {
+        const originalMessage = await this.db.get<{
+          message_id: string;
+          channel_id: string;
+        }>(`
+          SELECT message_id, channel_id 
+          FROM discord_match_messages 
+          WHERE match_id = ? AND message_type = 'announcement'
+          LIMIT 1
+        `, [eventData.id]);
+
+        if (originalMessage) {
+          const messageLink = `https://discord.com/channels/${this.settings?.guild_id}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+          embed.addFields({ 
+            name: '📋 Match Details', 
+            value: `[View Original Announcement](${messageLink})`, 
+            inline: false 
+          });
+        }
+      } catch (error) {
+        console.error('Error finding original announcement message:', error);
+      }
+    }
+
+    let attachment: AttachmentBuilder | undefined;
+
+    // Add event image if provided
+    if (eventData.event_image_url && eventData.event_image_url.trim()) {
+      try {
+        const imagePath = path.join(process.cwd(), 'public', eventData.event_image_url.replace(/^\//, ''));
+        
+        if (fs.existsSync(imagePath)) {
+          attachment = new AttachmentBuilder(imagePath, {
+            name: `reminder_image.${path.extname(imagePath).slice(1)}`
+          });
+          
+          embed.setImage(`attachment://reminder_image.${path.extname(imagePath).slice(1)}`);
+          console.log(`✅ Added reminder image attachment: ${eventData.event_image_url}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error handling reminder image ${eventData.event_image_url}:`, error);
+      }
+    }
+
+    return { embed, attachment };
+  }
+
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
   }

@@ -120,6 +120,9 @@ class MatchExecScheduler {
 
     // Also handle match reminders during the same check
     await this.handleMatchReminders();
+
+    // Handle timed announcements
+    await this.handleTimedAnnouncements();
   }
 
   private async handleMatchCompletion() {
@@ -345,6 +348,89 @@ class MatchExecScheduler {
       return true;
     } catch (error) {
       console.error('❌ Error queuing Discord match start notification:', error);
+      return false;
+    }
+  }
+
+  private async handleTimedAnnouncements() {
+    try {
+      // Get matches that have announcements configured
+      const matchesWithAnnouncements = await this.db.all(`
+        SELECT id, name, start_date, announcements
+        FROM matches 
+        WHERE announcements IS NOT NULL 
+        AND start_date IS NOT NULL
+        AND status IN ('created', 'gather', 'assign')
+        AND start_date > datetime('now')
+      `);
+
+      for (const match of matchesWithAnnouncements) {
+        try {
+          const announcements = JSON.parse(match.announcements);
+          const matchStartTime = new Date(match.start_date);
+          
+          for (const announcement of announcements) {
+            // Calculate when this announcement should be sent
+            const { value, unit } = announcement;
+            let millisecondsOffset = 0;
+            
+            switch (unit) {
+              case 'minutes':
+                millisecondsOffset = value * 60 * 1000;
+                break;
+              case 'hours':
+                millisecondsOffset = value * 60 * 60 * 1000;
+                break;
+              case 'days':
+                millisecondsOffset = value * 24 * 60 * 60 * 1000;
+                break;
+            }
+            
+            const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
+            const now = new Date();
+            
+            // Check if announcement should be sent now (within the last check interval)
+            const checkIntervalMs = 60 * 1000; // 1 minute buffer
+            const shouldSendNow = announcementTime <= now && 
+                                  announcementTime >= new Date(now.getTime() - checkIntervalMs);
+            
+            if (shouldSendNow) {
+              // Check if we already sent this announcement
+              const existingAnnouncement = await this.db.get(`
+                SELECT id FROM discord_announcement_queue 
+                WHERE match_id = ? AND announcement_type = 'timed'
+                AND announcement_data = ?
+                AND status NOT IN ('failed', 'completed')
+              `, [match.id, JSON.stringify(announcement)]);
+              
+              if (!existingAnnouncement) {
+                console.log(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
+                await this.queueTimedAnnouncement(match.id, announcement);
+              }
+            }
+          }
+        } catch (parseError) {
+          console.error(`❌ Error parsing announcements for match ${match.id}:`, parseError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling timed announcements:', error);
+    }
+  }
+
+  private async queueTimedAnnouncement(matchId: string, announcement: any): Promise<boolean> {
+    try {
+      // Let SQLite auto-generate the ID since it's AUTOINCREMENT
+      await this.db.run(`
+        INSERT INTO discord_announcement_queue (
+          match_id, status, announcement_type, announcement_data
+        ) VALUES (?, 'pending', 'timed', ?)
+      `, [matchId, JSON.stringify(announcement)]);
+      
+      console.log(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before)`);
+      return true;
+    } catch (error) {
+      console.error('❌ Error queuing timed announcement:', error);
       return false;
     }
   }

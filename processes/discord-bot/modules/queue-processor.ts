@@ -5,7 +5,10 @@ import { DiscordSettings } from '../../../shared/types';
 // Interfaces for different queue types
 interface QueuedAnnouncement {
   id: string;
-  data: string;
+  match_id?: string;
+  data?: string;
+  announcement_type?: string;
+  announcement_data?: string;
   created_at: string;
 }
 
@@ -44,7 +47,7 @@ export class QueueProcessor {
 
     try {
       const announcements = await this.db.all<QueuedAnnouncement>(`
-        SELECT id, data, created_at
+        SELECT id, match_id, data, announcement_type, announcement_data, created_at
         FROM discord_announcement_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -53,13 +56,73 @@ export class QueueProcessor {
 
       for (const announcement of announcements) {
         try {
-          const eventData = JSON.parse(announcement.data);
+          let eventData;
           
-          const result = await this.announcementHandler.postEventAnnouncement(eventData);
+          if (announcement.announcement_type === 'timed' && announcement.match_id) {
+            // For timed announcements, fetch match data from database
+            const match = await this.db.get(`
+              SELECT m.*, g.name as game_name, g.icon_url as game_icon
+              FROM matches m
+              LEFT JOIN games g ON m.game_id = g.id  
+              WHERE m.id = ?
+            `, [announcement.match_id]);
+            
+            if (!match) {
+              console.error(`❌ Match not found for timed announcement: ${announcement.match_id}`);
+              await this.db.run(`
+                UPDATE discord_announcement_queue 
+                SET status = 'failed', posted_at = datetime('now')
+                WHERE id = ?
+              `, [announcement.id]);
+              continue;
+            }
+            
+            // Parse maps if they exist
+            let maps = [];
+            if (match.maps) {
+              try {
+                maps = JSON.parse(match.maps);
+              } catch (e) {
+                console.warn('Could not parse maps for match:', match.id);
+              }
+            }
+            
+            // Convert database format to announcement format
+            eventData = {
+              id: match.id,
+              name: match.name,
+              description: match.description,
+              game_id: match.game_id,
+              game_name: match.game_name,
+              game_icon: match.game_icon,
+              start_date: match.start_date,
+              livestream_link: match.livestream_link,
+              rules: match.rules,
+              maps: maps,
+              event_image_url: match.event_image_url,
+              max_participants: match.max_participants
+            };
+            
+            // Add timing info to the event data for display
+            const timingData = JSON.parse(announcement.announcement_data || '{}');
+            eventData._timingInfo = timingData;
+            
+          } else {
+            // Standard announcement with embedded data
+            eventData = JSON.parse(announcement.data || '{}');
+          }
+          
+          // Use different posting methods based on announcement type
+          let result;
+          if (announcement.announcement_type === 'timed') {
+            result = await this.announcementHandler.postTimedReminder(eventData);
+          } else {
+            result = await this.announcementHandler.postEventAnnouncement(eventData);
+          }
           
           if (result && result.success) {
-            // Store Discord message information for later cleanup if needed
-            if (this.db && result.mainMessage) {
+            // Store Discord message information for later cleanup if needed (only for full announcements)
+            if (this.db && result.mainMessage && announcement.announcement_type !== 'timed') {
               try {
                 const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                 
@@ -95,7 +158,7 @@ export class QueueProcessor {
             // Mark as completed
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'completed', processed_at = datetime('now')
+              SET status = 'completed', posted_at = datetime('now')
               WHERE id = ?
             `, [announcement.id]);
 
@@ -104,7 +167,7 @@ export class QueueProcessor {
             // Mark as failed
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'failed', processed_at = datetime('now')
+              SET status = 'failed', posted_at = datetime('now')
               WHERE id = ?
             `, [announcement.id]);
 
@@ -116,7 +179,7 @@ export class QueueProcessor {
           // Mark as failed
           await this.db.run(`
             UPDATE discord_announcement_queue 
-            SET status = 'failed', processed_at = datetime('now')
+            SET status = 'failed', posted_at = datetime('now')
             WHERE id = ?
           `, [announcement.id]);
         }

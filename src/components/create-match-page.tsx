@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress } from '@mantine/core';
+import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress, NumberInput } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft } from '@tabler/icons-react';
 import { GameMap } from '@/shared/types';
 
@@ -34,6 +34,13 @@ interface MatchFormData {
   eventImageUrl?: string;
   playerNotifications?: boolean;
   announcementVoiceChannel?: string;
+  announcements?: AnnouncementTime[];
+}
+
+interface AnnouncementTime {
+  id: string;
+  value: number;
+  unit: 'minutes' | 'hours' | 'days';
 }
 
 interface GameMode {
@@ -64,7 +71,8 @@ export function CreateMatchPage() {
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [formData, setFormData] = useState<Partial<MatchFormData>>({
     rules: 'casual',
-    playerNotifications: true
+    playerNotifications: true,
+    announcements: []
   });
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [availableModes, setAvailableModes] = useState<GameMode[]>([]);
@@ -143,7 +151,8 @@ export function CreateMatchPage() {
     switch (currentStep) {
       case 1: return 'Select Game';
       case 2: return 'Event Information';
-      case 3: return 'Maps & Configuration';
+      case 3: return 'Announcements';
+      case 4: return 'Maps & Configuration';
       default: return 'Create Match';
     }
   };
@@ -177,49 +186,95 @@ export function CreateMatchPage() {
 
   const handleEventInfoNext = async () => {
     if (formData.name && formData.date && formData.time && formData.gameId) {
-      setLoadingMaps(true);
-      try {
-        // Get the selected game to check if it supports all modes
-        const selectedGame = games.find(game => game.id === formData.gameId);
-        const supportsAllModes = selectedGame?.supportsAllModes || false;
-        setCurrentGameSupportsAllModes(supportsAllModes);
-
-        // Fetch modes
-        const modesResponse = await fetch(`/api/games/${formData.gameId}/modes`);
-        if (modesResponse.ok) {
-          const modes = await modesResponse.json();
-          setAvailableModes(modes);
-        }
-
-        // If game supports all modes, fetch all maps at once
-        if (supportsAllModes) {
-          const mapsResponse = await fetch(`/api/games/${formData.gameId}/maps`);
-          if (mapsResponse.ok) {
-            const maps = await mapsResponse.json();
-            // For flexible games, deduplicate maps by base name
-            const uniqueMaps: GameMapWithMode[] = [];
-            const seenMapNames = new Set<string>();
-            
-            for (const map of maps) {
-              if (!seenMapNames.has(map.name)) {
-                uniqueMaps.push(map);
-                seenMapNames.add(map.name);
-              }
-            }
-            setAllMaps(uniqueMaps);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching game data:', error);
-      } finally {
-        setLoadingMaps(false);
-      }
       navigateToStep(3);
     }
   };
 
+  const handleAnnouncementsNext = async () => {
+    setLoadingMaps(true);
+    try {
+      // Get the selected game to check if it supports all modes
+      const selectedGame = games.find(game => game.id === formData.gameId);
+      const supportsAllModes = selectedGame?.supportsAllModes || false;
+      setCurrentGameSupportsAllModes(supportsAllModes);
+
+      // Fetch modes
+      const modesResponse = await fetch(`/api/games/${formData.gameId}/modes`);
+      if (modesResponse.ok) {
+        const modes = await modesResponse.json();
+        setAvailableModes(modes);
+      }
+
+      // If game supports all modes, fetch all maps at once
+      if (supportsAllModes) {
+        const mapsResponse = await fetch(`/api/games/${formData.gameId}/maps`);
+        if (mapsResponse.ok) {
+          const maps = await mapsResponse.json();
+          // For flexible games, deduplicate maps by base name
+          const uniqueMaps: GameMapWithMode[] = [];
+          const seenMapNames = new Set<string>();
+          
+          for (const map of maps) {
+            if (!seenMapNames.has(map.name)) {
+              uniqueMaps.push(map);
+              seenMapNames.add(map.name);
+            }
+          }
+          setAllMaps(uniqueMaps);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching game data:', error);
+    } finally {
+      setLoadingMaps(false);
+    }
+    navigateToStep(4);
+  };
+
   const updateFormData = (field: keyof MatchFormData, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const sortAnnouncements = (announcements: AnnouncementTime[]) => {
+    return [...announcements].sort((a, b) => {
+      // Convert to minutes for comparison
+      const getMinutes = (announcement: AnnouncementTime) => {
+        switch (announcement.unit) {
+          case 'minutes': return announcement.value;
+          case 'hours': return announcement.value * 60;
+          case 'days': return announcement.value * 24 * 60;
+          default: return 0;
+        }
+      };
+      
+      return getMinutes(a) - getMinutes(b);
+    });
+  };
+
+  const addAnnouncement = () => {
+    const newAnnouncement: AnnouncementTime = {
+      id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+      value: 1,
+      unit: 'hours'
+    };
+    const currentAnnouncements = formData.announcements || [];
+    const updatedAnnouncements = sortAnnouncements([...currentAnnouncements, newAnnouncement]);
+    updateFormData('announcements', updatedAnnouncements);
+  };
+
+  const updateAnnouncement = (id: string, field: keyof AnnouncementTime, value: unknown) => {
+    const currentAnnouncements = formData.announcements || [];
+    const updatedAnnouncements = currentAnnouncements.map(announcement => 
+      announcement.id === id ? { ...announcement, [field]: value } : announcement
+    );
+    const sortedAnnouncements = sortAnnouncements(updatedAnnouncements);
+    updateFormData('announcements', sortedAnnouncements);
+  };
+
+  const removeAnnouncement = (id: string) => {
+    const currentAnnouncements = formData.announcements || [];
+    const updatedAnnouncements = currentAnnouncements.filter(announcement => announcement.id !== id);
+    updateFormData('announcements', updatedAnnouncements);
   };
 
   const handleImageUpload = async (file: File | null) => {
@@ -379,7 +434,8 @@ export function CreateMatchPage() {
         maps: formData.maps || [],
         eventImageUrl: formData.eventImageUrl || null,
         playerNotifications: formData.playerNotifications ?? true,
-        announcementVoiceChannel: formData.announcementVoiceChannel || null
+        announcementVoiceChannel: formData.announcementVoiceChannel || null,
+        announcements: formData.announcements || []
       };
 
       const response = await fetch('/api/matches', {
@@ -425,7 +481,7 @@ export function CreateMatchPage() {
     }
   };
 
-  const progressValue = (currentStep / 3) * 100;
+  const progressValue = (currentStep / 4) * 100;
 
   return (
     <Container size="md" py={{ base: "md", sm: "xl" }} px={{ base: "md", sm: "xl" }}>
@@ -458,7 +514,7 @@ export function CreateMatchPage() {
         <Box>
           <Group justify="space-between" mb="xs">
             <Text size={{ base: "sm", sm: "sm" }} fw={500}>{getStepTitle()}</Text>
-            <Text size={{ base: "xs", sm: "sm" }} c="dimmed">Step {currentStep} of 3</Text>
+            <Text size={{ base: "xs", sm: "sm" }} c="dimmed">Step {currentStep} of 4</Text>
           </Group>
           <Progress value={progressValue} size={{ base: "xs", sm: "sm" }} />
         </Box>
@@ -638,6 +694,117 @@ export function CreateMatchPage() {
         )}
 
         {currentStep === 3 && (
+          <Stack>
+            <Text mb="md">Configure event announcements:</Text>
+            
+            <Text size="sm" c="dimmed" mb="md">
+              Set up notifications to announce your event before it starts. You can create multiple announcements with different timing.
+            </Text>
+
+            {formData.announcements && formData.announcements.length > 0 && (
+              <Stack gap="sm">
+                <Text size="sm" fw={500}>Scheduled Announcements:</Text>
+                {formData.announcements.map((announcement) => (
+                  <Card key={announcement.id} withBorder padding="sm">
+                    <Group justify="space-between" align="center">
+                      <Group align="center" gap="xs">
+                        <NumberInput
+                          size="sm"
+                          placeholder="Time"
+                          value={announcement.value}
+                          onChange={(value) => updateAnnouncement(announcement.id, 'value', Number(value) || 1)}
+                          min={1}
+                          max={999}
+                          style={{ width: 80 }}
+                        />
+                        <Select
+                          size="sm"
+                          data={[
+                            { value: 'minutes', label: 'minutes' },
+                            { value: 'hours', label: 'hours' },
+                            { value: 'days', label: 'days' }
+                          ]}
+                          value={announcement.unit}
+                          onChange={(value) => updateAnnouncement(announcement.id, 'unit', value)}
+                          style={{ width: 100 }}
+                        />
+                        <Text size="sm" c="dimmed">before event</Text>
+                      </Group>
+                      <ActionIcon
+                        color="red"
+                        variant="light"
+                        onClick={() => removeAnnouncement(announcement.id)}
+                      >
+                        <IconX size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+
+            <Card
+              withBorder
+              padding="md"
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={addAnnouncement}
+              style={{ 
+                borderStyle: 'dashed',
+                borderColor: 'var(--mantine-color-default-border)',
+                backgroundColor: 'var(--mantine-color-body)'
+              }}
+            >
+              <Stack align="center" justify="center" style={{ minHeight: 60 }}>
+                <ActionIcon size="lg" variant="light">
+                  <IconPlus />
+                </ActionIcon>
+                <Text size="sm" c="dimmed">Add Announcement</Text>
+              </Stack>
+            </Card>
+
+            {formData.announcements && formData.announcements.length > 0 && (
+              <Card withBorder padding="md">
+                <Text size="sm" fw={500} mb="xs">Announcement Preview</Text>
+                <Text size="xs" c="dimmed" mb="sm">This is how your announcement will appear:</Text>
+                
+                <Card withBorder padding="sm">
+                  <Group align="flex-start" gap="sm">
+                    {formData.eventImageUrl && (
+                      <Image
+                        src={formData.eventImageUrl}
+                        alt="Event"
+                        width={60}
+                        height={60}
+                        radius="md"
+                        fit="cover"
+                      />
+                    )}
+                    <Stack gap="xs" style={{ flex: 1 }}>
+                      <Text fw={600} size="sm">🎮 {formData.name}</Text>
+                      {formData.description && (
+                        <Text size="xs" c="dimmed" lineClamp={2}>{formData.description}</Text>
+                      )}
+                      <Text size="xs" c="blue" style={{ textDecoration: 'underline' }}>
+                        View Event Details →
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Card>
+              </Card>
+            )}
+            
+            <Group justify="space-between" mt="md" gap={{ base: "xs", sm: "md" }}>
+              <Button variant="outline" onClick={handleBack}>
+                Back
+              </Button>
+              <Button onClick={handleAnnouncementsNext}>
+                Next
+              </Button>
+            </Group>
+          </Stack>
+        )}
+
+        {currentStep === 4 && (
           <Stack>
             <Text mb="md">Maps Configuration:</Text>
             
