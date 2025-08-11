@@ -64,7 +64,7 @@ export default function SettingsPage() {
   const [announcerMessage, setAnnouncerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
-  const [setVoiceChannels] = useState<VoiceChannel[]>([]);
+  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
 
   // Helper functions for player reminder conversion

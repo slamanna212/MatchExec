@@ -47,18 +47,29 @@ export async function PUT(request: NextRequest) {
       voice_announcements_enabled
     } = body;
 
-    // Update announcer settings in the Discord settings table
-    // TODO: Move to dedicated announcer settings table if needed
-    await db.run(`
-      UPDATE discord_settings SET
-        announcer_voice = COALESCE(?, announcer_voice),
-        voice_announcements_enabled = COALESCE(?, voice_announcements_enabled),
-        updated_at = datetime('now')
-      WHERE id = 1
-    `, [
-      announcer_voice,
-      voice_announcements_enabled ? 1 : 0
-    ]);
+    // Build dynamic UPDATE query based on provided fields
+    const updates = [];
+    const params = [];
+    
+    if (announcer_voice !== undefined) {
+      updates.push('announcer_voice = ?');
+      params.push(announcer_voice);
+    }
+    
+    if (voice_announcements_enabled !== undefined) {
+      updates.push('voice_announcements_enabled = ?');
+      params.push(voice_announcements_enabled ? 1 : 0);
+    }
+    
+    if (updates.length > 0) {
+      updates.push('updated_at = datetime(\'now\')');
+      
+      await db.run(`
+        UPDATE discord_settings SET
+          ${updates.join(', ')}
+        WHERE id = 1
+      `, params);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
