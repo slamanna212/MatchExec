@@ -202,7 +202,7 @@ MatchCard.displayName = 'MatchCard';
 export function MatchDashboard() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
-  const [setGames] = useState<GameWithIcon[]>([]);
+  const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
