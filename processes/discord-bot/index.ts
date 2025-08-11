@@ -2666,40 +2666,14 @@ class MatchExecBot {
         this.audioPlayer.removeAllListeners(AudioPlayerStatus.Idle);
         this.audioPlayer.removeAllListeners('error');
 
-        const onFinish = () => {
-          this.audioPlayer.removeListener(AudioPlayerStatus.Idle, onFinish);
-          this.audioPlayer.removeListener('error', onError);
+        this.audioPlayer.once(AudioPlayerStatus.Idle, () => {
           console.log(`✅ Voice announcement finished playing in channel ${channelId}`);
           resolve(true);
-        };
-
-        const onError = (error: Error) => {
-          this.audioPlayer.removeListener(AudioPlayerStatus.Idle, onFinish);
-          this.audioPlayer.removeListener('error', onError);
-          console.error(`❌ Error playing voice announcement:`, error);
-          resolve(false);
-        };
-
-        // Add timeout to prevent hanging forever
-        const timeout = setTimeout(() => {
-          this.audioPlayer.removeListener(AudioPlayerStatus.Idle, onFinish);
-          this.audioPlayer.removeListener('error', onError);
-          console.log(`⏰ Voice announcement timed out in channel ${channelId}, assuming success`);
-          resolve(true);
-        }, 15000); // 15 second timeout
-
-        const cleanup = () => {
-          clearTimeout(timeout);
-        };
-
-        this.audioPlayer.once(AudioPlayerStatus.Idle, () => {
-          cleanup();
-          onFinish();
         });
         
         this.audioPlayer.once('error', (error) => {
-          cleanup();
-          onError(error);
+          console.error(`❌ Error playing voice announcement:`, error);
+          resolve(false);
         });
       });
 
