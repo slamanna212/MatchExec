@@ -126,6 +126,45 @@ class MatchExecBot {
     });
   }
 
+  async testVoiceLineForUser(userId: string, voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
+    try {
+      if (!this.isReady) {
+        return { success: false, message: 'Discord bot is not ready' };
+      }
+
+      if (!this.settings?.guild_id) {
+        return { success: false, message: 'Guild ID not configured' };
+      }
+
+      // Find the user and their voice channel
+      const guild = await this.client.guilds.fetch(this.settings.guild_id);
+      const member = await guild.members.fetch(userId);
+      
+      if (!member.voice.channel) {
+        return { success: false, message: `User ${userId} is not in any voice channel` };
+      }
+
+      const channelId = member.voice.channel.id;
+
+      // Play a random voice line in their channel
+      const success = await this.playVoiceAnnouncement(channelId, 'welcome'); // Use welcome type for test
+      
+      if (success) {
+        return { 
+          success: true, 
+          message: `Successfully played voice line in user's channel`,
+          channelId: channelId
+        };
+      } else {
+        return { success: false, message: 'Failed to play voice line' };
+      }
+
+    } catch (error) {
+      console.error('Error testing voice line for user:', error);
+      return { success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+
   private async loadSettings(): Promise<DiscordSettings | null> {
     if (!this.db) {
       console.error('❌ Database not initialized');
@@ -1330,6 +1369,11 @@ class MatchExecBot {
       await this.cleanupExpiredMatches();
     }, 3600000); // 1 hour
     
+    // Process Discord bot requests every 5 seconds
+    setInterval(async () => {
+      await this.processDiscordBotRequests();
+    }, 5000);
+    
     console.log('✅ Announcement queue processor started');
     console.log('✅ Deletion queue processor started');
     console.log('✅ Status update queue processor started');
@@ -2310,6 +2354,64 @@ class MatchExecBot {
     }
   }
 
+  private async processDiscordBotRequests() {
+    if (!this.db || !this.isReady) {
+      return;
+    }
+
+    try {
+      // Get pending requests
+      const requests = await this.db.all<{
+        id: string;
+        type: string;
+        data: string;
+        created_at: string;
+      }>(`
+        SELECT id, type, data, created_at
+        FROM discord_bot_requests
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 10
+      `);
+
+      for (const request of requests) {
+        try {
+          if (request.type === 'voice_test') {
+            const data = JSON.parse(request.data);
+            const result = await this.testVoiceLineForUser(data.userId, data.voiceId);
+            
+            // Update request with result
+            await this.db.run(`
+              UPDATE discord_bot_requests
+              SET status = ?, result = ?, updated_at = datetime('now')
+              WHERE id = ?
+            `, [
+              result.success ? 'completed' : 'failed',
+              JSON.stringify(result),
+              request.id
+            ]);
+
+            console.log(`✅ Processed voice test request ${request.id}: ${result.success ? 'success' : 'failed'}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing request ${request.id}:`, error);
+          
+          // Mark request as failed
+          await this.db.run(`
+            UPDATE discord_bot_requests
+            SET status = 'failed', result = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `, [
+            JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Unknown error' }),
+            request.id
+          ]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing Discord bot requests:', error);
+    }
+  }
+
   private async cleanupExpiredMatches() {
     if (!this.db || !this.isReady) {
       return;
@@ -2593,6 +2695,7 @@ export const sendPlayerReminderDMs = async (matchId: string) => {
 export const playVoiceAnnouncement = async (channelId: string, audioType: 'welcome' | 'nextround' | 'finish', lineNumber?: number) => {
   return await bot.playVoiceAnnouncement(channelId, audioType, lineNumber);
 };
+
 
 // Handle process signals
 process.on('SIGINT', async () => {

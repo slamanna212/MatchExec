@@ -1,8 +1,36 @@
 'use client'
 
-import { Card, Text, Badge, Grid, Stack, Group } from '@mantine/core';
+import { Card, Text, Badge, Grid, Stack, Group, Button, Alert } from '@mantine/core';
+import { useState } from 'react';
 
 export default function DevPage() {
+  const [voiceTestLoading, setVoiceTestLoading] = useState(false);
+  const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleTestVoiceLines = async () => {
+    setVoiceTestLoading(true);
+    setVoiceTestMessage(null);
+
+    try {
+      const response = await fetch('/api/debug/test-voice', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setVoiceTestMessage({ type: 'success', text: result.message || 'Voice test completed successfully!' });
+      } else {
+        const error = await response.json();
+        setVoiceTestMessage({ type: 'error', text: error.error || 'Failed to test voice lines' });
+      }
+    } catch (error) {
+      console.error('Error testing voice lines:', error);
+      setVoiceTestMessage({ type: 'error', text: 'Failed to test voice lines' });
+    } finally {
+      setVoiceTestLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
@@ -34,6 +62,32 @@ export default function DevPage() {
               <Text fw={600}>Running</Text>
             </Grid.Col>
           </Grid>
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Discord</Text>
+          
+          {voiceTestMessage && (
+            <Alert color={voiceTestMessage.type === 'success' ? 'green' : 'red'} mb="md">
+              {voiceTestMessage.text}
+            </Alert>
+          )}
+
+          <Stack gap="md">
+            <div>
+              <Text size="sm" c="dimmed" mb="xs">Voice Line Testing</Text>
+              <Text size="xs" c="dimmed" mb="md">
+                Tests voice announcements by connecting to user 123546381628604420's voice channel and playing a random line from the selected voice.
+              </Text>
+              <Button 
+                onClick={handleTestVoiceLines}
+                loading={voiceTestLoading}
+                disabled={voiceTestLoading}
+              >
+                Test Voice Lines
+              </Button>
+            </div>
+          </Stack>
         </Card>
       </Stack>
     </div>
