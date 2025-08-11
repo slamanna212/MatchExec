@@ -131,13 +131,14 @@ export default function SettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, channelsResponse] = await Promise.all([
+        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, channelsResponse, announcerResponse] = await Promise.all([
           fetch('/api/settings/discord'),
           fetch('/api/settings/discord'), // We'll use the same endpoint for now
           fetch('/api/settings/scheduler'),
           fetch('/api/settings/ui'),
           fetch('/api/settings/voices'),
-          fetch('/api/channels')
+          fetch('/api/channels'),
+          fetch('/api/settings/announcer')
         ]);
         
         if (discordResponse.ok) {
@@ -167,13 +168,6 @@ export default function SettingsPage() {
           setPlayerReminderValue(playerReminderDisplay.value);
           setPlayerReminderUnit(playerReminderDisplay.unit);
 
-          // Also load announcer settings from the same data
-          const sanitizedAnnouncerData = {
-            announcer_voice: appData.announcer_voice || 'wrestling-announcer',
-            voice_announcements_enabled: appData.voice_announcements_enabled || false,
-            announcement_voice_channel: appData.announcement_voice_channel || '',
-          };
-          announcerForm.setValues(sanitizedAnnouncerData);
         }
         
         if (schedulerResponse.ok) {
@@ -197,6 +191,11 @@ export default function SettingsPage() {
         if (channelsResponse.ok) {
           const channelsData = await channelsResponse.json();
           setVoiceChannels(channelsData.filter((channel: any) => channel.channel_type === 'voice'));
+        }
+
+        if (announcerResponse.ok) {
+          const announcerData = await announcerResponse.json();
+          announcerForm.setValues(announcerData);
         }
 
       } catch (error) {
@@ -338,7 +337,7 @@ export default function SettingsPage() {
     setAnnouncerMessage(null);
     
     try {
-      const response = await fetch('/api/settings/discord', {
+      const response = await fetch('/api/settings/announcer', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),

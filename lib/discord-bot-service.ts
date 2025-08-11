@@ -14,6 +14,19 @@ export class DiscordBotService {
   constructor(private db: Database) {}
 
   async requestVoiceTest(userId: string, voiceId?: string): Promise<string> {
+    // Check if there's already a pending voice test request for this user
+    const existingRequest = await this.db.get(`
+      SELECT id FROM discord_bot_requests 
+      WHERE type = 'voice_test' AND status = 'pending' 
+      AND JSON_EXTRACT(data, '$.userId') = ?
+      LIMIT 1
+    `, [userId]);
+
+    if (existingRequest) {
+      console.log(`⏭️ Voice test already pending for user ${userId}, returning existing request`);
+      return existingRequest.id;
+    }
+
     const requestId = `voice_test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     await this.db.run(`
@@ -57,7 +70,7 @@ export class DiscordBotService {
     };
   }
 
-  async waitForRequestCompletion(requestId: string, timeoutMs: number = 10000): Promise<VoiceTestRequest> {
+  async waitForRequestCompletion(requestId: string, timeoutMs: number = 30000): Promise<VoiceTestRequest> {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeoutMs) {

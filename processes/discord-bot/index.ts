@@ -71,6 +71,7 @@ class MatchExecBot {
   private isReady = false;
   private audioPlayer = createAudioPlayer();
   private voiceConnections = new Map<string, any>(); // channelId -> connection
+  private isProcessingVoiceTest = false;
 
   constructor() {
     this.client = new Client({
@@ -96,6 +97,9 @@ class MatchExecBot {
       
       // Register slash commands
       await this.registerSlashCommands();
+      
+      // Clear any pending voice test requests from previous sessions
+      await this.clearPendingVoiceTests();
       
       // Start announcement queue processor
       this.startAnnouncementProcessor();
@@ -124,6 +128,31 @@ class MatchExecBot {
         console.log('🐛 Discord debug:', info);
       }
     });
+  }
+
+  private async clearPendingVoiceTests(): Promise<void> {
+    if (!this.db) {
+      console.warn('⚠️ Database not available for clearing pending voice tests');
+      return;
+    }
+
+    try {
+      const result = await this.db.run(`
+        UPDATE discord_bot_requests 
+        SET status = 'failed', 
+            result = '{"success": false, "message": "Cleared on bot startup"}',
+            updated_at = datetime('now')
+        WHERE type = 'voice_test' AND status IN ('pending', 'processing')
+      `);
+
+      if (result.changes && result.changes > 0) {
+        console.log(`🧹 Cleared ${result.changes} pending voice test requests from previous session`);
+      } else {
+        console.log('✅ No pending voice test requests to clear');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing pending voice tests:', error);
+    }
   }
 
   async testVoiceLineForUser(userId: string, voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
@@ -2377,10 +2406,24 @@ class MatchExecBot {
       for (const request of requests) {
         try {
           if (request.type === 'voice_test') {
+            // Skip if already processing a voice test
+            if (this.isProcessingVoiceTest) {
+              console.log(`⏭️ Skipping voice test request ${request.id} - already processing another test`);
+              continue;
+            }
+
+            // Immediately mark as processing to prevent duplicate fetching
+            await this.db.run(`
+              UPDATE discord_bot_requests
+              SET status = 'processing', updated_at = datetime('now')
+              WHERE id = ? AND status = 'pending'
+            `, [request.id]);
+
+            this.isProcessingVoiceTest = true;
             const data = JSON.parse(request.data);
             const result = await this.testVoiceLineForUser(data.userId, data.voiceId);
             
-            // Update request with result
+            // Update request with final result
             await this.db.run(`
               UPDATE discord_bot_requests
               SET status = ?, result = ?, updated_at = datetime('now')
@@ -2392,9 +2435,15 @@ class MatchExecBot {
             ]);
 
             console.log(`✅ Processed voice test request ${request.id}: ${result.success ? 'success' : 'failed'}`);
+            this.isProcessingVoiceTest = false;
           }
         } catch (error) {
           console.error(`❌ Error processing request ${request.id}:`, error);
+          
+          // Reset the flag if it was a voice test that failed
+          if (request.type === 'voice_test') {
+            this.isProcessingVoiceTest = false;
+          }
           
           // Mark request as failed
           await this.db.run(`
@@ -2613,6 +2662,10 @@ class MatchExecBot {
 
       // Wait for the audio to finish playing
       return new Promise((resolve) => {
+        // Remove any existing listeners first to prevent conflicts
+        this.audioPlayer.removeAllListeners(AudioPlayerStatus.Idle);
+        this.audioPlayer.removeAllListeners('error');
+
         const onFinish = () => {
           this.audioPlayer.removeListener(AudioPlayerStatus.Idle, onFinish);
           this.audioPlayer.removeListener('error', onError);
@@ -2627,8 +2680,27 @@ class MatchExecBot {
           resolve(false);
         };
 
-        this.audioPlayer.once(AudioPlayerStatus.Idle, onFinish);
-        this.audioPlayer.once('error', onError);
+        // Add timeout to prevent hanging forever
+        const timeout = setTimeout(() => {
+          this.audioPlayer.removeListener(AudioPlayerStatus.Idle, onFinish);
+          this.audioPlayer.removeListener('error', onError);
+          console.log(`⏰ Voice announcement timed out in channel ${channelId}, assuming success`);
+          resolve(true);
+        }, 15000); // 15 second timeout
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+        };
+
+        this.audioPlayer.once(AudioPlayerStatus.Idle, () => {
+          cleanup();
+          onFinish();
+        });
+        
+        this.audioPlayer.once('error', (error) => {
+          cleanup();
+          onError(error);
+        });
       });
 
     } catch (error) {

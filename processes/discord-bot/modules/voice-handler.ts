@@ -174,17 +174,29 @@ export class VoiceHandler {
       return new Promise((resolve) => {
         player.on(AudioPlayerStatus.Idle, () => {
           console.log(`✅ Voice announcement finished playing in channel ${channelId}`);
+          // Disconnect from voice channel after playing
+          connection.destroy();
+          this.voiceConnections.delete(channelId);
+          console.log(`🔇 Disconnected from voice channel ${channelId} after playing announcement`);
           resolve(true);
         });
 
         player.on('error', (error) => {
           console.error(`❌ Error playing voice announcement:`, error);
+          // Disconnect on error as well
+          connection.destroy();
+          this.voiceConnections.delete(channelId);
+          console.log(`🔇 Disconnected from voice channel ${channelId} due to error`);
           resolve(false);
         });
 
         // Timeout after 30 seconds
         setTimeout(() => {
           console.warn(`⏰ Voice announcement timed out in channel ${channelId}`);
+          // Disconnect on timeout
+          connection.destroy();
+          this.voiceConnections.delete(channelId);
+          console.log(`🔇 Disconnected from voice channel ${channelId} due to timeout`);
           resolve(false);
         }, 30000);
       });
