@@ -24,7 +24,8 @@ import {
   IconApps,
   IconClock,
   IconBrandDiscord,
-  IconPaint
+  IconPaint,
+  IconVolume
 } from '@tabler/icons-react'
 
 interface NavigationProps {
@@ -61,6 +62,7 @@ export function Navigation({ children }: NavigationProps) {
       links: [
         { label: 'Application', href: '/settings#application', icon: IconApps },
         { label: 'Scheduler', href: '/settings#scheduler', icon: IconClock },
+        { label: 'Announcer', href: '/settings#announcer', icon: IconVolume },
         { label: 'Discord', href: '/settings#discord', icon: IconBrandDiscord },
         { label: 'UI', href: '/settings#ui', icon: IconPaint }
       ]

@@ -2,10 +2,10 @@
 
 export const dynamic = 'force-dynamic';
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox, Select } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox, Select, Box, Grid } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import { IconSettings } from '@tabler/icons-react';
+import { IconSettings, IconVolume, IconMicrophone } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
 
 interface DiscordSettings {
@@ -20,8 +20,6 @@ interface ApplicationSettings {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
   player_reminder_minutes?: number;
-  announcer_voice?: string;
-  voice_announcements_enabled?: boolean;
 }
 
 interface SchedulerSettings {
@@ -34,6 +32,24 @@ interface UISettings {
   auto_refresh_interval_seconds: number;
 }
 
+interface AnnouncerSettings {
+  announcer_voice?: string;
+  voice_announcements_enabled?: boolean;
+  announcement_voice_channel?: string;
+}
+
+interface VoiceChannel {
+  id: string;
+  discord_channel_id: string;
+  channel_name: string;
+  channel_type: 'voice';
+}
+
+interface Voice {
+  id: string;
+  name: string;
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,9 +60,12 @@ export default function SettingsPage() {
   const [appMessage, setAppMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerMessage, setSchedulerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [announcerSaving, setAnnouncerSaving] = useState(false);
+  const [announcerMessage, setAnnouncerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
-  const [availableVoices, setAvailableVoices] = useState<Array<{id: string; name: string}>>([]);
+  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
 
   // Helper functions for player reminder conversion
   const minutesToValueUnit = (minutes: number) => {
@@ -89,8 +108,6 @@ export default function SettingsPage() {
       event_duration_minutes: 45,
       match_reminder_minutes: 10,
       player_reminder_minutes: 120,
-      announcer_voice: 'wrestling-announcer',
-      voice_announcements_enabled: false,
     },
   });
 
@@ -102,16 +119,25 @@ export default function SettingsPage() {
     },
   });
 
+  const announcerForm = useForm<AnnouncerSettings>({
+    initialValues: {
+      announcer_voice: 'wrestling-announcer',
+      voice_announcements_enabled: false,
+      announcement_voice_channel: '',
+    },
+  });
+
   useEffect(() => {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse] = await Promise.all([
+        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, channelsResponse] = await Promise.all([
           fetch('/api/settings/discord'),
           fetch('/api/settings/discord'), // We'll use the same endpoint for now
           fetch('/api/settings/scheduler'),
           fetch('/api/settings/ui'),
-          fetch('/api/settings/voices')
+          fetch('/api/settings/voices'),
+          fetch('/api/channels')
         ]);
         
         if (discordResponse.ok) {
@@ -133,8 +159,6 @@ export default function SettingsPage() {
             event_duration_minutes: appData.event_duration_minutes || 45,
             match_reminder_minutes: appData.match_reminder_minutes || 10,
             player_reminder_minutes: appData.player_reminder_minutes || 120,
-            announcer_voice: appData.announcer_voice || 'wrestling-announcer',
-            voice_announcements_enabled: appData.voice_announcements_enabled || false
           };
           appForm.setValues(sanitizedAppData);
           
@@ -142,6 +166,14 @@ export default function SettingsPage() {
           const playerReminderDisplay = minutesToValueUnit(sanitizedAppData.player_reminder_minutes);
           setPlayerReminderValue(playerReminderDisplay.value);
           setPlayerReminderUnit(playerReminderDisplay.unit);
+
+          // Also load announcer settings from the same data
+          const sanitizedAnnouncerData = {
+            announcer_voice: appData.announcer_voice || 'wrestling-announcer',
+            voice_announcements_enabled: appData.voice_announcements_enabled || false,
+            announcement_voice_channel: appData.announcement_voice_channel || '',
+          };
+          announcerForm.setValues(sanitizedAnnouncerData);
         }
         
         if (schedulerResponse.ok) {
@@ -157,10 +189,16 @@ export default function SettingsPage() {
         if (voicesResponse.ok) {
           const voicesData = await voicesResponse.json();
           setAvailableVoices(voicesData.map((voice: {id: string; name: string}) => ({
-            value: voice.id,
-            label: voice.name
+            id: voice.id,
+            name: voice.name
           })));
         }
+
+        if (channelsResponse.ok) {
+          const channelsData = await channelsResponse.json();
+          setVoiceChannels(channelsData.filter((channel: any) => channel.channel_type === 'voice'));
+        }
+
       } catch (error) {
         console.error('Error fetching settings:', error);
       } finally {
@@ -295,6 +333,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAnnouncerSubmit = async (values: AnnouncerSettings) => {
+    setAnnouncerSaving(true);
+    setAnnouncerMessage(null);
+    
+    try {
+      const response = await fetch('/api/settings/discord', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+
+      if (response.ok) {
+        setAnnouncerMessage({ type: 'success', text: 'Announcer settings saved successfully!' });
+      } else {
+        const errorData = await response.json();
+        setAnnouncerMessage({ type: 'error', text: errorData.error || 'Failed to save announcer settings.' });
+      }
+    } catch (error) {
+      console.error('Error saving announcer settings:', error);
+      setAnnouncerMessage({ type: 'error', text: 'An error occurred while saving announcer settings.' });
+    } finally {
+      setAnnouncerSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
@@ -368,21 +431,6 @@ export default function SettingsPage() {
                   </Group>
                 </Stack>
 
-                <Checkbox
-                  label="Voice Announcements"
-                  description="Enable voice announcements in Discord voice channels"
-                  {...appForm.getInputProps('voice_announcements_enabled', { type: 'checkbox' })}
-                  disabled={loading}
-                />
-
-                <Select
-                  label="Announcer Voice"
-                  description="Select the voice style for match announcements"
-                  placeholder="Select a voice"
-                  data={availableVoices}
-                  {...appForm.getInputProps('announcer_voice')}
-                  disabled={loading || !appForm.values.voice_announcements_enabled}
-                />
 
                 <Group justify="flex-end" mt="lg">
                   <Button type="submit" loading={appSaving} disabled={loading}>
@@ -403,6 +451,72 @@ export default function SettingsPage() {
               message={schedulerMessage}
             />
           </div>
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder id="announcer">
+            <Group mb="md">
+              <IconVolume size="1.2rem" />
+              <Text size="lg" fw={600}>Announcer Settings</Text>
+            </Group>
+
+            {announcerMessage && (
+              <Alert color={announcerMessage.type === 'success' ? 'green' : 'red'} mb="md">
+                {announcerMessage.text}
+              </Alert>
+            )}
+
+            <form onSubmit={announcerForm.onSubmit(handleAnnouncerSubmit)}>
+              <Stack gap="md">
+                <Checkbox
+                  label="Voice Announcements"
+                  description="Enable voice announcements in Discord voice channels"
+                  {...announcerForm.getInputProps('voice_announcements_enabled', { type: 'checkbox' })}
+                  disabled={loading}
+                />
+
+                {announcerForm.values.voice_announcements_enabled && (
+                  <>
+                    <Box>
+                      <Text size="sm" fw={500} mb="xs">Announcer Voice</Text>
+                      <Text size="xs" c="dimmed" mb="md">Select the voice style for match announcements</Text>
+                      
+                      <Grid>
+                        {availableVoices.map((voice) => (
+                          <Grid.Col span={{ base: 12, sm: 6 }} key={voice.id}>
+                            <Card 
+                              shadow="sm" 
+                              padding="md" 
+                              radius="md" 
+                              withBorder
+                              style={{ 
+                                cursor: 'pointer',
+                                backgroundColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color-light)' : undefined,
+                                borderColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color)' : undefined
+                              }}
+                              onClick={() => announcerForm.setFieldValue('announcer_voice', voice.id)}
+                            >
+                              <Group gap="sm">
+                                <IconMicrophone size="1rem" />
+                                <Text fw={announcerForm.values.announcer_voice === voice.id ? 600 : 400}>
+                                  {voice.name}
+                                </Text>
+                              </Group>
+                            </Card>
+                          </Grid.Col>
+                        ))}
+                      </Grid>
+                    </Box>
+
+                  </>
+                )}
+
+                <Group justify="flex-end" mt="lg">
+                  <Button type="submit" loading={announcerSaving} disabled={loading}>
+                    Save Announcer Settings
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
 
           <Card shadow="sm" padding="lg" radius="md" withBorder id="discord">
             <Text size="lg" fw={600} mb="md">Discord Settings</Text>

@@ -77,7 +77,6 @@ export function CreateMatchPage() {
   const [startSignups, setStartSignups] = useState(true);
   const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
-  const [voiceChannels, setVoiceChannels] = useState<Array<{id: string; name: string}>>([]);
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -93,20 +92,6 @@ export function CreateMatchPage() {
       }
     };
 
-    const fetchVoiceChannels = async () => {
-      try {
-        const response = await fetch('/api/channels');
-        if (response.ok) {
-          const channelsData = await response.json();
-          setVoiceChannels(channelsData.map((channel: {id: string; name: string}) => ({
-            value: channel.id,
-            label: channel.name
-          })));
-        }
-      } catch (error) {
-        console.error('Error fetching voice channels:', error);
-      }
-    };
 
     // Restore form data from session storage
     const savedFormData = sessionStorage.getItem('createMatchFormData');
@@ -136,7 +121,6 @@ export function CreateMatchPage() {
     }
 
     fetchGames();
-    fetchVoiceChannels();
   }, []);
 
   // Save form data to session storage whenever it changes
@@ -580,15 +564,6 @@ export function CreateMatchPage() {
               onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
             />
 
-            <Select
-              label="Announcement Voice Channel"
-              description="Discord voice channel for match announcements (optional)"
-              placeholder="Select a voice channel"
-              data={voiceChannels}
-              value={formData.announcementVoiceChannel}
-              onChange={(value) => updateFormData('announcementVoiceChannel', value)}
-              clearable
-            />
 
             <Box>
               <Text size="sm" fw={500} mb="xs">Event Image (Optional)</Text>
