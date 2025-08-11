@@ -76,7 +76,7 @@ export class DiscordBotService {
     while (Date.now() - startTime < timeoutMs) {
       const request = await this.getRequestStatus(requestId);
       
-      if (request && request.status !== 'pending') {
+      if (request && (request.status === 'completed' || request.status === 'failed')) {
         return request;
       }
       
