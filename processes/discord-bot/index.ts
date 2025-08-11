@@ -2668,11 +2668,19 @@ class MatchExecBot {
 
         this.audioPlayer.once(AudioPlayerStatus.Idle, () => {
           console.log(`✅ Voice announcement finished playing in channel ${channelId}`);
+          // Disconnect from voice channel after playing
+          connection.destroy();
+          this.voiceConnections.delete(channelId);
+          console.log(`🔇 Disconnected from voice channel ${channelId} after playing announcement`);
           resolve(true);
         });
         
         this.audioPlayer.once('error', (error) => {
           console.error(`❌ Error playing voice announcement:`, error);
+          // Disconnect on error as well
+          connection.destroy();
+          this.voiceConnections.delete(channelId);
+          console.log(`🔇 Disconnected from voice channel ${channelId} due to error`);
           resolve(false);
         });
       });
