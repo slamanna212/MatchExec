@@ -594,9 +594,6 @@ export function MatchDashboard() {
         <Card p="lg" withBorder>
           <Stack align="center">
             <Text size="md" c="dimmed">No participants yet</Text>
-            <Text size="sm" c="dimmed">
-              Participants will appear here once signups begin
-            </Text>
           </Stack>
         </Card>
       );
