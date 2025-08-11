@@ -20,7 +20,7 @@ import {
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 import Link from 'next/link';
 
-interface GameWithIcon {
+interface GameWithIconType {
   id: string;
   name: string;
   genre: string;
@@ -199,7 +199,7 @@ export function MatchHistoryDashboard() {
 
     fetchMatches();
     fetchUISettings();
-  }, []);
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -347,7 +347,7 @@ export function MatchHistoryDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames]);
+  }, [matches, mapNames, handleViewDetails]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {

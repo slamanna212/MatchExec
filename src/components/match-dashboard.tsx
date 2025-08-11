@@ -101,9 +101,7 @@ const MatchCard = memo(({
   colorScheme, 
   onViewDetails, 
   onAssignPlayers, 
-  onStatusTransition, 
   formatMapName, 
-  getStatusColor, 
   getStatusColorForProgress, 
   getNextStatusButton 
 }: MatchCardProps) => {
@@ -204,7 +202,7 @@ MatchCard.displayName = 'MatchCard';
 export function MatchDashboard() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
-  const [games, setGames] = useState<GameWithIcon[]>([]);
+  const [setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
@@ -233,7 +231,7 @@ export function MatchDashboard() {
     fetchMatches();
     fetchGames();
     fetchUISettings();
-  }, []);
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -579,7 +577,7 @@ export function MatchDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, colorScheme]);
+  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {

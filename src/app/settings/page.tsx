@@ -64,7 +64,7 @@ export default function SettingsPage() {
   const [announcerMessage, setAnnouncerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
-  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
+  const [setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
 
   // Helper functions for player reminder conversion
@@ -190,7 +190,7 @@ export default function SettingsPage() {
 
         if (channelsResponse.ok) {
           const channelsData = await channelsResponse.json();
-          setVoiceChannels(channelsData.filter((channel: any) => channel.channel_type === 'voice'));
+          setVoiceChannels(channelsData.filter((channel: { channel_type: string }) => channel.channel_type === 'voice'));
         }
 
         if (announcerResponse.ok) {
@@ -207,6 +207,7 @@ export default function SettingsPage() {
 
     fetchSettings();
   }, []); // Empty dependency array - only run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);

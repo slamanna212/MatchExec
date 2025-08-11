@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 
 export async function POST() {

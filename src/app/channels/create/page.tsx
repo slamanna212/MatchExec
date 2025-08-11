@@ -13,7 +13,6 @@ import {
   Checkbox,
   Radio,
   Alert,
-  Center
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
@@ -156,12 +155,12 @@ export default function CreateChannelPage() {
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
-              Enter the Discord channel ID. You can get this by right-clicking the channel in Discord and selecting "Copy ID".
+              Enter the Discord channel ID. You can get this by right-clicking the channel in Discord and selecting &quot;Copy ID&quot;.
             </Text>
             <TextInput
               label="Discord Channel ID"
               placeholder="123456789012345678"
-              description="Right-click the channel in Discord and select 'Copy ID'"
+              description="Right-click the channel in Discord and select &apos;Copy ID&apos;"
               {...form.getInputProps('discord_channel_id')}
               required
             />
@@ -170,7 +169,7 @@ export default function CreateChannelPage() {
                 <strong>How to get a channel ID:</strong><br />
                 1. Enable Developer Mode in Discord (Settings → Advanced → Developer Mode)<br />
                 2. Right-click the channel you want to add<br />
-                3. Select "Copy ID"
+                3. Select &quot;Copy ID&quot;
               </Text>
             </Alert>
           </Stack>

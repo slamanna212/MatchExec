@@ -77,7 +77,7 @@ export default function DevPage() {
             <div>
               <Text size="sm" c="dimmed" mb="xs">Voice Line Testing</Text>
               <Text size="xs" c="dimmed" mb="md">
-                Tests voice announcements by connecting to user 123546381628604420's voice channel and playing a random line from the selected voice.
+                Tests voice announcements by connecting to user 123546381628604420&apos;s voice channel and playing a random line from the selected voice.
               </Text>
               <Button 
                 onClick={handleTestVoiceLines}

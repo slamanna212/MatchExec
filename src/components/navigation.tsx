@@ -159,7 +159,7 @@ export function Navigation({ children }: NavigationProps) {
         <AppShell.Section grow>
           {navigationItems.map((item) => {
             // If item has links, don't handle click on parent (let it toggle)
-            const hasChildren = item.links && item.links.length > 0;
+            // const hasChildren = item.links && item.links.length > 0;
             const isSettingsPage = pathname?.startsWith('/settings');
             
             return (

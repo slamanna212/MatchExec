@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft } from '@tabler/icons-react';
-import { Match, GameMap } from '@/shared/types';
+import { GameMap } from '@/shared/types';
 
 interface GameWithIcon {
   id: string;
