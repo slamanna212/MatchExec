@@ -888,7 +888,7 @@ export function MatchDashboard() {
 
             <div>
               <Group justify="space-between" mb="md">
-                <Text size="lg" fw={600}>Reminders</Text>
+                <Text size="lg" fw={600}>Scheduled Announcements</Text>
                 <Badge size="lg" variant="light">
                   {reminders.length}
                 </Badge>
@@ -900,7 +900,7 @@ export function MatchDashboard() {
                 </Group>
               ) : reminders.length === 0 ? (
                 <Text size="sm" c="dimmed" ta="center" py="md">
-                  No reminders set for this match
+                  No scheduled announcements for this match
                 </Text>
               ) : (
                 <Stack gap="xs">
@@ -913,12 +913,15 @@ export function MatchDashboard() {
                               size="xs" 
                               variant="light" 
                               color={
+                                reminder.type === 'timed_announcement' ? 'indigo' :
                                 reminder.type === 'discord_general' ? 'blue' :
                                 reminder.type === 'discord_match' ? 'purple' :
                                 'green'
                               }
+                              style={{ textTransform: 'none' }}
                             >
-                              {reminder.type === 'discord_general' ? 'General' :
+                              {reminder.type === 'timed_announcement' ? 'Announcement' :
+                               reminder.type === 'discord_general' ? 'General' :
                                reminder.type === 'discord_match' ? 'Match' :
                                'Player DM'}
                             </Badge>
@@ -926,18 +929,30 @@ export function MatchDashboard() {
                               size="xs" 
                               variant="light"
                               color={
-                                reminder.status === 'sent' || reminder.status === 'processed' ? 'green' :
+                                reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
                                 reminder.status === 'failed' ? 'red' :
+                                reminder.status === 'scheduled' ? 'blue' :
                                 'yellow'
                               }
+                              style={{ textTransform: 'none' }}
                             >
-                              {reminder.status === 'processed' ? 'Sent' : reminder.status}
+                              {reminder.status === 'processed' || reminder.status === 'posted' ? 'Sent' : 
+                               reminder.status === 'scheduled' ? 'Scheduled' :
+                               reminder.status === 'pending' ? 'Pending' :
+                               reminder.status === 'failed' ? 'Failed' :
+                               reminder.status.charAt(0).toUpperCase() + reminder.status.slice(1).toLowerCase()}
                             </Badge>
                           </Group>
                           
+                          {reminder.type === 'timed_announcement' && reminder.description && (
+                            <Text size="sm" fw={500}>
+                              {reminder.description}
+                            </Text>
+                          )}
+                          
                           {reminder.reminder_time && reminder.reminder_time !== 'N/A' && (
                             <Text size="xs" c="dimmed">
-                              Reminder Time: {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', { 
+                              {reminder.type === 'timed_announcement' ? 'Announcement Time' : 'Reminder Time'}: {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', { 
                                 year: 'numeric', 
                                 month: 'numeric', 
                                 day: 'numeric', 

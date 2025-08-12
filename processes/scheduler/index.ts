@@ -400,7 +400,7 @@ class MatchExecScheduler {
                 SELECT id FROM discord_announcement_queue 
                 WHERE match_id = ? AND announcement_type = 'timed'
                 AND announcement_data = ?
-                AND status NOT IN ('failed', 'completed')
+                AND status NOT IN ('failed')
               `, [match.id, JSON.stringify(announcement)]);
               
               if (!existingAnnouncement) {

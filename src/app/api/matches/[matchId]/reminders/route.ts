@@ -37,115 +37,83 @@ export async function GET(
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    // Get scheduled future reminders (pending status and future reminder_time)
-    const futureDiscordReminders = await db.all<ReminderDbRow & { type: string; description: string }>(`
-      SELECT 
-        id,
-        match_id,
-        reminder_time,
-        status,
-        error_message,
-        created_at,
-        sent_at,
-        'discord_general' as type,
-        'Discord Channel Reminder' as description
-      FROM discord_reminder_queue 
-      WHERE match_id = ? 
-        AND status = 'pending'
-        AND datetime(reminder_time) > datetime('now')
-      ORDER BY reminder_time ASC
-    `, [matchId]);
-
-    const futurePlayerReminders = await db.all<ReminderDbRow & { type: string; description: string }>(`
-      SELECT 
-        id,
-        match_id,
-        reminder_time,
-        status,
-        error_message,
-        created_at,
-        sent_at,
-        'discord_player' as type,
-        'Player DM Reminders' as description
-      FROM discord_player_reminder_queue 
-      WHERE match_id = ? 
-        AND status = 'pending'
-        AND datetime(reminder_time) > datetime('now')
-      ORDER BY reminder_time ASC
-    `, [matchId]);
-
-    // Get pending match notifications (status announcements)
-    const pendingMatchNotifications = await db.all<ReminderDbRow & { type: string; description: string }>(`
-      SELECT 
-        id,
-        match_id,
-        created_at as reminder_time,
-        status,
-        error_message,
-        created_at,
-        processed_at as sent_at,
-        'discord_match' as type,
-        'Match Status Announcement' as description
-      FROM discord_match_reminder_queue 
-      WHERE match_id = ? 
-        AND status = 'pending'
-      ORDER BY created_at ASC
-    `, [matchId]);
-
-    // Calculate when future reminders would be scheduled (if not already queued)
-    const futureScheduledReminders = [];
+    // Get scheduled announcements from match creation process
+    const scheduledAnnouncements = [];
     
     if (match.start_date) {
-      const startDate = new Date(match.start_date);
-      const matchStartTime = startDate.getTime();
+      // Get the announcements from the match record
+      const matchWithAnnouncements = await db.get(`
+        SELECT announcements
+        FROM matches 
+        WHERE id = ?
+      `, [matchId]);
       
-      // Get Discord settings for reminder timing
-      const discordSettings = await db.get(`
-        SELECT match_reminder_minutes, player_reminder_minutes 
-        FROM discord_settings 
-        WHERE id = 1
-      `);
-      
-      if (discordSettings) {
-        // Check if general reminder would be scheduled
-        const generalReminderTime = new Date(matchStartTime - (discordSettings.match_reminder_minutes * 60 * 1000));
-        if (generalReminderTime > new Date() && futureDiscordReminders.length === 0) {
-          futureScheduledReminders.push({
-            id: 'scheduled_general',
-            match_id: matchId,
-            reminder_time: generalReminderTime.toISOString(),
-            status: 'scheduled',
-            type: 'discord_general',
-            description: `Discord Channel Reminder (${discordSettings.match_reminder_minutes} min before start)`,
-            created_at: now
-          });
-        }
-        
-        // Check if player reminders would be scheduled
-        if (match.player_notifications) {
-          const playerReminderTime = new Date(matchStartTime - (discordSettings.player_reminder_minutes * 60 * 1000));
-          if (playerReminderTime > new Date() && futurePlayerReminders.length === 0) {
-            futureScheduledReminders.push({
-              id: 'scheduled_player',
+      if (matchWithAnnouncements?.announcements) {
+        try {
+          const announcements = JSON.parse(matchWithAnnouncements.announcements);
+          const startDate = new Date(match.start_date);
+          
+          for (const announcement of announcements) {
+            // Calculate when this announcement should be sent
+            const { value, unit, id } = announcement;
+            let millisecondsOffset = 0;
+            
+            switch (unit) {
+              case 'minutes':
+                millisecondsOffset = value * 60 * 1000;
+                break;
+              case 'hours':
+                millisecondsOffset = value * 60 * 60 * 1000;
+                break;
+              case 'days':
+                millisecondsOffset = value * 24 * 60 * 60 * 1000;
+                break;
+            }
+            
+            const announcementTime = new Date(startDate.getTime() - millisecondsOffset);
+            
+            // Check if this announcement was already processed in the announcement queue
+            const queuedAnnouncement = await db.get(`
+              SELECT status, posted_at, error_message
+              FROM discord_announcement_queue 
+              WHERE match_id = ? AND announcement_type = 'timed'
+              AND announcement_data = ?
+            `, [matchId, JSON.stringify(announcement)]);
+            
+            let status = 'pending';
+            let sentAt = null;
+            let errorMessage = null;
+            
+            if (queuedAnnouncement) {
+              status = queuedAnnouncement.status === 'posted' ? 'sent' : queuedAnnouncement.status;
+              sentAt = queuedAnnouncement.posted_at;
+              errorMessage = queuedAnnouncement.error_message;
+            } else if (announcementTime <= new Date()) {
+              // If time has passed but no queue entry exists, it should have been processed
+              status = 'scheduled';
+            }
+            
+            scheduledAnnouncements.push({
+              id: `announcement_${id}`,
               match_id: matchId,
-              reminder_time: playerReminderTime.toISOString(),
-              status: 'scheduled',
-              type: 'discord_player',
-              description: `Player DM Reminders (${discordSettings.player_reminder_minutes} min before start)`,
-              created_at: now
+              reminder_time: announcementTime.toISOString(),
+              status: status,
+              error_message: errorMessage,
+              created_at: now,
+              sent_at: sentAt,
+              type: 'timed_announcement',
+              description: `${value} ${unit} before start`,
+              timing: { value, unit }
             });
           }
+        } catch (parseError) {
+          console.error('Error parsing match announcements:', parseError);
         }
       }
     }
 
-    // Combine all future reminders
-    const allFutureReminders = [
-      ...futureDiscordReminders,
-      ...futurePlayerReminders,
-      ...pendingMatchNotifications,
-      ...futureScheduledReminders
-    ].sort((a, b) => {
+    // Sort announcements by reminder time
+    const allReminders = scheduledAnnouncements.sort((a, b) => {
       const timeA = new Date(a.reminder_time);
       const timeB = new Date(b.reminder_time);
       return timeA.getTime() - timeB.getTime();
@@ -159,8 +127,8 @@ export async function GET(
         player_notifications: Boolean(match.player_notifications),
         status: match.status
       },
-      futureReminders: allFutureReminders,
-      reminderCount: allFutureReminders.length
+      reminders: allReminders,
+      reminderCount: allReminders.length
     });
 
   } catch (error) {

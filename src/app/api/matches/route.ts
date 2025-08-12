@@ -125,49 +125,10 @@ export async function POST(request: NextRequest) {
     console.log('  announcements:', announcements);
     console.log('  announcements length:', announcements?.length);
     
-    // CREATE REMINDER RECORDS from announcements configured during match creation
-    if (announcements && announcements.length > 0 && startDate) {
-      try {
-        const startDateTime = new Date(startDate);
-        console.log(`📅 Creating ${announcements.length} reminders from match creation announcements...`);
-        
-        for (const announcement of announcements) {
-          // Convert announcement timing to actual reminder time
-          let reminderTime: Date;
-          const value = announcement.value || 1;
-          
-          switch (announcement.unit) {
-            case 'minutes':
-              reminderTime = new Date(startDateTime.getTime() - (value * 60 * 1000));
-              break;
-            case 'hours':
-              reminderTime = new Date(startDateTime.getTime() - (value * 60 * 60 * 1000));
-              break;
-            case 'days':
-              reminderTime = new Date(startDateTime.getTime() - (value * 24 * 60 * 60 * 1000));
-              break;
-            default:
-              console.warn(`Unknown announcement unit: ${announcement.unit}`);
-              continue;
-          }
-          
-          // Only create reminder if it's in the future
-          if (reminderTime > new Date()) {
-            const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            await db.run(`
-              INSERT INTO discord_reminder_queue (id, match_id, reminder_time, status)
-              VALUES (?, ?, ?, 'pending')
-            `, [reminderId, matchId, reminderTime.toISOString()]);
-            
-            console.log(`✅ Created reminder: ${value} ${announcement.unit} before start (${reminderTime.toISOString()})`);
-          } else {
-            console.log(`⚠️ Skipped past reminder: ${value} ${announcement.unit} before start`);
-          }
-        }
-      } catch (reminderError) {
-        console.error('❌ Error creating announcement reminders:', reminderError);
-        // Don't fail match creation if reminders fail
-      }
+    // NOTE: Announcements are stored in the announcements field and will be processed by the scheduler
+    // The scheduler's handleTimedAnnouncements() method will queue them at the appropriate times
+    if (announcements && announcements.length > 0) {
+      console.log(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
     }
 
     // Discord announcement will be triggered when match transitions to "gather" stage
