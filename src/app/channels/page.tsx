@@ -1,6 +1,5 @@
 'use client'
 
-export const dynamic = 'force-dynamic';
 
 import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
