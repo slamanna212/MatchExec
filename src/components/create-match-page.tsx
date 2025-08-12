@@ -485,19 +485,19 @@ export function CreateMatchPage() {
 
   return (
     <Container size="md" py={{ base: "md", sm: "xl" }} px={{ base: "md", sm: "xl" }}>
-      <Stack gap={{ base: "md", sm: "xl" }}>
+      <Stack gap="md">
         {/* Header */}
         <Group justify="space-between" align="center">
-          <Group align="center" gap={{ base: "sm", sm: "md" }}>
+          <Group align="center" gap="sm">
             <ActionIcon 
               variant="subtle" 
-              size={{ base: "md", sm: "lg" }}
+              size="md"
               onClick={handleBack}
               aria-label="Go back"
             >
               <IconArrowLeft />
             </ActionIcon>
-            <Title order={{ base: 3, sm: 2 }}>Create Match</Title>
+            <Title order={2}>Create Match</Title>
           </Group>
         </Group>
 
@@ -513,10 +513,10 @@ export function CreateMatchPage() {
         {/* Progress Indicator */}
         <Box>
           <Group justify="space-between" mb="xs">
-            <Text size={{ base: "sm", sm: "sm" }} fw={500}>{getStepTitle()}</Text>
-            <Text size={{ base: "xs", sm: "sm" }} c="dimmed">Step {currentStep} of 4</Text>
+            <Text size="sm" fw={500}>{getStepTitle()}</Text>
+            <Text size="xs" c="dimmed">Step {currentStep} of 4</Text>
           </Group>
-          <Progress value={progressValue} size={{ base: "xs", sm: "sm" }} />
+          <Progress value={progressValue} size="xs" />
         </Box>
 
         {/* Step Content */}
@@ -679,7 +679,7 @@ export function CreateMatchPage() {
               )}
             </Box>
             
-            <Group justify="space-between" mt="md" gap={{ base: "xs", sm: "md" }}>
+            <Group justify="space-between" mt="md" gap="xs">
               <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
@@ -793,7 +793,7 @@ export function CreateMatchPage() {
               </Card>
             )}
             
-            <Group justify="space-between" mt="md" gap={{ base: "xs", sm: "md" }}>
+            <Group justify="space-between" mt="md" gap="xs">
               <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
@@ -973,11 +973,11 @@ export function CreateMatchPage() {
               </Card>
             )}
             
-            <Group justify="space-between" mt="md" gap={{ base: "xs", sm: "md" }} align={{ base: "stretch", sm: "center" }} wrap={{ base: "wrap", sm: "nowrap" }}>
+            <Group justify="space-between" mt="md" gap="xs" align="center">
               <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
-              <Group align="center" gap={{ base: "xs", sm: "md" }} wrap={{ base: "wrap", sm: "nowrap" }}>
+              <Group align="center" gap="xs">
                 <Checkbox
                   label="Start Signups"
                   checked={startSignups}

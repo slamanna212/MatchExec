@@ -3,12 +3,12 @@ import { getDbInstance } from '../../../../lib/database-init';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
     const db = await getDbInstance();
     const body = await request.json();
-    const { channelId } = params;
+    const { channelId } = await params;
     
     const {
       send_announcements = false,
@@ -68,11 +68,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
     const db = await getDbInstance();
-    const { channelId } = params;
+    const { channelId } = await params;
 
     // Check if channel exists
     const channel = await db.get(

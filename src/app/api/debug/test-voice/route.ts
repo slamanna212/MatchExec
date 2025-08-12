@@ -8,7 +8,10 @@ export async function POST() {
     const botService = new DiscordBotService(db);
     
     // Get the current voice settings
-    const settings = await db.get(`
+    const settings = await db.get<{
+      announcer_voice?: string;
+      voice_announcements_enabled?: number;
+    }>(`
       SELECT announcer_voice, voice_announcements_enabled
       FROM discord_settings 
       WHERE id = 1

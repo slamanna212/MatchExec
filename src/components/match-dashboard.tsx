@@ -27,12 +27,13 @@ interface ReminderData {
   id: string;
   match_id: string;
   reminder_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'processed';
+  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
   error_message?: string;
   created_at: string;
   sent_at?: string;
   processed_at?: string;
-  type: 'discord_general' | 'discord_match' | 'discord_player';
+  type: 'discord_general' | 'discord_match' | 'discord_player' | 'timed_announcement';
+  description?: string;
 }
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -262,7 +263,6 @@ export function MatchDashboard() {
     };
 
     fetchMatches();
-    fetchGames();
     fetchUISettings();
   }, [fetchMatches]);
 
@@ -276,17 +276,6 @@ export function MatchDashboard() {
     return () => clearInterval(intervalId);
   }, [refreshInterval, fetchMatches]);
 
-  const fetchGames = async () => {
-    try {
-      const response = await fetch('/api/games');
-      if (response.ok) {
-        const data = await response.json();
-        setGames(data);
-      }
-    } catch (error) {
-      console.error('Error fetching games:', error);
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -602,7 +591,7 @@ export function MatchDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress, handleStatusTransition]);
+  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {

@@ -194,7 +194,7 @@ export default function SettingsPage() {
     }
 
     fetchSettings();
-  }, [form, appForm, uiForm, announcerForm]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);

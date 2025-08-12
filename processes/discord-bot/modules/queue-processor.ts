@@ -92,7 +92,7 @@ export class QueueProcessor {
           }
 
           // Build event data object
-          let eventData = {
+          let eventData: any = {
             id: announcement.match_id,
             name: announcement.name,
             description: announcement.description || 'No description provided',
@@ -134,9 +134,9 @@ export class QueueProcessor {
             result = await this.announcementHandler.postEventAnnouncement(eventData);
           }
           
-          if (result && (result.success || result === true)) {
+          if (result && (result === true || (typeof result === 'object' && result.success))) {
             // Store Discord message information for later cleanup if needed (only for full announcements)
-            if (this.db && result.mainMessage && announcement.announcement_type !== 'timed') {
+            if (this.db && typeof result === 'object' && 'mainMessage' in result && result.mainMessage && announcement.announcement_type !== 'timed') {
               try {
                 const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                 
@@ -145,7 +145,7 @@ export class QueueProcessor {
 
                 // Create maps thread if there are maps
                 if (eventData.maps && eventData.maps.length > 0) {
-                  const thread = await this.announcementHandler.createMapsThread(result.mainMessage, eventData.name, eventData.game_id, eventData.maps);
+                  const thread = await this.announcementHandler.createMapsThread((result as any).mainMessage, eventData.name, eventData.game_id, eventData.maps);
                   threadId = thread?.id || null;
                 }
 
@@ -155,13 +155,13 @@ export class QueueProcessor {
                   discordEventId = await this.eventHandler.createDiscordEvent({
                     ...eventData,
                     start_date: eventData.start_date
-                  }, result.mainMessage, rounds);
+                  }, (result as any).mainMessage, rounds);
                 }
 
                 await this.db.run(`
                   INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [messageRecordId, eventData.id, result.mainMessage.id, result.mainMessage.channelId, threadId, discordEventId, 'announcement']);
+                `, [messageRecordId, eventData.id, (result as any).mainMessage.id, (result as any).mainMessage.channelId, threadId, discordEventId, 'announcement']);
                 
                 console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
               } catch (error) {

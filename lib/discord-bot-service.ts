@@ -27,7 +27,7 @@ export class DiscordBotService {
     ]);
 
     // Check if there's already a recent pending or processing voice test request for this user
-    const existingRequest = await this.db.get(`
+    const existingRequest = await this.db.get<{ id: string }>(`
       SELECT id FROM discord_bot_requests 
       WHERE type = 'voice_test' AND status IN ('pending', 'processing') 
       AND JSON_EXTRACT(data, '$.userId') = ?

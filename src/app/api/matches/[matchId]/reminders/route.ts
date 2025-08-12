@@ -4,7 +4,7 @@ import { getDbInstance } from '../../../../../lib/database-init';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
     const { matchId } = await params;
@@ -17,7 +17,13 @@ export async function GET(
     const now = new Date().toISOString();
 
     // Get match details first
-    const match = await db.get(`
+    const match = await db.get<{
+      id: string;
+      name: string;
+      start_date?: string;
+      player_notifications?: number;
+      status: string;
+    }>(`
       SELECT id, name, start_date, player_notifications, status
       FROM matches 
       WHERE id = ?
@@ -32,7 +38,9 @@ export async function GET(
     
     if (match.start_date) {
       // Get the announcements from the match record
-      const matchWithAnnouncements = await db.get(`
+      const matchWithAnnouncements = await db.get<{
+        announcements?: string;
+      }>(`
         SELECT announcements
         FROM matches 
         WHERE id = ?
@@ -63,7 +71,11 @@ export async function GET(
             const announcementTime = new Date(startDate.getTime() - millisecondsOffset);
             
             // Check if this announcement was already processed in the announcement queue
-            const queuedAnnouncement = await db.get(`
+            const queuedAnnouncement = await db.get<{
+              status: string;
+              posted_at?: string;
+              error_message?: string;
+            }>(`
               SELECT status, posted_at, error_message
               FROM discord_announcement_queue 
               WHERE match_id = ? AND announcement_type = 'timed'
