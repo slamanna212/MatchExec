@@ -53,12 +53,15 @@ docker run -p 3000:3000 --env-file .env matchexec
 │   └── globals.css         # Global styles
 ├── processes/
 │   ├── discord-bot/        # Discord bot process
-│   │   ├── index.ts        # Refactored modular bot file
-│   │   ├── index-old.ts    # Original monolithic bot file
+│   │   ├── index.ts        # Modular bot implementation
 │   │   └── modules/        # Discord bot modules
 │   │       ├── voice-handler.ts      # Voice announcements and TTS
 │   │       ├── event-handler.ts      # Discord server events
 │   │       ├── announcement-handler.ts # Match announcements
+│   │       ├── reminder-handler.ts   # Player reminders and notifications
+│   │       ├── queue-processor.ts    # Queue processing
+│   │       ├── interaction-handler.ts # Discord interactions
+│   │       ├── utils.ts              # Utility functions
 │   │       └── settings-manager.ts   # Settings management
 │   ├── scheduler/          # Cron scheduler process
 │   │   └── index.ts        # Scheduled tasks
@@ -133,29 +136,31 @@ Individual processes only connect to the database - migrations run once at start
 
 ## Discord Bot Architecture
 
-The Discord bot has been refactored from a single 2,700+ line file into a modular architecture for better maintainability:
+The Discord bot uses a modular architecture for maintainability and scalability:
 
 ### Bot Modules
 
 - **voice-handler.ts**: Handles voice announcements, TTS, and voice channel management
 - **event-handler.ts**: Manages Discord server events creation and deletion
 - **announcement-handler.ts**: Creates and posts match announcements with embeds
+- **reminder-handler.ts**: Handles player reminders and notifications
+- **queue-processor.ts**: Processes various Discord queue operations
+- **interaction-handler.ts**: Manages Discord slash commands and interactions
 - **settings-manager.ts**: Loads and manages Discord bot settings from database
+- **utils.ts**: Common utility functions used across modules
 
 ### File Structure
 
-- `index.ts` - New modular bot implementation
-- `index-old.ts` - Original monolithic bot file (preserved for reference)
+- `index.ts` - Main bot implementation with modular architecture
 - `modules/` - Individual bot modules
 
 ### Benefits
 
 - **Maintainability**: Each module handles a specific responsibility
 - **Testability**: Modules can be tested independently  
-- **Readability**: Individual files are much smaller (~200-500 lines vs 2,700)
+- **Readability**: Individual files are focused and manageable
 - **Reusability**: Modules can be imported and used across the codebase
-
-The refactored bot maintains the same functionality as the original while being much easier to work with and extend.
+- **Scalability**: Easy to add new features by creating new modules
 
 
 ## Technology Stack

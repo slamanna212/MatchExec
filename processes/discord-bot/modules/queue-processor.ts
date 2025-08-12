@@ -122,7 +122,7 @@ export class QueueProcessor {
             continue;
           }
 
-          // Post the announcement using the same logic as the original bot
+          // Post the announcement
           let result;
           if (announcement.announcement_type === 'timed') {
             result = await this.announcementHandler.postTimedReminder(eventData);
