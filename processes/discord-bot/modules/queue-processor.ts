@@ -48,110 +48,68 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const announcements = await this.db.all<QueuedAnnouncement>(`
-        SELECT id, match_id, announcement_type, announcement_data, created_at
-        FROM discord_announcement_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
+      // Use the original approach - JOIN with matches table to get all needed data
+      const announcements = await this.db.all<{
+        id: string;
+        match_id: string;
+        name: string;
+        description: string;
+        game_id: string;
+        max_participants: number;
+        guild_id: string;
+        maps?: string;
+        livestream_link?: string;
+        event_image_url?: string;
+        start_date?: string;
+        rules?: 'competitive' | 'casual';
+        announcement_type?: string;
+        announcement_data?: string;
+      }>(`
+        SELECT daq.id, daq.match_id, daq.announcement_type, daq.announcement_data,
+               m.name, m.description, m.game_id, m.max_participants, m.guild_id, 
+               m.maps, m.livestream_link, m.event_image_url, m.start_date, m.rules
+        FROM discord_announcement_queue daq
+        JOIN matches m ON daq.match_id = m.id
+        WHERE daq.status = 'pending'
+        ORDER BY daq.created_at ASC
         LIMIT 5
       `);
 
       for (const announcement of announcements) {
         try {
-          let eventData;
-          
-          if (announcement.announcement_type === 'timed' && announcement.match_id) {
-            // For timed announcements, fetch match data from database
-            const match = await this.db.get(`
-              SELECT m.*, g.name as game_name, g.icon_url as game_icon
-              FROM matches m
-              LEFT JOIN games g ON m.game_id = g.id  
-              WHERE m.id = ?
-            `, [announcement.match_id]);
-            
-            if (!match) {
-              console.error(`❌ Match not found for timed announcement: ${announcement.match_id}`);
-              await this.db.run(`
-                UPDATE discord_announcement_queue 
-                SET status = 'failed', posted_at = datetime('now')
-                WHERE id = ?
-              `, [announcement.id]);
-              continue;
+          // Parse maps if they exist
+          let maps: string[] = [];
+          if (announcement.maps) {
+            try {
+              maps = JSON.parse(announcement.maps);
+            } catch (e) {
+              maps = [];
             }
-            
-            // Parse maps if they exist
-            let maps = [];
-            if (match.maps) {
-              try {
-                maps = JSON.parse(match.maps);
-              } catch (e) {
-                console.warn('Could not parse maps for match:', match.id);
-              }
+          }
+
+          // Build event data object
+          let eventData = {
+            id: announcement.match_id,
+            name: announcement.name,
+            description: announcement.description || 'No description provided',
+            game_id: announcement.game_id,
+            type: announcement.rules || 'casual',
+            maps: maps,
+            max_participants: announcement.max_participants,
+            guild_id: announcement.guild_id,
+            livestream_link: announcement.livestream_link,
+            event_image_url: announcement.event_image_url,
+            start_date: announcement.start_date
+          };
+
+          // Handle timed announcements with special timing info
+          if (announcement.announcement_type === 'timed' && announcement.announcement_data) {
+            try {
+              const timingData = JSON.parse(announcement.announcement_data);
+              eventData._timingInfo = timingData;
+            } catch (e) {
+              console.warn('Could not parse timing data for timed announcement:', announcement.id);
             }
-            
-            // Convert database format to announcement format
-            eventData = {
-              id: match.id,
-              name: match.name,
-              description: match.description,
-              game_id: match.game_id,
-              game_name: match.game_name,
-              game_icon: match.game_icon,
-              start_date: match.start_date,
-              livestream_link: match.livestream_link,
-              rules: match.rules,
-              maps: maps,
-              event_image_url: match.event_image_url,
-              max_participants: match.max_participants
-            };
-            
-            // Add timing info to the event data for display
-            const timingData = JSON.parse(announcement.announcement_data || '{}');
-            eventData._timingInfo = timingData;
-            
-          } else {
-            // Standard announcement - need to fetch from database since no embedded data
-            const match = await this.db.get(`
-              SELECT m.*, g.name as game_name, g.icon_url as game_icon
-              FROM matches m
-              LEFT JOIN games g ON m.game_id = g.id  
-              WHERE m.id = ?
-            `, [announcement.match_id]);
-            
-            if (!match) {
-              console.error(`❌ Match not found for announcement: ${announcement.match_id}`);
-              await this.db.run(`
-                UPDATE discord_announcement_queue 
-                SET status = 'failed', posted_at = datetime('now')
-                WHERE id = ?
-              `, [announcement.id]);
-              continue;
-            }
-            
-            // Parse maps if they exist
-            let maps = [];
-            if (match.maps) {
-              try {
-                maps = JSON.parse(match.maps);
-              } catch (e) {
-                console.warn('Could not parse maps for match:', match.id);
-              }
-            }
-            
-            eventData = {
-              id: match.id,
-              name: match.name,
-              description: match.description,
-              game_id: match.game_id,
-              game_name: match.game_name,
-              game_icon: match.game_icon,
-              start_date: match.start_date,
-              livestream_link: match.livestream_link,
-              rules: match.rules,
-              maps: maps,
-              event_image_url: match.event_image_url,
-              max_participants: match.max_participants
-            };
           }
           
           if (!this.announcementHandler) {
@@ -164,7 +122,7 @@ export class QueueProcessor {
             continue;
           }
 
-          // Use different posting methods based on announcement type
+          // Post the announcement using the same logic as the original bot
           let result;
           if (announcement.announcement_type === 'timed') {
             result = await this.announcementHandler.postTimedReminder(eventData);
@@ -172,7 +130,7 @@ export class QueueProcessor {
             result = await this.announcementHandler.postEventAnnouncement(eventData);
           }
           
-          if (result && result.success) {
+          if (result && (result.success || result === true)) {
             // Store Discord message information for later cleanup if needed (only for full announcements)
             if (this.db && result.mainMessage && announcement.announcement_type !== 'timed') {
               try {
@@ -207,23 +165,23 @@ export class QueueProcessor {
               }
             }
 
-            // Mark as completed
+            // Mark as posted using CURRENT_TIMESTAMP like the original
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'posted', posted_at = datetime('now')
+              SET status = 'posted', posted_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [announcement.id]);
 
-            console.log(`✅ Processed announcement queue item ${announcement.id}`);
+            console.log(`✅ Posted announcement for: ${announcement.name}`);
           } else {
             // Mark as failed
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'failed', posted_at = datetime('now'), error_message = ?
+              SET status = 'failed', error_message = 'Failed to post announcement'
               WHERE id = ?
-            `, ['Failed to post announcement', announcement.id]);
+            `, [announcement.id]);
 
-            console.log(`❌ Failed to process announcement queue item ${announcement.id}`);
+            console.log(`❌ Failed to post announcement for: ${announcement.name}`);
           }
         } catch (error) {
           console.error(`❌ Error processing announcement ${announcement.id}:`, error);

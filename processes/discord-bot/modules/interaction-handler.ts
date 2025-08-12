@@ -15,9 +15,8 @@ import {
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
 
-// Import SignupFormLoader (assuming it exists)
-// @ts-ignore - We'll assume this import works
-import { SignupFormLoader } from '../../../lib/signup-form-loader';
+// Import SignupFormLoader
+import { SignupFormLoader } from '../../../lib/signup-forms';
 
 export class InteractionHandler {
   constructor(
