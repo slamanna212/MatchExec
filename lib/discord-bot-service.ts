@@ -4,7 +4,7 @@ interface VoiceTestRequest {
   id: string;
   userId: string;
   voiceId?: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string;
   created_at: string;
   updated_at: string;
@@ -14,11 +14,24 @@ export class DiscordBotService {
   constructor(private db: Database) {}
 
   async requestVoiceTest(userId: string, voiceId?: string): Promise<string> {
-    // Check if there's already a pending voice test request for this user
-    const existingRequest = await this.db.get(`
-      SELECT id FROM discord_bot_requests 
+    // Clean up any stale pending requests for this user (older than 2 minutes)
+    await this.db.run(`
+      UPDATE discord_bot_requests 
+      SET status = 'failed', result = ?, updated_at = datetime('now')
       WHERE type = 'voice_test' AND status = 'pending' 
       AND JSON_EXTRACT(data, '$.userId') = ?
+      AND datetime(created_at, '+2 minutes') < datetime('now')
+    `, [
+      JSON.stringify({ success: false, message: 'Request timed out and was cleaned up' }),
+      userId
+    ]);
+
+    // Check if there's already a recent pending or processing voice test request for this user
+    const existingRequest = await this.db.get(`
+      SELECT id FROM discord_bot_requests 
+      WHERE type = 'voice_test' AND status IN ('pending', 'processing') 
+      AND JSON_EXTRACT(data, '$.userId') = ?
+      AND datetime(created_at, '+2 minutes') >= datetime('now')
       LIMIT 1
     `, [userId]);
 
@@ -63,14 +76,14 @@ export class DiscordBotService {
       id: request.id,
       userId: data.userId,
       voiceId: data.voiceId,
-      status: request.status as 'pending' | 'completed' | 'failed',
+      status: request.status as 'pending' | 'processing' | 'completed' | 'failed',
       result: request.result || undefined,
       created_at: request.created_at,
       updated_at: request.updated_at
     };
   }
 
-  async waitForRequestCompletion(requestId: string, timeoutMs: number = 30000): Promise<VoiceTestRequest> {
+  async waitForRequestCompletion(requestId: string, timeoutMs: number = 45000): Promise<VoiceTestRequest> {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeoutMs) {
@@ -80,10 +93,20 @@ export class DiscordBotService {
         return request;
       }
       
-      // Wait 500ms before checking again
+      // Wait 500ms before checking again for faster response
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    throw new Error('Request timeout');
+    // Mark the request as failed due to timeout (only if still pending/processing)
+    await this.db.run(`
+      UPDATE discord_bot_requests
+      SET status = 'failed', result = ?, updated_at = datetime('now')
+      WHERE id = ? AND status IN ('pending', 'processing')
+    `, [
+      JSON.stringify({ success: false, message: 'Request timed out after 45 seconds' }),
+      requestId
+    ]);
+    
+    throw new Error('Request timeout - voice test took longer than 45 seconds to complete');
   }
 }

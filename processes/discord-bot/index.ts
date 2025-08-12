@@ -97,7 +97,8 @@ class MatchExecBot {
         this.settings,
         this.announcementHandler,
         this.reminderHandler,
-        this.eventHandler
+        this.eventHandler,
+        this.voiceHandler
       );
 
       console.log('✅ Bot modules initialized');
@@ -122,6 +123,7 @@ class MatchExecBot {
           this.announcementHandler?.updateSettings(newSettings);
           this.reminderHandler?.updateSettings(newSettings);
           this.queueProcessor?.updateSettings(newSettings);
+          this.queueProcessor?.updateVoiceHandler(this.voiceHandler);
         }
       }
     }, 30000);

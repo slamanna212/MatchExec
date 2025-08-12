@@ -4,6 +4,7 @@ import { DiscordSettings } from '../../../shared/types';
 import { AnnouncementHandler } from './announcement-handler';
 import { ReminderHandler } from './reminder-handler';
 import { EventHandler } from './event-handler';
+import { VoiceHandler } from './voice-handler';
 
 // Interfaces for different queue types - matching existing DB structure
 interface QueuedAnnouncement {
@@ -35,13 +36,16 @@ interface QueuedReminder {
 }
 
 export class QueueProcessor {
+  private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
+
   constructor(
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null,
     private announcementHandler: AnnouncementHandler | null,
     private reminderHandler: ReminderHandler | null,
-    private eventHandler: EventHandler | null
+    private eventHandler: EventHandler | null,
+    private voiceHandler: VoiceHandler | null = null
   ) {}
 
   async processAnnouncementQueue() {
@@ -399,6 +403,21 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
+      // Clean up old completed/failed requests older than 1 hour
+      await this.db.run(`
+        DELETE FROM discord_bot_requests 
+        WHERE status IN ('completed', 'failed') 
+        AND datetime(updated_at, '+1 hour') < datetime('now')
+      `);
+      
+      // Clean up really old pending/processing requests (older than 5 minutes)
+      await this.db.run(`
+        UPDATE discord_bot_requests 
+        SET status = 'failed', result = ?, updated_at = datetime('now')
+        WHERE status IN ('pending', 'processing') 
+        AND datetime(created_at, '+5 minutes') < datetime('now')
+      `, [JSON.stringify({ success: false, message: 'Request abandoned - too old' })]);
+      
       // Process voice test requests and other bot requests
       const requests = await this.db.all<{
         id: string;
@@ -410,15 +429,76 @@ export class QueueProcessor {
         FROM discord_bot_requests
         WHERE status = 'pending'
         ORDER BY created_at ASC
-        LIMIT 10
+        LIMIT 5
       `);
 
       for (const request of requests) {
         try {
           if (request.type === 'voice_test') {
-            // This will be handled by the voice handler through the main bot
-            // For now, we skip it as it's already being processed elsewhere
-            continue;
+            // Parse the request data
+            const requestData = JSON.parse(request.data);
+            const { userId, voiceId } = requestData;
+            
+            // Check if we're already processing a voice test for this user
+            if (this.processingVoiceTests.has(userId)) {
+              console.log(`⏭️ Voice test already being processed for user ${userId}, skipping request ${request.id}`);
+              continue;
+            }
+            
+            console.log(`🔊 Processing voice test request ${request.id} for user ${userId}`);
+            
+            // Mark user as being processed
+            this.processingVoiceTests.add(userId);
+            
+            // Immediately mark the request as processing to prevent duplicate processing
+            const updateResult = await this.db.run(`
+              UPDATE discord_bot_requests
+              SET status = 'processing', updated_at = datetime('now')
+              WHERE id = ? AND status = 'pending'
+            `, [request.id]);
+            
+            if (updateResult.changes === 0) {
+              console.log(`⏭️ Request ${request.id} was already processed by another queue cycle, skipping`);
+              this.processingVoiceTests.delete(userId);
+              continue;
+            }
+            
+            try {
+              // Get the voice handler from the bot instance
+              if (!this.voiceHandler) {
+                await this.db.run(`
+                  UPDATE discord_bot_requests
+                  SET status = 'failed', result = ?, updated_at = datetime('now')
+                  WHERE id = ?
+                `, [
+                  JSON.stringify({ success: false, message: 'Voice handler not available' }),
+                  request.id
+                ]);
+                console.error(`❌ Voice handler not available for request ${request.id}`);
+                continue;
+              }
+              
+              // Process the voice test
+              const result = await this.voiceHandler.testVoiceLineForUser(userId, voiceId);
+              
+              // Update the request with the final result
+              await this.db.run(`
+                UPDATE discord_bot_requests
+                SET status = ?, result = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `, [
+                result.success ? 'completed' : 'failed',
+                JSON.stringify(result),
+                request.id
+              ]);
+              
+              const statusIcon = result.success ? '✅' : '❌';
+              console.log(`${statusIcon} Processed voice test request ${request.id}: ${result.message}`);
+              
+            } finally {
+              // Always remove user from processing set
+              this.processingVoiceTests.delete(userId);
+            }
           }
           
           // Handle other request types here in the future
@@ -454,5 +534,9 @@ export class QueueProcessor {
 
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
+  }
+
+  updateVoiceHandler(voiceHandler: VoiceHandler | null) {
+    this.voiceHandler = voiceHandler;
   }
 }

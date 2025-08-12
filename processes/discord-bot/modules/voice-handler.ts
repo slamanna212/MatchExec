@@ -14,6 +14,8 @@ import { DiscordSettings } from '../../../shared/types';
 
 export class VoiceHandler {
   private voiceConnections = new Map<string, any>(); // channelId -> connection
+  private activeAudioPlayers = new Map<string, any>(); // channelId -> player
+  private playbackStatus = new Map<string, boolean>(); // channelId -> isPlaying
 
   constructor(
     private client: Client,
@@ -77,6 +79,12 @@ export class VoiceHandler {
         return false;
       }
 
+      // Check if audio is already playing in this channel
+      if (this.playbackStatus.get(channelId)) {
+        console.log(`⏭️ Audio already playing in channel ${channelId}, skipping new request`);
+        return false;
+      }
+
       // Get audio file path
       const audioFilePath = await this.getAudioFilePath(this.settings.announcer_voice, audioType, lineNumber);
       if (!audioFilePath) {
@@ -110,21 +118,25 @@ export class VoiceHandler {
       // Construct filename
       let filename: string;
       if (lineNumber) {
-        filename = `${audioType}_${lineNumber}.wav`;
+        filename = `${audioType}${lineNumber}.mp3`;
       } else {
-        // Random line selection
-        const randomNum = Math.floor(Math.random() * 10) + 1;
-        filename = `${audioType}_${randomNum}.wav`;
+        // Random line selection (1-5 for most voices)
+        const randomNum = Math.floor(Math.random() * 5) + 1;
+        filename = `${audioType}${randomNum}.mp3`;
       }
 
-      const fullPath = path.join(process.cwd(), voice.path, filename);
+      // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
+      const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
+      const fullPath = path.join(process.cwd(), cleanVoicePath, filename);
       
       // Check if file exists using fs
       const fs = require('fs');
       if (!fs.existsSync(fullPath)) {
+        console.warn(`⚠️ Audio file not found: ${fullPath}`);
         return null;
       }
 
+      console.log(`🎵 Found audio file: ${fullPath}`);
       return fullPath;
     } catch (error) {
       console.error('❌ Error getting audio file path:', error);
@@ -134,11 +146,23 @@ export class VoiceHandler {
 
   private async connectToVoiceChannelAndPlayAudio(channelId: string, audioFilePath: string): Promise<boolean> {
     try {
+      // Mark channel as playing
+      this.playbackStatus.set(channelId, true);
+
       // Get the voice channel
       const channel = await this.client.channels.fetch(channelId) as VoiceBasedChannel;
       if (!channel || channel.type !== ChannelType.GuildVoice) {
         console.error(`❌ Channel ${channelId} is not a voice channel`);
+        this.playbackStatus.set(channelId, false);
         return false;
+      }
+
+      // Stop any existing audio player for this channel
+      const existingPlayer = this.activeAudioPlayers.get(channelId);
+      if (existingPlayer) {
+        console.log(`🛑 Stopping existing audio player in channel ${channelId}`);
+        existingPlayer.stop();
+        this.activeAudioPlayers.delete(channelId);
       }
 
       // Get existing connection or create new one
@@ -156,11 +180,14 @@ export class VoiceHandler {
       }
 
       // Wait for connection to be ready
-      await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
       // Create audio player and resource
       const player = createAudioPlayer();
       const resource = createAudioResource(audioFilePath);
+
+      // Store the player reference
+      this.activeAudioPlayers.set(channelId, player);
 
       // Subscribe the connection to the audio player
       connection.subscribe(player);
@@ -176,26 +203,48 @@ export class VoiceHandler {
         
         const cleanup = () => {
           if (!isResolved) {
-            connection.destroy();
-            this.voiceConnections.delete(channelId);
+            this.playbackStatus.set(channelId, false);
+            this.activeAudioPlayers.delete(channelId);
+            
+            // Disconnect from voice channel after a short delay to allow cleanup
+            setTimeout(() => {
+              try {
+                connection.destroy();
+                this.voiceConnections.delete(channelId);
+                console.log(`🔇 Disconnected from voice channel ${channelId} after playing announcement`);
+              } catch (error) {
+                console.warn(`⚠️ Error disconnecting from voice channel ${channelId}:`, error);
+              }
+            }, 1000);
+            
             isResolved = true;
           }
         };
 
+        // Set a timeout to ensure we don't hang indefinitely
+        const timeout = setTimeout(() => {
+          if (!isResolved) {
+            console.warn(`⏰ Audio playback timeout in channel ${channelId}`);
+            player.stop();
+            cleanup();
+            resolve(false);
+          }
+        }, 30000); // 30 second timeout
+
         player.once(AudioPlayerStatus.Idle, () => {
           if (!isResolved) {
+            clearTimeout(timeout);
             console.log(`✅ Voice announcement finished playing in channel ${channelId}`);
             cleanup();
-            console.log(`🔇 Disconnected from voice channel ${channelId} after playing announcement`);
             resolve(true);
           }
         });
 
         player.once('error', (error) => {
           if (!isResolved) {
+            clearTimeout(timeout);
             console.error(`❌ Error playing voice announcement:`, error);
             cleanup();
-            console.log(`🔇 Disconnected from voice channel ${channelId} due to error`);
             resolve(false);
           }
         });
@@ -203,12 +252,25 @@ export class VoiceHandler {
       
     } catch (error) {
       console.error('❌ Error connecting to voice channel and playing audio:', error);
+      this.playbackStatus.set(channelId, false);
+      this.activeAudioPlayers.delete(channelId);
       return false;
     }
   }
 
   async disconnectFromVoiceChannel(channelId: string): Promise<boolean> {
     try {
+      // Stop any active audio player
+      const player = this.activeAudioPlayers.get(channelId);
+      if (player) {
+        player.stop();
+        this.activeAudioPlayers.delete(channelId);
+      }
+
+      // Clear playback status
+      this.playbackStatus.set(channelId, false);
+
+      // Disconnect from voice channel
       const connection = this.voiceConnections.get(channelId);
       if (connection) {
         connection.destroy();
@@ -224,6 +286,20 @@ export class VoiceHandler {
   }
 
   async disconnectFromAllVoiceChannels(): Promise<void> {
+    // Stop all active audio players
+    for (const [channelId, player] of this.activeAudioPlayers) {
+      try {
+        player.stop();
+        console.log(`🛑 Stopped audio player in channel ${channelId}`);
+      } catch (error) {
+        console.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
+      }
+    }
+    this.activeAudioPlayers.clear();
+
+    // Clear all playback status
+    this.playbackStatus.clear();
+
     // Disconnect from all voice channels
     for (const [channelId, connection] of this.voiceConnections) {
       try {
