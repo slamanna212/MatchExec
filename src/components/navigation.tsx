@@ -61,8 +61,8 @@ export function Navigation({ children }: NavigationProps) {
       icon: IconSettings,
       links: [
         { label: 'Application', href: '/settings#application', icon: IconApps },
-        { label: 'Scheduler', href: '/settings#scheduler', icon: IconClock },
         { label: 'Announcer', href: '/settings#announcer', icon: IconVolume },
+        { label: 'Scheduler', href: '/settings#scheduler', icon: IconClock },
         { label: 'Discord', href: '/settings#discord', icon: IconBrandDiscord },
         { label: 'UI', href: '/settings#ui', icon: IconPaint }
       ]

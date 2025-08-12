@@ -441,17 +441,6 @@ export default function SettingsPage() {
             </form>
           </Card>
 
-          <div id="scheduler">
-            <SchedulerConfig
-              value={schedulerSettings}
-              onChange={setSchedulerSettings}
-              onSubmit={handleSchedulerSubmit}
-              loading={loading}
-              saving={schedulerSaving}
-              message={schedulerMessage}
-            />
-          </div>
-
           <Card shadow="sm" padding="lg" radius="md" withBorder id="announcer">
             <Group mb="md">
               <IconVolume size="1.2rem" />
@@ -517,6 +506,17 @@ export default function SettingsPage() {
               </Stack>
             </form>
           </Card>
+
+          <div id="scheduler">
+            <SchedulerConfig
+              value={schedulerSettings}
+              onChange={setSchedulerSettings}
+              onSubmit={handleSchedulerSubmit}
+              loading={loading}
+              saving={schedulerSaving}
+              message={schedulerMessage}
+            />
+          </div>
 
           <Card shadow="sm" padding="lg" radius="md" withBorder id="discord">
             <Text size="lg" fw={600} mb="md">Discord Settings</Text>
