@@ -346,6 +346,12 @@ export default function SettingsPage() {
 
       if (response.ok) {
         setAnnouncerMessage({ type: 'success', text: 'Announcer settings saved successfully!' });
+        // Refresh the form to get the latest data
+        const refreshResponse = await fetch('/api/settings/announcer');
+        if (refreshResponse.ok) {
+          const refreshedData = await refreshResponse.json();
+          announcerForm.setValues(refreshedData);
+        }
       } else {
         const errorData = await response.json();
         setAnnouncerMessage({ type: 'error', text: errorData.error || 'Failed to save announcer settings.' });
