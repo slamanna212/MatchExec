@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
-import { IconPlus, IconSettings, IconTrash, IconVolumeOff, IconMessage, IconRefresh } from '@tabler/icons-react';
+import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
 
 interface ChannelEditData {
@@ -237,7 +237,7 @@ export default function ChannelsPage() {
           <Grid.Col span={{ base: 12, md: 6 }}>
             <Card shadow="sm" padding="lg" radius="md" withBorder>
               <Group mb="md">
-                <IconVolumeOff size="1.2rem" />
+                <IconMicrophone size="1.2rem" />
                 <Text size="lg" fw={600}>Voice Channels</Text>
                 <Badge color="grape" variant="light">{voiceChannels.length}</Badge>
               </Group>
