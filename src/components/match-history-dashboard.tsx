@@ -14,8 +14,7 @@ import {
   Grid,
   Modal,
   Image,
-  RingProgress,
-  useMantineColorScheme
+  RingProgress
 } from '@mantine/core';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 import Link from 'next/link';
@@ -32,19 +31,6 @@ interface ReminderData {
   type: 'discord_general' | 'discord_match' | 'discord_player';
 }
 
-interface GameWithIconType {
-  id: string;
-  name: string;
-  genre: string;
-  developer: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  iconUrl: string;
-  coverUrl: string;
-  mapCount: number;
-  modeCount: number;
-}
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -195,25 +181,6 @@ export function MatchHistoryDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
-  const { colorScheme } = useMantineColorScheme();
-
-  // Fetch UI settings on component mount
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        console.error('Error fetching UI settings:', error);
-      }
-    };
-
-    fetchMatches();
-    fetchUISettings();
-  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -251,6 +218,24 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
+  // Fetch UI settings on component mount
+  useEffect(() => {
+    const fetchUISettings = async () => {
+      try {
+        const response = await fetch('/api/settings/ui');
+        if (response.ok) {
+          const uiSettings = await response.json();
+          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
+        }
+      } catch (error) {
+        console.error('Error fetching UI settings:', error);
+      }
+    };
+
+    fetchMatches();
+    fetchUISettings();
+  }, [fetchMatches]);
+
   // Set up auto-refresh with configurable interval (less frequent for history)
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -261,14 +246,14 @@ export function MatchHistoryDashboard() {
     return () => clearInterval(intervalId);
   }, [refreshInterval, fetchMatches]);
 
-  const formatMapName = (mapId: string) => {
+  const formatMapName = useCallback((mapId: string) => {
     // Convert map ID to proper display name
     // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
     return mapId
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-  };
+  }, []);
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
@@ -370,12 +355,12 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
-  const handleViewDetails = (match: MatchWithGame) => {
+  const handleViewDetails = useCallback((match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
-  };
+  }, [fetchParticipants, fetchReminders]);
 
   // Memoize expensive match card rendering
   const memoizedMatchCards = useMemo(() => {
@@ -389,7 +374,7 @@ export function MatchHistoryDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, handleViewDetails]);
+  }, [matches, mapNames, handleViewDetails, formatMapName]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {

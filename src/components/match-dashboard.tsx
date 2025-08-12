@@ -21,19 +21,6 @@ import {
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 
-interface GameWithIcon {
-  id: string;
-  name: string;
-  genre: string;
-  developer: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  iconUrl: string;
-  coverUrl: string;
-  mapCount: number;
-  modeCount: number;
-}
 import { AssignPlayersModal } from './assign-players-modal';
 
 interface ReminderData {
@@ -100,9 +87,7 @@ interface MatchCardProps {
   colorScheme: string;
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
-  onStatusTransition: (matchId: string, newStatus: string) => void;
   formatMapName: (mapId: string) => string;
-  getStatusColor: (status: string) => string;
   getStatusColorForProgress: (status: string, isDark: boolean) => string;
   getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
@@ -214,7 +199,6 @@ MatchCard.displayName = 'MatchCard';
 export function MatchDashboard() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
-  const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
@@ -227,25 +211,6 @@ export function MatchDashboard() {
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const { colorScheme } = useMantineColorScheme();
-
-  // Fetch UI settings on component mount
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        console.error('Error fetching UI settings:', error);
-      }
-    };
-
-    fetchMatches();
-    fetchGames();
-    fetchUISettings();
-  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -282,6 +247,25 @@ export function MatchDashboard() {
     }
   }, []);
 
+  // Fetch UI settings on component mount
+  useEffect(() => {
+    const fetchUISettings = async () => {
+      try {
+        const response = await fetch('/api/settings/ui');
+        if (response.ok) {
+          const uiSettings = await response.json();
+          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
+        }
+      } catch (error) {
+        console.error('Error fetching UI settings:', error);
+      }
+    };
+
+    fetchMatches();
+    fetchGames();
+    fetchUISettings();
+  }, [fetchMatches]);
+
   // Set up auto-refresh with configurable interval
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -316,12 +300,12 @@ export function MatchDashboard() {
     }
   };
 
-  const getStatusColorForProgress = (status: string, isDark: boolean) => {
+  const getStatusColorForProgress = useCallback((status: string, isDark: boolean) => {
     if (status === 'created' && isDark) {
       return 'white';
     }
     return getStatusColor(status) + '.8';
-  };
+  }, []);
 
   const formatMapName = (mapId: string) => {
     // Convert map ID to proper display name
@@ -463,12 +447,12 @@ export function MatchDashboard() {
     }
   }, []);
 
-  const handleViewDetails = (match: MatchWithGame) => {
+  const handleViewDetails = useCallback((match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
-  };
+  }, [fetchParticipants, fetchReminders]);
 
   // Auto-refresh participants and reminders when details modal is open
   useEffect(() => {
@@ -501,7 +485,7 @@ export function MatchDashboard() {
     }
   };
 
-  const handleStatusTransition = async (matchId: string, newStatus: string) => {
+  const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
     try {
       const response = await fetch(`/api/matches/${matchId}/transition`, {
         method: 'POST',
@@ -527,9 +511,9 @@ export function MatchDashboard() {
     } catch (error) {
       console.error('Error transitioning match status:', error);
     }
-  };
+  }, []);
 
-  const getNextStatusButton = (match: MatchWithGame) => {
+  const getNextStatusButton = useCallback((match: MatchWithGame) => {
     switch (match.status) {
       case 'created':
         return (
@@ -581,7 +565,7 @@ export function MatchDashboard() {
       default:
         return null;
     }
-  };
+  }, [handleStatusTransition]);
 
   const handleAssignPlayers = (match: MatchWithGame) => {
     setSelectedMatchForAssignment(match);
@@ -612,15 +596,13 @@ export function MatchDashboard() {
           colorScheme={colorScheme}
           onViewDetails={handleViewDetails}
           onAssignPlayers={handleAssignPlayers}
-          onStatusTransition={handleStatusTransition}
           formatMapName={formatMapName}
-          getStatusColor={getStatusColor}
           getStatusColorForProgress={getStatusColorForProgress}
           getNextStatusButton={getNextStatusButton}
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress]);
+  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress, handleStatusTransition]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {

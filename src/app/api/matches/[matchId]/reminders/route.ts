@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 
-interface ReminderDbRow {
-  id: string;
-  match_id: string;
-  reminder_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'processed';
-  error_message?: string;
-  created_at: string;
-  sent_at?: string;
-  processed_at?: string;
-}
 
 export async function GET(
   request: NextRequest,

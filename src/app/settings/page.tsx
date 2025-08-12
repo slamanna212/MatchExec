@@ -38,12 +38,6 @@ interface AnnouncerSettings {
   announcement_voice_channel?: string;
 }
 
-interface VoiceChannel {
-  id: string;
-  discord_channel_id: string;
-  channel_name: string;
-  channel_type: 'voice';
-}
 
 interface Voice {
   id: string;
@@ -64,7 +58,6 @@ export default function SettingsPage() {
   const [announcerMessage, setAnnouncerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
-  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
 
   // Helper functions for player reminder conversion
@@ -131,13 +124,12 @@ export default function SettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, channelsResponse, announcerResponse] = await Promise.all([
+        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, announcerResponse] = await Promise.all([
           fetch('/api/settings/discord'),
           fetch('/api/settings/discord'), // We'll use the same endpoint for now
           fetch('/api/settings/scheduler'),
           fetch('/api/settings/ui'),
           fetch('/api/settings/voices'),
-          fetch('/api/channels'),
           fetch('/api/settings/announcer')
         ]);
         
@@ -188,10 +180,6 @@ export default function SettingsPage() {
           })));
         }
 
-        if (channelsResponse.ok) {
-          const channelsData = await channelsResponse.json();
-          setVoiceChannels(channelsData.filter((channel: { channel_type: string }) => channel.channel_type === 'voice'));
-        }
 
         if (announcerResponse.ok) {
           const announcerData = await announcerResponse.json();
@@ -206,8 +194,7 @@ export default function SettingsPage() {
     }
 
     fetchSettings();
-  }, []); // Empty dependency array - only run once on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, appForm, uiForm, announcerForm]);
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);
