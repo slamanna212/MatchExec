@@ -91,6 +91,32 @@ export interface DiscordSettingsDbRow {
   [key: string]: unknown;
 }
 
+export interface DiscordChannel {
+  id: string;
+  discord_channel_id: string;
+  channel_name?: string;
+  channel_type: 'text' | 'voice';
+  send_announcements: boolean;
+  send_reminders: boolean;
+  send_match_start: boolean;
+  send_signup_updates: boolean;
+  last_name_refresh?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscordSettings {
+  bot_token: string;
+  guild_id: string;
+  announcement_role_id?: string;
+  mention_everyone?: boolean;
+  event_duration_minutes?: number;
+  match_reminder_minutes?: number;
+  player_reminder_minutes?: number;
+  announcer_voice?: string;
+  voice_announcements_enabled?: boolean;
+}
+
 // Match progress constants
 export const MATCH_FLOW_STEPS = {
   created: { name: 'Creation', progress: 20 },

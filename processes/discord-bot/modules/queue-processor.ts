@@ -1,12 +1,14 @@
 import { Client } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
+import { AnnouncementHandler } from './announcement-handler';
+import { ReminderHandler } from './reminder-handler';
+import { EventHandler } from './event-handler';
 
-// Interfaces for different queue types
+// Interfaces for different queue types - matching existing DB structure
 interface QueuedAnnouncement {
   id: string;
   match_id?: string;
-  data?: string;
   announcement_type?: string;
   announcement_data?: string;
   created_at: string;
@@ -14,21 +16,21 @@ interface QueuedAnnouncement {
 
 interface QueuedDeletion {
   id: string;
-  data: string;
+  match_id: string;
   created_at: string;
 }
 
 interface QueuedStatusUpdate {
   id: string;
   match_id: string;
-  data: string;
+  new_status: string;
   created_at: string;
 }
 
 interface QueuedReminder {
   id: string;
   match_id: string;
-  data: string;
+  reminder_time: string;
   created_at: string;
 }
 
@@ -37,9 +39,9 @@ export class QueueProcessor {
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null,
-    private announcementHandler: any,
-    private reminderHandler: any,
-    private eventHandler: any
+    private announcementHandler: AnnouncementHandler | null,
+    private reminderHandler: ReminderHandler | null,
+    private eventHandler: EventHandler | null
   ) {}
 
   async processAnnouncementQueue() {
@@ -47,7 +49,7 @@ export class QueueProcessor {
 
     try {
       const announcements = await this.db.all<QueuedAnnouncement>(`
-        SELECT id, match_id, data, announcement_type, announcement_data, created_at
+        SELECT id, match_id, announcement_type, announcement_data, created_at
         FROM discord_announcement_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -108,10 +110,60 @@ export class QueueProcessor {
             eventData._timingInfo = timingData;
             
           } else {
-            // Standard announcement with embedded data
-            eventData = JSON.parse(announcement.data || '{}');
+            // Standard announcement - need to fetch from database since no embedded data
+            const match = await this.db.get(`
+              SELECT m.*, g.name as game_name, g.icon_url as game_icon
+              FROM matches m
+              LEFT JOIN games g ON m.game_id = g.id  
+              WHERE m.id = ?
+            `, [announcement.match_id]);
+            
+            if (!match) {
+              console.error(`❌ Match not found for announcement: ${announcement.match_id}`);
+              await this.db.run(`
+                UPDATE discord_announcement_queue 
+                SET status = 'failed', posted_at = datetime('now')
+                WHERE id = ?
+              `, [announcement.id]);
+              continue;
+            }
+            
+            // Parse maps if they exist
+            let maps = [];
+            if (match.maps) {
+              try {
+                maps = JSON.parse(match.maps);
+              } catch (e) {
+                console.warn('Could not parse maps for match:', match.id);
+              }
+            }
+            
+            eventData = {
+              id: match.id,
+              name: match.name,
+              description: match.description,
+              game_id: match.game_id,
+              game_name: match.game_name,
+              game_icon: match.game_icon,
+              start_date: match.start_date,
+              livestream_link: match.livestream_link,
+              rules: match.rules,
+              maps: maps,
+              event_image_url: match.event_image_url,
+              max_participants: match.max_participants
+            };
           }
           
+          if (!this.announcementHandler) {
+            console.error('❌ AnnouncementHandler not available');
+            await this.db.run(`
+              UPDATE discord_announcement_queue 
+              SET status = 'failed', posted_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['AnnouncementHandler not available', announcement.id]);
+            continue;
+          }
+
           // Use different posting methods based on announcement type
           let result;
           if (announcement.announcement_type === 'timed') {
@@ -136,7 +188,7 @@ export class QueueProcessor {
                 }
 
                 // Create Discord server event
-                if (eventData.start_date && typeof eventData.start_date === 'string') {
+                if (eventData.start_date && typeof eventData.start_date === 'string' && this.eventHandler) {
                   const rounds = eventData.maps?.length || 1;
                   discordEventId = await this.eventHandler.createDiscordEvent({
                     ...eventData,
@@ -158,7 +210,7 @@ export class QueueProcessor {
             // Mark as completed
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'completed', posted_at = datetime('now')
+              SET status = 'posted', posted_at = datetime('now')
               WHERE id = ?
             `, [announcement.id]);
 
@@ -167,9 +219,9 @@ export class QueueProcessor {
             // Mark as failed
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'failed', posted_at = datetime('now')
+              SET status = 'failed', posted_at = datetime('now'), error_message = ?
               WHERE id = ?
-            `, [announcement.id]);
+            `, ['Failed to post announcement', announcement.id]);
 
             console.log(`❌ Failed to process announcement queue item ${announcement.id}`);
           }
@@ -179,9 +231,9 @@ export class QueueProcessor {
           // Mark as failed
           await this.db.run(`
             UPDATE discord_announcement_queue 
-            SET status = 'failed', posted_at = datetime('now')
+            SET status = 'failed', posted_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [announcement.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
         }
       }
     } catch (error) {
@@ -194,7 +246,7 @@ export class QueueProcessor {
 
     try {
       const deletions = await this.db.all<QueuedDeletion>(`
-        SELECT id, data, created_at
+        SELECT id, match_id, created_at
         FROM discord_deletion_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -203,8 +255,7 @@ export class QueueProcessor {
 
       for (const deletion of deletions) {
         try {
-          const deletionData = JSON.parse(deletion.data);
-          const { matchId } = deletionData;
+          const matchId = deletion.match_id;
 
           // Get all Discord messages for this match
           const messages = await this.db.all<{
@@ -245,7 +296,7 @@ export class QueueProcessor {
               }
 
               // Delete Discord event if exists
-              if (record.discord_event_id) {
+              if (record.discord_event_id && this.eventHandler) {
                 const success = await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
                 if (success) {
                   console.log(`🗑️ Deleted Discord event ${record.discord_event_id}`);
@@ -265,7 +316,7 @@ export class QueueProcessor {
           // Mark deletion as completed
           await this.db.run(`
             UPDATE discord_deletion_queue 
-            SET status = 'completed', processed_at = datetime('now')
+            SET status = 'processed', processed_at = datetime('now')
             WHERE id = ?
           `, [deletion.id]);
 
@@ -292,7 +343,7 @@ export class QueueProcessor {
 
     try {
       const updates = await this.db.all<QueuedStatusUpdate>(`
-        SELECT id, match_id, data, created_at
+        SELECT id, match_id, new_status, created_at
         FROM discord_status_update_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -301,8 +352,8 @@ export class QueueProcessor {
 
       for (const update of updates) {
         try {
-          const updateData = JSON.parse(update.data);
-          const { newStatus, matchId } = updateData;
+          const newStatus = update.new_status;
+          const matchId = update.match_id;
 
           console.log(`📝 Processing status update for match ${matchId}: ${newStatus}`);
 
@@ -311,7 +362,7 @@ export class QueueProcessor {
           
           await this.db.run(`
             UPDATE discord_status_update_queue 
-            SET status = 'completed', processed_at = datetime('now')
+            SET status = 'processed', processed_at = datetime('now')
             WHERE id = ?
           `, [update.id]);
 
@@ -337,7 +388,7 @@ export class QueueProcessor {
 
     try {
       const reminders = await this.db.all<QueuedReminder>(`
-        SELECT id, match_id, data, created_at
+        SELECT id, match_id, reminder_time, created_at
         FROM discord_reminder_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -348,13 +399,23 @@ export class QueueProcessor {
         try {
           console.log(`📬 Processing reminder for match ${reminder.match_id}`);
 
+          if (!this.reminderHandler) {
+            console.error('❌ ReminderHandler not available');
+            await this.db.run(`
+              UPDATE discord_reminder_queue 
+              SET status = 'failed', sent_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['ReminderHandler not available', reminder.id]);
+            continue;
+          }
+
           const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
           
           // Mark as completed or failed based on result
-          const status = success ? 'completed' : 'failed';
+          const status = success ? 'sent' : 'failed';
           await this.db.run(`
             UPDATE discord_reminder_queue 
-            SET status = ?, processed_at = datetime('now')
+            SET status = ?, sent_at = datetime('now')
             WHERE id = ?
           `, [status, reminder.id]);
 
@@ -366,9 +427,9 @@ export class QueueProcessor {
           
           await this.db.run(`
             UPDATE discord_reminder_queue 
-            SET status = 'failed', processed_at = datetime('now')
+            SET status = 'failed', sent_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [reminder.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
         }
       }
     } catch (error) {

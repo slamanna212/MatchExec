@@ -367,7 +367,7 @@ export class ReminderHandler {
       const columnMap = {
         'announcements': 'send_announcements',
         'reminders': 'send_reminders', 
-        'match_start': 'send_match_start_notifications',
+        'match_start': 'send_match_start',
         'signup_updates': 'send_signup_updates'
       };
 
@@ -383,11 +383,11 @@ export class ReminderHandler {
         channel_type: string;
         send_announcements: number;
         send_reminders: number;
-        send_match_start_notifications: number;
+        send_match_start: number;
         send_signup_updates: number;
       }>(`
         SELECT discord_channel_id, channel_name, channel_type, 
-               send_announcements, send_reminders, send_match_start_notifications, send_signup_updates
+               send_announcements, send_reminders, send_match_start, send_signup_updates
         FROM discord_channels 
         WHERE ${column} = 1
       `);
@@ -398,7 +398,7 @@ export class ReminderHandler {
         channel_type: channel.channel_type as 'text' | 'voice',
         send_announcements: Boolean(channel.send_announcements),
         send_reminders: Boolean(channel.send_reminders),
-        send_match_start_notifications: Boolean(channel.send_match_start_notifications),
+        send_match_start: Boolean(channel.send_match_start),
         send_signup_updates: Boolean(channel.send_signup_updates)
       }));
 

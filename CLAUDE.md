@@ -53,8 +53,8 @@ docker run -p 3000:3000 --env-file .env matchexec
 │   └── globals.css         # Global styles
 ├── processes/
 │   ├── discord-bot/        # Discord bot process
-│   │   ├── index.ts        # Original monolithic bot file
-│   │   ├── index-refactored.ts  # Refactored modular bot file
+│   │   ├── index.ts        # Refactored modular bot file
+│   │   ├── index-old.ts    # Original monolithic bot file
 │   │   └── modules/        # Discord bot modules
 │   │       ├── voice-handler.ts      # Voice announcements and TTS
 │   │       ├── event-handler.ts      # Discord server events
@@ -144,8 +144,8 @@ The Discord bot has been refactored from a single 2,700+ line file into a modula
 
 ### File Structure
 
-- `index.ts` - Original monolithic bot file (preserved for reference)
-- `index-refactored.ts` - New modular bot implementation
+- `index.ts` - New modular bot implementation
+- `index-old.ts` - Original monolithic bot file (preserved for reference)
 - `modules/` - Individual bot modules
 
 ### Benefits
