@@ -78,6 +78,8 @@ docker run -p 3000:3000 --env-file .env matchexec
 
 The project uses SQLite for data persistence with automated migrations and seeding at startup.
 
+**IMPORTANT**: This project uses the standard `sqlite3` library, NOT `better-sqlite3`. All database connections should use the callback-based API of sqlite3.
+
 ### Schema
 
 The database includes tables for:

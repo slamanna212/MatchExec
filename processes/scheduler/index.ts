@@ -188,8 +188,8 @@ class MatchExecScheduler {
         `SELECT m.id, m.name, m.start_date
          FROM matches m
          WHERE m.start_date IS NOT NULL 
-         AND m.status IN ('gather', 'assign', 'battle')
-         AND datetime(m.start_date, '-${reminderMinutes} minutes') <= datetime('now', '+1 hour')
+         AND m.status IN ('created', 'gather', 'assign', 'battle')
+         AND datetime(m.start_date) > datetime('now')
          AND NOT EXISTS (
            SELECT 1 FROM discord_reminder_queue drq 
            WHERE drq.match_id = m.id 
