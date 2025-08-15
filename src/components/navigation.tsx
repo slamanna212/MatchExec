@@ -87,7 +87,13 @@ export function Navigation({ children }: NavigationProps) {
           <Group h="100%" px="md" justify="space-between">
             <Group>
               <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" />
-              <Text size="lg" fw={700}>MatchExec</Text>
+              <Image
+                src="/assets/512png.png"
+                alt="MatchExec Logo"
+                w={40}
+                h={40}
+                fit="contain"
+              />
             </Group>
             <ActionIcon variant="outline" size={30} onClick={() => {}} aria-label="Toggle color scheme">
               <IconMoon size="16" />
@@ -139,7 +145,13 @@ export function Navigation({ children }: NavigationProps) {
               size="sm"
               aria-label="Open navigation"
             />
-            <Text size="lg" fw={700}>MatchExec</Text>
+            <Image
+              src="/assets/512png.png"
+              alt="MatchExec Logo"
+              w={40}
+              h={40}
+              fit="contain"
+            />
           </Group>
           <ActionIcon
             variant="outline"
