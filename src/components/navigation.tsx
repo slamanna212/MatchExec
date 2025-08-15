@@ -9,7 +9,8 @@ import {
   Burger,
   Group,
   ActionIcon,
-  useMantineColorScheme
+  useMantineColorScheme,
+  Image
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -95,8 +96,14 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Header>
         <AppShell.Navbar p="md">
           <AppShell.Section>
-            <Group mb="md" visibleFrom="md">
-              <Text size="xl" fw={700}>MatchExec</Text>
+            <Group mb="md" visibleFrom="md" justify="center">
+              <Image
+                src="/assets/512png.png"
+                alt="MatchExec Logo"
+                w={80}
+                h={80}
+                fit="contain"
+              />
             </Group>
           </AppShell.Section>
           <AppShell.Section grow />
@@ -151,8 +158,14 @@ export function Navigation({ children }: NavigationProps) {
 
       <AppShell.Navbar p="md">
         <AppShell.Section>
-          <Group mb="md" visibleFrom="md">
-            <Text size="xl" fw={700}>MatchExec</Text>
+          <Group mb="md" visibleFrom="md" justify="center">
+            <Image
+              src="/assets/512png.png"
+              alt="MatchExec Logo"
+              w={120}
+              h={120}
+              fit="contain"
+            />
           </Group>
         </AppShell.Section>
 
