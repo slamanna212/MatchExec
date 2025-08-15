@@ -1,4 +1,4 @@
-import { Client } from 'discord.js';
+import { Client, EmbedBuilder } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
 import { AnnouncementHandler } from './announcement-handler';
@@ -314,6 +314,10 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
+      if (updates.length > 0) {
+        console.log(`🔄 Processing ${updates.length} status update(s) from queue`);
+      }
+
       for (const update of updates) {
         try {
           const newStatus = update.new_status;
@@ -321,16 +325,35 @@ export class QueueProcessor {
 
           console.log(`📝 Processing status update for match ${matchId}: ${newStatus}`);
 
-          // For now, just mark as completed since full status update logic would be complex
-          // In a full implementation, this would update Discord messages with new status
+          // Update Discord messages based on the new status
+          let success = false;
+          
+          try {
+            if (newStatus === 'assign') {
+              // When transitioning to 'assign' (signups closed), remove signup buttons
+              success = await this.updateMatchMessagesForSignupClosure(matchId);
+            } else {
+              // For other status changes, just log for now
+              console.log(`📝 Status update to ${newStatus} - no Discord message changes needed`);
+              success = true;
+            }
+          } catch (error) {
+            console.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
+            success = false;
+          }
+          
+          // Mark as completed or failed based on result
+          const finalStatus = success ? 'processed' : 'failed';
+          const errorMessage = success ? null : 'Failed to update Discord messages';
           
           await this.db.run(`
             UPDATE discord_status_update_queue 
-            SET status = 'processed', processed_at = datetime('now')
+            SET status = ?, processed_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [update.id]);
+          `, [finalStatus, errorMessage, update.id]);
 
-          console.log(`✅ Processed status update queue item ${update.id}`);
+          const statusIcon = success ? '✅' : '❌';
+          console.log(`${statusIcon} Processed status update queue item ${update.id} for match ${matchId}`);
 
         } catch (error) {
           console.error(`❌ Error processing status update ${update.id}:`, error);
@@ -532,6 +555,114 @@ export class QueueProcessor {
       this.processReminderQueue(),
       this.processDiscordBotRequests()
     ]);
+  }
+
+  private async updateMatchMessagesForSignupClosure(matchId: string): Promise<boolean> {
+    if (!this.client.isReady() || !this.db) {
+      console.log(`❌ Cannot update messages - client ready: ${this.client.isReady()}, db: ${!!this.db}`);
+      return false;
+    }
+
+    try {
+      console.log(`🔍 Looking for Discord messages to update for match ${matchId}`);
+      
+      // Get all announcement messages for this match
+      const messages = await this.db.all<{
+        message_id: string;
+        channel_id: string;
+        message_type: string;
+      }>(`
+        SELECT message_id, channel_id, message_type
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+      `, [matchId]);
+
+      console.log(`🔍 Found ${messages.length} Discord messages for match ${matchId}`);
+
+      if (messages.length === 0) {
+        // Let's check if there are ANY messages for this match
+        const allMessages = await this.db.all<{
+          message_id: string;
+          channel_id: string;
+          message_type: string;
+        }>(`
+          SELECT message_id, channel_id, message_type
+          FROM discord_match_messages
+          WHERE match_id = ?
+        `, [matchId]);
+        
+        console.log(`🔍 Total messages for match ${matchId}: ${allMessages.length}`);
+        if (allMessages.length > 0) {
+          console.log(`🔍 Message types found:`, allMessages.map(m => m.message_type));
+        }
+        
+        console.log(`⚠️ No announcement-type Discord messages found for match ${matchId}`);
+        return true; // Not an error if no messages exist
+      }
+
+      let successCount = 0;
+
+      for (const messageRecord of messages) {
+        try {
+          // Fetch the Discord channel
+          const channel = await this.client.channels.fetch(messageRecord.channel_id);
+          
+          if (!channel?.isTextBased() || !('messages' in channel)) {
+            console.warn(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            continue;
+          }
+
+          // Fetch the Discord message
+          const message = await channel.messages.fetch(messageRecord.message_id);
+          
+          if (!message) {
+            console.warn(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            continue;
+          }
+
+          // Create updated embed - copy the existing embed exactly but add signups closed message
+          const updatedEmbed = message.embeds[0] ? 
+            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+          
+          // Just add a simple signups closed message at the bottom, don't change anything else
+          const existingFields = updatedEmbed.data.fields || [];
+          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+          
+          if (signupStatusFieldIndex === -1) {
+            // Add new field at the bottom
+            updatedEmbed.addFields([{
+              name: '📋 Signup Status',
+              value: '🔒 **Signups are now closed**',
+              inline: false
+            }]);
+          }
+
+          // Remove all action rows (signup buttons) but keep everything else the same
+          await message.edit({
+            embeds: [updatedEmbed],
+            components: [] // This removes all buttons
+          });
+
+          successCount++;
+          console.log(`✅ Updated Discord message ${messageRecord.message_id} - removed signup button`);
+
+        } catch (error) {
+          console.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error(`❌ Failed to update any Discord messages for match ${matchId}`);
+        return false;
+      }
+
+      console.log(`✅ Successfully updated ${successCount} Discord message(s) for match ${matchId} - signup buttons removed`);
+      return true;
+
+    } catch (error) {
+      console.error(`❌ Error updating Discord messages for signup closure:`, error);
+      return false;
+    }
   }
 
   updateSettings(settings: DiscordSettings | null) {
