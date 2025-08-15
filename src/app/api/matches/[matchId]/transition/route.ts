@@ -7,10 +7,10 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
   try {
     const db = await getDbInstance();
     
-    // Add to announcement queue
+    // Add to announcement queue with explicit 'standard' type
     await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, status)
-      VALUES (?, 'pending')
+      INSERT OR IGNORE INTO discord_announcement_queue (match_id, announcement_type, status)
+      VALUES (?, 'standard', 'pending')
     `, [matchId]);
     
     console.log('📢 Discord announcement queued for match:', matchId);
@@ -114,12 +114,22 @@ export async function POST(
     // Trigger Discord announcement when entering "gather" stage
     if (newStatus === 'gather') {
       try {
-        const discordSuccess = await queueDiscordAnnouncement(matchId);
+        // Check if an announcement is already queued to prevent duplicates
+        const existingAnnouncement = await db.get(`
+          SELECT id FROM discord_announcement_queue 
+          WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard')
+        `, [matchId]);
         
-        if (discordSuccess) {
-          console.log(`📢 Discord announcement queued for match entering gather stage: ${matchId}`);
+        if (!existingAnnouncement) {
+          const discordSuccess = await queueDiscordAnnouncement(matchId);
+          
+          if (discordSuccess) {
+            console.log(`📢 Discord announcement queued for match entering gather stage: ${matchId}`);
+          } else {
+            console.warn(`⚠️ Failed to queue Discord announcement for match: ${matchId}`);
+          }
         } else {
-          console.warn(`⚠️ Failed to queue Discord announcement for match: ${matchId}`);
+          console.log(`📢 Discord announcement already queued for match: ${matchId}, skipping duplicate`);
         }
       } catch (discordError) {
         console.error('❌ Error queuing Discord announcement:', discordError);
