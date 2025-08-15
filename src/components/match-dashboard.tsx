@@ -16,10 +16,12 @@ import {
   Modal,
   Image,
   RingProgress,
-  useMantineColorScheme
+  useMantineColorScheme,
+  SegmentedControl
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
+import classes from './gradient-segmented-control.module.css';
 
 import { AssignPlayersModal } from './assign-players-modal';
 
@@ -211,6 +213,7 @@ export function MatchDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'participants' | 'announcements'>('participants');
   const { colorScheme } = useMantineColorScheme();
 
   const fetchMatches = useCallback(async (silent = false) => {
@@ -844,86 +847,105 @@ export function MatchDashboard() {
 
             <Divider />
 
-            <div>
-              <Group justify="space-between" mb="md">
-                <Text size="lg" fw={600}>Participants</Text>
-                <Badge size="lg" variant="light">
-                  {participants.length}/{selectedMatch.max_participants}
-                </Badge>
-              </Group>
-              
-              {memoizedParticipantsList}
-            </div>
+            <Group justify="center" mb="md">
+              <SegmentedControl
+                radius="xl"
+                size="md"
+                data={[
+                  { 
+                    label: `Participants (${participants.length}/${selectedMatch.max_participants})`, 
+                    value: 'participants' 
+                  },
+                  { 
+                    label: `Announcements (${reminders.length})`, 
+                    value: 'announcements' 
+                  }
+                ]}
+                value={activeTab}
+                onChange={(value) => setActiveTab(value as 'participants' | 'announcements')}
+                classNames={classes}
+              />
+            </Group>
 
-            <Divider />
+            {activeTab === 'participants' && (
+              <div>
+                {memoizedParticipantsList}
+              </div>
+            )}
 
-            <div>
-              <Group justify="space-between" mb="md">
-                <Text size="lg" fw={600}>Scheduled Announcements</Text>
-                <Badge size="lg" variant="light">
-                  {reminders.length}
-                </Badge>
-              </Group>
-              
-              {remindersLoading ? (
-                <Group justify="center" py="md">
-                  <Loader size="sm" />
-                </Group>
-              ) : reminders.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" py="md">
-                  No scheduled announcements for this match
-                </Text>
-              ) : (
-                <Stack gap="xs">
-                  {reminders.map((reminder) => (
-                    <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder>
-                      <Group justify="space-between" align="flex-start">
-                        <Stack gap="xs" style={{ flex: 1 }}>
-                          <Group gap="xs">
-                            <Badge 
-                              size="xs" 
-                              variant="light" 
-                              color={
-                                reminder.type === 'timed_announcement' ? 'indigo' :
-                                reminder.type === 'discord_general' ? 'blue' :
-                                reminder.type === 'discord_match' ? 'purple' :
-                                'green'
-                              }
-                              style={{ textTransform: 'none' }}
-                            >
-                              {reminder.type === 'timed_announcement' ? 'Announcement' :
-                               reminder.type === 'discord_general' ? 'General' :
-                               reminder.type === 'discord_match' ? 'Match' :
-                               'Player DM'}
-                            </Badge>
-                            <Badge 
-                              size="xs" 
-                              variant="light"
-                              color={
-                                reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
-                                reminder.status === 'failed' ? 'red' :
-                                reminder.status === 'scheduled' ? 'blue' :
-                                'yellow'
-                              }
-                              style={{ textTransform: 'none' }}
-                            >
-                              {reminder.status === 'processed' || reminder.status === 'posted' ? 'Sent' : 
-                               reminder.status === 'scheduled' ? 'Scheduled' :
-                               reminder.status === 'pending' ? 'Pending' :
-                               reminder.status === 'failed' ? 'Failed' :
-                               reminder.status.charAt(0).toUpperCase() + reminder.status.slice(1).toLowerCase()}
-                            </Badge>
-                          </Group>
-                          
-                          {reminder.type === 'timed_announcement' && reminder.description && (
-                            <Text size="sm" fw={500}>
-                              {reminder.description}
-                            </Text>
-                          )}
-                          
-                          {reminder.reminder_time && reminder.reminder_time !== 'N/A' && (
+            {activeTab === 'announcements' && (
+              <div>
+                {remindersLoading ? (
+                  <Group justify="center" py="md">
+                    <Loader size="sm" />
+                  </Group>
+                ) : reminders.length === 0 ? (
+                  <Text size="sm" c="dimmed" ta="center" py="md">
+                    No scheduled announcements for this match
+                  </Text>
+                ) : (
+                  <Stack gap="xs">
+                    {reminders.map((reminder) => (
+                      <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder>
+                        <Group justify="space-between" align="flex-start">
+                          <Stack gap="xs" style={{ flex: 1 }}>
+                            <Group gap="xs">
+                              <Badge 
+                                size="xs" 
+                                variant="light" 
+                                color={
+                                  reminder.type === 'timed_announcement' ? 'indigo' :
+                                  reminder.type === 'discord_general' ? 'blue' :
+                                  reminder.type === 'discord_match' ? 'purple' :
+                                  'green'
+                                }
+                                style={{ textTransform: 'none' }}
+                              >
+                                {reminder.type === 'timed_announcement' ? 'Announcement' :
+                                 reminder.type === 'discord_general' ? 'General' :
+                                 reminder.type === 'discord_match' ? 'Match' :
+                                 'Player DM'}
+                              </Badge>
+                              <Badge 
+                                size="xs" 
+                                variant="light"
+                                color={
+                                  reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
+                                  reminder.status === 'failed' ? 'red' :
+                                  reminder.status === 'scheduled' ? 'blue' :
+                                  'yellow'
+                                }
+                                style={{ textTransform: 'none' }}
+                              >
+                                {reminder.status === 'processed' || reminder.status === 'posted' ? 'Sent' : 
+                                 reminder.status === 'scheduled' ? 'Scheduled' :
+                                 reminder.status === 'pending' ? 'Pending' :
+                                 reminder.status === 'failed' ? 'Failed' :
+                                 reminder.status.charAt(0).toUpperCase() + reminder.status.slice(1).toLowerCase()}
+                              </Badge>
+                            </Group>
+                            
+                            {reminder.type === 'timed_announcement' && reminder.description && (
+                              <Text size="sm" fw={500}>
+                                {reminder.description}
+                              </Text>
+                            )}
+                            
+                            {reminder.reminder_time && reminder.reminder_time !== 'N/A' && (
+                              <Text size="xs" c="dimmed">
+                                {reminder.type === 'timed_announcement' ? 'Announcement Time' : 'Reminder Time'}: {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'numeric', 
+                                  day: 'numeric', 
+                                  hour: 'numeric', 
+                                  minute: '2-digit',
+                                  hour12: true 
+                                }) || 'N/A'}
+                              </Text>
+                            )}
+                            
                             <Text size="xs" c="dimmed">
-                              {reminder.type === 'timed_announcement' ? 'Announcement Time' : 'Reminder Time'}: {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', { 
+                              Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
                                 year: 'numeric', 
                                 month: 'numeric', 
                                 day: 'numeric', 
@@ -932,44 +954,33 @@ export function MatchDashboard() {
                                 hour12: true 
                               }) || 'N/A'}
                             </Text>
-                          )}
-                          
-                          <Text size="xs" c="dimmed">
-                            Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                              year: 'numeric', 
-                              month: 'numeric', 
-                              day: 'numeric', 
-                              hour: 'numeric', 
-                              minute: '2-digit',
-                              hour12: true 
-                            }) || 'N/A'}
-                          </Text>
-                          
-                          {(reminder.sent_at || reminder.processed_at) && (
-                            <Text size="xs" c="dimmed">
-                              Sent: {parseDbTimestamp(reminder.sent_at || reminder.processed_at || '')?.toLocaleString('en-US', { 
-                                year: 'numeric', 
-                                month: 'numeric', 
-                                day: 'numeric', 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true 
-                              }) || 'N/A'}
-                            </Text>
-                          )}
-                          
-                          {reminder.error_message && (
-                            <Text size="xs" c="red">
-                              Error: {reminder.error_message}
-                            </Text>
-                          )}
-                        </Stack>
-                      </Group>
-                    </Card>
-                  ))}
-                </Stack>
-              )}
-            </div>
+                            
+                            {(reminder.sent_at || reminder.processed_at) && (
+                              <Text size="xs" c="dimmed">
+                                Sent: {parseDbTimestamp(reminder.sent_at || reminder.processed_at || '')?.toLocaleString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'numeric', 
+                                  day: 'numeric', 
+                                  hour: 'numeric', 
+                                  minute: '2-digit',
+                                  hour12: true 
+                                }) || 'N/A'}
+                              </Text>
+                            )}
+                            
+                            {reminder.error_message && (
+                              <Text size="xs" c="red">
+                                Error: {reminder.error_message}
+                              </Text>
+                            )}
+                          </Stack>
+                        </Group>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </div>
+            )}
 
             <Divider />
             

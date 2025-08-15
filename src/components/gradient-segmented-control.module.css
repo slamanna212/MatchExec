@@ -1,0 +1,11 @@
+.indicator {
+  background-color: var(--mantine-primary-color-filled);
+}
+
+.control:not(:has([data-active])) {
+  background-color: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-7));
+}
+
+.label {
+  color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-2));
+}
