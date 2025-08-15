@@ -115,7 +115,7 @@ export function Navigation({ children }: NavigationProps) {
           <AppShell.Section grow />
           <AppShell.Section>
             <Group mt="md">
-              <ActionIcon variant="outline" size={30} onClick={() => {}}>
+              <ActionIcon variant="outline" size={30} onClick={() => {}} c="#F5F5F5" style={{ borderColor: '#F5F5F5' }}>
                 <IconMoon size="16" />
               </ActionIcon>
             </Group>
@@ -248,6 +248,8 @@ export function Navigation({ children }: NavigationProps) {
               variant="outline"
               size={30}
               onClick={() => toggleColorScheme()}
+              c="#F5F5F5"
+              style={{ borderColor: '#F5F5F5' }}
             >
               {mounted ? (
                 colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />
