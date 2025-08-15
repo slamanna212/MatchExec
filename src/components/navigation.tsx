@@ -83,10 +83,10 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md">
+        <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
           <Group h="100%" px="md" justify="space-between">
             <Group>
-              <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" />
+              <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
               <Image
                 src="/assets/512png.png"
                 alt="MatchExec Logo"
@@ -95,7 +95,7 @@ export function Navigation({ children }: NavigationProps) {
                 fit="contain"
               />
             </Group>
-            <ActionIcon variant="outline" size={30} onClick={() => {}} aria-label="Toggle color scheme">
+            <ActionIcon variant="outline" size={30} onClick={() => {}} aria-label="Toggle color scheme" c="#F5F5F5" style={{ borderColor: '#F5F5F5' }}>
               <IconMoon size="16" />
             </ActionIcon>
           </Group>
@@ -136,7 +136,7 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md">
+      <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
         <Group h="100%" px="md" justify="space-between">
           <Group>
             <Burger 
@@ -144,6 +144,7 @@ export function Navigation({ children }: NavigationProps) {
               onClick={toggle} 
               size="sm"
               aria-label="Open navigation"
+              color="#F5F5F5"
             />
             <Image
               src="/assets/512png.png"
@@ -158,6 +159,8 @@ export function Navigation({ children }: NavigationProps) {
             size={30}
             onClick={() => toggleColorScheme()}
             aria-label="Toggle color scheme"
+            c="#F5F5F5"
+            style={{ borderColor: '#F5F5F5' }}
           >
             {mounted ? (
               colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />
