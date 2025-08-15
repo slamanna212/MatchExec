@@ -386,17 +386,38 @@ export class QueueProcessor {
         try {
           console.log(`📬 Processing reminder for match ${reminder.match_id}`);
 
-          if (!this.reminderHandler) {
-            console.error('❌ ReminderHandler not available');
+          if (!this.announcementHandler) {
+            console.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_reminder_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
               WHERE id = ?
-            `, ['ReminderHandler not available', reminder.id]);
+            `, ['AnnouncementHandler not available', reminder.id]);
             continue;
           }
 
-          const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
+          // Get match data for timed reminder
+          const matchData = await this.db.get<{
+            id: string;
+            name: string;
+            description: string;
+            game_id: string;
+            start_date: string;
+            event_image_url?: string;
+          }>(`
+            SELECT id, name, description, game_id, start_date, event_image_url
+            FROM matches WHERE id = ?
+          `, [reminder.match_id]);
+
+          if (!matchData) {
+            throw new Error('Match not found');
+          }
+
+          // Send timed reminder to channels (not player DMs)
+          const success = await this.announcementHandler.postTimedReminder({
+            ...matchData,
+            _timingInfo: { value: 10, unit: 'minutes' } // This will be calculated properly by scheduler
+          });
           
           // Mark as completed or failed based on result
           const status = success ? 'sent' : 'failed';
@@ -421,6 +442,90 @@ export class QueueProcessor {
       }
     } catch (error) {
       console.error('❌ Error processing reminder queue:', error);
+    }
+  }
+
+  async processPlayerReminderQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const playerReminders = await this.db.all<{
+        id: string;
+        match_id: string;
+        reminder_time: string;
+        created_at: string;
+      }>(`
+        SELECT id, match_id, reminder_time, created_at
+        FROM discord_player_reminder_queue
+        WHERE status = 'pending' 
+        AND datetime(reminder_time) <= datetime('now')
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const reminder of playerReminders) {
+        try {
+          console.log(`📱 Processing player reminder DMs for match ${reminder.match_id}`);
+
+          if (!this.reminderHandler) {
+            console.error('❌ ReminderHandler not available');
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue 
+              SET status = 'failed', sent_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['ReminderHandler not available', reminder.id]);
+            continue;
+          }
+
+          // Check if player notifications are enabled for this match
+          const matchSettings = await this.db.get<{
+            player_notifications: number;
+            name: string;
+          }>(`
+            SELECT player_notifications, name FROM matches WHERE id = ?
+          `, [reminder.match_id]);
+
+          if (!matchSettings) {
+            throw new Error('Match not found');
+          }
+
+          if (!matchSettings.player_notifications) {
+            console.log(`⏭️ Player notifications disabled for match ${matchSettings.name}, skipping DMs`);
+            // Mark as completed since this is expected behavior
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue 
+              SET status = 'skipped', sent_at = datetime('now')
+              WHERE id = ?
+            `, [reminder.id]);
+            continue;
+          }
+
+          // Send DMs to players (only if notifications are enabled)
+          const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
+          
+          // Mark as completed or failed based on result
+          const status = success ? 'sent' : 'failed';
+          await this.db.run(`
+            UPDATE discord_player_reminder_queue 
+            SET status = ?, sent_at = datetime('now')
+            WHERE id = ?
+          `, [status, reminder.id]);
+
+          const resultIcon = success ? '✅' : '❌';
+          console.log(`${resultIcon} Processed player reminder queue item ${reminder.id} for match ${reminder.match_id}`);
+
+        } catch (error) {
+          console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
+          
+          await this.db.run(`
+            UPDATE discord_player_reminder_queue 
+            SET status = 'failed', sent_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing player reminder queue:', error);
     }
   }
 
@@ -553,6 +658,7 @@ export class QueueProcessor {
       this.processDeletionQueue(), 
       this.processStatusUpdateQueue(),
       this.processReminderQueue(),
+      this.processPlayerReminderQueue(),
       this.processDiscordBotRequests()
     ]);
   }
