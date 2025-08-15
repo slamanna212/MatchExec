@@ -100,7 +100,7 @@ export function Navigation({ children }: NavigationProps) {
             </ActionIcon>
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="md">
+        <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
           <AppShell.Section>
             <Group mb="md" visibleFrom="md" justify="center">
               <Image
@@ -168,7 +168,7 @@ export function Navigation({ children }: NavigationProps) {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md">
+      <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
         <AppShell.Section>
           <Group mb="md" visibleFrom="md" justify="center">
             <Image
@@ -195,6 +195,7 @@ export function Navigation({ children }: NavigationProps) {
                   leftSection={<item.icon size="1rem" />}
                   active={mounted && pathname === item.href}
                   childrenOffset={0}
+                  c="#F5F5F5"
                   onClick={(event) => {
                     event.preventDefault()
                     router.push(item.href)
@@ -210,6 +211,7 @@ export function Navigation({ children }: NavigationProps) {
                     leftSection={<link.icon size="1rem" />}
                     active={mounted && pathname === link.href}
                     pl="xl"
+                    c="#F5F5F5"
                     onClick={(event) => {
                       event.preventDefault()
                       if (link.href.includes('#')) {
