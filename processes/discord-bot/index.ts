@@ -10,6 +10,7 @@ import { AnnouncementHandler } from './modules/announcement-handler';
 import { SettingsManager } from './modules/settings-manager';
 import { QueueProcessor } from './modules/queue-processor';
 import { ReminderHandler } from './modules/reminder-handler';
+import { InteractionHandler } from './modules/interaction-handler';
 
 class MatchExecBot {
   private client: Client;
@@ -24,6 +25,7 @@ class MatchExecBot {
   private settingsManager: SettingsManager | null = null;
   private reminderHandler: ReminderHandler | null = null;
   private queueProcessor: QueueProcessor | null = null;
+  private interactionHandler: InteractionHandler | null = null;
 
   constructor() {
     this.client = new Client({
@@ -44,6 +46,11 @@ class MatchExecBot {
       if (!this.client.user) return;
       
       console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
+      
+      // Register slash commands
+      if (this.interactionHandler) {
+        await this.interactionHandler.registerSlashCommands();
+      }
       
       this.isReady = true;
       console.log('🤖 MatchExec Discord Bot is ready!');
@@ -91,6 +98,12 @@ class MatchExecBot {
       this.eventHandler = new EventHandler(this.client, this.db, this.settings);
       this.announcementHandler = new AnnouncementHandler(this.client, this.db, this.settings);
       this.reminderHandler = new ReminderHandler(this.client, this.db, this.settings);
+      this.interactionHandler = new InteractionHandler(
+        this.client,
+        this.db,
+        this.settings,
+        this.sendSignupNotification.bind(this)
+      );
       this.queueProcessor = new QueueProcessor(
         this.client,
         this.db,
@@ -122,6 +135,7 @@ class MatchExecBot {
           this.eventHandler?.updateSettings(newSettings);
           this.announcementHandler?.updateSettings(newSettings);
           this.reminderHandler?.updateSettings(newSettings);
+          this.interactionHandler?.updateSettings(newSettings);
           this.queueProcessor?.updateSettings(newSettings);
           this.queueProcessor?.updateVoiceHandler(this.voiceHandler);
         }
@@ -145,30 +159,35 @@ class MatchExecBot {
     }
   }
 
-  // Simplified interaction handlers
+  // Interaction handlers - delegate to InteractionHandler module
   private async handleSlashCommand(interaction: any) {
-    if (interaction.commandName === 'status') {
-      await interaction.reply({
-        content: `🤖 Bot Status: ${this.isReady ? 'Ready' : 'Not Ready'}\n⚙️ Settings Loaded: ${this.settings ? 'Yes' : 'No'}`,
-        ephemeral: true
-      });
+    if (this.interactionHandler) {
+      await this.interactionHandler.handleSlashCommand(interaction);
     }
   }
 
   private async handleButtonInteraction(interaction: any) {
-    // Simplified button handling - just acknowledge for now
-    await interaction.reply({
-      content: 'Button interaction received but handler not fully implemented yet.',
-      ephemeral: true
-    });
+    if (this.interactionHandler) {
+      await this.interactionHandler.handleButtonInteraction(interaction);
+    }
   }
 
   private async handleModalSubmit(interaction: any) {
-    // Simplified modal handling - just acknowledge for now  
-    await interaction.reply({
-      content: 'Modal submission received but handler not fully implemented yet.',
-      ephemeral: true
-    });
+    if (this.interactionHandler) {
+      await this.interactionHandler.handleModalSubmit(interaction);
+    }
+  }
+
+  // Signup notification method for InteractionHandler
+  private async sendSignupNotification(eventId: string, signupInfo: any) {
+    try {
+      if (this.reminderHandler) {
+        // Use reminder handler to send signup notifications
+        await this.reminderHandler.sendSignupNotification(eventId, signupInfo);
+      }
+    } catch (error) {
+      console.error('❌ Error sending signup notification:', error);
+    }
   }
 
   // Public API methods for external use
