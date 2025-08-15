@@ -535,7 +535,19 @@ export function MatchDashboard() {
           </Button>
         );
       case 'assign':
-        return null; // Battle starts automatically at scheduled time
+        return (
+          <Button 
+            size="sm" 
+            color="yellow"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'battle');
+            }}
+            style={{ flex: 1 }}
+          >
+            Start Match
+          </Button>
+        );
       case 'battle':
         return (
           <Button 

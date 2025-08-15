@@ -130,6 +130,8 @@ export class QueueProcessor {
           let result;
           if (announcement.announcement_type === 'timed') {
             result = await this.announcementHandler.postTimedReminder(eventData);
+          } else if (announcement.announcement_type === 'match_start') {
+            result = await this.announcementHandler.postMatchStartAnnouncement(eventData);
           } else {
             result = await this.announcementHandler.postEventAnnouncement(eventData);
           }

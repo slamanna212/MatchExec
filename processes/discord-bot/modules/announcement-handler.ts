@@ -598,6 +598,163 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
+  async postMatchStartAnnouncement(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    type: 'competitive' | 'casual';
+    maps?: string[];
+    max_participants: number;
+    guild_id: string;
+    livestream_link?: string;
+    event_image_url?: string;
+    start_date?: string;
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for match start notifications
+    const matchStartChannels = await this.getChannelsForNotificationType('match_start');
+    
+    if (matchStartChannels.length === 0) {
+      console.warn('⚠️ No channels configured for match start notifications');
+      return false;
+    }
+
+    try {
+      // Create match start embed
+      const { embed, attachment } = await this.createMatchStartEmbed(eventData);
+
+      // Build message options
+      const messageOptions: any = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured match start channels
+      for (const channelConfig of matchStartChannels) {
+        try {
+          const matchStartChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (matchStartChannel?.isTextBased() && 'send' in matchStartChannel) {
+            // Send match start announcement
+            await matchStartChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send match start announcement to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send match start announcement to any channels');
+        return false;
+      }
+
+      console.log(`✅ Match start announcement posted to ${successCount} channel(s) for: ${eventData.name}`);
+      return { success: true, successCount };
+
+    } catch (error) {
+      console.error('❌ Error posting match start announcement:', error);
+      return false;
+    }
+  }
+
+  private async createMatchStartEmbed(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    type: 'competitive' | 'casual';
+    maps?: string[];
+    max_participants: number;
+    guild_id: string;
+    livestream_link?: string;
+    event_image_url?: string;
+    start_date?: string;
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data for styling
+    let gameName = eventData.game_id;
+    let gameColor = 0xe74c3c; // Red color for match start
+    let attachment: AttachmentBuilder | undefined;
+
+    if (this.db) {
+      try {
+        const gameData = await this.db.get<{
+          name: string;
+          color?: string;
+          icon_url?: string;
+        }>(`
+          SELECT name, color, icon_url FROM games WHERE id = ?
+        `, [eventData.game_id]);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching game data for match start:', error);
+      }
+    }
+
+    // Create the embed
+    const embed = new EmbedBuilder()
+      .setTitle(`🚀 ${eventData.name} - MATCH STARTING NOW!`)
+      .setDescription(eventData.description || `The ${eventData.name} match is beginning!`)
+      .setColor(gameColor)
+      .addFields([
+        { name: '🎮 Game', value: gameName, inline: true },
+        { name: '🏆 Type', value: eventData.type.charAt(0).toUpperCase() + eventData.type.slice(1), inline: true },
+        { name: '👥 Max Players', value: eventData.max_participants.toString(), inline: true }
+      ])
+      .setTimestamp()
+      .setFooter({ text: 'Match Starting' });
+
+    // Add maps if available
+    if (eventData.maps && eventData.maps.length > 0) {
+      const mapList = eventData.maps.length > 3 
+        ? `${eventData.maps.slice(0, 3).join(', ')} +${eventData.maps.length - 3} more`
+        : eventData.maps.join(', ');
+      embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
+    }
+
+    // Add livestream link if available
+    if (eventData.livestream_link) {
+      embed.addFields([{ name: '📺 Livestream', value: `[Watch Live](${eventData.livestream_link})`, inline: false }]);
+    }
+
+    // Add event image if provided
+    if (eventData.event_image_url && eventData.event_image_url.trim()) {
+      try {
+        const imagePath = path.join(process.cwd(), 'public', eventData.event_image_url.replace(/^\//, ''));
+        
+        if (fs.existsSync(imagePath)) {
+          attachment = new AttachmentBuilder(imagePath, {
+            name: `match_start_image.${path.extname(imagePath).slice(1)}`
+          });
+          
+          embed.setImage(`attachment://match_start_image.${path.extname(imagePath).slice(1)}`);
+          console.log(`✅ Added match start image attachment: ${eventData.event_image_url}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error handling match start image ${eventData.event_image_url}:`, error);
+      }
+    }
+
+    return { embed, attachment };
+  }
+
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
   }

@@ -43,6 +43,25 @@ async function queueDiscordStatusUpdate(matchId: string, newStatus: string): Pro
   }
 }
 
+// Queue a Discord match start announcement request that the Discord bot will process
+async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Add to main announcement queue with match_start type
+    await db.run(`
+      INSERT OR IGNORE INTO discord_announcement_queue (match_id, announcement_type, status)
+      VALUES (?, 'match_start', 'pending')
+    `, [matchId]);
+    
+    console.log('🚀 Discord match start announcement queued for match:', matchId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord match start announcement:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
@@ -120,6 +139,22 @@ export async function POST(
         }
       } catch (discordError) {
         console.error('❌ Error queuing Discord status update:', discordError);
+        // Don't fail the API request if Discord queueing fails
+      }
+    }
+
+    // Trigger Discord match start notification when entering "battle" stage
+    if (newStatus === 'battle') {
+      try {
+        const discordMatchStartSuccess = await queueDiscordMatchStart(matchId);
+        
+        if (discordMatchStartSuccess) {
+          console.log(`🚀 Discord match start notification queued for match entering battle stage: ${matchId}`);
+        } else {
+          console.warn(`⚠️ Failed to queue Discord match start notification for match: ${matchId}`);
+        }
+      } catch (discordError) {
+        console.error('❌ Error queuing Discord match start notification:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
     }
