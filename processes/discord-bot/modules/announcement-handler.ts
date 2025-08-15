@@ -682,29 +682,40 @@ export class AnnouncementHandler {
     event_image_url?: string;
     start_date?: string;
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    // Get game data for styling
+    // Get game data and match voice channels
     let gameName = eventData.game_id;
     let gameColor = 0xe74c3c; // Red color for match start
     let attachment: AttachmentBuilder | undefined;
+    let blueTeamVoiceChannel: string | null = null;
+    let redTeamVoiceChannel: string | null = null;
 
     if (this.db) {
       try {
-        const gameData = await this.db.get<{
-          name: string;
-          color?: string;
-          icon_url?: string;
+        // Get game data and match voice channels in one query
+        const matchData = await this.db.get<{
+          game_name: string;
+          game_color?: string;
+          game_icon?: string;
+          blue_team_voice_channel?: string;
+          red_team_voice_channel?: string;
         }>(`
-          SELECT name, color, icon_url FROM games WHERE id = ?
-        `, [eventData.game_id]);
+          SELECT g.name as game_name, g.color as game_color, g.icon_url as game_icon,
+                 m.blue_team_voice_channel, m.red_team_voice_channel
+          FROM matches m
+          JOIN games g ON m.game_id = g.id
+          WHERE m.id = ?
+        `, [eventData.id]);
         
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+        if (matchData) {
+          gameName = matchData.game_name;
+          blueTeamVoiceChannel = matchData.blue_team_voice_channel;
+          redTeamVoiceChannel = matchData.red_team_voice_channel;
+          if (matchData.game_color) {
+            gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
           }
         }
       } catch (error) {
-        console.error('Error fetching game data for match start:', error);
+        console.error('Error fetching match data for match start:', error);
       }
     }
 
@@ -727,6 +738,77 @@ export class AnnouncementHandler {
         ? `${eventData.maps.slice(0, 3).join(', ')} +${eventData.maps.length - 3} more`
         : eventData.maps.join(', ');
       embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
+    }
+
+    // Get team assignments and add them to the embed
+    if (this.db) {
+      try {
+        const participants = await this.db.all<{
+          username: string;
+          team_assignment?: string;
+          discord_user_id?: string;
+        }>(`
+          SELECT username, team_assignment, discord_user_id
+          FROM match_participants
+          WHERE match_id = ?
+          ORDER BY team_assignment ASC, username ASC
+        `, [eventData.id]);
+
+        if (participants && participants.length > 0) {
+          // Group participants by team
+          const blueTeam = participants.filter(p => p.team_assignment === 'blue');
+          const redTeam = participants.filter(p => p.team_assignment === 'red');
+          const reserves = participants.filter(p => p.team_assignment === 'reserve' || !p.team_assignment);
+
+          // Add team rosters
+          if (blueTeam.length > 0) {
+            const blueList = blueTeam.map(p => 
+              p.discord_user_id ? `<@${p.discord_user_id}>` : p.username
+            ).join('\n');
+            
+            let blueFieldValue = blueList;
+            if (blueTeamVoiceChannel) {
+              blueFieldValue += `\n\n🎙️ Voice: <#${blueTeamVoiceChannel}>`;
+            }
+            
+            embed.addFields([{ 
+              name: '🔵 Blue Team', 
+              value: blueFieldValue, 
+              inline: true 
+            }]);
+          }
+
+          if (redTeam.length > 0) {
+            const redList = redTeam.map(p => 
+              p.discord_user_id ? `<@${p.discord_user_id}>` : p.username
+            ).join('\n');
+            
+            let redFieldValue = redList;
+            if (redTeamVoiceChannel) {
+              redFieldValue += `\n\n🎙️ Voice: <#${redTeamVoiceChannel}>`;
+            }
+            
+            embed.addFields([{ 
+              name: '🔴 Red Team', 
+              value: redFieldValue, 
+              inline: true 
+            }]);
+          }
+
+          if (reserves.length > 0) {
+            const reserveList = reserves.map(p => 
+              p.discord_user_id ? `<@${p.discord_user_id}>` : p.username
+            ).join('\n');
+            embed.addFields([{ 
+              name: '🟡 Reserves', 
+              value: reserveList, 
+              inline: true 
+            }]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching team assignments for match start:', error);
+      }
     }
 
     // Add livestream link if available
