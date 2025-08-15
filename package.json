@@ -33,8 +33,8 @@
     "express": "^5.1.0",
     "ffmpeg-static": "^5.2.0",
     "framer-motion": "^12.23.12",
-    "lucide-react": "^0.536.0",
-    "next": "15.4.5",
+    "lucide-react": "^0.539.0",
+    "next": "15.4.6",
     "node-cron": "^4.2.1",
     "pm2": "^6.0.8",
     "react": "19.1.1",
@@ -49,7 +49,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.4.5",
+    "eslint-config-next": "15.4.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
