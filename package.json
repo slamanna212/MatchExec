@@ -22,7 +22,7 @@
     "@mantine/dates": "^8.2.3",
     "@mantine/form": "^8.2.3",
     "@mantine/hooks": "^8.2.3",
-    "@mantine/modals": "^8.2.3",
+    "@mantine/modals": "^8.2.5",
     "@mantine/notifications": "^8.2.3",
     "@tabler/icons-react": "^3.34.1",
     "@types/express": "^5.0.3",
