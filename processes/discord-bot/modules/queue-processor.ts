@@ -1,4 +1,6 @@
-import { Client, EmbedBuilder } from 'discord.js';
+import { Client, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import fs from 'fs';
+import path from 'path';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
 import { AnnouncementHandler } from './announcement-handler';
@@ -687,6 +689,15 @@ export class QueueProcessor {
     try {
       console.log(`🔍 Looking for Discord messages to update for match ${matchId}`);
       
+      // Get match data with image info for recreating attachments
+      const matchData = await this.db.get<{
+        event_image_url?: string;
+      }>(`
+        SELECT event_image_url
+        FROM matches
+        WHERE id = ?
+      `, [matchId]);
+      
       // Get all announcement messages for this match
       const messages = await this.db.all<{
         message_id: string;
@@ -790,11 +801,36 @@ export class QueueProcessor {
 
           console.log(`🔍 Embed after modification:`, JSON.stringify(updatedEmbed.data, null, 2));
 
-          const editOptions = {
+          // Recreate attachment if there's an event image to prevent Discord from stripping it
+          let attachment: AttachmentBuilder | undefined;
+          if (matchData?.event_image_url && matchData.event_image_url.trim()) {
+            try {
+              // Convert URL path to file system path for local files
+              const imagePath = path.join(process.cwd(), 'public', matchData.event_image_url.replace(/^\//, ''));
+              
+              if (fs.existsSync(imagePath)) {
+                // Create attachment for the event image
+                attachment = new AttachmentBuilder(imagePath, {
+                  name: `event_image.${path.extname(imagePath).slice(1)}`
+                });
+                
+                // Update embed to use attachment://filename to reference the reattached image
+                updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
+                
+                console.log(`🔍 Recreated attachment for image: ${matchData.event_image_url}`);
+              } else {
+                console.warn(`⚠️ Event image not found for reattachment: ${imagePath}`);
+              }
+            } catch (error) {
+              console.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
+            }
+          }
+
+          const editOptions: any = {
             content: null, // Explicitly clear any content that might cause image display
             embeds: [updatedEmbed],
             components: [], // This removes all buttons
-            files: [] // Explicitly clear files to prevent Discord from re-displaying attachments
+            files: attachment ? [attachment] : [] // Include recreated attachment if available
           };
           
           console.log(`🔍 Edit options:`, JSON.stringify(editOptions, null, 2));

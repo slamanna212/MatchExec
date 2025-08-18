@@ -811,6 +811,33 @@ export class AnnouncementHandler {
       }
     }
 
+    // Add link to original match info if available
+    if (this.db) {
+      try {
+        const originalMessage = await this.db.get<{
+          message_id: string;
+          channel_id: string;
+        }>(`
+          SELECT message_id, channel_id 
+          FROM discord_match_messages 
+          WHERE match_id = ? AND message_type = 'announcement'
+          LIMIT 1
+        `, [eventData.id]);
+
+        if (originalMessage && this.client.guilds.cache.first()) {
+          const guildId = this.client.guilds.cache.first()?.id;
+          const messageLink = `https://discord.com/channels/${guildId}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+          embed.addFields([{ 
+            name: '🔗 Match Details', 
+            value: `[View Full Match Info](${messageLink})`, 
+            inline: false 
+          }]);
+        }
+      } catch (error) {
+        console.error('Error finding original announcement message:', error);
+      }
+    }
+
     // Add livestream link if available
     if (eventData.livestream_link) {
       embed.addFields([{ name: '📺 Livestream', value: `[Watch Live](${eventData.livestream_link})`, inline: false }]);
