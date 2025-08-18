@@ -741,29 +741,68 @@ export class QueueProcessor {
             continue;
           }
 
+          console.log(`🔍 SIGNUP CLOSURE DEBUG - Message ${messageRecord.message_id}:`);
+          console.log(`🔍 Original message has ${message.embeds.length} embeds`);
+          console.log(`🔍 Original message has ${message.attachments.size} attachments`);
+          
+          if (message.embeds[0]) {
+            console.log(`🔍 Original embed data:`, JSON.stringify(message.embeds[0].data, null, 2));
+          }
+          
+          if (message.attachments.size > 0) {
+            console.log(`🔍 Original attachments:`, Array.from(message.attachments.values()).map(a => ({
+              id: a.id,
+              name: a.name,
+              url: a.url,
+              proxyURL: a.proxyURL
+            })));
+          }
+
           // Create updated embed - copy the existing embed exactly but add signups closed message
           const updatedEmbed = message.embeds[0] ? 
             EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+          
+          console.log(`🔍 Embed before modification:`, JSON.stringify(updatedEmbed.data, null, 2));
+          
+          // Keep the image in the embed - don't remove it
+          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
+          if (updatedEmbed.data.image?.url) {
+            console.log(`🔍 Found image URL: ${updatedEmbed.data.image.url} - keeping it in embed`);
+          } else {
+            console.log(`🔍 No image found in embed`);
+          }
           
           // Just add a simple signups closed message at the bottom, don't change anything else
           const existingFields = updatedEmbed.data.fields || [];
           const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
           
           if (signupStatusFieldIndex === -1) {
+            console.log(`🔍 Adding signup status field`);
             // Add new field at the bottom
             updatedEmbed.addFields([{
               name: '📋 Signup Status',
               value: '🔒 **Signups are now closed**',
               inline: false
             }]);
+          } else {
+            console.log(`🔍 Signup status field already exists at index ${signupStatusFieldIndex}`);
           }
 
-          // Remove all action rows (signup buttons) but keep everything else the same
-          await message.edit({
+          console.log(`🔍 Embed after modification:`, JSON.stringify(updatedEmbed.data, null, 2));
+
+          const editOptions = {
+            content: null, // Explicitly clear any content that might cause image display
             embeds: [updatedEmbed],
             components: [], // This removes all buttons
-            files: [] // Clear files to prevent duplicate images
-          });
+            files: [] // Explicitly clear files to prevent Discord from re-displaying attachments
+          };
+          
+          console.log(`🔍 Edit options:`, JSON.stringify(editOptions, null, 2));
+
+          // Remove all action rows (signup buttons) but keep everything else the same
+          await message.edit(editOptions);
+          
+          console.log(`🔍 Message edit completed for ${messageRecord.message_id}`);
 
           successCount++;
           console.log(`✅ Updated Discord message ${messageRecord.message_id} - removed signup button`);

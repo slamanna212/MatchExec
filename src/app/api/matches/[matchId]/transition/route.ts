@@ -7,9 +7,20 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
   try {
     const db = await getDbInstance();
     
+    // Check if already exists first to prevent duplicates
+    const existing = await db.get(`
+      SELECT id FROM discord_announcement_queue 
+      WHERE match_id = ? AND announcement_type = 'standard' AND status IN ('pending', 'posted')
+    `, [matchId]);
+    
+    if (existing) {
+      console.log('📢 Discord announcement already exists for match:', matchId);
+      return true;
+    }
+    
     // Add to announcement queue with explicit 'standard' type
     await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, announcement_type, status)
+      INSERT INTO discord_announcement_queue (match_id, announcement_type, status)
       VALUES (?, 'standard', 'pending')
     `, [matchId]);
     
@@ -117,7 +128,7 @@ export async function POST(
         // Check if an announcement is already queued to prevent duplicates
         const existingAnnouncement = await db.get(`
           SELECT id FROM discord_announcement_queue 
-          WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard')
+          WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard') AND status IN ('pending', 'posted')
         `, [matchId]);
         
         if (!existingAnnouncement) {
