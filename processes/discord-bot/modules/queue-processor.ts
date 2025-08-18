@@ -378,6 +378,7 @@ export class QueueProcessor {
         SELECT id, match_id, reminder_time, created_at
         FROM discord_reminder_queue
         WHERE status = 'pending'
+        AND datetime(reminder_time) <= datetime('now')
         ORDER BY created_at ASC
         LIMIT 5
       `);
@@ -413,10 +414,24 @@ export class QueueProcessor {
             throw new Error('Match not found');
           }
 
+          // Calculate actual time difference for display
+          const now = new Date();
+          const matchStart = new Date(matchData.start_date);
+          const timeDiffMs = matchStart.getTime() - now.getTime();
+          const timeDiffMinutes = Math.round(timeDiffMs / (1000 * 60));
+          
+          let timingInfo = { value: timeDiffMinutes, unit: 'minutes' };
+          
+          // Convert to hours if more than 90 minutes
+          if (timeDiffMinutes > 90) {
+            const hours = Math.round(timeDiffMinutes / 60);
+            timingInfo = { value: hours, unit: 'hours' };
+          }
+
           // Send timed reminder to channels (not player DMs)
           const success = await this.announcementHandler.postTimedReminder({
             ...matchData,
-            _timingInfo: { value: 10, unit: 'minutes' } // This will be calculated properly by scheduler
+            _timingInfo: timingInfo
           });
           
           // Mark as completed or failed based on result
