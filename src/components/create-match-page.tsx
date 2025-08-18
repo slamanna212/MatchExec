@@ -376,6 +376,12 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === modeId);
     if (!mode) return;
 
+    // Check if map.id exists
+    if (!map.id) {
+      console.error('Map ID is undefined:', map);
+      return;
+    }
+
     // Extract base map ID (remove mode suffix if it exists)
     const baseMapId = map.id.includes('-') ? map.id.split('-')[0] : map.id;
     const combinedId = `${baseMapId}-${modeId}`;
@@ -928,8 +934,8 @@ export function CreateMatchPage() {
                       Select any map and choose which mode to play on it.
                     </Text>
                     <Grid>
-                      {allMaps.map((map) => (
-                        <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
+                      {allMaps.map((map, index) => (
+                        <Grid.Col key={`${map.id}-${index}`} span={{ base: 12, sm: 6, md: 4 }}>
                           <Card
                             shadow="sm"
                             padding="md"

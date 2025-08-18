@@ -22,6 +22,7 @@ export async function GET(
       // For games that support all modes, show unique maps only
       maps = await db.all(`
         SELECT DISTINCT
+          gm.id,
           gm.name,
           gm.image_url as imageUrl,
           gm.location,
