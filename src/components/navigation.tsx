@@ -88,7 +88,7 @@ export function Navigation({ children }: NavigationProps) {
             <Group>
               <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
               <Image
-                src="/assets/512png.png"
+                src="/logo.svg"
                 alt="MatchExec Logo"
                 w={40}
                 h={40}
@@ -104,7 +104,7 @@ export function Navigation({ children }: NavigationProps) {
           <AppShell.Section>
             <Group mb="md" visibleFrom="md" justify="center">
               <Image
-                src="/assets/512png.png"
+                src="/logo.svg"
                 alt="MatchExec Logo"
                 w={80}
                 h={80}
@@ -147,7 +147,7 @@ export function Navigation({ children }: NavigationProps) {
               color="#F5F5F5"
             />
             <Image
-              src="/assets/512png.png"
+              src="/logo.svg"
               alt="MatchExec Logo"
               w={40}
               h={40}
@@ -175,7 +175,7 @@ export function Navigation({ children }: NavigationProps) {
         <AppShell.Section>
           <Group mb="md" visibleFrom="md" justify="center">
             <Image
-              src="/assets/512png.png"
+              src="/logo.svg"
               alt="MatchExec Logo"
               w={120}
               h={120}
