@@ -761,7 +761,8 @@ export class QueueProcessor {
           // Remove all action rows (signup buttons) but keep everything else the same
           await message.edit({
             embeds: [updatedEmbed],
-            components: [] // This removes all buttons
+            components: [], // This removes all buttons
+            files: [] // Clear files to prevent duplicate images
           });
 
           successCount++;
