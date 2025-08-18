@@ -80,6 +80,8 @@ The project uses SQLite for data persistence with automated migrations and seedi
 
 **IMPORTANT**: This project uses the standard `sqlite3` library, NOT `better-sqlite3`. All database connections should use the callback-based API of sqlite3.
 
+**Database Location**: The SQLite database file is located at `./app_data/data/matchexec.db` (relative to project root). Always use this path when creating Node.js scripts for database operations.
+
 ### Schema
 
 The database includes tables for:

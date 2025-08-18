@@ -19,19 +19,20 @@ export async function GET(
     let maps;
     
     if (gameInfo?.supportsAllModes) {
-      // For games that support all modes, show unique maps only
+      // For games that support all modes, show all map-mode combinations
       maps = await db.all(`
-        SELECT DISTINCT
+        SELECT 
           gm.id,
           gm.name,
+          gm.mode_id as modeId,
           gm.image_url as imageUrl,
           gm.location,
-          'All Modes' as modeName,
-          'This map supports all game modes' as modeDescription
+          gmo.name as modeName,
+          gmo.description as modeDescription
         FROM game_maps gm
+        LEFT JOIN game_modes gmo ON gm.mode_id = gmo.id
         WHERE gm.game_id = ?
-        GROUP BY gm.name, gm.image_url, gm.location
-        ORDER BY gm.name ASC
+        ORDER BY gm.name ASC, gmo.name ASC
       `, [gameId]);
     } else {
       // For games with specific mode-map combinations, show all combinations
