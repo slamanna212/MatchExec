@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Alert, Divider } from '@mantine/core';
-import { IconPlus, IconCheck, IconAlertCircle } from '@tabler/icons-react';
+import { IconPlus, IconCheck, IconAlertCircle, IconDeviceFloppy } from '@tabler/icons-react';
 import { 
   ModeDataJsonWithScoring, 
   ScoringConfig, 
@@ -32,9 +32,10 @@ export function RealTimeScoring({
   submitting
 }: RealTimeScoringProps) {
   
-  // Get max rounds from format variant
-  const maxRounds = (scoringConfig.formatVariant.maxRounds as number) || 3;
-  const winCondition = maxRounds === 3 ? 2 : Math.ceil(maxRounds / 2); // First to majority
+  // Get rounds to win from format variant (this is actually the win condition)
+  const roundsToWin = (scoringConfig.formatVariant.maxRounds as number) || 2;
+  const winCondition = roundsToWin; // First to this many wins
+  const maxPossibleRounds = (roundsToWin * 2) - 1; // Maximum possible rounds (e.g., 2-0, 2-1 max = 3 rounds)
   
   // Round state
   const [rounds, setRounds] = useState<RoundScore[]>([]);
@@ -45,6 +46,22 @@ export function RealTimeScoring({
   // Match state
   const [matchWinner, setMatchWinner] = useState<'team1' | 'team2' | 'draw' | null>(null);
   const [isMatchComplete, setIsMatchComplete] = useState(false);
+
+  // Initialize with existing score data if provided
+  useEffect(() => {
+    if (initialScore && initialScore.scoringType === 'rounds') {
+      const existingScore = initialScore as RoundsScore;
+      setRounds(existingScore.rounds || []);
+      setCurrentRound((existingScore.rounds?.length || 0) + 1);
+      
+      // If the match was already complete, restore the winner
+      if (existingScore.winner && existingScore.winner !== 'draw' && 
+          ((existingScore.team1Rounds >= winCondition) || (existingScore.team2Rounds >= winCondition))) {
+        setMatchWinner(existingScore.winner);
+        setIsMatchComplete(true);
+      }
+    }
+  }, [initialScore, winCondition]);
 
   // Calculate current team round wins
   const team1Rounds = rounds.filter(r => r.winner === 'team1').length;
@@ -58,7 +75,7 @@ export function RealTimeScoring({
     } else if (team2Rounds >= winCondition) {
       setMatchWinner('team2');
       setIsMatchComplete(true);
-    } else if (rounds.length >= maxRounds && team1Rounds === team2Rounds) {
+    } else if (rounds.length >= maxPossibleRounds && team1Rounds === team2Rounds) {
       // Handle overtime or draw based on format
       if (scoringConfig.formatVariant.overtimeEnabled) {
         // Continue playing until someone has a 2-round lead
@@ -68,7 +85,7 @@ export function RealTimeScoring({
         setIsMatchComplete(true);
       }
     }
-  }, [rounds, team1Rounds, team2Rounds, winCondition, maxRounds, scoringConfig]);
+  }, [rounds, team1Rounds, team2Rounds, winCondition, maxPossibleRounds, scoringConfig]);
 
   const handleAddRound = () => {
     if (!currentRoundWinner) return;
@@ -101,7 +118,7 @@ export function RealTimeScoring({
       winner: matchWinner || 'draw',
       completedAt: new Date(),
       currentRound: currentRound - 1,
-      maxRounds,
+      maxRounds: maxPossibleRounds,
       rounds,
       team1Rounds,
       team2Rounds
@@ -110,15 +127,45 @@ export function RealTimeScoring({
     await onScoreSubmit(finalScore);
   };
 
+  const handleSaveProgress = async () => {
+    if (rounds.length === 0) return;
+
+    // For partial saves, we need to determine a temporary winner or use null
+    // But since the API requires a winner, we'll use the current leader or 'draw'
+    let tempWinner: 'team1' | 'team2' | 'draw' = 'draw';
+    if (team1Rounds > team2Rounds) {
+      tempWinner = 'team1';
+    } else if (team2Rounds > team1Rounds) {
+      tempWinner = 'team2';
+    }
+
+    const progressScore: RoundsScore = {
+      matchId,
+      gameId,
+      format: scoringConfig.format,
+      scoringType: 'rounds',
+      winner: isMatchComplete ? (matchWinner || 'draw') : tempWinner,
+      completedAt: new Date(),
+      currentRound: currentRound - 1,
+      maxRounds: maxPossibleRounds,
+      rounds,
+      team1Rounds,
+      team2Rounds
+    };
+
+    await onScoreSubmit(progressScore);
+  };
+
   const canAddRound = currentRoundWinner !== null && !isMatchComplete;
   const canFinishMatch = isMatchComplete && matchWinner !== null;
+  const canSaveProgress = rounds.length > 0 && !submitting;
 
   return (
     <Stack gap="md">
       {/* Round Progress Indicator */}
       <RoundIndicator
         currentRound={currentRound}
-        maxRounds={maxRounds}
+        maxRounds={maxPossibleRounds}
         team1Rounds={team1Rounds}
         team2Rounds={team2Rounds}
         formatLabel={`First to ${winCondition}`}
@@ -225,8 +272,23 @@ export function RealTimeScoring({
         </Card>
       )}
 
-      {/* Submit Match Score */}
-      <Group justify="flex-end">
+      {/* Save Progress / Submit Match Score */}
+      <Group justify="space-between">
+        {/* Save Progress Button - Show when there are rounds to save but match isn't complete */}
+        {!isMatchComplete && canSaveProgress && (
+          <Button
+            size="md"
+            variant="light"
+            color="blue"
+            leftSection={<IconDeviceFloppy size={16} />}
+            onClick={handleSaveProgress}
+            loading={submitting}
+          >
+            Save Progress
+          </Button>
+        )}
+        
+        {/* Submit Final Score Button - Show when match is complete */}
         <Button
           size="md"
           color="green"
@@ -234,8 +296,9 @@ export function RealTimeScoring({
           onClick={handleFinishMatch}
           disabled={!canFinishMatch}
           loading={submitting}
+          style={{ marginLeft: 'auto' }}
         >
-          Submit Match Score
+          {isMatchComplete ? 'Submit Final Score' : 'Complete Match'}
         </Button>
       </Group>
     </Stack>
