@@ -6,37 +6,19 @@ import {
   Card, 
   Text, 
   Button, 
-  Badge,
   Avatar,
   Divider,
   Loader,
   Group,
   Stack,
   Grid,
-  Modal,
-  Image,
-  RingProgress,
-  useMantineColorScheme,
-  SegmentedControl
+  RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
-import classes from './gradient-segmented-control.module.css';
 
 import { AssignPlayersModal } from './assign-players-modal';
-
-interface ReminderData {
-  id: string;
-  match_id: string;
-  reminder_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
-  error_message?: string;
-  created_at: string;
-  sent_at?: string;
-  processed_at?: string;
-  type: 'discord_general' | 'discord_match' | 'discord_player' | 'timed_announcement';
-  description?: string;
-}
+import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -67,28 +49,9 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   end_date?: string;
 }
 
-interface MatchParticipant {
-  id: string;
-  user_id: string;
-  username: string;
-  joined_at: string;
-  signup_data: Record<string, unknown>;
-}
-
-interface SignupField {
-  id: string;
-  label: string;
-  type: string;
-}
-
-interface SignupConfig {
-  fields: SignupField[];
-}
-
 interface MatchCardProps {
   match: MatchWithGame;
   mapNames: {[key: string]: string};
-  colorScheme: string;
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
   formatMapName: (mapId: string) => string;
@@ -98,7 +61,6 @@ interface MatchCardProps {
 const MatchCard = memo(({ 
   match, 
   mapNames, 
-  colorScheme, 
   onViewDetails, 
   onAssignPlayers, 
   formatMapName, 
@@ -212,8 +174,6 @@ export function MatchDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'participants' | 'announcements'>('participants');
-  const { colorScheme } = useMantineColorScheme();
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -279,17 +239,6 @@ export function MatchDashboard() {
   }, [refreshInterval, fetchMatches]);
 
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'created': return 'gray';
-      case 'gather': return 'blue';
-      case 'assign': return 'orange';
-      case 'battle': return 'yellow';
-      case 'complete': return 'green';
-      case 'cancelled': return 'red';
-      default: return 'gray';
-    }
-  };
 
 
   const formatMapName = (mapId: string) => {
@@ -590,7 +539,6 @@ export function MatchDashboard() {
         <MatchCard 
           match={match}
           mapNames={mapNames}
-          colorScheme={colorScheme}
           onViewDetails={handleViewDetails}
           onAssignPlayers={handleAssignPlayers}
           formatMapName={formatMapName}
@@ -598,70 +546,8 @@ export function MatchDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton]);
+  }, [matches, mapNames, handleViewDetails, getNextStatusButton]);
 
-  // Memoize participants list to prevent unnecessary rerenders
-  const memoizedParticipantsList = useMemo(() => {
-    if (participantsLoading) {
-      return (
-        <div className="flex justify-center py-4">
-          <Loader size="md" />
-        </div>
-      );
-    }
-    
-    if (participants.length === 0) {
-      return (
-        <Card p="lg" withBorder>
-          <Stack align="center">
-            <Text size="md" c="dimmed">No participants yet</Text>
-          </Stack>
-        </Card>
-      );
-    }
-    
-    return (
-      <Stack gap="xs">
-        {participants.map((participant, index) => (
-          <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
-            <Group justify="space-between" align="center">
-              <Group align="center">
-                <Avatar size="sm" color="blue">
-                  {index + 1}
-                </Avatar>
-                <div>
-                  <Text fw={500} size="sm">{participant.username}</Text>
-                  <Text size="xs" c="dimmed">
-                    Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
-                  </Text>
-                </div>
-              </Group>
-              
-              {participant.signup_data && (
-                <Stack gap="xs" align="flex-end">
-                  {Object.entries(participant.signup_data).map(([key, value]) => {
-                    const field = signupConfig?.fields.find(f => f.id === key);
-                    const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
-                    
-                    return (
-                      <Group key={key} gap="xs">
-                        <Text size="xs" c="dimmed">
-                          {displayLabel}:
-                        </Text>
-                        <Badge size="xs" variant="light">
-                          {String(value)}
-                        </Badge>
-                      </Group>
-                    );
-                  })}
-                </Stack>
-              )}
-            </Group>
-          </Card>
-        ))}
-      </Stack>
-    );
-  }, [participants, participantsLoading, signupConfig]);
 
   if (loading) {
     return (
@@ -711,313 +597,25 @@ export function MatchDashboard() {
         matchName={selectedMatchForAssignment?.name || ''}
       />
 
-      <Modal
+      <MatchDetailsModal
         opened={detailsModalOpen}
         onClose={() => setDetailsModalOpen(false)}
         title="Match Details"
-        size="lg"
-      >
-        {selectedMatch && (
-          <Stack gap="md">
-            <Group>
-              <Avatar
-                src={selectedMatch.game_icon}
-                alt={selectedMatch.game_name}
-                size="lg"
-              />
-              <Stack gap="xs" style={{ flex: 1 }}>
-                <Text size="xl" fw={600}>{selectedMatch.name}</Text>
-                <Text size="md" c="dimmed">{selectedMatch.game_name}</Text>
-              </Stack>
-              <RingProgress
-                size={60}
-                thickness={6}
-                sections={[
-                  { 
-                    value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
-                    color: selectedMatch.game_color || '#95a5a6'
-                  }
-                ]}
-              />
-            </Group>
-
-            <Divider />
-
-            <Stack gap="sm">
-              {selectedMatch.description && (
-                <div>
-                  <Text size="sm" fw={500} c="dimmed">Description:</Text>
-                  <Text size="sm">{selectedMatch.description}</Text>
-                </div>
-              )}
-
-              {selectedMatch.rules && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Rules:</Text>
-                  <Text size="sm" tt="capitalize">{selectedMatch.rules}</Text>
-                </Group>
-              )}
-
-              {selectedMatch.rounds && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Rounds:</Text>
-                  <Text size="sm">{selectedMatch.rounds}</Text>
-                </Group>
-              )}
-
-              {selectedMatch.maps && selectedMatch.maps.length > 0 && (
-                <div>
-                  <Text size="sm" fw={500} c="dimmed" mb="md">Maps:</Text>
-                  <Grid>
-                    {selectedMatch.maps.map(mapId => {
-                      const mapDetail = mapDetails[mapId];
-                      return (
-                        <Grid.Col key={mapId} span={12}>
-                          <Card shadow="sm" padding="sm" radius="md" withBorder>
-                            <Group wrap="nowrap" align="center" gap="md">
-                              <div style={{ width: '50%' }}>
-                                <Image
-                                  src={mapDetail?.imageUrl}
-                                  alt={mapDetail?.name || formatMapName(mapId)}
-                                  height={60}
-                                  radius="sm"
-                                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                                />
-                              </div>
-                              <div style={{ width: '50%' }}>
-                                <Text fw={500} size="sm" lineClamp={1}>
-                                  {mapDetail?.name || formatMapName(mapId)}
-                                </Text>
-                                {mapDetail?.location && (
-                                  <Text size="xs" c="dimmed" lineClamp={1}>
-                                    {mapDetail.location}
-                                  </Text>
-                                )}
-                                {mapDetail?.modeName && (
-                                  <Badge size="xs" variant="light" mt={2}>
-                                    {mapDetail.modeName}
-                                  </Badge>
-                                )}
-                              </div>
-                            </Group>
-                          </Card>
-                        </Grid.Col>
-                      );
-                    })}
-                  </Grid>
-                </div>
-              )}
-
-              {selectedMatch.livestream_link && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Livestream:</Text>
-                  <Text size="sm" component="a" href={selectedMatch.livestream_link} target="_blank">
-                    View Stream
-                  </Text>
-                </Group>
-              )}
-
-              <Group justify="space-between">
-                <Text size="sm" fw={500} c="dimmed">Max Participants:</Text>
-                <Text size="sm">{selectedMatch.max_participants}</Text>
-              </Group>
-
-              {selectedMatch.start_date && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
-                  <Text size="sm">{parseDbTimestamp(selectedMatch.start_date)?.toLocaleString('en-US', { 
-                    year: 'numeric', 
-                    month: 'numeric', 
-                    day: 'numeric', 
-                    hour: 'numeric', 
-                    minute: '2-digit',
-                    hour12: true 
-                  }) || 'N/A'}</Text>
-                </Group>
-              )}
-
-              <Group justify="space-between">
-                <Text size="sm" fw={500} c="dimmed">Created:</Text>
-                <Text size="sm">{parseDbTimestamp(selectedMatch.created_at)?.toLocaleString('en-US', { 
-                  year: 'numeric', 
-                  month: 'numeric', 
-                  day: 'numeric', 
-                  hour: 'numeric', 
-                  minute: '2-digit',
-                  hour12: true 
-                }) || 'N/A'}</Text>
-              </Group>
-            </Stack>
-
-            <Divider />
-
-            <Group justify="center" mb="md">
-              <SegmentedControl
-                radius="xl"
-                size="md"
-                data={[
-                  { 
-                    label: `Participants (${participants.length}/${selectedMatch.max_participants})`, 
-                    value: 'participants' 
-                  },
-                  { 
-                    label: `Announcements (${reminders.length})`, 
-                    value: 'announcements' 
-                  }
-                ]}
-                value={activeTab}
-                onChange={(value) => setActiveTab(value as 'participants' | 'announcements')}
-                classNames={classes}
-              />
-            </Group>
-
-            {activeTab === 'participants' && (
-              <div>
-                {memoizedParticipantsList}
-              </div>
-            )}
-
-            {activeTab === 'announcements' && (
-              <div>
-                {remindersLoading ? (
-                  <Group justify="center" py="md">
-                    <Loader size="sm" />
-                  </Group>
-                ) : reminders.length === 0 ? (
-                  <Text size="sm" c="dimmed" ta="center" py="md">
-                    No scheduled announcements for this match
-                  </Text>
-                ) : (
-                  <Stack gap="xs">
-                    {reminders.map((reminder) => (
-                      <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder>
-                        <Group justify="space-between" align="flex-start">
-                          <Stack gap="xs" style={{ flex: 1 }}>
-                            <Group gap="xs">
-                              <Badge 
-                                size="xs" 
-                                variant="light" 
-                                color={
-                                  reminder.type === 'timed_announcement' ? 'indigo' :
-                                  reminder.type === 'discord_general' ? 'blue' :
-                                  reminder.type === 'discord_match' ? 'purple' :
-                                  'green'
-                                }
-                                style={{ textTransform: 'none' }}
-                              >
-                                {reminder.type === 'timed_announcement' ? 'Announcement' :
-                                 reminder.type === 'discord_general' ? 'General' :
-                                 reminder.type === 'discord_match' ? 'Match' :
-                                 'Player DM'}
-                              </Badge>
-                              <Badge 
-                                size="xs" 
-                                variant="light"
-                                color={
-                                  reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
-                                  reminder.status === 'failed' ? 'red' :
-                                  reminder.status === 'scheduled' ? 'blue' :
-                                  'yellow'
-                                }
-                                style={{ textTransform: 'none' }}
-                              >
-                                {reminder.status === 'processed' || reminder.status === 'posted' ? 'Sent' : 
-                                 reminder.status === 'scheduled' ? 'Scheduled' :
-                                 reminder.status === 'pending' ? 'Pending' :
-                                 reminder.status === 'failed' ? 'Failed' :
-                                 reminder.status.charAt(0).toUpperCase() + reminder.status.slice(1).toLowerCase()}
-                              </Badge>
-                            </Group>
-                            
-                            {reminder.type === 'timed_announcement' && reminder.description && (
-                              <Text size="sm" fw={500}>
-                                {reminder.description}
-                              </Text>
-                            )}
-                            
-                            {reminder.reminder_time && reminder.reminder_time !== 'N/A' && (
-                              <Text size="xs" c="dimmed">
-                                {reminder.type === 'timed_announcement' ? 'Announcement Time' : 'Reminder Time'}: {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', { 
-                                  year: 'numeric', 
-                                  month: 'numeric', 
-                                  day: 'numeric', 
-                                  hour: 'numeric', 
-                                  minute: '2-digit',
-                                  hour12: true 
-                                }) || 'N/A'}
-                              </Text>
-                            )}
-                            
-                            <Text size="xs" c="dimmed">
-                              Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                                year: 'numeric', 
-                                month: 'numeric', 
-                                day: 'numeric', 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true 
-                              }) || 'N/A'}
-                            </Text>
-                            
-                            {(reminder.sent_at || reminder.processed_at) && (
-                              <Text size="xs" c="dimmed">
-                                Sent: {parseDbTimestamp(reminder.sent_at || reminder.processed_at || '')?.toLocaleString('en-US', { 
-                                  year: 'numeric', 
-                                  month: 'numeric', 
-                                  day: 'numeric', 
-                                  hour: 'numeric', 
-                                  minute: '2-digit',
-                                  hour12: true 
-                                }) || 'N/A'}
-                              </Text>
-                            )}
-                            
-                            {reminder.error_message && (
-                              <Text size="xs" c="red">
-                                Error: {reminder.error_message}
-                              </Text>
-                            )}
-                          </Stack>
-                        </Group>
-                      </Card>
-                    ))}
-                  </Stack>
-                )}
-              </div>
-            )}
-
-            <Divider />
-            
-            <Group justify="space-between" mt="md">
-              <Button
-                color="red"
-                variant="light"
-                onClick={() => confirmDelete(selectedMatch)}
-              >
-                Delete Match
-              </Button>
-              <Group>
-                {(selectedMatch.status === 'gather' || selectedMatch.status === 'assign') && (
-                  <Button
-                    onClick={() => {
-                      setDetailsModalOpen(false);
-                      handleAssignPlayers(selectedMatch);
-                    }}
-                  >
-                    Assign
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={() => setDetailsModalOpen(false)}
-                >
-                  Close
-                </Button>
-              </Group>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
+        selectedMatch={selectedMatch}
+        participants={participants}
+        participantsLoading={participantsLoading}
+        signupConfig={signupConfig}
+        reminders={reminders}
+        remindersLoading={remindersLoading}
+        mapDetails={mapDetails}
+        formatMapName={formatMapName}
+        parseDbTimestamp={parseDbTimestamp}
+        showTabs={true}
+        showDeleteButton={true}
+        showAssignButton={true}
+        onDelete={(match) => confirmDelete(match)}
+        onAssign={(match) => handleAssignPlayers(match)}
+      />
     </div>
   );
 }
