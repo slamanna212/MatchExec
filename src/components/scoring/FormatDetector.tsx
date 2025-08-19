@@ -1,7 +1,7 @@
 'use client'
 
 import { Stack, Text, Card, Group, Badge } from '@mantine/core';
-import { IconClock, IconZap, IconTarget } from '@tabler/icons-react';
+import { IconClock, IconBolt, IconTarget } from '@tabler/icons-react';
 import { 
   ModeDataJsonWithScoring, 
   ScoringConfig, 
@@ -35,7 +35,7 @@ export function FormatDetector({
     switch (timing) {
       case 'realtime':
         return {
-          icon: <IconZap size={16} />,
+          icon: <IconBolt size={16} />,
           color: 'orange',
           label: 'Real-time',
           description: 'Score rounds as they complete during the match'

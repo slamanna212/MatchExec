@@ -15,9 +15,24 @@ import {
   RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
+import { Match, MATCH_FLOW_STEPS, MatchScore } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
+import { ScoringModal } from './scoring/ScoringModal';
+
+// Helper function to get default mode for each game
+function getDefaultModeForGame(gameId: string): string {
+  switch (gameId) {
+    case 'valorant':
+      return 'standard';
+    case 'overwatch2':
+      return 'control';
+    case 'marvelrivals':
+      return 'domination';
+    default:
+      return 'standard';
+  }
+}
 import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -181,6 +196,8 @@ export function MatchDashboard() {
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
   const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
+  const [scoringModalOpen, setScoringModalOpen] = useState(false);
+  const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<MatchWithGame | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
@@ -507,8 +524,8 @@ export function MatchDashboard() {
               size="sm" 
               onClick={(e) => {
                 e.stopPropagation();
-                // TODO: Open scoring modal
-                console.log('Open scoring modal for match:', match.id);
+                setSelectedMatchForScoring(match);
+                setScoringModalOpen(true);
               }}
               style={{ flex: 1 }}
             >
@@ -566,6 +583,36 @@ export function MatchDashboard() {
   };
 
   // Memoize expensive match card rendering
+  // Handle score submission
+  const handleScoreSubmit = async (score: MatchScore) => {
+    if (!selectedMatchForScoring) return;
+
+    try {
+      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${selectedMatchForScoring.id}/score`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(score),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save score');
+      }
+
+      // Refresh matches to show updated status
+      fetchMatches();
+      
+      // Close modal
+      setScoringModalOpen(false);
+      setSelectedMatchForScoring(null);
+    } catch (error) {
+      console.error('Error submitting score:', error);
+      throw error; // Re-throw to let the modal handle the error display
+    }
+  };
+
   const memoizedMatchCards = useMemo(() => {
     return matches.map((match) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
@@ -628,6 +675,19 @@ export function MatchDashboard() {
         onClose={() => setAssignPlayersModalOpen(false)}
         matchId={selectedMatchForAssignment?.id || ''}
         matchName={selectedMatchForAssignment?.name || ''}
+      />
+
+      <ScoringModal
+        opened={scoringModalOpen}
+        onClose={() => {
+          setScoringModalOpen(false);
+          setSelectedMatchForScoring(null);
+        }}
+        matchId={selectedMatchForScoring?.id || ''}
+        gameId={selectedMatchForScoring?.game_id || ''}
+        modeId={getDefaultModeForGame(selectedMatchForScoring?.game_id || '')}
+        matchFormat={selectedMatchForScoring?.match_format || 'casual'}
+        onScoreSubmit={handleScoreSubmit}
       />
 
       <MatchDetailsModal

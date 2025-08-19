@@ -194,7 +194,7 @@ export function RealTimeScoring({
             <Text size="sm">
               {matchWinner === 'draw' 
                 ? 'The match ended in a draw'
-                : `${matchWinner === 'team1' ? 'Team 1' : 'Team 2'} wins ${team1Rounds}-${team2Rounds}!`
+                : `${matchWinner === 'team1' ? 'Red Team' : 'Blue Team'} wins ${team1Rounds}-${team2Rounds}!`
               }
             </Text>
           </Stack>
@@ -215,8 +215,8 @@ export function RealTimeScoring({
                       {round.team1Score} - {round.team2Score}
                     </Text>
                   )}
-                  <Text size="sm" fw={600} c={round.winner === 'team1' ? 'blue' : 'red'}>
-                    {round.winner === 'team1' ? 'Team 1' : 'Team 2'} wins
+                  <Text size="sm" fw={600} c={round.winner === 'team1' ? 'red' : 'blue'}>
+                    {round.winner === 'team1' ? 'Red Team' : 'Blue Team'} wins
                   </Text>
                 </Group>
               </Group>

@@ -15,8 +15,8 @@ interface WinnerSelectorProps {
 export function WinnerSelector({
   value,
   onChange,
-  team1Name = 'Team 1',
-  team2Name = 'Team 2',
+  team1Name = 'Red Team',
+  team2Name = 'Blue Team',
   allowDraw = true,
   disabled = false
 }: WinnerSelectorProps) {

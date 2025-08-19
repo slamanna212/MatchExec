@@ -18,8 +18,8 @@ export function RoundIndicator({
   maxRounds,
   team1Rounds,
   team2Rounds,
-  team1Name = 'Team 1',
-  team2Name = 'Team 2',
+  team1Name = 'Red Team',
+  team2Name = 'Blue Team',
   formatLabel
 }: RoundIndicatorProps) {
   

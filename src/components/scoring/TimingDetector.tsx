@@ -15,6 +15,7 @@ interface TimingDetectorProps {
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
   submitting: boolean;
+  initialScore?: MatchScore;
 }
 
 export function TimingDetector({
@@ -23,7 +24,8 @@ export function TimingDetector({
   modeData,
   scoringConfig,
   onScoreSubmit,
-  submitting
+  submitting,
+  initialScore
 }: TimingDetectorProps) {
   
   // Route to appropriate scoring component based on timing
@@ -36,6 +38,7 @@ export function TimingDetector({
         scoringConfig={scoringConfig}
         onScoreSubmit={onScoreSubmit}
         submitting={submitting}
+        initialScore={initialScore}
       />
     );
   }
@@ -49,6 +52,7 @@ export function TimingDetector({
       scoringConfig={scoringConfig}
       onScoreSubmit={onScoreSubmit}
       submitting={submitting}
+      initialScore={initialScore}
     />
   );
 }
