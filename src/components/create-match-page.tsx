@@ -768,36 +768,6 @@ export function CreateMatchPage() {
               </Stack>
             </Card>
 
-            {formData.announcements && formData.announcements.length > 0 && (
-              <Card withBorder padding="md">
-                <Text size="sm" fw={500} mb="xs">Announcement Preview</Text>
-                <Text size="xs" c="dimmed" mb="sm">This is how your announcement will appear:</Text>
-                
-                <Card withBorder padding="sm">
-                  <Group align="flex-start" gap="sm">
-                    {formData.eventImageUrl && (
-                      <Image
-                        src={formData.eventImageUrl}
-                        alt="Event"
-                        width={60}
-                        height={60}
-                        radius="md"
-                        fit="cover"
-                      />
-                    )}
-                    <Stack gap="xs" style={{ flex: 1 }}>
-                      <Text fw={600} size="sm">🎮 {formData.name}</Text>
-                      {formData.description && (
-                        <Text size="xs" c="dimmed" lineClamp={2}>{formData.description}</Text>
-                      )}
-                      <Text size="xs" c="blue" style={{ textDecoration: 'underline' }}>
-                        View Event Details →
-                      </Text>
-                    </Stack>
-                  </Group>
-                </Card>
-              </Card>
-            )}
             
             <Group justify="space-between" mt="md" gap="xs">
               <Button variant="outline" onClick={handleBack}>
