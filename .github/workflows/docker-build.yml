@@ -1,9 +1,10 @@
 name: Build and Push Docker Image
 
-on:
-  push:
-    branches:
-      - dev
+# Disabled - not ready for Docker builds yet
+# on:
+#   push:
+#     branches:
+#       - dev
 
 jobs:
   build:
