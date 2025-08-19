@@ -47,6 +47,15 @@ class MatchExecBot {
       
       console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
       
+      // Set bot status to display website
+      this.client.user.setPresence({
+        activities: [{
+          name: 'ALPHA BUILD | matchexec.com',
+          type: 4 // ActivityType.Custom
+        }],
+        status: 'online'
+      });
+      
       // Register slash commands
       if (this.interactionHandler) {
         await this.interactionHandler.registerSlashCommands();
