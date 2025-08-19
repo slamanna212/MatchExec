@@ -1,0 +1,200 @@
+{
+  "description": "Scoring system reference for MatchExec - tracks all implemented scoring types",
+  "version": "1.0.0",
+  "lastUpdated": "2025-08-19",
+  "scoringTypes": {
+    "rounds": {
+      "description": "Round-based scoring where teams compete in multiple rounds",
+      "winConditions": ["bestOf"],
+      "properties": {
+        "maxRounds": "Maximum number of rounds (e.g., 3 for best-of-3)",
+        "roundScoring": "Scoring system within each round"
+      },
+      "examples": ["Control mode in Overwatch 2"],
+      "roundScoringTypes": {
+        "percentage": {
+          "description": "Percentage-based scoring within rounds",
+          "properties": {
+            "max": "Maximum percentage (usually 100)",
+            "winThreshold": "Percentage needed to win round"
+          }
+        }
+      }
+    },
+    "objective": {
+      "description": "Objective-based scoring focused on map progression",
+      "winConditions": ["distance"],
+      "properties": {
+        "checkpoints": "Number of checkpoints on the map",
+        "objectiveScoring": "How progress is measured"
+      },
+      "examples": ["Escort, Hybrid, Push modes in Overwatch 2"],
+      "objectiveScoringTypes": {
+        "distance": {
+          "description": "Distance-based progression scoring",
+          "properties": {
+            "unit": "Unit of measurement (meters, etc.)",
+            "timeComponent": "Whether time affects scoring",
+            "captureFirst": "Must capture initial point first (Hybrid)",
+            "bidirectional": "Can move in both directions (Push)"
+          }
+        }
+      }
+    },
+    "points": {
+      "description": "Point accumulation scoring system",
+      "winConditions": ["firstTo", "firstToOrFinal"],
+      "properties": {
+        "maxPoints": "Points needed to win",
+        "totalObjectives": "Total objectives available on map",
+        "pointScoring": "How points are earned"
+      },
+      "examples": ["Flashpoint, Clash modes in Overwatch 2"],
+      "pointScoringTypes": {
+        "capture": {
+          "description": "Points earned by capturing objectives",
+          "properties": {
+            "unlockDelay": "Seconds before next objective unlocks"
+          }
+        },
+        "linear": {
+          "description": "Linear progression through objectives",
+          "properties": {
+            "alternativeWin": "Alternative win condition (e.g., finalCapture)"
+          }
+        }
+      }
+    },
+    "deathmatch": {
+      "description": "Elimination-based scoring system",
+      "winConditions": ["firstTo", "mostAtTime", "topPercentage"],
+      "properties": {
+        "targetEliminations": "Eliminations needed to win",
+        "timeLimit": "Match duration if applicable",
+        "winnerCriteria": "How winners are determined"
+      },
+      "examples": ["Doom Match, Conquest in Marvel Rivals"],
+      "deathmatchScoringTypes": {
+        "eliminations": {
+          "description": "Direct elimination counting",
+          "properties": {
+            "targetCount": "Eliminations needed to win",
+            "mvpSelection": "How MVP is chosen"
+          }
+        },
+        "coins": {
+          "description": "Resource collection from eliminations",
+          "properties": {
+            "coinValue": "Base value of coins",
+            "valueIncrease": "How coin value changes over time",
+            "targetCoins": "Coins needed to win"
+          }
+        }
+      }
+    },
+    "vehicle": {
+      "description": "Vehicle escort progression with dynamic movement",
+      "winConditions": ["reachDestination", "maxDistance"],
+      "properties": {
+        "checkpoints": "Number of checkpoints along route",
+        "speedMechanics": "How vehicle speed is affected by players",
+        "timeBonus": "Time bonuses from checkpoints"
+      },
+      "examples": ["Convoy, Convergence in Marvel Rivals"],
+      "vehicleScoringTypes": {
+        "escort": {
+          "description": "Standard vehicle escort mechanics",
+          "properties": {
+            "maxPlayers": "Maximum players affecting speed",
+            "speedMultiplier": "Speed increase per player"
+          }
+        },
+        "hybrid": {
+          "description": "Capture area first, then escort vehicle",
+          "properties": {
+            "capturePhase": "Initial area capture requirement",
+            "sections": "Number of mission area sections"
+          }
+        }
+      }
+    },
+    "custom": {
+      "description": "Custom scoring for workshop or specialized modes",
+      "winConditions": ["custom"],
+      "properties": {
+        "customScoring": "Configurable scoring rules"
+      },
+      "examples": ["Workshop mode in Overwatch 2"],
+      "customScoringTypes": {
+        "configurable": {
+          "description": "Fully configurable scoring system",
+          "properties": {
+            "configurable": "Whether scoring can be customized"
+          }
+        }
+      }
+    }
+  },
+  "implementedModes": {
+    "overwatch2": {
+      "control": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-3 rounds with percentage capture to 100%"
+      },
+      "escort": {
+        "scoringType": "objective",
+        "implementation": "Distance-based payload escort with 3 checkpoints"
+      },
+      "hybrid": {
+        "scoringType": "objective", 
+        "implementation": "Capture point first, then escort payload with 2 checkpoints"
+      },
+      "push": {
+        "scoringType": "objective",
+        "implementation": "Bidirectional robot push with distance measurement"
+      },
+      "flashpoint": {
+        "scoringType": "points",
+        "implementation": "First to 3 captures out of 5 objectives, 40s unlock delay"
+      },
+      "clash": {
+        "scoringType": "points",
+        "implementation": "Linear progression to 5 points or final objective capture"
+      },
+      "workshop": {
+        "scoringType": "custom",
+        "implementation": "Fully configurable scoring system"
+      }
+    },
+    "marvelrivals": {
+      "domination": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-3 rounds with percentage capture, 1% per 1.2s"
+      },
+      "convoy": {
+        "scoringType": "vehicle",
+        "implementation": "Vehicle escort with dynamic speed (max 3 players affect speed)"
+      },
+      "convergence": {
+        "scoringType": "vehicle", 
+        "implementation": "Capture mission area (3 sections) then escort vehicle"
+      },
+      "doom-match": {
+        "scoringType": "deathmatch",
+        "implementation": "FFA, first to 16 eliminations or most when time expires"
+      },
+      "conquest": {
+        "scoringType": "deathmatch",
+        "implementation": "Team deathmatch with coin collection, first to 50 points"
+      }
+    }
+  },
+  "futureGames": {
+    "notes": "Additional games can be added here with their specific scoring implementations",
+    "examples": {
+      "valorant": "Round-based with economy system",
+      "csgo": "Round-based with bomb/defuse objectives",
+      "rocket-league": "Time-based with goal scoring"
+    }
+  }
+}

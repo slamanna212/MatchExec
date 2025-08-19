@@ -2,36 +2,105 @@
     {
       "id": "control",
       "name": "Control",
-      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds."
+      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds.",
+      "scoring": {
+        "type": "rounds",
+        "winCondition": "bestOf",
+        "maxRounds": 3,
+        "roundScoring": {
+          "type": "percentage",
+          "max": 100,
+          "winThreshold": 100
+        }
+      }
     },
     {
       "id": "escort",
       "name": "Escort",
-      "description": "Attackers escort a payload to its destination while defenders try to stop them."
+      "description": "Attackers escort a payload to its destination while defenders try to stop them.",
+      "scoring": {
+        "type": "objective",
+        "winCondition": "distance",
+        "checkpoints": 3,
+        "objectiveScoring": {
+          "type": "distance",
+          "unit": "meters",
+          "timeComponent": true
+        }
+      }
     },
     {
       "id": "hybrid",
       "name": "Hybrid",
-      "description": "Attackers first capture a point, then escort a payload on the next segment."
+      "description": "Attackers first capture a point, then escort a payload on the next segment.",
+      "scoring": {
+        "type": "objective",
+        "winCondition": "distance",
+        "checkpoints": 2,
+        "objectiveScoring": {
+          "type": "distance",
+          "unit": "meters",
+          "timeComponent": true,
+          "captureFirst": true
+        }
+      }
     },
     {
       "id": "push",
       "name": "Push",
-      "description": "Both teams vie to push a robot into the enemy base across multiple rounds."
+      "description": "Both teams vie to push a robot into the enemy base across multiple rounds.",
+      "scoring": {
+        "type": "objective",
+        "winCondition": "distance",
+        "checkpoints": 2,
+        "objectiveScoring": {
+          "type": "distance",
+          "unit": "meters",
+          "timeComponent": true,
+          "bidirectional": true
+        }
+      }
     },
     {
       "id": "flashpoint",
       "name": "Flashpoint",
-      "description": "Like Control but faster points on the same map."
+      "description": "Like Control but faster points on the same map.",
+      "scoring": {
+        "type": "points",
+        "winCondition": "firstTo",
+        "maxPoints": 3,
+        "totalObjectives": 5,
+        "pointScoring": {
+          "type": "capture",
+          "unlockDelay": 40
+        }
+      }
     },
     {
       "id": "clash",
       "name": "Clash",
-      "description": "Tug of War in Overwatch 2."
+      "description": "Tug of War in Overwatch 2.",
+      "scoring": {
+        "type": "points",
+        "winCondition": "firstToOrFinal",
+        "maxPoints": 5,
+        "totalObjectives": 5,
+        "pointScoring": {
+          "type": "linear",
+          "alternativeWin": "finalCapture"
+        }
+      }
     },
     {
       "id": "workshop",
       "name": "Workshop",
-      "description": "Limited only by your imagination."
+      "description": "Limited only by your imagination.",
+      "scoring": {
+        "type": "custom",
+        "winCondition": "custom",
+        "customScoring": {
+          "configurable": true
+        }
+      }
     }    
   ]
