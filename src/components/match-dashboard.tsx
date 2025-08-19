@@ -502,17 +502,40 @@ export function MatchDashboard() {
         );
       case 'battle':
         return (
-          <Button 
-            size="sm" 
-            color="green"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleStatusTransition(match.id, 'complete');
-            }}
-            style={{ flex: 1 }}
-          >
-            End Match
-          </Button>
+          <Group gap="xs" style={{ flex: 1 }}>
+            <Button 
+              size="sm" 
+              onClick={(e) => {
+                e.stopPropagation();
+                // TODO: Open scoring modal
+                console.log('Open scoring modal for match:', match.id);
+              }}
+              style={{ flex: 1 }}
+            >
+              Scoring
+            </Button>
+            <Button 
+              size="sm" 
+              color="red"
+              onClick={(e) => {
+                e.stopPropagation();
+                modals.openConfirmModal({
+                  title: 'End Match',
+                  children: (
+                    <Text size="sm">
+                      Are you sure you want to end the match &quot;{match.name}&quot;? This will mark the match as complete.
+                    </Text>
+                  ),
+                  labels: { confirm: 'End Match', cancel: 'Cancel' },
+                  confirmProps: { color: 'red' },
+                  onConfirm: () => handleStatusTransition(match.id, 'complete'),
+                });
+              }}
+              style={{ flex: 1 }}
+            >
+              End Match
+            </Button>
+          </Group>
         );
       case 'complete':
         return null; // No further transitions
