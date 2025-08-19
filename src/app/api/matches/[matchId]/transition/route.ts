@@ -178,6 +178,16 @@ export async function POST(
         console.error('❌ Error queuing Discord match start notification:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
+
+      // Initialize match games for all maps
+      try {
+        const { initializeMatchGames } = await import('../../../../../lib/scoring-functions');
+        await initializeMatchGames(matchId);
+        console.log(`🎮 Match games initialized for all maps in match: ${matchId}`);
+      } catch (initError) {
+        console.error('❌ Error initializing match games:', initError);
+        // Don't fail the API request if match games initialization fails
+      }
     }
 
     // Get updated match data

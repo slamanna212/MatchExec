@@ -11,6 +11,7 @@ import { EndGameScoring } from './endgame/EndGameScoring';
 interface TimingDetectorProps {
   matchId: string;
   gameId: string;
+  gameType?: string; // Optional game type for API calls (if different from gameId)
   modeData: ModeDataJsonWithScoring;
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
@@ -21,6 +22,7 @@ interface TimingDetectorProps {
 export function TimingDetector({
   matchId,
   gameId,
+  gameType,
   modeData,
   scoringConfig,
   onScoreSubmit,
@@ -34,6 +36,7 @@ export function TimingDetector({
       <RealTimeScoring
         matchId={matchId}
         gameId={gameId}
+        gameType={gameType}
         modeData={modeData}
         scoringConfig={scoringConfig}
         onScoreSubmit={onScoreSubmit}
@@ -48,6 +51,7 @@ export function TimingDetector({
     <EndGameScoring
       matchId={matchId}
       gameId={gameId}
+      gameType={gameType}
       modeData={modeData}
       scoringConfig={scoringConfig}
       onScoreSubmit={onScoreSubmit}

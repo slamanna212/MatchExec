@@ -7,19 +7,33 @@ export async function POST(
   { params }: { params: Promise<{ matchId: string; gameId: string }> }
 ) {
   try {
+    console.log('POST /api/matches/[matchId]/games/[gameId]/score - Starting');
+    
     const { gameId } = await params;
+    console.log('POST - Extracted gameId:', gameId);
+    
     const scoreData: MatchScore = await request.json();
+    console.log('POST - Received score data:', JSON.stringify(scoreData, null, 2));
 
     // Validate the score data
     if (!scoreData.matchId || !scoreData.gameId || !scoreData.winner || !scoreData.scoringType) {
+      console.log('POST - Validation failed, missing required fields');
       return NextResponse.json(
         { error: 'Invalid score data: missing required fields' },
         { status: 400 }
       );
     }
 
+    console.log('POST - Validation passed, calling saveMatchScore');
+    
+    // Check if this is a final save or progress save
+    const { searchParams } = new URL(request.url);
+    const isFinal = searchParams.get('final') === 'true';
+    console.log('POST - isFinal parameter:', isFinal);
+    
     // Save the match score
-    await saveMatchScore(gameId, scoreData);
+    await saveMatchScore(gameId, scoreData, isFinal);
+    console.log('POST - saveMatchScore completed successfully');
 
     return NextResponse.json({ 
       success: true,

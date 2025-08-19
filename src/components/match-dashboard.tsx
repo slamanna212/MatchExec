@@ -591,7 +591,28 @@ export function MatchDashboard() {
       // Create a match game ID (using match ID for now as there's typically one game per match)
       const gameId = `${selectedMatchForScoring.id}_game_1`;
       
-      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${gameId}/score`, {
+      // Determine if this is a final save based on the score data
+      // For rounds-based scoring, check if all rounds are complete and there's a definitive winner
+      let isFinal = false;
+      if (score.scoringType === 'rounds' && 'rounds' in score && 'maxRounds' in score) {
+        const roundsScore = score as any; // Type assertion for rounds-based score
+        // Check if match should be considered complete
+        const winCondition = 'playAll'; // Default assumption, could be passed in
+        if (winCondition === 'playAll') {
+          isFinal = roundsScore.rounds.length >= roundsScore.maxRounds;
+        } else {
+          // bestOf logic - check if someone has majority
+          const requiredWins = Math.ceil(roundsScore.maxRounds / 2);
+          isFinal = roundsScore.team1Rounds >= requiredWins || roundsScore.team2Rounds >= requiredWins;
+        }
+      } else {
+        // For non-rounds scoring, assume it's final if a winner is declared
+        isFinal = score.winner !== 'draw';
+      }
+      
+      const url = `/api/matches/${selectedMatchForScoring.id}/games/${gameId}/score${isFinal ? '?final=true' : '?final=false'}`;
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

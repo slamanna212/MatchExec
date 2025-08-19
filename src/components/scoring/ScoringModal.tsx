@@ -13,6 +13,7 @@ import {
 } from '@/shared/types';
 import { FormatBadge } from './shared/FormatBadge';
 import { FormatDetector } from './FormatDetector';
+import { MapBasedScoring } from './MapBasedScoring';
 
 interface ScoringModalProps {
   opened: boolean;
@@ -55,26 +56,12 @@ export function ScoringModal({
         const mode: ModeDataJsonWithScoring = await response.json();
         setModeData(mode);
 
-        // Create scoring configuration based on format
-        const formatVariant = mode.formatVariants[matchFormat];
-        if (!formatVariant) {
-          throw new Error(`Format "${matchFormat}" not supported for mode "${mode.name}"`);
+        // Create scoring configuration based on format, adjusted for match-specific data
+        const configResponse = await fetch(`/api/games/${gameId}/modes/${modeId}/config?format=${matchFormat}&matchId=${matchId}`);
+        if (!configResponse.ok) {
+          throw new Error('Failed to load scoring configuration');
         }
-
-        const config: ScoringConfig = {
-          format: matchFormat,
-          scoringType: mode.scoringType,
-          scoringTiming: mode.scoringTiming,
-          formatVariant,
-          validation: {
-            // Extract validation rules from format variant
-            minRounds: formatVariant.maxRounds ? 1 : undefined,
-            maxRounds: formatVariant.maxRounds as number | undefined,
-            targetPoints: formatVariant.maxPoints as number | undefined,
-            targetEliminations: formatVariant.targetEliminations as number | undefined,
-            timeLimit: formatVariant.timeLimit as number | undefined,
-          }
-        };
+        const config = await configResponse.json();
         
         setScoringConfig(config);
       } catch (err) {
@@ -139,9 +126,9 @@ export function ScoringModal({
               {modeData.description}
             </Text>
             
-            <FormatDetector
+            <MapBasedScoring
               matchId={matchId}
-              gameId={`${matchId}_game_1`} // Pass the match game instance ID here
+              gameType={gameId} // Pass the actual game type for API calls
               modeData={modeData}
               scoringConfig={scoringConfig}
               onScoreSubmit={handleScoreSubmit}

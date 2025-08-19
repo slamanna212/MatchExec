@@ -17,6 +17,7 @@ import { FormatAwareScoreInput } from '../shared/FormatAwareScoreInput';
 interface RealTimeScoringProps {
   matchId: string;
   gameId: string;
+  gameType?: string; // Optional game type for API calls (if different from gameId)
   modeData: ModeDataJsonWithScoring;
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
@@ -27,6 +28,7 @@ interface RealTimeScoringProps {
 export function RealTimeScoring({
   matchId,
   gameId,
+  gameType,
   modeData,
   scoringConfig,
   onScoreSubmit,
@@ -45,7 +47,7 @@ export function RealTimeScoring({
   // Round state
   const [rounds, setRounds] = useState<RoundScore[]>([]);
   const [currentRound, setCurrentRound] = useState(1);
-  const [currentRoundWinner, setCurrentRoundWinner] = useState<'team1' | 'team2' | 'draw' | null>(null);
+  const [currentRoundWinner, setCurrentRoundWinner] = useState<'team1' | 'team2' | null>(null);
   const [currentRoundScores, setCurrentRoundScores] = useState({ team1: 0, team2: 0 });
   
   // Match state

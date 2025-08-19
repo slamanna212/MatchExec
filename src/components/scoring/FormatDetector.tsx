@@ -13,6 +13,7 @@ import { TimingDetector } from './TimingDetector';
 interface FormatDetectorProps {
   matchId: string;
   gameId: string;
+  gameType?: string; // Optional game type for API calls (if different from gameId)
   modeData: ModeDataJsonWithScoring;
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
@@ -22,6 +23,7 @@ interface FormatDetectorProps {
 export function FormatDetector({
   matchId,
   gameId,
+  gameType,
   modeData,
   scoringConfig,
   onScoreSubmit,
@@ -150,6 +152,7 @@ export function FormatDetector({
       <TimingDetector
         matchId={matchId}
         gameId={gameId}
+        gameType={gameType}
         modeData={modeData}
         scoringConfig={scoringConfig}
         onScoreSubmit={onScoreSubmit}

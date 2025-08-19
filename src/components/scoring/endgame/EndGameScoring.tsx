@@ -19,19 +19,23 @@ import { FormatAwareScoreInput } from '../shared/FormatAwareScoreInput';
 interface EndGameScoringProps {
   matchId: string;
   gameId: string;
+  gameType?: string; // Optional game type for API calls (if different from gameId)
   modeData: ModeDataJsonWithScoring;
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
   submitting: boolean;
+  initialScore?: MatchScore;
 }
 
 export function EndGameScoring({
   matchId,
   gameId,
+  gameType,
   modeData,
   scoringConfig,
   onScoreSubmit,
-  submitting
+  submitting,
+  initialScore
 }: EndGameScoringProps) {
   
   // Common state
