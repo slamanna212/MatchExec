@@ -45,14 +45,16 @@
       "scoringTiming": "realtime",
       "formatVariants": {
         "casual": {
-          "maxRounds": 2,
+          "maxRounds": 3,
+          "winCondition": "playAll",
           "captureRate": 0.9,
-          "description": "Best-of-3 rounds with slower capture rate"
+          "description": "Play all 3 rounds, most wins takes the match"
         },
         "competitive": {
-          "maxRounds": 3,
+          "maxRounds": 5,
+          "winCondition": "playAll",
           "captureRate": 1.0,
-          "description": "Best-of-5 rounds with standard capture rate"
+          "description": "Play all 5 rounds, most wins takes the match"
         }
       }
     },

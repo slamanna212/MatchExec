@@ -588,7 +588,10 @@ export function MatchDashboard() {
     if (!selectedMatchForScoring) return;
 
     try {
-      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${selectedMatchForScoring.id}/score`, {
+      // Create a match game ID (using match ID for now as there's typically one game per match)
+      const gameId = `${selectedMatchForScoring.id}_game_1`;
+      
+      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${gameId}/score`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

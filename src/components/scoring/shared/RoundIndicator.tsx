@@ -52,7 +52,6 @@ export function RoundIndicator({
         size="lg"
         radius="md"
         striped={!isComplete}
-        animate={!isComplete}
         color={isComplete ? 'green' : 'blue'}
       />
 

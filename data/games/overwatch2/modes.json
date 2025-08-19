@@ -7,14 +7,14 @@
       "scoringTiming": "realtime",
       "formatVariants": {
         "casual": {
-          "maxRounds": 2,
-          "winCondition": "bestOf",
-          "description": "Best-of-3 rounds, first to 2 wins"
+          "maxRounds": 3,
+          "winCondition": "playAll",
+          "description": "Play all 3 rounds, most wins takes the match"
         },
         "competitive": {
-          "maxRounds": 3,
-          "winCondition": "bestOf",
-          "description": "Best-of-5 rounds, first to 3 wins"
+          "maxRounds": 5,
+          "winCondition": "playAll",
+          "description": "Play all 5 rounds, most wins takes the match"
         }
       },
       "scoring": {

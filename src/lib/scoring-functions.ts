@@ -63,6 +63,53 @@ export async function getMatchFormatConfig(
 }
 
 /**
+ * Ensure a match_games entry exists for the given match game ID
+ */
+async function ensureMatchGameExists(matchGameId: string, matchId: string): Promise<void> {
+  const db = await getDbInstance();
+  
+  try {
+    // Check if the match_games entry already exists
+    const checkQuery = `SELECT id FROM match_games WHERE id = ?`;
+    
+    const exists = await new Promise<boolean>((resolve, reject) => {
+      db.get(checkQuery, [matchGameId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(!!row);
+        }
+      });
+    });
+
+    if (!exists) {
+      // Create the match_games entry
+      const insertQuery = `
+        INSERT INTO match_games (
+          id, match_id, round, participant1_id, participant2_id, 
+          status, created_at, updated_at
+        ) VALUES (?, ?, 1, 'team1', 'team2', 'ongoing', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+      
+      await new Promise<void>((resolve, reject) => {
+        db.run(insertQuery, [matchGameId, matchId], function(err) {
+          if (err) {
+            console.error('Error creating match game entry:', err);
+            reject(new Error(`Failed to create match game entry: ${err.message}`));
+          } else {
+            console.log(`Created match game entry ${matchGameId} for match ${matchId}`);
+            resolve();
+          }
+        });
+      });
+    }
+  } catch (error) {
+    console.error('Error in ensureMatchGameExists:', error);
+    throw error;
+  }
+}
+
+/**
  * Save match score with format-aware JSON structure
  */
 export async function saveMatchScore(
@@ -72,6 +119,9 @@ export async function saveMatchScore(
   const db = await getDbInstance();
   
   try {
+    // First, ensure the match_games entry exists
+    await ensureMatchGameExists(matchGameId, matchScore.matchId);
+    
     // Serialize the match score as JSON
     const scoreData = JSON.stringify(matchScore);
     

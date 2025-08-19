@@ -18,7 +18,7 @@ interface ScoringModalProps {
   opened: boolean;
   onClose: () => void;
   matchId: string;
-  gameId: string;
+  gameId: string; // This is the game type (e.g., "overwatch2", "valorant")
   modeId: string;
   matchFormat: MatchFormat;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
@@ -141,7 +141,7 @@ export function ScoringModal({
             
             <FormatDetector
               matchId={matchId}
-              gameId={gameId}
+              gameId={`${matchId}_game_1`} // Pass the match game instance ID here
               modeData={modeData}
               scoringConfig={scoringConfig}
               onScoreSubmit={handleScoreSubmit}

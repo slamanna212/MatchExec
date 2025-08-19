@@ -21,6 +21,7 @@ interface RealTimeScoringProps {
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
   submitting: boolean;
+  initialScore?: MatchScore;
 }
 
 export function RealTimeScoring({
@@ -29,13 +30,17 @@ export function RealTimeScoring({
   modeData,
   scoringConfig,
   onScoreSubmit,
-  submitting
+  submitting,
+  initialScore
 }: RealTimeScoringProps) {
   
-  // Get rounds to win from format variant (this is actually the win condition)
-  const roundsToWin = (scoringConfig.formatVariant.maxRounds as number) || 2;
-  const winCondition = roundsToWin; // First to this many wins
-  const maxPossibleRounds = (roundsToWin * 2) - 1; // Maximum possible rounds (e.g., 2-0, 2-1 max = 3 rounds)
+  // Get rounds configuration from format variant
+  const maxRounds = (scoringConfig.formatVariant.maxRounds as number) || 3;
+  const winCondition = scoringConfig.formatVariant.winCondition || 'playAll';
+  
+  // For "playAll", we play all rounds and winner is determined by most wins
+  // For "bestOf", we stop when someone reaches majority (legacy behavior)
+  const maxPossibleRounds = winCondition === 'playAll' ? maxRounds : (Math.ceil(maxRounds / 2));
   
   // Round state
   const [rounds, setRounds] = useState<RoundScore[]>([]);
@@ -55,13 +60,19 @@ export function RealTimeScoring({
       setCurrentRound((existingScore.rounds?.length || 0) + 1);
       
       // If the match was already complete, restore the winner
-      if (existingScore.winner && existingScore.winner !== 'draw' && 
-          ((existingScore.team1Rounds >= winCondition) || (existingScore.team2Rounds >= winCondition))) {
-        setMatchWinner(existingScore.winner);
-        setIsMatchComplete(true);
+      if (existingScore.winner && existingScore.winner !== 'draw') {
+        // Check if match should be complete based on win condition
+        const shouldBeComplete = winCondition === 'playAll' 
+          ? existingScore.rounds.length >= maxPossibleRounds
+          : (existingScore.team1Rounds >= Math.ceil(maxPossibleRounds / 2) || existingScore.team2Rounds >= Math.ceil(maxPossibleRounds / 2));
+          
+        if (shouldBeComplete) {
+          setMatchWinner(existingScore.winner);
+          setIsMatchComplete(true);
+        }
       }
     }
-  }, [initialScore, winCondition]);
+  }, [initialScore, winCondition, maxPossibleRounds]);
 
   // Calculate current team round wins
   const team1Rounds = rounds.filter(r => r.winner === 'team1').length;
@@ -69,19 +80,33 @@ export function RealTimeScoring({
 
   // Check if match is complete
   useEffect(() => {
-    if (team1Rounds >= winCondition) {
-      setMatchWinner('team1');
-      setIsMatchComplete(true);
-    } else if (team2Rounds >= winCondition) {
-      setMatchWinner('team2');
-      setIsMatchComplete(true);
-    } else if (rounds.length >= maxPossibleRounds && team1Rounds === team2Rounds) {
-      // Handle overtime or draw based on format
-      if (scoringConfig.formatVariant.overtimeEnabled) {
-        // Continue playing until someone has a 2-round lead
-        setIsMatchComplete(false);
-      } else {
-        setMatchWinner('draw');
+    if (winCondition === 'playAll') {
+      // Play all rounds, then determine winner by most wins
+      if (rounds.length >= maxPossibleRounds) {
+        if (team1Rounds > team2Rounds) {
+          setMatchWinner('team1');
+          setIsMatchComplete(true);
+        } else if (team2Rounds > team1Rounds) {
+          setMatchWinner('team2');
+          setIsMatchComplete(true);
+        } else {
+          // Handle tie - check for overtime
+          if (scoringConfig.formatVariant.overtimeEnabled) {
+            setIsMatchComplete(false); // Continue to overtime
+          } else {
+            setMatchWinner('draw');
+            setIsMatchComplete(true);
+          }
+        }
+      }
+    } else {
+      // Legacy "bestOf" behavior - first to reach majority wins
+      const requiredWins = Math.ceil(maxPossibleRounds / 2);
+      if (team1Rounds >= requiredWins) {
+        setMatchWinner('team1');
+        setIsMatchComplete(true);
+      } else if (team2Rounds >= requiredWins) {
+        setMatchWinner('team2');
         setIsMatchComplete(true);
       }
     }
@@ -168,7 +193,7 @@ export function RealTimeScoring({
         maxRounds={maxPossibleRounds}
         team1Rounds={team1Rounds}
         team2Rounds={team2Rounds}
-        formatLabel={`First to ${winCondition}`}
+        formatLabel={winCondition === 'playAll' ? `Play all ${maxPossibleRounds}` : `First to ${Math.ceil(maxPossibleRounds / 2)}`}
       />
 
       {/* Current Round Scoring - Only show if match not complete */}
