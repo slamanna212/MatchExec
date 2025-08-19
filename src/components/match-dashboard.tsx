@@ -156,6 +156,16 @@ const MatchCard = memo(({
       </Group>
     </Card>
   );
+}, (prevProps, nextProps) => {
+  // Custom comparison to ensure re-render when match status or other critical props change
+  return (
+    prevProps.match.id === nextProps.match.id &&
+    prevProps.match.status === nextProps.match.status &&
+    prevProps.match.name === nextProps.match.name &&
+    prevProps.match.updated_at === nextProps.match.updated_at &&
+    prevProps.match.game_color === nextProps.match.game_color &&
+    JSON.stringify(prevProps.mapNames) === JSON.stringify(nextProps.mapNames)
+  );
 });
 
 MatchCard.displayName = 'MatchCard';
