@@ -4,7 +4,6 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
   AppShell,
-  Text,
   NavLink,
   Burger,
   Group,
@@ -173,12 +172,12 @@ export function Navigation({ children }: NavigationProps) {
 
       <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
         <AppShell.Section>
-          <Group mb="md" visibleFrom="md" justify="center">
+          <Group mb="xs" visibleFrom="md" justify="center">
             <Image
               src="/logo.svg"
               alt="MatchExec Logo"
-              w={120}
-              h={120}
+              w={140}
+              h={140}
               fit="contain"
             />
           </Group>
