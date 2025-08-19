@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const db = await getDbInstance();
     
     let query = `
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
     `;
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     ]);
     
     const match = await db.get<MatchDbRow>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       WHERE m.id = ?

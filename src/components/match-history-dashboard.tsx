@@ -50,6 +50,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
   game_icon?: string;
+  game_color?: string;
   rules?: string;
   rounds?: number;
   maps?: string[];
@@ -116,7 +117,7 @@ const HistoryMatchCard = memo(({
           sections={[
             { 
               value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
-              color: 'green'
+              color: match.game_color || '#95a5a6'
             }
           ]}
         />
@@ -506,7 +507,7 @@ export function MatchHistoryDashboard() {
                 sections={[
                   { 
                     value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
-                    color: 'green'
+                    color: selectedMatch.game_color || '#95a5a6'
                   }
                 ]}
               />

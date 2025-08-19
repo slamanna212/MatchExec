@@ -56,6 +56,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
   game_icon?: string;
+  game_color?: string;
   rules?: string;
   rounds?: number;
   maps?: string[];
@@ -91,7 +92,6 @@ interface MatchCardProps {
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
   formatMapName: (mapId: string) => string;
-  getStatusColorForProgress: (status: string, isDark: boolean) => string;
   getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
@@ -102,7 +102,6 @@ const MatchCard = memo(({
   onViewDetails, 
   onAssignPlayers, 
   formatMapName, 
-  getStatusColorForProgress, 
   getNextStatusButton 
 }: MatchCardProps) => {
   return (
@@ -130,7 +129,7 @@ const MatchCard = memo(({
           sections={[
             { 
               value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
-              color: getStatusColorForProgress(match.status, colorScheme === 'dark')
+              color: match.game_color || '#95a5a6'
             }
           ]}
         />
@@ -292,12 +291,6 @@ export function MatchDashboard() {
     }
   };
 
-  const getStatusColorForProgress = useCallback((status: string, isDark: boolean) => {
-    if (status === 'created' && isDark) {
-      return 'white';
-    }
-    return getStatusColor(status) + '.8';
-  }, []);
 
   const formatMapName = (mapId: string) => {
     // Convert map ID to proper display name
@@ -601,12 +594,11 @@ export function MatchDashboard() {
           onViewDetails={handleViewDetails}
           onAssignPlayers={handleAssignPlayers}
           formatMapName={formatMapName}
-          getStatusColorForProgress={getStatusColorForProgress}
           getNextStatusButton={getNextStatusButton}
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton, getStatusColorForProgress]);
+  }, [matches, mapNames, colorScheme, handleViewDetails, getNextStatusButton]);
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {
@@ -743,7 +735,7 @@ export function MatchDashboard() {
                 sections={[
                   { 
                     value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
-                    color: getStatusColorForProgress(selectedMatch.status, colorScheme === 'dark')
+                    color: selectedMatch.game_color || '#95a5a6'
                   }
                 ]}
               />
