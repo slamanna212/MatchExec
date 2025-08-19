@@ -1,7 +1,15 @@
 {
-  "description": "Scoring system reference for MatchExec - tracks all implemented scoring types",
-  "version": "1.0.0",
+  "description": "Scoring system reference for MatchExec - tracks all implemented scoring types with format variants",
+  "version": "2.0.0",
   "lastUpdated": "2025-08-19",
+  "formatSupport": {
+    "description": "All game modes now support casual and competitive format variants with different rules",
+    "formatTypes": ["casual", "competitive"],
+    "formatDifferences": {
+      "casual": "More forgiving timing, lower requirements, accessible gameplay",
+      "competitive": "Standard timing, full requirements, serious gameplay"
+    }
+  },
   "scoringTypes": {
     "rounds": {
       "description": "Round-based scoring where teams compete in multiple rounds",
@@ -10,13 +18,34 @@
         "maxRounds": "Maximum number of rounds (e.g., 3 for best-of-3)",
         "roundScoring": "Scoring system within each round"
       },
-      "examples": ["Control mode in Overwatch 2"],
+      "examples": ["Control mode in Overwatch 2", "Standard/Swiftplay in Valorant", "Domination in Marvel Rivals"],
+      "formatExamples": {
+        "casual": "Overwatch 2 Control: Best-of-3 (first to 2), Valorant Standard: First to 13 (no overtime)",
+        "competitive": "Overwatch 2 Control: Best-of-5 (first to 3), Valorant Standard: First to 13 (with overtime)"
+      },
       "roundScoringTypes": {
         "percentage": {
           "description": "Percentage-based scoring within rounds",
           "properties": {
             "max": "Maximum percentage (usually 100)",
             "winThreshold": "Percentage needed to win round"
+          }
+        },
+        "plantDefuse": {
+          "description": "Plant/defuse bomb-based rounds",
+          "properties": {
+            "roundTime": "Time limit per round (seconds)",
+            "plantTime": "Time to plant bomb (seconds)",
+            "defuseTime": "Time to defuse bomb (seconds)",
+            "economySystem": "Whether rounds have buy phases",
+            "overtimeType": "Type of overtime (firstTo2Lead, etc.)"
+          }
+        },
+        "tierProgression": {
+          "description": "Progression through weapon or ability tiers",
+          "properties": {
+            "maxTiers": "Total number of tiers to complete",
+            "winCondition": "How team wins (firstToComplete, etc.)"
           }
         }
       }
@@ -29,6 +58,10 @@
         "objectiveScoring": "How progress is measured"
       },
       "examples": ["Escort, Hybrid, Push modes in Overwatch 2"],
+      "formatExamples": {
+        "casual": "Extra time banks (20% more), more forgiving capture requirements",
+        "competitive": "Standard timing, full skill requirements"
+      },
       "objectiveScoringTypes": {
         "distance": {
           "description": "Distance-based progression scoring",
@@ -49,7 +82,11 @@
         "totalObjectives": "Total objectives available on map",
         "pointScoring": "How points are earned"
       },
-      "examples": ["Flashpoint, Clash modes in Overwatch 2"],
+      "examples": ["Flashpoint, Clash modes in Overwatch 2", "Escalation in Valorant"],
+      "formatExamples": {
+        "casual": "Lower point targets, longer unlock delays for easier play",
+        "competitive": "Higher point targets, faster unlock timing"
+      },
       "pointScoringTypes": {
         "capture": {
           "description": "Points earned by capturing objectives",
@@ -73,7 +110,11 @@
         "timeLimit": "Match duration if applicable",
         "winnerCriteria": "How winners are determined"
       },
-      "examples": ["Doom Match, Conquest in Marvel Rivals"],
+      "examples": ["Doom Match, Conquest in Marvel Rivals", "Deathmatch, Team Deathmatch in Valorant"],
+      "formatExamples": {
+        "casual": "Lower elimination targets, longer time limits",
+        "competitive": "Higher elimination targets, shorter time limits"
+      },
       "deathmatchScoringTypes": {
         "eliminations": {
           "description": "Direct elimination counting",
@@ -101,6 +142,10 @@
         "timeBonus": "Time bonuses from checkpoints"
       },
       "examples": ["Convoy, Convergence in Marvel Rivals"],
+      "formatExamples": {
+        "casual": "Faster vehicle movement, extra time banks, relaxed capture phases",
+        "competitive": "Standard vehicle speed and timing requirements"
+      },
       "vehicleScoringTypes": {
         "escort": {
           "description": "Standard vehicle escort mechanics",
@@ -189,10 +234,89 @@
       }
     }
   },
+  "implementedModes": {
+    "overwatch2": {
+      "control": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-3 rounds with percentage capture to 100%"
+      },
+      "escort": {
+        "scoringType": "objective",
+        "implementation": "Distance-based payload escort with 3 checkpoints"
+      },
+      "hybrid": {
+        "scoringType": "objective", 
+        "implementation": "Capture point first, then escort payload with 2 checkpoints"
+      },
+      "push": {
+        "scoringType": "objective",
+        "implementation": "Bidirectional robot push with distance measurement"
+      },
+      "flashpoint": {
+        "scoringType": "points",
+        "implementation": "First to 3 captures out of 5 objectives, 40s unlock delay"
+      },
+      "clash": {
+        "scoringType": "points",
+        "implementation": "Linear progression to 5 points or final objective capture"
+      },
+      "workshop": {
+        "scoringType": "custom",
+        "implementation": "Fully configurable scoring system"
+      }
+    },
+    "marvelrivals": {
+      "domination": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-3 rounds with percentage capture, 1% per 1.2s"
+      },
+      "convoy": {
+        "scoringType": "vehicle",
+        "implementation": "Vehicle escort with dynamic speed (max 3 players affect speed)"
+      },
+      "convergence": {
+        "scoringType": "vehicle", 
+        "implementation": "Capture mission area (3 sections) then escort vehicle"
+      },
+      "doom-match": {
+        "scoringType": "deathmatch",
+        "implementation": "FFA, first to 16 eliminations or most when time expires"
+      },
+      "conquest": {
+        "scoringType": "deathmatch",
+        "implementation": "Team deathmatch with coin collection, first to 50 points"
+      }
+    },
+    "valorant": {
+      "standard": {
+        "scoringType": "rounds",
+        "implementation": "Plant/defuse rounds, first to 13 wins, overtime in competitive"
+      },
+      "swiftplay": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-9 plant/defuse format, first to 5 wins"
+      },
+      "spike-rush": {
+        "scoringType": "rounds",
+        "implementation": "Best-of-7 with random weapons and power orbs"
+      },
+      "deathmatch": {
+        "scoringType": "deathmatch",
+        "implementation": "FFA, first to 40 eliminations or most in 9 minutes"
+      },
+      "escalation": {
+        "scoringType": "points",
+        "implementation": "Team progression through 12 weapon tiers"
+      },
+      "team-deathmatch": {
+        "scoringType": "deathmatch",
+        "implementation": "5v5 team eliminations, first to 100 kills"
+      }
+    }
+  },
   "futureGames": {
     "notes": "Additional games can be added here with their specific scoring implementations",
     "examples": {
-      "valorant": "Round-based with economy system",
       "csgo": "Round-based with bomb/defuse objectives",
       "rocket-league": "Time-based with goal scoring"
     }
