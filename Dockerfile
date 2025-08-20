@@ -10,7 +10,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM base AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 RUN addgroup --system --gid 1001 nodejs
