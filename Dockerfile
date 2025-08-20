@@ -26,7 +26,6 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/ecosystem.config.js ./
-COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
 
