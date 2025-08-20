@@ -30,13 +30,15 @@ interface EndGameScoringProps {
 export function EndGameScoring({
   matchId,
   gameId,
-  gameType,
+  // gameType is not used in this component
   modeData,
   scoringConfig,
   onScoreSubmit,
-  submitting,
-  initialScore
-}: EndGameScoringProps) {
+  submitting
+  // initialScore is not used in this component
+}: Omit<EndGameScoringProps, 'gameType' | 'initialScore'>) {
+  // Remove unused destructured variables
+  // gameType and initialScore are not used
   
   // Common state
   const [winner, setWinner] = useState<'team1' | 'team2' | 'draw' | null>(null);
@@ -74,7 +76,8 @@ export function EndGameScoring({
   });
 
   // Custom scoring data
-  const [customData, setCustomData] = useState<Record<string, unknown>>({});
+  const [customData] = useState<Record<string, unknown>>({});
+  // Remove unused setter 'setCustomData'
 
   const handleSubmitScore = async () => {
     if (!winner) return;

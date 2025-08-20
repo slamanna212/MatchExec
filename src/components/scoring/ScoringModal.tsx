@@ -5,14 +5,12 @@ import { Modal, Stack, Group, Text, Loader, Alert, Button } from '@mantine/core'
 import { IconAlertCircle, IconTrophy } from '@tabler/icons-react';
 import { 
   MatchFormat, 
-  ScoringType, 
-  ScoringTiming, 
   ScoringConfig,
   MatchScore,
   ModeDataJsonWithScoring 
 } from '@/shared/types';
 import { FormatBadge } from './shared/FormatBadge';
-import { FormatDetector } from './FormatDetector';
+// FormatDetector import removed as it's not used
 import { MapBasedScoring } from './MapBasedScoring';
 
 interface ScoringModalProps {
@@ -75,7 +73,7 @@ export function ScoringModal({
     if (opened) {
       loadScoringConfig();
     }
-  }, [opened, gameId, modeId, matchFormat]);
+  }, [opened, gameId, modeId, matchFormat, matchId]);
 
   const handleScoreSubmit = async (score: MatchScore) => {
     setSubmitting(true);

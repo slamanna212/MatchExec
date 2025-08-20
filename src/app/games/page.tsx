@@ -1,7 +1,7 @@
 'use client'
 
 
-import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, Button, ScrollArea } from '@mantine/core';
+import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 

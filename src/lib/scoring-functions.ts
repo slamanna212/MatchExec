@@ -3,8 +3,7 @@ import {
   MatchScore, 
   ScoringConfig, 
   MatchFormat, 
-  ModeDataJsonWithScoring,
-  FormatVariant 
+  ModeDataJsonWithScoring
 } from '@/shared/types';
 
 /**
@@ -19,8 +18,8 @@ export async function getMatchFormatConfig(
 ): Promise<ScoringConfig> {
   try {
     // Load mode data from JSON files (since we store config in data files, not database)
-    const fs = require('fs');
-    const path = require('path');
+    const fs = await import('fs');
+    const path = await import('path');
     
     const modesPath = path.join(process.cwd(), 'data', 'games', gameId, 'modes.json');
     
@@ -47,7 +46,7 @@ export async function getMatchFormatConfig(
       try {
         const db = await getDbInstance();
         const matchQuery = `SELECT maps FROM matches WHERE id = ?`;
-        const matchRow: any = await db.get(matchQuery, [matchId]);
+        const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
         
         if (matchRow && matchRow.maps) {
           const maps = JSON.parse(matchRow.maps);
@@ -103,7 +102,7 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
   try {
     // Get match data including maps
     const matchQuery = `SELECT maps FROM matches WHERE id = ?`;
-    const matchRow: any = await db.get(matchQuery, [matchId]);
+    const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
     
     if (!matchRow || !matchRow.maps) {
       console.log('initializeMatchGames - No maps found for match');
@@ -147,7 +146,7 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
 /**
  * Get all match games for a match with their current status
  */
-export async function getMatchGames(matchId: string): Promise<any[]> {
+export async function getMatchGames(matchId: string): Promise<Array<Record<string, unknown>>> {
   const db = await getDbInstance();
   
   try {
@@ -181,7 +180,7 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
     const checkQuery = `SELECT id FROM match_games WHERE id = ?`;
     console.log('ensureMatchGameExists - Running check query');
     
-    const row = await db.get(checkQuery, [matchGameId]);
+    const row = await db.get<{ id: string }>(checkQuery, [matchGameId]);
     const exists = !!row;
     console.log('ensureMatchGameExists - Check query result:', exists);
 
@@ -285,7 +284,7 @@ export async function getMatchScore(matchGameId: string): Promise<MatchScore | n
       WHERE id = ?
     `;
 
-    const row: any = await db.get(query, [matchGameId]);
+    const row = await db.get<{ score_data?: string; winner_id?: string; completed_at?: string }>(query, [matchGameId]);
     
     if (!row || !row.score_data) {
       return null;
@@ -316,7 +315,7 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
       SELECT match_id FROM match_games WHERE id = ?
     `;
     
-    const matchRow: any = await db.get(matchQuery, [matchGameId]);
+    const matchRow = await db.get<{ match_id?: string }>(matchQuery, [matchGameId]);
     const matchId = matchRow?.match_id;
 
     if (!matchId) return;
@@ -329,7 +328,7 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
       WHERE match_id = ?
     `;
 
-    const statusResult: any = await db.get(statusQuery, [matchId]);
+    const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
 
     // If all games are completed, mark match as complete
     if (statusResult.total > 0 && statusResult.completed === statusResult.total) {
@@ -359,7 +358,7 @@ export async function getMatchFormat(matchId: string): Promise<MatchFormat> {
       SELECT match_format FROM matches WHERE id = ?
     `;
 
-    const row: any = await db.get(query, [matchId]);
+    const row = await db.get<{ match_format?: string }>(query, [matchId]);
     return (row?.match_format as MatchFormat) || 'casual';
   } catch (error) {
     console.error('Error in getMatchFormat:', error);

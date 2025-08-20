@@ -26,7 +26,7 @@ interface ModeData {
   id: string;
   name: string;
   description: string;
-  scoring?: any; // Flexible scoring configuration
+  scoring?: Record<string, unknown>; // Flexible scoring configuration
 }
 
 interface MapData {

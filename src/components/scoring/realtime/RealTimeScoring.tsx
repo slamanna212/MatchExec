@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Alert, Divider } from '@mantine/core';
-import { IconPlus, IconCheck, IconAlertCircle, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconPlus, IconCheck, IconDeviceFloppy } from '@tabler/icons-react';
 import { 
   ModeDataJsonWithScoring, 
   ScoringConfig, 
@@ -28,13 +28,15 @@ interface RealTimeScoringProps {
 export function RealTimeScoring({
   matchId,
   gameId,
-  gameType,
-  modeData,
+  // gameType is not used in this component
+  // modeData is not used in this component
   scoringConfig,
   onScoreSubmit,
   submitting,
   initialScore
-}: RealTimeScoringProps) {
+}: Omit<RealTimeScoringProps, 'gameType' | 'modeData'>) {
+  // Remove unused destructured variables
+  // gameType and modeData are not used
   
   // Get rounds configuration from format variant
   const maxRounds = (scoringConfig.formatVariant.maxRounds as number) || 3;

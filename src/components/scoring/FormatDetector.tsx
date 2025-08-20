@@ -30,7 +30,8 @@ export function FormatDetector({
   submitting
 }: FormatDetectorProps) {
   
-  const { format, scoringType, scoringTiming, formatVariant } = scoringConfig;
+  const { scoringType, scoringTiming, formatVariant } = scoringConfig;
+  // Remove unused destructured variable 'format'
 
   // Get scoring timing icon and description
   const getTimingInfo = (timing: ScoringTiming) => {

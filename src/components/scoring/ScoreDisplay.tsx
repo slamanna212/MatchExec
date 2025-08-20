@@ -13,7 +13,7 @@ import {
   Alert,
   Loader
 } from '@mantine/core';
-import { IconTrophy, IconEdit, IconClock, IconTarget, IconAlertCircle } from '@tabler/icons-react';
+import { IconTrophy, IconEdit, IconClock, IconAlertCircle } from '@tabler/icons-react';
 import { 
   MatchScore, 
   RoundsScore, 
@@ -360,7 +360,8 @@ function VehicleDisplay({ score }: { score: VehicleScore }) {
   );
 }
 
-function CustomDisplay({ score }: { score: CustomScore }) {
+function CustomDisplay({ }: { score: CustomScore }) {
+  // Remove unused parameter 'score'
   return (
     <Stack gap="sm">
       <Text size="sm" fw={600}>Custom Scoring</Text>

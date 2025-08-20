@@ -595,7 +595,7 @@ export function MatchDashboard() {
       // For rounds-based scoring, check if all rounds are complete and there's a definitive winner
       let isFinal = false;
       if (score.scoringType === 'rounds' && 'rounds' in score && 'maxRounds' in score) {
-        const roundsScore = score as any; // Type assertion for rounds-based score
+        const roundsScore = score as { rounds: unknown[]; maxRounds: number; team1Rounds: number; team2Rounds: number }; // Type assertion for rounds-based score
         // Check if match should be considered complete
         const winCondition = 'playAll'; // Default assumption, could be passed in
         if (winCondition === 'playAll') {
