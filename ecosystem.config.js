@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'matchexec-web',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: 'server.js',
       env: {
         NODE_ENV: 'production',
         PORT: 3000
