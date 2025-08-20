@@ -15,6 +15,10 @@ WORKDIR /app
 
 RUN npm install -g pm2
 
+# Copy minimal package.json for processes and install only required dependencies
+COPY --from=builder /app/processes-package.json ./package.json
+RUN npm install --only=production
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
