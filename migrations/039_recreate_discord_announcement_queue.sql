@@ -17,15 +17,17 @@ CREATE TABLE discord_announcement_queue_new (
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
--- Copy existing data if table exists (check if columns exist to handle partial migrations)
+-- Copy existing data if table exists
 INSERT INTO discord_announcement_queue_new (id, match_id, status, created_at, posted_at, error_message, announcement_type, announcement_data)
-SELECT id, match_id, status, created_at, posted_at, error_message,
-       CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('discord_announcement_queue') WHERE name = 'announcement_type') > 0 
-            THEN COALESCE(announcement_type, 'standard') 
-            ELSE 'standard' END as announcement_type,
-       CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('discord_announcement_queue') WHERE name = 'announcement_data') > 0 
-            THEN announcement_data 
-            ELSE NULL END as announcement_data
+SELECT 
+  id, 
+  match_id, 
+  status, 
+  created_at, 
+  posted_at, 
+  error_message,
+  'standard' as announcement_type,
+  NULL as announcement_data
 FROM discord_announcement_queue
 WHERE EXISTS (SELECT name FROM sqlite_master WHERE type='table' AND name='discord_announcement_queue');
 
