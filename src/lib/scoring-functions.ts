@@ -40,33 +40,9 @@ export async function getMatchFormatConfig(
       throw new Error(`Format "${matchFormat}" not supported for mode "${modeData.name}"`);
     }
 
-    // If this is for a specific match, override maxRounds with the actual number of maps
+    // Use the original format variant for individual map scoring
+    // The maxRounds should represent rounds within a single map, not the total maps in the match
     let adjustedFormatVariant = { ...formatVariant };
-    if (matchId) {
-      try {
-        const db = await getDbInstance();
-        const matchQuery = `SELECT maps FROM matches WHERE id = ?`;
-        const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
-        
-        if (matchRow && matchRow.maps) {
-          const maps = JSON.parse(matchRow.maps);
-          if (maps.length > 0) {
-            // For multi-map matches, treat each map as a "round" but these are actually separate games
-            // The maxRounds in the context of individual map scoring should be based on the mode
-            // but for match-level scoring, it should be the number of maps
-            console.log(`Overriding maxRounds from ${formatVariant.maxRounds} to ${maps.length} based on ${maps.length} maps in match`);
-            adjustedFormatVariant = {
-              ...formatVariant,
-              maxRounds: maps.length,
-              description: `${formatVariant.description} (${maps.length} maps)`
-            };
-          }
-        }
-      } catch (dbError) {
-        console.warn('Could not fetch match data for configuration adjustment:', dbError);
-        // Fall back to original format variant
-      }
-    }
 
     // Build scoring configuration
     const config: ScoringConfig = {
