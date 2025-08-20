@@ -197,8 +197,8 @@ export default function CreateChannelPage() {
                 {...form.getInputProps('send_reminders', { type: 'checkbox' })}
               />
               <Checkbox
-                label="Match Start Notifications"
-                description="Send notifications when matches are starting"
+                label="Live Updates"
+                description="Send live updates about matches starting and their scores"
                 {...form.getInputProps('send_match_start', { type: 'checkbox' })}
               />
               <Checkbox
@@ -244,7 +244,7 @@ export default function CreateChannelPage() {
                   <Text size="sm">✓ Match Reminders</Text>
                 )}
                 {form.values.send_match_start && (
-                  <Text size="sm">✓ Match Start Notifications</Text>
+                  <Text size="sm">✓ Live Updates</Text>
                 )}
                 {form.values.send_signup_updates && (
                   <Text size="sm">✓ Signup Updates</Text>

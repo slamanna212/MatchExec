@@ -204,7 +204,7 @@ export default function ChannelsPage() {
                           <Group gap="xs" mt="xs">
                             {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
                             {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
-                            {channel.send_match_start && <Badge size="xs" color="orange">Match Start</Badge>}
+                            {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                             {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
                           </Group>
                         </div>
@@ -301,8 +301,8 @@ export default function ChannelsPage() {
               />
 
               <Checkbox
-                label="Match Start Notifications"
-                description="Send notifications when matches are starting"
+                label="Live Updates"
+                description="Send live updates about matches starting and their scores"
                 checked={editData.send_match_start}
                 onChange={(e) => setEditData(prev => ({ ...prev, send_match_start: e.target.checked }))}
               />
