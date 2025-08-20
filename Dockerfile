@@ -13,6 +13,8 @@ RUN npm run build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
+RUN npm install -g pm2
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
