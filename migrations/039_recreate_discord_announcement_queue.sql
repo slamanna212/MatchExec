@@ -1,6 +1,9 @@
 -- Recreate discord_announcement_queue table without UNIQUE constraint on match_id
 -- This allows multiple timed announcements per match
 
+-- Drop temporary table if it exists from a failed previous migration
+DROP TABLE IF EXISTS discord_announcement_queue_new;
+
 -- Create new table with the desired structure
 CREATE TABLE discord_announcement_queue_new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
