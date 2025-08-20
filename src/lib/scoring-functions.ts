@@ -158,7 +158,7 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
       ORDER BY mg.round ASC
     `;
     
-    const games = await db.all(query, [matchId]);
+    const games = await db.all<Record<string, unknown>>(query, [matchId]);
     return games || [];
   } catch (error) {
     console.error('Error in getMatchGames:', error);
@@ -331,7 +331,7 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
     const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
 
     // If all games are completed, mark match as complete
-    if (statusResult.total > 0 && statusResult.completed === statusResult.total) {
+    if (statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total) {
       const updateMatchQuery = `
         UPDATE matches 
         SET status = 'complete', end_date = CURRENT_TIMESTAMP 

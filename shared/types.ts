@@ -133,7 +133,8 @@ export interface MatchParticipant {
   match_id: string;
   user_id: string;
   username: string;
-  joined_at: Date;
+  joined_at: Date | string;
+  signup_data?: Record<string, unknown>;
 }
 
 export interface MatchGame {
@@ -316,6 +317,31 @@ export interface ScoringConfig {
     targetEliminations?: number;
     timeLimit?: number;
   };
+}
+
+// Signup field types
+export interface SignupField {
+  id: string;
+  label: string;
+  type: string;
+}
+
+export interface SignupConfig {
+  fields: SignupField[];
+}
+
+// Reminder types
+export interface ReminderData {
+  id: string;
+  match_id: string;
+  reminder_time: string;
+  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
+  error_message?: string;
+  created_at: string;
+  sent_at?: string;
+  processed_at?: string;
+  type: 'discord_general' | 'discord_match' | 'discord_player' | 'timed_announcement';
+  description?: string;
 }
 
 // Scheduler settings types

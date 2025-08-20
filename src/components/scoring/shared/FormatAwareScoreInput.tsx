@@ -136,7 +136,7 @@ export function FormatAwareScoreInput({
 
       {/* Show validation errors */}
       {validationErrors.length > 0 && (
-        <Alert icon={<IconAlertCircle size={16} />} color="yellow" size="sm">
+        <Alert icon={<IconAlertCircle size={16} />} color="yellow">
           <Stack gap={4}>
             {validationErrors.map((error, index) => (
               <Text key={index} size="xs">{error}</Text>

@@ -218,8 +218,10 @@ export function RealTimeScoring({
               <>
                 {/* For pure round-based (like Valorant), just need winner */}
                 <WinnerSelector
-                  value={currentRoundWinner}
-                  onChange={setCurrentRoundWinner}
+                  value={currentRoundWinner || 'team1'}
+                  onChange={(value: 'team1' | 'team2' | 'draw') => 
+                    setCurrentRoundWinner(value === 'draw' ? null : value)
+                  }
                   allowDraw={false}
                   disabled={submitting}
                 />
@@ -241,8 +243,10 @@ export function RealTimeScoring({
                 />
 
                 <WinnerSelector
-                  value={currentRoundWinner}
-                  onChange={setCurrentRoundWinner}
+                  value={currentRoundWinner || 'team1'}
+                  onChange={(value: 'team1' | 'team2' | 'draw') => 
+                    setCurrentRoundWinner(value === 'draw' ? null : value)
+                  }
                   allowDraw={false}
                   disabled={submitting}
                 />

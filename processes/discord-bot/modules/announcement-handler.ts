@@ -708,8 +708,8 @@ export class AnnouncementHandler {
         
         if (matchData) {
           gameName = matchData.game_name;
-          blueTeamVoiceChannel = matchData.blue_team_voice_channel;
-          redTeamVoiceChannel = matchData.red_team_voice_channel;
+          blueTeamVoiceChannel = matchData.blue_team_voice_channel || null;
+          redTeamVoiceChannel = matchData.red_team_voice_channel || null;
           if (matchData.game_color) {
             gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
           }

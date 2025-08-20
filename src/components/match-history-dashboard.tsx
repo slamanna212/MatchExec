@@ -13,7 +13,7 @@ import {
   Grid,
   RingProgress
 } from '@mantine/core';
-import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
+import { Match, MATCH_FLOW_STEPS, SignupConfig, ReminderData } from '@/shared/types';
 import Link from 'next/link';
 import { MatchDetailsModal } from './match-details-modal';
 
@@ -143,7 +143,13 @@ export function MatchHistoryDashboard() {
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
-  const [participants, setParticipants] = useState<MatchParticipant[]>([]);
+  const [participants, setParticipants] = useState<{
+    id: string;
+    user_id: string;
+    username: string;
+    joined_at: string;
+    signup_data: Record<string, unknown>;
+  }[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(30);

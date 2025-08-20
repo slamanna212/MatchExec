@@ -10,7 +10,7 @@ export async function GET(
     const { gameId } = await params;
     
     // Check if this game supports all modes
-    const gameInfo = await db.get(`
+    const gameInfo = await db.get<{ supportsAllModes: boolean }>(`
       SELECT supports_all_modes as supportsAllModes
       FROM games
       WHERE id = ?

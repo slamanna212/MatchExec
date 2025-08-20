@@ -36,8 +36,6 @@ export function TimingDetector({
       <RealTimeScoring
         matchId={matchId}
         gameId={gameId}
-        gameType={gameType}
-        modeData={modeData}
         scoringConfig={scoringConfig}
         onScoreSubmit={onScoreSubmit}
         submitting={submitting}
@@ -51,12 +49,10 @@ export function TimingDetector({
     <EndGameScoring
       matchId={matchId}
       gameId={gameId}
-      gameType={gameType}
       modeData={modeData}
       scoringConfig={scoringConfig}
       onScoreSubmit={onScoreSubmit}
       submitting={submitting}
-      initialScore={initialScore}
     />
   );
 }

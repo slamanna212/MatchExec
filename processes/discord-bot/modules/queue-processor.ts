@@ -422,7 +422,7 @@ export class QueueProcessor {
           const timeDiffMs = matchStart.getTime() - now.getTime();
           const timeDiffMinutes = Math.round(timeDiffMs / (1000 * 60));
           
-          let timingInfo = { value: timeDiffMinutes, unit: 'minutes' };
+          let timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' } = { value: timeDiffMinutes, unit: 'minutes' };
           
           // Convert to hours if more than 90 minutes
           if (timeDiffMinutes > 90) {

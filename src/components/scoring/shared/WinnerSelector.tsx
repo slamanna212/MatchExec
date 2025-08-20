@@ -51,7 +51,7 @@ export function WinnerSelector({
 
       <SegmentedControl
         value={value || ''}
-        onChange={onChange}
+        onChange={(val) => onChange(val as 'team1' | 'team2' | 'draw')}
         disabled={disabled}
         fullWidth
         data={data.map(item => ({

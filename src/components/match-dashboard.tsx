@@ -15,7 +15,7 @@ import {
   RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS, MatchScore } from '@/shared/types';
+import { Match, MATCH_FLOW_STEPS, MatchScore, SignupConfig, ReminderData } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
@@ -191,7 +191,13 @@ export function MatchDashboard() {
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
-  const [participants, setParticipants] = useState<MatchParticipant[]>([]);
+  const [participants, setParticipants] = useState<{
+    id: string;
+    user_id: string;
+    username: string;
+    joined_at: string;
+    signup_data: Record<string, unknown>;
+  }[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
@@ -339,7 +345,13 @@ export function MatchDashboard() {
             return data.participants;
           }
           
-          const hasChanges = data.participants.some((participant: MatchParticipant, index: number) => {
+          const hasChanges = data.participants.some((participant: {
+            id: string;
+            user_id: string;
+            username: string;
+            joined_at: string;
+            signup_data: Record<string, unknown>;
+          }, index: number) => {
             const prevParticipant = prevParticipants[index];
             return !prevParticipant ||
               participant.id !== prevParticipant.id ||
