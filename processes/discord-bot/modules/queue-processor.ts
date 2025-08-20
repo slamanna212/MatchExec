@@ -83,6 +83,18 @@ export class QueueProcessor {
 
       for (const announcement of announcements) {
         try {
+          // Immediately mark as processing to prevent duplicate processing by concurrent queue cycles
+          const updateResult = await this.db.run(`
+            UPDATE discord_announcement_queue 
+            SET status = 'processing', posted_at = datetime('now')
+            WHERE id = ? AND status = 'pending'
+          `, [announcement.id]);
+          
+          if (updateResult.changes === 0) {
+            console.log(`⏭️ Announcement ${announcement.id} was already processed by another queue cycle, skipping`);
+            continue;
+          }
+
           // Parse maps if they exist
           let maps: string[] = [];
           if (announcement.maps) {
