@@ -33,6 +33,9 @@ COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/ecosystem.config.js ./
 
+# Create app_data directory and set ownership
+RUN mkdir -p /app/app_data/data && chown -R nextjs:nodejs /app/app_data
+
 USER nextjs
 
 EXPOSE 3000
