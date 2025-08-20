@@ -79,7 +79,8 @@ export function ScoringModal({
     setSubmitting(true);
     try {
       await onScoreSubmit(score);
-      onClose();
+      // Don't automatically close - let the MapBasedScoring component manage this
+      // Only close if there are no more maps to score (this will be handled by the parent)
     } catch (err) {
       console.error('Failed to submit score:', err);
       setError(err instanceof Error ? err.message : 'Failed to submit score');
@@ -131,6 +132,7 @@ export function ScoringModal({
               scoringConfig={scoringConfig}
               onScoreSubmit={handleScoreSubmit}
               submitting={submitting}
+              onAllMapsCompleted={onClose}
             />
           </>
         )}

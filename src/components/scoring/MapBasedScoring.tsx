@@ -24,6 +24,7 @@ interface MapBasedScoringProps {
   scoringConfig: ScoringConfig;
   onScoreSubmit: (score: MatchScore) => Promise<void>;
   submitting: boolean;
+  onAllMapsCompleted?: () => void; // Optional callback when all maps are completed
 }
 
 export function MapBasedScoring({
@@ -32,7 +33,8 @@ export function MapBasedScoring({
   modeData,
   scoringConfig,
   onScoreSubmit,
-  submitting
+  submitting,
+  onAllMapsCompleted
 }: MapBasedScoringProps) {
   const [matchGames, setMatchGames] = useState<MatchGame[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
@@ -114,18 +116,28 @@ export function MapBasedScoring({
     await onScoreSubmit(updatedScore);
     
     // Refresh match games after submission
-    const response = await fetch(`/api/matches/${matchId}/games`);
-    if (response.ok) {
-      const data = await response.json();
-      setMatchGames(data.games || []);
-      
-      // Move to next pending game if current one is completed
-      const nextGame = data.games.find((game: MatchGame) => 
-        game.status === 'pending' || game.status === 'ongoing'
-      );
-      if (nextGame && nextGame.id !== selectedGameId) {
-        setSelectedGameId(nextGame.id);
+    try {
+      const response = await fetch(`/api/matches/${matchId}/games`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatchGames(data.games || []);
+        
+        // Move to next pending game if current one is completed
+        const nextGame = data.games.find((game: MatchGame) => 
+          game.status === 'pending' || game.status === 'ongoing'
+        );
+        if (nextGame && nextGame.id !== selectedGameId) {
+          setSelectedGameId(nextGame.id);
+        } else if (!nextGame && onAllMapsCompleted) {
+          // No more pending games - all maps are completed
+          onAllMapsCompleted();
+        }
+      } else {
+        console.error('Failed to refresh match games after score submission:', response.status, response.statusText);
       }
+    } catch (fetchError) {
+      console.error('Error refreshing match games after score submission:', fetchError);
+      // Don't throw the error - just log it so the modal doesn't close unexpectedly
     }
   };
 

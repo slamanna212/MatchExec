@@ -42,7 +42,7 @@ export async function getMatchFormatConfig(
 
     // Use the original format variant for individual map scoring
     // The maxRounds should represent rounds within a single map, not the total maps in the match
-    let adjustedFormatVariant = { ...formatVariant };
+    const adjustedFormatVariant = { ...formatVariant };
 
     // Build scoring configuration
     const config: ScoringConfig = {
