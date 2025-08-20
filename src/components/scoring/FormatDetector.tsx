@@ -130,22 +130,6 @@ export function FormatDetector({
             </Badge>
           </Group>
 
-          <Group gap="xl">
-            <div>
-              <Text size="xs" fw={600} c="dimmed">Timing</Text>
-              <Text size="xs">{timingInfo.description}</Text>
-            </div>
-            
-            <div>
-              <Text size="xs" fw={600} c="dimmed">Scoring</Text>
-              <Text size="xs">{scoringTypeInfo.description}</Text>
-            </div>
-          </Group>
-
-          <div>
-            <Text size="xs" fw={600} c="dimmed">Format Rules</Text>
-            <Text size="xs">{formatVariant.description}</Text>
-          </div>
         </Stack>
       </Card>
 
