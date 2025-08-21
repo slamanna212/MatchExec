@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ModeDataJsonWithScoring } from '@/shared/types';
+import { ModeDataJson } from '@/shared/types';
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +15,7 @@ export async function GET(
     
     try {
       const modesData = await fs.readFile(modesPath, 'utf8');
-      const modes: ModeDataJsonWithScoring[] = JSON.parse(modesData);
+      const modes: ModeDataJson[] = JSON.parse(modesData);
       
       // Find the specific mode
       const mode = modes.find(m => m.id === modeId);
