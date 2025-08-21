@@ -16,7 +16,7 @@ export async function GET(
         description
       FROM game_modes
       WHERE game_id = ?
-      ORDER BY name
+      ORDER BY name ASC
     `, [gameId]);
 
     return NextResponse.json(modes);

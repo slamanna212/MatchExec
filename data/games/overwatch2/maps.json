@@ -88,7 +88,7 @@
       "name": "Midtown",
       "type": "Hybrid",
       "location": "Manhattan, New York, United States",
-      "thumbnailUrl": "/public/assets/games/overwatch2/maps/midtown.webp"
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/midtown-ow2.webp"
     },
     {
       "id": "numbani",
@@ -215,6 +215,13 @@
       "type": "Clash",
       "location": "Giza Plateau, Egypt",
       "thumbnailUrl": "/public/assets/games/overwatch2/maps/throne-of-anubis.webp"
-    }
+    },
+    {
+      "id": "ow2-workshop",
+      "name": "Workshop Map",
+      "type": "Workshop",
+      "location": "Everywhere",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/ow2-workshop.jpg"
+    }    
 ]
   

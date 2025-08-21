@@ -30,7 +30,7 @@ function isValidImageType(buffer: Buffer): boolean {
     gif: [0x47, 0x49, 0x46, 0x38]
   };
 
-  for (const [type, signature] of Object.entries(signatures)) {
+  for (const [, signature] of Object.entries(signatures)) {
     if (signature.every((byte, index) => buffer[index] === byte)) {
       return true;
     }

@@ -5,26 +5,21 @@ import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
 
 async function runMigrations() {
-  console.log('🚀 Starting database migrations and seeding...');
   
   const db = getDatabase();
   
   try {
     // Connect to database
     await db.connect();
-    console.log('✅ Database connected');
     
     // Run migrations
     const migrationRunner = new MigrationRunner(db);
     await migrationRunner.runMigrations();
-    console.log('✅ Migrations completed');
     
     // Seed database with game data
     const seeder = new DatabaseSeeder(db);
     await seeder.seedDatabase();
-    console.log('✅ Database seeding completed');
     
-    console.log('🎉 Database initialization finished successfully');
     
   } catch (error) {
     console.error('❌ Error during database initialization:', error);

@@ -8,3 +8,15 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.tsbuildinfo
+.vscode
+.gitignore
+README.md
+.dockerignore
+coverage
+.nyc_output
+*.md
+.eslintcache
+dist
+build
+tmp
+temp

@@ -1,18 +1,28 @@
-import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
+import * as sqlite3 from 'sqlite3';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class Database {
   private db: sqlite3.Database | null = null;
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || process.env.DATABASE_PATH || './matchexec.db';
+    this.dbPath = dbPath || process.env.DATABASE_PATH || path.join(process.cwd(), 'app_data', 'data', 'matchexec.db');
   }
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Ensure the directory exists before creating the database file
+      const dbDir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dbDir)) {
+        try {
+          fs.mkdirSync(dbDir, { recursive: true });
+        } catch (err) {
+          reject(new Error(`Failed to create database directory ${dbDir}: ${err}`));
+          return;
+        }
+      }
+
       this.db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) {
           reject(err);
@@ -32,7 +42,6 @@ export class Database {
         if (err) {
           reject(err);
         } else {
-          console.log('Database connection closed');
           this.db = null;
           resolve();
         }
@@ -40,7 +49,7 @@ export class Database {
     });
   }
 
-  async run(sql: string, params: any[] = []): Promise<{ lastID?: number; changes?: number }> {
+  async run(sql: string, params: unknown[] = []): Promise<{ lastID?: number; changes?: number }> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {
@@ -54,7 +63,7 @@ export class Database {
     });
   }
 
-  async get<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
+  async get<T = unknown>(sql: string, params: unknown[] = []): Promise<T | undefined> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {
@@ -68,7 +77,7 @@ export class Database {
     });
   }
 
-  async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  async all<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     if (!this.db) throw new Error('Database not connected');
     
     return new Promise((resolve, reject) => {

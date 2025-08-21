@@ -12,7 +12,6 @@ export class MigrationRunner {
   }
 
   async runMigrations(): Promise<void> {
-    console.log('Running database migrations...');
 
     // Ensure migrations table exists
     await this.createMigrationsTable();
@@ -29,14 +28,13 @@ export class MigrationRunner {
       }
     }
 
-    console.log('Database migrations completed');
   }
 
   private async createMigrationsTable(): Promise<void> {
     await this.db.run(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
+        filename TEXT NOT NULL UNIQUE,
         executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -44,7 +42,6 @@ export class MigrationRunner {
 
   private getMigrationFiles(): string[] {
     if (!fs.existsSync(this.migrationsDir)) {
-      console.log('No migrations directory found');
       return [];
     }
 
@@ -55,24 +52,22 @@ export class MigrationRunner {
 
   private async getExecutedMigrations(): Promise<string[]> {
     try {
-      const rows = await this.db.all<{ name: string }>('SELECT name FROM migrations');
-      return rows.map(row => row.name);
-    } catch (error) {
+      const rows = await this.db.all<{ filename: string }>('SELECT filename FROM migrations');
+      return rows.map(row => row.filename);
+    } catch {
       // If migrations table doesn't exist yet, return empty array
       return [];
     }
   }
 
   private async executeMigration(filename: string): Promise<void> {
-    console.log(`Executing migration: ${filename}`);
     
     const migrationPath = path.join(this.migrationsDir, filename);
     const sql = fs.readFileSync(migrationPath, 'utf8');
 
     try {
       await this.db.exec(sql);
-      await this.db.run('INSERT INTO migrations (name) VALUES (?)', [filename]);
-      console.log(`Migration ${filename} completed successfully`);
+      await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
     } catch (error) {
       console.error(`Migration ${filename} failed:`, error);
       throw error;

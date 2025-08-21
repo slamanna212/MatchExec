@@ -53,7 +53,16 @@ docker run -p 3000:3000 --env-file .env matchexec
 │   └── globals.css         # Global styles
 ├── processes/
 │   ├── discord-bot/        # Discord bot process
-│   │   └── index.ts        # Main bot file
+│   │   ├── index.ts        # Modular bot implementation
+│   │   └── modules/        # Discord bot modules
+│   │       ├── voice-handler.ts      # Voice announcements and TTS
+│   │       ├── event-handler.ts      # Discord server events
+│   │       ├── announcement-handler.ts # Match announcements
+│   │       ├── reminder-handler.ts   # Player reminders and notifications
+│   │       ├── queue-processor.ts    # Queue processing
+│   │       ├── interaction-handler.ts # Discord interactions
+│   │       ├── utils.ts              # Utility functions
+│   │       └── settings-manager.ts   # Settings management
 │   ├── scheduler/          # Cron scheduler process
 │   │   └── index.ts        # Scheduled tasks
 │   └── worker/             # Background worker process
@@ -68,6 +77,10 @@ docker run -p 3000:3000 --env-file .env matchexec
 ## Database
 
 The project uses SQLite for data persistence with automated migrations and seeding at startup.
+
+**IMPORTANT**: This project uses the standard `sqlite3` library, NOT `better-sqlite3`. All database connections should use the callback-based API of sqlite3.
+
+**Database Location**: The SQLite database file is located at `./app_data/data/matchexec.db` (relative to project root). Always use this path when creating Node.js scripts for database operations.
 
 ### Schema
 
@@ -124,6 +137,34 @@ const games = await db.all('SELECT * FROM games');
 ```
 
 Individual processes only connect to the database - migrations run once at startup for performance and reliability.
+
+## Discord Bot Architecture
+
+The Discord bot uses a modular architecture for maintainability and scalability:
+
+### Bot Modules
+
+- **voice-handler.ts**: Handles voice announcements, TTS, and voice channel management
+- **event-handler.ts**: Manages Discord server events creation and deletion
+- **announcement-handler.ts**: Creates and posts match announcements with embeds
+- **reminder-handler.ts**: Handles player reminders and notifications
+- **queue-processor.ts**: Processes various Discord queue operations
+- **interaction-handler.ts**: Manages Discord slash commands and interactions
+- **settings-manager.ts**: Loads and manages Discord bot settings from database
+- **utils.ts**: Common utility functions used across modules
+
+### File Structure
+
+- `index.ts` - Main bot implementation with modular architecture
+- `modules/` - Individual bot modules
+
+### Benefits
+
+- **Maintainability**: Each module handles a specific responsibility
+- **Testability**: Modules can be tested independently  
+- **Readability**: Individual files are focused and manageable
+- **Reusability**: Modules can be imported and used across the codebase
+- **Scalability**: Easy to add new features by creating new modules
 
 
 ## Technology Stack

@@ -13,13 +13,24 @@ export interface EventAnnouncementData {
 export async function postEventAnnouncement(eventData: EventAnnouncementData): Promise<boolean> {
   try {
     // Import here to avoid build issues
-    const { getDbInstance } = await import('../lib/database-init');
+    const { getDbInstance } = await import('../src/lib/database-init');
     const db = await getDbInstance();
     
-    // Add to announcement queue
+    // Check if announcement already exists to prevent duplicates
+    const existing = await db.get(`
+      SELECT id FROM discord_announcement_queue 
+      WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard')
+    `, [eventData.id]);
+    
+    if (existing) {
+      console.log('📢 Discord announcement already queued for:', eventData.name);
+      return true;
+    }
+    
+    // Add to announcement queue with explicit 'standard' type
     await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, status)
-      VALUES (?, 'pending')
+      INSERT INTO discord_announcement_queue (match_id, announcement_type, status)
+      VALUES (?, 'standard', 'pending')
     `, [eventData.id]);
     
     console.log('📢 Discord announcement queued for:', eventData.name);

@@ -1,0 +1,25 @@
+{
+  "dataVersion": "0.0.1",
+  "voices": [
+    {
+      "id": "wrestling-announcer",
+      "name": "Wrestling Announcer",
+      "path": "/public/assets/audio/wrestling-announcer"
+    },
+    {
+      "id": "british-football",
+      "name": "British Football",
+      "path": "/public/assets/audio/british-football"
+    },
+    {
+      "id": "london-radio",
+      "name": "London Radio",
+      "path": "/public/assets/audio/london-radio"
+    },
+    {
+      "id": "aria",
+      "name": "Aria",
+      "path": "/public/assets/audio/aria"
+    }
+  ]
+}

@@ -1,27 +1,32 @@
 [
     {
-      "id": "convergence",
-      "name": "Convergence",
-      "description": "Convergence is played mostly like Convoy, with the difference that the attacking team needs to capture a mission area first."
+      "id": "domination",
+      "name": "Domination",
+      "description": "Teams compete to control strategic points across the map."
     },
     {
       "id": "convoy",
       "name": "Convoy",
-      "description": "One team needs to escort a moving vehicle to the end of the map while the opposite team needs to stop them."
+      "description": "Escort vehicles to their destination while defending against enemy attacks."
     },
     {
-      "id": "domination",
-      "name": "Domination",
-      "description": "Two teams fight each other to hold control of a single point in a space called the Mission Area."
+      "id": "convergence",
+      "name": "Convergence",
+      "description": "Fight to control critical convergence points in dynamic battles."
     },
     {
-      "id": "doom-match",
-      "name": "Doom Match",
-      "description": "It is a standard 8-12 player FFA deathmatch."
+      "id": "doomrush",
+      "name": "Doom Rush",
+      "description": "High-intensity combat with rapid respawns and aggressive gameplay."
     },
     {
       "id": "conquest",
       "name": "Conquest",
       "description": "Standard team deathmatch mode in which players compete for eliminations"
+    },
+    {
+      "id": "escalation",
+      "name": "Escalation",
+      "description": "Progressive power increases create intensifying combat scenarios."
     }
-  ]
+]
