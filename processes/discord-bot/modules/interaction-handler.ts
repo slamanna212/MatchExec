@@ -41,14 +41,12 @@ export class InteractionHandler {
     try {
       const rest = new REST().setToken(this.settings.bot_token);
       
-      console.log('🔄 Started refreshing application (/) commands.');
 
       const data = await rest.put(
         Routes.applicationGuildCommands(this.client.user!.id, this.settings.guild_id),
         { body: commands }
       ) as any[];
 
-      console.log(`✅ Successfully reloaded ${data.length} application (/) commands.`);
     } catch (error) {
       console.error('❌ Error registering slash commands:', error);
     }
@@ -274,7 +272,6 @@ export class InteractionHandler {
           participantCount: participantCount?.count || 1
         });
 
-        console.log(`✅ User ${interaction.user.tag} (${displayUsername}) signed up for event ${eventId}:`, signupData);
       } else {
         throw new Error('Database not available');
       }

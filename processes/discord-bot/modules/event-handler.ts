@@ -88,7 +88,6 @@ export class EventHandler {
             // Read the image file as a buffer
             const imageBuffer = fs.readFileSync(imagePath);
             eventOptions.image = imageBuffer;
-            console.log(`✅ Added cover image to Discord event: ${eventData.event_image_url}`);
           } else {
             console.warn(`⚠️ Event image not found for Discord event: ${imagePath}`);
           }
@@ -99,7 +98,6 @@ export class EventHandler {
 
       const discordEvent = await guild.scheduledEvents.create(eventOptions);
       
-      console.log(`✅ Created Discord event: ${discordEvent.name} (ID: ${discordEvent.id}) - Duration: ${durationMinutes} minutes (${rounds} rounds × ${this.settings?.event_duration_minutes || 45} min/round)`);
       return discordEvent.id;
 
     } catch (error) {
@@ -119,7 +117,6 @@ export class EventHandler {
       const event = await guild.scheduledEvents.fetch(eventId);
       if (event) {
         await event.delete();
-        console.log(`✅ Deleted Discord event: ${eventId}`);
         return true;
       } else {
         console.warn(`⚠️ Discord event not found: ${eventId}`);

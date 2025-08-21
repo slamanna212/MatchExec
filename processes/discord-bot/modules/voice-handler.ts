@@ -70,7 +70,6 @@ export class VoiceHandler {
       }
 
       if (!this.settings.voice_announcements_enabled) {
-        console.log('ℹ️ Voice announcements are disabled');
         return false;
       }
 
@@ -81,7 +80,6 @@ export class VoiceHandler {
 
       // Check if audio is already playing in this channel
       if (this.playbackStatus.get(channelId)) {
-        console.log(`⏭️ Audio already playing in channel ${channelId}, skipping new request`);
         return false;
       }
 
@@ -136,7 +134,6 @@ export class VoiceHandler {
         return null;
       }
 
-      console.log(`🎵 Found audio file: ${fullPath}`);
       return fullPath;
     } catch (error) {
       console.error('❌ Error getting audio file path:', error);
@@ -160,7 +157,6 @@ export class VoiceHandler {
       // Stop any existing audio player for this channel
       const existingPlayer = this.activeAudioPlayers.get(channelId);
       if (existingPlayer) {
-        console.log(`🛑 Stopping existing audio player in channel ${channelId}`);
         existingPlayer.stop();
         this.activeAudioPlayers.delete(channelId);
       }
@@ -192,7 +188,6 @@ export class VoiceHandler {
       // Subscribe the connection to the audio player
       connection.subscribe(player);
 
-      console.log(`🔊 Playing voice announcement in channel ${channelId}: ${path.basename(audioFilePath)}`);
 
       // Play the audio
       player.play(resource);
@@ -211,7 +206,6 @@ export class VoiceHandler {
               try {
                 connection.destroy();
                 this.voiceConnections.delete(channelId);
-                console.log(`🔇 Disconnected from voice channel ${channelId} after playing announcement`);
               } catch (error) {
                 console.warn(`⚠️ Error disconnecting from voice channel ${channelId}:`, error);
               }
@@ -224,7 +218,6 @@ export class VoiceHandler {
         // Set a timeout to ensure we don't hang indefinitely
         const timeout = setTimeout(() => {
           if (!isResolved) {
-            console.warn(`⏰ Audio playback timeout in channel ${channelId}`);
             player.stop();
             cleanup();
             resolve(false);
@@ -234,7 +227,6 @@ export class VoiceHandler {
         player.once(AudioPlayerStatus.Idle, () => {
           if (!isResolved) {
             clearTimeout(timeout);
-            console.log(`✅ Voice announcement finished playing in channel ${channelId}`);
             cleanup();
             resolve(true);
           }
@@ -275,7 +267,6 @@ export class VoiceHandler {
       if (connection) {
         connection.destroy();
         this.voiceConnections.delete(channelId);
-        console.log(`🔇 Disconnected from voice channel ${channelId}`);
         return true;
       }
       return false;
@@ -290,7 +281,6 @@ export class VoiceHandler {
     for (const [channelId, player] of this.activeAudioPlayers) {
       try {
         player.stop();
-        console.log(`🛑 Stopped audio player in channel ${channelId}`);
       } catch (error) {
         console.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
       }
@@ -304,7 +294,6 @@ export class VoiceHandler {
     for (const [channelId, connection] of this.voiceConnections) {
       try {
         connection.destroy();
-        console.log(`🔇 Disconnected from voice channel ${channelId}`);
       } catch (error) {
         console.error(`❌ Error disconnecting from voice channel ${channelId}:`, error);
       }

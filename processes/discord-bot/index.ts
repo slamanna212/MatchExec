@@ -46,7 +46,6 @@ class MatchExecBot {
     this.client.once('ready', async () => {
       if (!this.client.user) return;
       
-      console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
       
       // Set bot status to display website and version
       const versionInfo = getVersionInfo();
@@ -68,7 +67,6 @@ class MatchExecBot {
       }
       
       this.isReady = true;
-      console.log('🤖 MatchExec Discord Bot is ready!');
     });
 
     // Basic interaction handling (simplified)
@@ -95,9 +93,7 @@ class MatchExecBot {
   private async initialize() {
     try {
       // Connect to database (migrations should be run separately)
-      console.log('🗄️ Connecting to database...');
       this.db = await getDbInstance();
-      console.log('✅ Database connected');
       
       // Initialize settings manager
       this.settingsManager = new SettingsManager(this.db);
@@ -129,7 +125,6 @@ class MatchExecBot {
         this.voiceHandler
       );
 
-      console.log('✅ Bot modules initialized');
 
       // Start periodic tasks
       this.startPeriodicTasks();
@@ -221,7 +216,6 @@ class MatchExecBot {
   }
 
   private async shutdown() {
-    console.log('🛑 Received shutdown signal, gracefully shutting down...');
     
     if (this.voiceHandler) {
       await this.voiceHandler.disconnectFromAllVoiceChannels();
@@ -231,7 +225,6 @@ class MatchExecBot {
       this.client.destroy();
     }
     
-    console.log('🛑 Discord bot shut down complete');
     process.exit(0);
   }
 
@@ -245,7 +238,6 @@ class MatchExecBot {
     }
 
     try {
-      console.log('🔐 Attempting to login to Discord...');
       await this.client.login(this.settings.bot_token);
     } catch (error) {
       console.error('❌ Failed to login to Discord:', error);
@@ -258,11 +250,8 @@ const bot = new MatchExecBot();
 
 // Initialize database and start the bot
 (async () => {
-  console.log('🚀 Starting MatchExec Discord Bot...');
   try {
-    console.log('🔧 About to start bot...');
     await bot.start();
-    console.log('✅ Bot start method completed');
   } catch (error) {
     console.error('❌ Failed to start Discord bot:', error);
     console.error('Full error:', error);

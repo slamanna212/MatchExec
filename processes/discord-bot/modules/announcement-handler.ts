@@ -116,7 +116,6 @@ export class AnnouncementHandler {
         return false;
       }
 
-      console.log(`✅ Event announcement posted to ${successCount} channel(s) for: ${eventData.name}`);
       return { success: true, mainMessage, successCount };
 
     } catch (error) {
@@ -134,7 +133,6 @@ export class AnnouncementHandler {
         reason: 'Map details for event'
       });
 
-      console.log(`✅ Created PUBLIC thread: ${thread.name} (ID: ${thread.id}) in channel ${message.channelId}`);
 
       // Create an embed for each map
       for (let i = 0; i < maps.length; i++) {
@@ -150,7 +148,6 @@ export class AnnouncementHandler {
         }
       }
 
-      console.log(`✅ Created maps thread with ${maps.length} map embeds`);
       return thread;
     } catch (error) {
       console.error('❌ Error creating maps thread:', error);
@@ -179,7 +176,6 @@ export class AnnouncementHandler {
           SELECT name, color FROM games WHERE id = ?
         `, [gameId]);
         
-        console.log('Game data from database:', gameData);
         
         if (gameData) {
           gameName = gameData.name;
@@ -187,12 +183,9 @@ export class AnnouncementHandler {
             // Convert hex string to number (remove # and parse as hex)
             const colorHex = gameData.color.replace('#', '');
             gameColor = parseInt(colorHex, 16);
-            console.log(`Using game color: ${gameData.color} -> ${gameColor} (0x${colorHex})`);
           } else {
-            console.log('No color found for game, using fallback');
           }
         } else {
-          console.log('No game data found for ID:', gameId);
         }
       } catch (error) {
         console.error('Error fetching game data:', error);
@@ -257,7 +250,6 @@ export class AnnouncementHandler {
           // Use attachment://filename to reference the attached image
           embed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
           
-          console.log(`✅ Added event image attachment: ${eventImageUrl}`);
         } else {
           console.warn(`⚠️ Event image not found: ${imagePath}`);
         }
@@ -484,7 +476,6 @@ export class AnnouncementHandler {
         return false;
       }
 
-      console.log(`✅ Timed reminder posted to ${successCount} channel(s) for: ${eventData.name}`);
       return { success: true, successCount };
 
     } catch (error) {
@@ -588,7 +579,6 @@ export class AnnouncementHandler {
           });
           
           embed.setImage(`attachment://reminder_image.${path.extname(imagePath).slice(1)}`);
-          console.log(`✅ Added reminder image attachment: ${eventData.event_image_url}`);
         }
       } catch (error) {
         console.error(`❌ Error handling reminder image ${eventData.event_image_url}:`, error);
@@ -660,7 +650,6 @@ export class AnnouncementHandler {
         return false;
       }
 
-      console.log(`✅ Match start announcement posted to ${successCount} channel(s) for: ${eventData.name}`);
       return { success: true, successCount };
 
     } catch (error) {
@@ -854,7 +843,6 @@ export class AnnouncementHandler {
           });
           
           embed.setImage(`attachment://match_start_image.${path.extname(imagePath).slice(1)}`);
-          console.log(`✅ Added match start image attachment: ${eventData.event_image_url}`);
         }
       } catch (error) {
         console.error(`❌ Error handling match start image ${eventData.event_image_url}:`, error);

@@ -27,7 +27,6 @@ export class SettingsManager {
       `);
       
       if (!settings?.bot_token) {
-        console.log('⚠️ No bot token found in database settings');
         return null;
       }
 

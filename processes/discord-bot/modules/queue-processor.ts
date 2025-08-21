@@ -91,7 +91,6 @@ export class QueueProcessor {
           `, [announcement.id]);
           
           if (updateResult.changes === 0) {
-            console.log(`⏭️ Announcement ${announcement.id} was already processed by another queue cycle, skipping`);
             continue;
           }
 
@@ -179,7 +178,6 @@ export class QueueProcessor {
                   VALUES (?, ?, ?, ?, ?, ?, ?)
                 `, [messageRecordId, eventData.id, (result as any).mainMessage.id, (result as any).mainMessage.channelId, threadId, discordEventId, 'announcement']);
                 
-                console.log(`✅ Stored Discord message tracking for match: ${eventData.id}`);
               } catch (error) {
                 console.error('❌ Error storing Discord message tracking:', error);
               }
@@ -192,7 +190,6 @@ export class QueueProcessor {
               WHERE id = ?
             `, [announcement.id]);
 
-            console.log(`✅ Posted announcement for: ${announcement.name}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -201,7 +198,6 @@ export class QueueProcessor {
               WHERE id = ?
             `, [announcement.id]);
 
-            console.log(`❌ Failed to post announcement for: ${announcement.name}`);
           }
         } catch (error) {
           console.error(`❌ Error processing announcement ${announcement.id}:`, error);
@@ -257,7 +253,6 @@ export class QueueProcessor {
               if (channel?.isTextBased() && 'messages' in channel) {
                 await channel.messages.delete(record.message_id);
                 deletedCount++;
-                console.log(`🗑️ Deleted message ${record.message_id} from channel ${record.channel_id}`);
               }
 
               // Delete thread if exists
@@ -266,7 +261,6 @@ export class QueueProcessor {
                   const thread = await this.client.channels.fetch(record.thread_id);
                   if (thread?.isThread()) {
                     await thread.delete();
-                    console.log(`🗑️ Deleted thread ${record.thread_id}`);
                   }
                 } catch (error) {
                   console.warn(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
@@ -277,7 +271,6 @@ export class QueueProcessor {
               if (record.discord_event_id && this.eventHandler) {
                 const success = await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
                 if (success) {
-                  console.log(`🗑️ Deleted Discord event ${record.discord_event_id}`);
                 }
               }
 
@@ -298,7 +291,6 @@ export class QueueProcessor {
             WHERE id = ?
           `, [deletion.id]);
 
-          console.log(`✅ Processed deletion queue item ${deletion.id} - deleted ${deletedCount} messages`);
 
         } catch (error) {
           console.error(`❌ Error processing deletion ${deletion.id}:`, error);
@@ -329,7 +321,6 @@ export class QueueProcessor {
       `);
 
       if (updates.length > 0) {
-        console.log(`🔄 Processing ${updates.length} status update(s) from queue`);
       }
 
       for (const update of updates) {
@@ -337,7 +328,6 @@ export class QueueProcessor {
           const newStatus = update.new_status;
           const matchId = update.match_id;
 
-          console.log(`📝 Processing status update for match ${matchId}: ${newStatus}`);
 
           // Update Discord messages based on the new status
           let success = false;
@@ -348,7 +338,6 @@ export class QueueProcessor {
               success = await this.updateMatchMessagesForSignupClosure(matchId);
             } else {
               // For other status changes, just log for now
-              console.log(`📝 Status update to ${newStatus} - no Discord message changes needed`);
               success = true;
             }
           } catch (error) {
@@ -367,7 +356,6 @@ export class QueueProcessor {
           `, [finalStatus, errorMessage, update.id]);
 
           const statusIcon = success ? '✅' : '❌';
-          console.log(`${statusIcon} Processed status update queue item ${update.id} for match ${matchId}`);
 
         } catch (error) {
           console.error(`❌ Error processing status update ${update.id}:`, error);
@@ -399,7 +387,6 @@ export class QueueProcessor {
 
       for (const reminder of reminders) {
         try {
-          console.log(`📬 Processing reminder for match ${reminder.match_id}`);
 
           if (!this.announcementHandler) {
             console.error('❌ AnnouncementHandler not available');
@@ -457,7 +444,6 @@ export class QueueProcessor {
           `, [status, reminder.id]);
 
           const resultIcon = success ? '✅' : '❌';
-          console.log(`${resultIcon} Processed reminder queue item ${reminder.id} for match ${reminder.match_id}`);
 
         } catch (error) {
           console.error(`❌ Error processing reminder ${reminder.id}:`, error);
@@ -494,7 +480,6 @@ export class QueueProcessor {
 
       for (const reminder of playerReminders) {
         try {
-          console.log(`📱 Processing player reminder DMs for match ${reminder.match_id}`);
 
           if (!this.reminderHandler) {
             console.error('❌ ReminderHandler not available');
@@ -519,7 +504,6 @@ export class QueueProcessor {
           }
 
           if (!matchSettings.player_notifications) {
-            console.log(`⏭️ Player notifications disabled for match ${matchSettings.name}, skipping DMs`);
             // Mark as completed since this is expected behavior
             await this.db.run(`
               UPDATE discord_player_reminder_queue 
@@ -541,7 +525,6 @@ export class QueueProcessor {
           `, [status, reminder.id]);
 
           const resultIcon = success ? '✅' : '❌';
-          console.log(`${resultIcon} Processed player reminder queue item ${reminder.id} for match ${reminder.match_id}`);
 
         } catch (error) {
           console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
@@ -600,11 +583,9 @@ export class QueueProcessor {
             
             // Check if we're already processing a voice test for this user
             if (this.processingVoiceTests.has(userId)) {
-              console.log(`⏭️ Voice test already being processed for user ${userId}, skipping request ${request.id}`);
               continue;
             }
             
-            console.log(`🔊 Processing voice test request ${request.id} for user ${userId}`);
             
             // Mark user as being processed
             this.processingVoiceTests.add(userId);
@@ -617,7 +598,6 @@ export class QueueProcessor {
             `, [request.id]);
             
             if (updateResult.changes === 0) {
-              console.log(`⏭️ Request ${request.id} was already processed by another queue cycle, skipping`);
               this.processingVoiceTests.delete(userId);
               continue;
             }
@@ -652,7 +632,6 @@ export class QueueProcessor {
               ]);
               
               const statusIcon = result.success ? '✅' : '❌';
-              console.log(`${statusIcon} Processed voice test request ${request.id}: ${result.message}`);
               
             } finally {
               // Always remove user from processing set
@@ -694,12 +673,10 @@ export class QueueProcessor {
 
   private async updateMatchMessagesForSignupClosure(matchId: string): Promise<boolean> {
     if (!this.client.isReady() || !this.db) {
-      console.log(`❌ Cannot update messages - client ready: ${this.client.isReady()}, db: ${!!this.db}`);
       return false;
     }
 
     try {
-      console.log(`🔍 Looking for Discord messages to update for match ${matchId}`);
       
       // Get match data with image info for recreating attachments
       const matchData = await this.db.get<{
@@ -721,7 +698,6 @@ export class QueueProcessor {
         WHERE match_id = ? AND message_type = 'announcement'
       `, [matchId]);
 
-      console.log(`🔍 Found ${messages.length} Discord messages for match ${matchId}`);
 
       if (messages.length === 0) {
         // Let's check if there are ANY messages for this match
@@ -735,12 +711,9 @@ export class QueueProcessor {
           WHERE match_id = ?
         `, [matchId]);
         
-        console.log(`🔍 Total messages for match ${matchId}: ${allMessages.length}`);
         if (allMessages.length > 0) {
-          console.log(`🔍 Message types found:`, allMessages.map(m => m.message_type));
         }
         
-        console.log(`⚠️ No announcement-type Discord messages found for match ${matchId}`);
         return true; // Not an error if no messages exist
       }
 
@@ -764,35 +737,22 @@ export class QueueProcessor {
             continue;
           }
 
-          console.log(`🔍 SIGNUP CLOSURE DEBUG - Message ${messageRecord.message_id}:`);
-          console.log(`🔍 Original message has ${message.embeds.length} embeds`);
-          console.log(`🔍 Original message has ${message.attachments.size} attachments`);
           
           if (message.embeds[0]) {
-            console.log(`🔍 Original embed data:`, JSON.stringify(message.embeds[0].data, null, 2));
           }
           
           if (message.attachments.size > 0) {
-            console.log(`🔍 Original attachments:`, Array.from(message.attachments.values()).map(a => ({
-              id: a.id,
-              name: a.name,
-              url: a.url,
-              proxyURL: a.proxyURL
-            })));
           }
 
           // Create updated embed - copy the existing embed exactly but add signups closed message
           const updatedEmbed = message.embeds[0] ? 
             EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
           
-          console.log(`🔍 Embed before modification:`, JSON.stringify(updatedEmbed.data, null, 2));
           
           // Keep the image in the embed - don't remove it
           // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
           if (updatedEmbed.data.image?.url) {
-            console.log(`🔍 Found image URL: ${updatedEmbed.data.image.url} - keeping it in embed`);
           } else {
-            console.log(`🔍 No image found in embed`);
           }
           
           // Just add a simple signups closed message at the bottom, don't change anything else
@@ -800,7 +760,6 @@ export class QueueProcessor {
           const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
           
           if (signupStatusFieldIndex === -1) {
-            console.log(`🔍 Adding signup status field`);
             // Add new field at the bottom
             updatedEmbed.addFields([{
               name: '📋 Signup Status',
@@ -808,10 +767,8 @@ export class QueueProcessor {
               inline: false
             }]);
           } else {
-            console.log(`🔍 Signup status field already exists at index ${signupStatusFieldIndex}`);
           }
 
-          console.log(`🔍 Embed after modification:`, JSON.stringify(updatedEmbed.data, null, 2));
 
           // Recreate attachment if there's an event image to prevent Discord from stripping it
           let attachment: AttachmentBuilder | undefined;
@@ -829,7 +786,6 @@ export class QueueProcessor {
                 // Update embed to use attachment://filename to reference the reattached image
                 updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
                 
-                console.log(`🔍 Recreated attachment for image: ${matchData.event_image_url}`);
               } else {
                 console.warn(`⚠️ Event image not found for reattachment: ${imagePath}`);
               }
@@ -845,15 +801,12 @@ export class QueueProcessor {
             files: attachment ? [attachment] : [] // Include recreated attachment if available
           };
           
-          console.log(`🔍 Edit options:`, JSON.stringify(editOptions, null, 2));
 
           // Remove all action rows (signup buttons) but keep everything else the same
           await message.edit(editOptions);
           
-          console.log(`🔍 Message edit completed for ${messageRecord.message_id}`);
 
           successCount++;
-          console.log(`✅ Updated Discord message ${messageRecord.message_id} - removed signup button`);
 
         } catch (error) {
           console.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
@@ -865,7 +818,6 @@ export class QueueProcessor {
         return false;
       }
 
-      console.log(`✅ Successfully updated ${successCount} Discord message(s) for match ${matchId} - signup buttons removed`);
       return true;
 
     } catch (error) {

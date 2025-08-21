@@ -61,7 +61,6 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!participants || participants.length === 0) {
-        console.log('ℹ️ No participants with Discord IDs found for player reminders:', matchId);
         return true; // Not an error, just no one to notify
       }
 
@@ -96,7 +95,6 @@ export class ReminderHandler {
           });
 
           successCount++;
-          console.log(`✅ Sent player reminder DM to ${participant.username} (${participant.discord_user_id})`);
 
         } catch (error) {
           failureCount++;
@@ -105,7 +103,6 @@ export class ReminderHandler {
       }
 
       const totalParticipants = participants.length;
-      console.log(`📩 Player reminder results: ${successCount}/${totalParticipants} sent successfully, ${failureCount} failed`);
 
       return successCount > 0; // Success if at least one DM was sent
 
@@ -130,7 +127,6 @@ export class ReminderHandler {
     const signupChannels = await this.getChannelsForNotificationType('signup_updates');
     
     if (signupChannels.length === 0) {
-      console.log('ℹ️ No channels configured for signup updates');
       return true; // Not an error, just no channels configured
     }
 
@@ -253,7 +249,6 @@ export class ReminderHandler {
         return false;
       }
 
-      console.log(`✅ Signup notification sent to ${successCount} channel(s) for: ${matchData.name}`);
       return true;
 
     } catch (error) {
