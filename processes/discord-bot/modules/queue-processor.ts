@@ -7,6 +7,7 @@ import { AnnouncementHandler } from './announcement-handler';
 import { ReminderHandler } from './reminder-handler';
 import { EventHandler } from './event-handler';
 import { VoiceHandler } from './voice-handler';
+import { SettingsManager } from './settings-manager';
 
 // Interfaces for different queue types - matching existing DB structure
 interface QueuedAnnouncement {
@@ -47,7 +48,8 @@ export class QueueProcessor {
     private announcementHandler: AnnouncementHandler | null,
     private reminderHandler: ReminderHandler | null,
     private eventHandler: EventHandler | null,
-    private voiceHandler: VoiceHandler | null = null
+    private voiceHandler: VoiceHandler | null = null,
+    private settingsManager: SettingsManager | null = null
   ) {}
 
   async processAnnouncementQueue() {
