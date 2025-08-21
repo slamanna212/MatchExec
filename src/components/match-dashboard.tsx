@@ -495,7 +495,17 @@ export function MatchDashboard() {
             color="orange"
             onClick={(e) => {
               e.stopPropagation();
-              handleStatusTransition(match.id, 'assign');
+              modals.openConfirmModal({
+                title: 'Close Signups',
+                children: (
+                  <Text size="sm">
+                    Are you sure you want to close signups for &quot;{match.name}&quot;? This will prevent new players from joining the match.
+                  </Text>
+                ),
+                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+                confirmProps: { color: 'orange' },
+                onConfirm: () => handleStatusTransition(match.id, 'assign'),
+              });
             }}
             style={{ flex: 1 }}
           >
