@@ -22,7 +22,7 @@
     {
       "id": "conquest",
       "name": "Conquest",
-      "description": "Large-scale territorial control across expansive battlefields."
+      "description": "Standard team deathmatch mode in which players compete for eliminations"
     },
     {
       "id": "escalation",
