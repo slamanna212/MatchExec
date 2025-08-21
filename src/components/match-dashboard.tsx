@@ -686,17 +686,19 @@ export function MatchDashboard() {
         matchName={selectedMatchForAssignment?.name || ''}
       />
 
-      <ScoringModal
-        opened={scoringModalOpen}
-        onClose={() => {
-          setScoringModalOpen(false);
-          setSelectedMatchForScoring(null);
-        }}
-        matchId={selectedMatchForScoring?.id || ''}
-        gameId={selectedMatchForScoring?.game_id || ''}
-        matchFormat={selectedMatchForScoring?.match_format || 'casual'}
-        onResultSubmit={handleResultSubmit}
-      />
+      {selectedMatchForScoring && (
+        <ScoringModal
+          opened={scoringModalOpen}
+          onClose={() => {
+            setScoringModalOpen(false);
+            setSelectedMatchForScoring(null);
+          }}
+          matchId={selectedMatchForScoring.id}
+          gameId={selectedMatchForScoring.game_id}
+          matchFormat={selectedMatchForScoring.match_format || 'casual'}
+          onResultSubmit={handleResultSubmit}
+        />
+      )}
 
       <MatchDetailsModal
         opened={detailsModalOpen}

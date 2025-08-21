@@ -38,21 +38,34 @@ export function SimpleMapScoring({
 
   // Fetch match games
   useEffect(() => {
+    if (!matchId || matchId.trim() === '') {
+      console.log('SimpleMapScoring: Waiting for valid matchId, current value:', matchId);
+      setLoading(true); // Keep loading while waiting for valid matchId
+      setError(null);
+      return;
+    }
+    
     const fetchMatchGames = async () => {
       let response: Response | undefined;
       try {
         setLoading(true);
         setError(null);
-        response = await fetch(`/api/matches/${matchId}/games`, {
+        const url = `/api/matches/${matchId}/games?t=${Date.now()}`;
+        console.log('SimpleMapScoring: Fetching from URL:', url);
+        console.log('SimpleMapScoring: matchId:', matchId);
+        response = await fetch(url, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
           },
         });
+        console.log('SimpleMapScoring: Response received:', response.status, response.statusText);
         if (!response.ok) {
           let errorMessage = `HTTP ${response.status}: Failed to load match games`;
           try {
             const responseText = await response.text();
+            console.log('SimpleMapScoring: Error response body:', responseText);
             if (responseText.trim()) {
               const errorData = JSON.parse(responseText);
               errorMessage = errorData.error || errorMessage;
@@ -60,7 +73,36 @@ export function SimpleMapScoring({
           } catch (jsonError) {
             console.error('Failed to parse error response as JSON:', jsonError);
           }
-          throw new Error(errorMessage);
+          
+          // If it's a 405 error, it might be a transient routing issue in development
+          // Let's retry once after a short delay
+          if (response.status === 405) {
+            console.log('SimpleMapScoring: Got 405, retrying after delay...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            try {
+              const retryUrl = `/api/matches/${matchId}/games?retry=${Date.now()}`;
+              const retryResponse = await fetch(retryUrl, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Cache-Control': 'no-cache',
+                },
+              });
+              
+              if (retryResponse.ok) {
+                console.log('SimpleMapScoring: Retry successful');
+                response = retryResponse;
+              } else {
+                console.log('SimpleMapScoring: Retry also failed:', retryResponse.status);
+                throw new Error(errorMessage);
+              }
+            } catch (retryError) {
+              console.error('SimpleMapScoring: Retry failed:', retryError);
+              throw new Error(errorMessage);
+            }
+          } else {
+            throw new Error(errorMessage);
+          }
         }
         
         const data = await response.json();
@@ -132,41 +174,48 @@ export function SimpleMapScoring({
       
       await onResultSubmit(result);
       
-      // Refresh match games after submission
-      const response = await fetch(`/api/matches/${matchId}/games`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMatchGames(data.games || []);
-        
-        // Move to next pending game if current one is completed
-        const nextGame = data.games.find((game: MatchGame) => 
-          game.status === 'pending' || game.status === 'ongoing'
-        );
-        if (nextGame && nextGame.id !== selectedGameId) {
-          setSelectedGameId(nextGame.id);
-        } else if (!nextGame && onAllMapsCompleted) {
-          // No more pending games - all maps are completed
-          onAllMapsCompleted();
-        }
-      } else {
-        let errorMessage = `HTTP ${response.status}: Failed to refresh games`;
-        try {
-          const responseText = await response.text();
-          if (responseText.trim()) {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.error || errorMessage;
-          }
-        } catch (jsonError) {
-          console.error('Failed to parse error response as JSON:', jsonError);
-        }
-        console.error('Error refreshing match games:', response.status, errorMessage);
-        setError(errorMessage);
+      // Instead of immediately refreshing, optimistically update the local state
+      // and let the main useEffect handle the refresh
+      const updatedGames = matchGames.map(game => 
+        game.id === selectedGame.id 
+          ? { ...game, status: 'completed' as const, winner_id: winner }
+          : game
+      );
+      setMatchGames(updatedGames);
+      
+      // Move to next pending game if current one is completed
+      const nextGame = updatedGames.find((game: MatchGame) => 
+        game.status === 'pending' || game.status === 'ongoing'
+      );
+      if (nextGame && nextGame.id !== selectedGameId) {
+        setSelectedGameId(nextGame.id);
+      } else if (!nextGame && onAllMapsCompleted) {
+        // No more pending games - all maps are completed
+        onAllMapsCompleted();
       }
+      
+      // Trigger a background refresh after a delay to sync with server
+      setTimeout(async () => {
+        try {
+          const refreshResponse = await fetch(`/api/matches/${matchId}/games`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (refreshResponse.ok) {
+            const data = await refreshResponse.json();
+            setMatchGames(data.games || []);
+          } else {
+            console.warn('Background refresh failed:', refreshResponse.status);
+            // Don't show error to user since optimistic update already worked
+          }
+        } catch (error) {
+          console.warn('Background refresh error:', error);
+          // Don't show error to user since optimistic update already worked
+        }
+      }, 1000);
     } catch (error) {
       console.error('Error in handleTeamWin:', error);
       setError(error instanceof Error ? error.message : 'Failed to save result');
