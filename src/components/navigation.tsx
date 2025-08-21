@@ -49,24 +49,15 @@ export function Navigation({ children }: NavigationProps) {
       padding="md"
     >
       <AppShell.Header hiddenFrom="md">
-        <Group h="100%" px="md" justify="space-between">
-          <Group>
-            <Burger opened={opened} onClick={toggle} size="sm" />
-            <Text size="lg" fw={700}>MatchExec</Text>
-          </Group>
-          <ActionIcon
-            variant="outline"
-            size={30}
-            onClick={() => toggleColorScheme()}
-          >
-            {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-          </ActionIcon>
+        <Group h="100%" px="md">
+          <Burger opened={opened} onClick={toggle} size="sm" />
+          <Text size="lg" fw={700}>MatchExec</Text>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
         <AppShell.Section>
-          <Group justify="space-between" mb="md" visibleFrom="md">
+          <Group justify="space-between" mb="md">
             <Text size="xl" fw={700}>MatchExec</Text>
             <ActionIcon
               variant="outline"
