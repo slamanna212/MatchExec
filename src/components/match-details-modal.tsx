@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Modal,
   Stack,
@@ -17,6 +17,7 @@ import {
   Loader,
   SegmentedControl
 } from '@mantine/core';
+import { IconTrophy } from '@tabler/icons-react';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
 
@@ -65,6 +66,16 @@ interface SignupConfig {
   fields: SignupField[];
 }
 
+interface MatchGameResult {
+  id: string;
+  match_id: string;
+  round: number;
+  map_id: string;
+  map_name: string;
+  winner_id?: string;
+  status: 'pending' | 'ongoing' | 'completed';
+}
+
 interface MatchDetailsModalProps {
   opened: boolean;
   onClose: () => void;
@@ -105,6 +116,42 @@ export function MatchDetailsModal({
   onAssign
 }: MatchDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements'>('participants');
+  const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
+  const [gamesLoading, setGamesLoading] = useState(false);
+
+  // Fetch match games for battle/complete status matches
+  useEffect(() => {
+    if (!selectedMatch || !opened) return;
+    if (selectedMatch.status !== 'battle' && selectedMatch.status !== 'complete') return;
+
+    const fetchMatchGames = async () => {
+      try {
+        setGamesLoading(true);
+        const response = await fetch(`/api/matches/${selectedMatch.id}/games`);
+        if (response.ok) {
+          const data = await response.json();
+          setMatchGames(data.games || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch match games:', error);
+      } finally {
+        setGamesLoading(false);
+      }
+    };
+
+    fetchMatchGames();
+  }, [selectedMatch, opened]);
+
+  // Helper function to get winner for a specific map
+  const getMapWinner = (mapId: string) => {
+    const game = matchGames.find(g => g.map_id === mapId);
+    if (!game || !game.winner_id) return null;
+    
+    return {
+      team: game.winner_id === 'team1' ? 'Blue Team' : 'Red Team',
+      color: game.winner_id === 'team1' ? 'blue' : 'red'
+    };
+  };
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {
@@ -234,10 +281,16 @@ export function MatchDetailsModal({
 
           {selectedMatch.maps && selectedMatch.maps.length > 0 && (
             <div>
-              <Text size="sm" fw={500} c="dimmed" mb="md">Maps:</Text>
+              <Group justify="space-between" mb="md">
+                <Text size="sm" fw={500} c="dimmed">Maps:</Text>
+                {gamesLoading && (selectedMatch.status === 'battle' || selectedMatch.status === 'complete') && (
+                  <Loader size="xs" />
+                )}
+              </Group>
               <Grid>
                 {selectedMatch.maps.map(mapId => {
                   const mapDetail = mapDetails[mapId];
+                  const winner = getMapWinner(mapId);
                   return (
                     <Grid.Col key={mapId} span={12}>
                       <Card shadow="sm" padding="sm" radius="md" withBorder>
@@ -252,19 +305,33 @@ export function MatchDetailsModal({
                             />
                           </div>
                           <div style={{ width: '50%' }}>
-                            <Text fw={500} size="sm" lineClamp={1}>
-                              {mapDetail?.name || formatMapName(mapId)}
-                            </Text>
-                            {mapDetail?.location && (
-                              <Text size="xs" c="dimmed" lineClamp={1}>
-                                {mapDetail.location}
-                              </Text>
-                            )}
-                            {mapDetail?.modeName && (
-                              <Badge size="xs" variant="light" mt={2}>
-                                {mapDetail.modeName}
-                              </Badge>
-                            )}
+                            <Group justify="space-between" align="flex-start">
+                              <div style={{ flex: 1 }}>
+                                <Text fw={500} size="sm" lineClamp={1}>
+                                  {mapDetail?.name || formatMapName(mapId)}
+                                </Text>
+                                {mapDetail?.location && (
+                                  <Text size="xs" c="dimmed" lineClamp={1}>
+                                    {mapDetail.location}
+                                  </Text>
+                                )}
+                                {mapDetail?.modeName && (
+                                  <Badge size="xs" variant="light" mt={2}>
+                                    {mapDetail.modeName}
+                                  </Badge>
+                                )}
+                              </div>
+                              {winner && (
+                                <div style={{ textAlign: 'right' }}>
+                                  <Group gap={4} justify="flex-end">
+                                    <IconTrophy size={14} color="gold" />
+                                    <Badge size="xs" color={winner.color} variant="filled">
+                                      {winner.team}
+                                    </Badge>
+                                  </Group>
+                                </div>
+                              )}
+                            </Group>
                           </div>
                         </Group>
                       </Card>
