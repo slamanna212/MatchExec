@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react';
-import { Stack, Group, Card, Button, Text, Badge, Divider, Alert, Loader } from '@mantine/core';
-import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
+import { useState, useEffect, useRef } from 'react';
+import { Stack, Group, Card, Button, Text, Badge, Divider, Alert, Loader, Box, ActionIcon } from '@mantine/core';
+import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
 
 interface MatchGame {
@@ -27,6 +27,7 @@ interface SimpleMapScoringProps {
 
 export function SimpleMapScoring({
   matchId,
+  gameType,
   onResultSubmit,
   submitting,
   onAllMapsCompleted
@@ -35,6 +36,8 @@ export function SimpleMapScoring({
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Fetch match games
   useEffect(() => {
@@ -127,6 +130,19 @@ export function SimpleMapScoring({
     fetchMatchGames();
   }, [matchId]);
 
+  // Auto-scroll to selected map when it changes
+  useEffect(() => {
+    if (selectedGameId && matchGames.length > 0) {
+      const gameIndex = matchGames.findIndex(game => game.id === selectedGameId);
+      if (gameIndex !== -1) {
+        // Use setTimeout to ensure the DOM has updated
+        setTimeout(() => {
+          scrollToMap(gameIndex);
+        }, 100);
+      }
+    }
+  }, [selectedGameId, matchGames]);
+
   const selectedGame = matchGames.find(game => game.id === selectedGameId);
 
   const getStatusIcon = (status: string) => {
@@ -159,6 +175,41 @@ export function SimpleMapScoring({
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  };
+
+  const getMapImageUrl = (gameId: string, mapId: string) => {
+    return `/assets/games/${gameId}/maps/${mapId}.webp`;
+  };
+
+  const CARD_WIDTH = 180 + 16; // Card width + gap
+  
+  const getMaxScroll = () => {
+    if (!containerRef.current) return 0;
+    const containerWidth = containerRef.current.offsetWidth;
+    const totalWidth = matchGames.length * CARD_WIDTH;
+    return Math.max(0, totalWidth - containerWidth);
+  };
+
+  const handleScrollLeft = () => {
+    setScrollPosition(Math.max(0, scrollPosition - CARD_WIDTH));
+  };
+
+  const handleScrollRight = () => {
+    const maxScroll = getMaxScroll();
+    setScrollPosition(Math.min(maxScroll, scrollPosition + CARD_WIDTH));
+  };
+
+  const scrollToMap = (gameIndex: number) => {
+    if (!containerRef.current) return;
+    
+    const containerWidth = containerRef.current.offsetWidth;
+    const cardPosition = gameIndex * CARD_WIDTH;
+    const centerPosition = cardPosition - (containerWidth / 2) + (CARD_WIDTH / 2);
+    
+    const maxScroll = getMaxScroll();
+    const targetScroll = Math.max(0, Math.min(maxScroll, centerPosition));
+    
+    setScrollPosition(targetScroll);
   };
 
   const handleTeamWin = async (winner: 'team1' | 'team2') => {
@@ -252,22 +303,117 @@ export function SimpleMapScoring({
       {/* Map Selection */}
       <Card withBorder p="md">
         <Stack gap="sm">
-          <Text fw={600} size="sm">Select Map to Score</Text>
-          <Group gap="xs">
-            {matchGames.map((game) => (
-              <Button
-                key={game.id}
-                variant={selectedGameId === game.id ? "filled" : "light"}
-                color={getStatusColor(game.status)}
-                size="sm"
-                leftSection={getStatusIcon(game.status)}
-                onClick={() => setSelectedGameId(game.id)}
-                disabled={submitting}
+          <Text fw={600} size="sm">Match Schedule</Text>
+          
+          {/* Map Cards with Horizontal Scrolling */}
+          <Box pos="relative">
+            <Group gap="xs" align="center">
+              {/* Left Arrow */}
+              <ActionIcon
+                variant="light"
+                size="lg"
+                onClick={handleScrollLeft}
+                disabled={scrollPosition <= 0}
+                style={{ flexShrink: 0 }}
               >
-                Map {game.round}: {formatMapName(game.map_id, game.map_name)}
-              </Button>
-            ))}
-          </Group>
+                <IconChevronLeft size={16} />
+              </ActionIcon>
+
+              {/* Scrollable Map Container */}
+              <Box
+                ref={containerRef}
+                style={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}
+              >
+                <Group
+                  gap="md"
+                  style={{
+                    transform: `translateX(-${scrollPosition}px)`,
+                    transition: 'transform 0.3s ease',
+                    flexWrap: 'nowrap'
+                  }}
+                >
+                  {matchGames.map((game) => (
+                    <Card
+                      key={game.id}
+                      withBorder
+                      onClick={() => setSelectedGameId(game.id)}
+                      style={{
+                        cursor: submitting ? 'not-allowed' : 'pointer',
+                        minWidth: 180,
+                        height: 120,
+                        backgroundImage: `linear-gradient(${selectedGameId === game.id ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'}), url('${getMapImageUrl(gameType, game.map_id)}')`,
+                        backgroundSize: 'cover', // Full card coverage
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundColor: '#1a1b1e', // Fallback color
+                        border: selectedGameId === game.id ? `2px solid var(--mantine-color-${getStatusColor(game.status)}-6)` : 'none',
+                        boxShadow: selectedGameId === game.id ? `0 0 0 1px var(--mantine-color-${getStatusColor(game.status)}-6)` : undefined,
+                        opacity: submitting ? 0.6 : 1,
+                        position: 'relative'
+                      }}
+                      p="sm"
+                    >
+                      <Stack gap="xs" h="100%" justify="space-between">
+                        {/* Status Icon and Badge */}
+                        <Group justify="space-between" align="flex-start">
+                          {getStatusIcon(game.status)}
+                          <Badge 
+                            color={getStatusColor(game.status)} 
+                            size="xs"
+                            style={{ backgroundColor: `var(--mantine-color-${getStatusColor(game.status)}-6)` }}
+                          >
+                            {game.status}
+                          </Badge>
+                        </Group>
+                        
+                        {/* Map Info */}
+                        <Box>
+                          <Text 
+                            size="xs" 
+                            fw={600} 
+                            c="white"
+                            style={{ 
+                              textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+                              lineHeight: 1.2,
+                              fontWeight: 700
+                            }}
+                          >
+                            Map {game.round}
+                          </Text>
+                          <Text 
+                            size="xs" 
+                            c="white"
+                            style={{ 
+                              textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+                              lineHeight: 1.1,
+                              fontWeight: 600
+                            }}
+                          >
+                            {formatMapName(game.map_id, game.map_name)}
+                          </Text>
+                        </Box>
+                      </Stack>
+                    </Card>
+                  ))}
+                </Group>
+              </Box>
+
+              {/* Right Arrow */}
+              <ActionIcon
+                variant="light"
+                size="lg"
+                onClick={handleScrollRight}
+                disabled={scrollPosition >= getMaxScroll()}
+                style={{ flexShrink: 0 }}
+              >
+                <IconChevronRight size={16} />
+              </ActionIcon>
+            </Group>
+          </Box>
           
           {/* Status summary */}
           <Group gap="lg" mt="xs">
