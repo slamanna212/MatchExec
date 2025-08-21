@@ -9,7 +9,9 @@ import {
   Group,
   ActionIcon,
   useMantineColorScheme,
-  Image
+  Image,
+  Text,
+  Tooltip
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -27,6 +29,7 @@ import {
   IconPaint,
   IconVolume
 } from '@tabler/icons-react'
+import { getVersionInfo, VersionInfo } from '@/lib/version-client'
 
 interface NavigationProps {
   children: React.ReactNode
@@ -38,10 +41,14 @@ export function Navigation({ children }: NavigationProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
 
   // Fix hydration issues by ensuring component is mounted on client
   useEffect(() => {
     setMounted(true)
+    
+    // Fetch version info from API
+    getVersionInfo().then(setVersionInfo).catch(console.error)
   }, [])
 
   const navigationItems = [
@@ -113,7 +120,7 @@ export function Navigation({ children }: NavigationProps) {
           </AppShell.Section>
           <AppShell.Section grow />
           <AppShell.Section>
-            <Group mt="md">
+            <Group mt="md" justify="center">
               <ActionIcon variant="outline" size={30} onClick={() => {}} c="#F5F5F5" style={{ borderColor: '#F5F5F5' }}>
                 <IconMoon size="16" />
               </ActionIcon>
@@ -198,6 +205,16 @@ export function Navigation({ children }: NavigationProps) {
                   active={mounted && pathname === item.href}
                   childrenOffset={0}
                   c="#F5F5F5"
+                  styles={{
+                    root: {
+                      '&:hover': {
+                        backgroundColor: '#3d2563 !important'
+                      },
+                      '&[dataActive="true"]': {
+                        backgroundColor: '#4c1d95 !important'
+                      }
+                    }
+                  }}
                   onClick={(event) => {
                     event.preventDefault()
                     router.push(item.href)
@@ -214,6 +231,16 @@ export function Navigation({ children }: NavigationProps) {
                     active={mounted && pathname === link.href}
                     pl="xl"
                     c="#F5F5F5"
+                    styles={{
+                      root: {
+                        '&:hover': {
+                          backgroundColor: '#3d2563 !important'
+                        },
+                        '&[dataActive="true"]': {
+                          backgroundColor: '#4c1d95 !important'
+                        }
+                      }
+                    }}
                     onClick={(event) => {
                       event.preventDefault()
                       if (link.href.includes('#')) {
@@ -242,7 +269,22 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Section>
 
         <AppShell.Section>
-          <Group mt="md">
+          {versionInfo && (
+            <div 
+              title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+              style={{
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                color: '#C1C2C5',
+                textAlign: 'center',
+                marginBottom: '8px',
+                cursor: 'help'
+              }}
+            >
+              {versionInfo.version}
+            </div>
+          )}
+          <Group mt="md" justify="center">
             <ActionIcon
               variant="outline"
               size={30}

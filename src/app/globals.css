@@ -24,3 +24,16 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Force consistent NavLink hover colors with higher specificity */
+[data-mantine-color-scheme="dark"] .m_f0824112:hover,
+[data-mantine-color-scheme="light"] .m_f0824112:hover,
+.m_f0824112:hover {
+  background-color: #3d2563 !important;
+}
+
+[data-mantine-color-scheme="dark"] .m_f0824112[data-active="true"],
+[data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
+.m_f0824112[data-active="true"] {
+  background-color: #4c1d95 !important;
+}

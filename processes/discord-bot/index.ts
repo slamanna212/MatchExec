@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { getDbInstance } from '../../src/lib/database-init.js';
 import { Database } from '../../lib/database/connection';
 import { DiscordSettings } from '../../shared/types';
+import { getVersionInfo } from '../../lib/version-server';
 
 // Import our modules
 import { VoiceHandler } from './modules/voice-handler';
@@ -47,10 +48,15 @@ class MatchExecBot {
       
       console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
       
-      // Set bot status to display website
+      // Set bot status to display website and version
+      const versionInfo = getVersionInfo();
+      const statusText = versionInfo.isDev 
+        ? `${versionInfo.version} | matchexec.com`
+        : `${versionInfo.version} | matchexec.com`;
+      
       this.client.user.setPresence({
         activities: [{
-          name: 'ALPHA BUILD | matchexec.com',
+          name: statusText,
           type: 4 // ActivityType.Custom
         }],
         status: 'online'
