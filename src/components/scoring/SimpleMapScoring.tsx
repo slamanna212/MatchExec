@@ -43,12 +43,20 @@ export function SimpleMapScoring({
       try {
         setLoading(true);
         setError(null);
-        response = await fetch(`/api/matches/${matchId}/games`);
+        response = await fetch(`/api/matches/${matchId}/games`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
         if (!response.ok) {
           let errorMessage = `HTTP ${response.status}: Failed to load match games`;
           try {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
+            const responseText = await response.text();
+            if (responseText.trim()) {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error || errorMessage;
+            }
           } catch (jsonError) {
             console.error('Failed to parse error response as JSON:', jsonError);
           }
@@ -125,7 +133,12 @@ export function SimpleMapScoring({
       await onResultSubmit(result);
       
       // Refresh match games after submission
-      const response = await fetch(`/api/matches/${matchId}/games`);
+      const response = await fetch(`/api/matches/${matchId}/games`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setMatchGames(data.games || []);
@@ -143,8 +156,11 @@ export function SimpleMapScoring({
       } else {
         let errorMessage = `HTTP ${response.status}: Failed to refresh games`;
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
+          const responseText = await response.text();
+          if (responseText.trim()) {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.error || errorMessage;
+          }
         } catch (jsonError) {
           console.error('Failed to parse error response as JSON:', jsonError);
         }
