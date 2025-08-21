@@ -192,7 +192,7 @@ export async function POST(
 
     // Get updated match data
     const updatedMatch = await db.get<MatchDbRow>(` 
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       WHERE m.id = ?
