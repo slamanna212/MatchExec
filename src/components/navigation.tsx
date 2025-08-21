@@ -9,9 +9,7 @@ import {
   Group,
   ActionIcon,
   useMantineColorScheme,
-  Image,
-  Text,
-  Tooltip
+  Image
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
