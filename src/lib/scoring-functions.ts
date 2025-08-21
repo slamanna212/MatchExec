@@ -54,15 +54,18 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
       const existingGame = await db.get(existsQuery, [gameId]);
       
       if (!existingGame) {
+        // First map should be 'ongoing', rest should be 'pending'
+        const status = i === 0 ? 'ongoing' : 'pending';
+        
         const insertQuery = `
           INSERT INTO match_games (
             id, match_id, round, participant1_id, participant2_id,
             map_id, status, created_at, updated_at
-          ) VALUES (?, ?, ?, 'team1', 'team2', ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES (?, ?, ?, 'team1', 'team2', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `;
         
-        await db.run(insertQuery, [gameId, matchId, i + 1, mapId]);
-        console.log(`Created match game ${gameId} for map ${mapId}`);
+        await db.run(insertQuery, [gameId, matchId, i + 1, mapId, status]);
+        console.log(`Created match game ${gameId} for map ${mapId} with status ${status}`);
       } else {
         console.log(`Match game ${gameId} already exists`);
       }
@@ -172,6 +175,9 @@ export async function saveMatchResult(
     await db.run(query, [result.winner, matchGameId]);
     console.log(`Saved match result for game ${matchGameId}: ${result.winner} wins`);
 
+    // Set the next pending map to 'ongoing' if it exists
+    await setNextMapToOngoing(result.matchId);
+
     // Update match status to complete if all games are done
     await updateMatchStatusIfComplete(matchGameId);
     
@@ -209,6 +215,41 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
   } catch (error) {
     console.error('Error in getMatchResult:', error);
     throw error;
+  }
+}
+
+/**
+ * Set the next pending map to ongoing status
+ */
+async function setNextMapToOngoing(matchId: string): Promise<void> {
+  const db = await getDbInstance();
+  
+  try {
+    // Find the first pending map and set it to ongoing
+    const nextMapQuery = `
+      SELECT id FROM match_games 
+      WHERE match_id = ? AND status = 'pending' 
+      ORDER BY round ASC 
+      LIMIT 1
+    `;
+    
+    const nextMap = await db.get<{ id: string }>(nextMapQuery, [matchId]);
+    
+    if (nextMap) {
+      const updateQuery = `
+        UPDATE match_games 
+        SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `;
+      
+      await db.run(updateQuery, [nextMap.id]);
+      console.log(`Set next map ${nextMap.id} to ongoing status`);
+    } else {
+      console.log('No pending maps found to set as ongoing');
+    }
+  } catch (error) {
+    console.error('Error setting next map to ongoing:', error);
+    // Don't throw - this is a non-critical operation
   }
 }
 
