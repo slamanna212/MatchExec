@@ -1,9 +1,15 @@
 'use client'
 
 import { Card, Text, Badge, Grid, Stack, Group, Button, Alert } from '@mantine/core';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { redirect } from 'next/navigation';
 
 export default function DevPage() {
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') {
+      redirect('/');
+    }
+  }, []);
   const [voiceTestLoading, setVoiceTestLoading] = useState(false);
   const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
