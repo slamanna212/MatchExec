@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx pm2 stop:*)",
+      "WebFetch(domain:overwatch.fandom.com)",
+      "WebFetch(domain:valorant.fandom.com)",
+      "Bash(npm run lint)",
+      "Bash(npm run build:*)"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "npx ccusage@latest statusline --visual-burn-rate emoji"
+  }
+}
