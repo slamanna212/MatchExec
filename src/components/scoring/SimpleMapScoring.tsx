@@ -27,7 +27,6 @@ interface SimpleMapScoringProps {
 
 export function SimpleMapScoring({
   matchId,
-  gameType,
   onResultSubmit,
   submitting,
   onAllMapsCompleted

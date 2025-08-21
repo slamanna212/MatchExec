@@ -7,7 +7,6 @@ import {
   Group, 
   Text, 
   Badge, 
-  Divider, 
   Button,
   Alert,
   Loader
