@@ -15,24 +15,11 @@ import {
   RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS, MatchScore, SignupConfig, ReminderData } from '@/shared/types';
+import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
 
-// Helper function to get default mode for each game
-function getDefaultModeForGame(gameId: string): string {
-  switch (gameId) {
-    case 'valorant':
-      return 'standard';
-    case 'overwatch2':
-      return 'control';
-    case 'marvelrivals':
-      return 'domination';
-    default:
-      return 'standard';
-  }
-}
 import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -596,47 +583,23 @@ export function MatchDashboard() {
 
   // Memoize expensive match card rendering
   // Handle score submission
-  const handleScoreSubmit = async (score: MatchScore) => {
+  const handleResultSubmit = async (result: MatchResult) => {
     if (!selectedMatchForScoring) return;
 
     try {
-      // Create a match game ID (using match ID for now as there's typically one game per match)
-      const gameId = `${selectedMatchForScoring.id}_game_1`;
-      
-      // Determine if this is a final save based on the score data
-      // For rounds-based scoring, check if all rounds are complete and there's a definitive winner
-      let isFinal = false;
-      if (score.scoringType === 'rounds' && 'rounds' in score && 'maxRounds' in score) {
-        const roundsScore = score as { rounds: unknown[]; maxRounds: number; team1Rounds: number; team2Rounds: number }; // Type assertion for rounds-based score
-        // Check if match should be considered complete
-        const winCondition = 'playAll'; // Default assumption, could be passed in
-        if (winCondition === 'playAll') {
-          isFinal = roundsScore.rounds.length >= roundsScore.maxRounds;
-        } else {
-          // bestOf logic - check if someone has majority
-          const requiredWins = Math.ceil(roundsScore.maxRounds / 2);
-          isFinal = roundsScore.team1Rounds >= requiredWins || roundsScore.team2Rounds >= requiredWins;
-        }
-      } else {
-        // For non-rounds scoring, assume it's final if a winner is declared
-        isFinal = score.winner !== 'draw';
-      }
-      
-      const url = `/api/matches/${selectedMatchForScoring.id}/games/${gameId}/score${isFinal ? '?final=true' : '?final=false'}`;
-      
-      const response = await fetch(url, {
+      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${result.gameId}/result`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(score),
+        body: JSON.stringify(result),
       });
-
+      
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to save score');
+        throw new Error(error.error || 'Failed to save result');
       }
-
+      
       // Refresh matches to show updated status
       fetchMatches();
       
@@ -644,7 +607,7 @@ export function MatchDashboard() {
       setScoringModalOpen(false);
       setSelectedMatchForScoring(null);
     } catch (error) {
-      console.error('Error submitting score:', error);
+      console.error('Error submitting result:', error);
       throw error; // Re-throw to let the modal handle the error display
     }
   };
@@ -721,9 +684,8 @@ export function MatchDashboard() {
         }}
         matchId={selectedMatchForScoring?.id || ''}
         gameId={selectedMatchForScoring?.game_id || ''}
-        modeId={getDefaultModeForGame(selectedMatchForScoring?.game_id || '')}
         matchFormat={selectedMatchForScoring?.match_format || 'casual'}
-        onScoreSubmit={handleScoreSubmit}
+        onResultSubmit={handleResultSubmit}
       />
 
       <MatchDetailsModal

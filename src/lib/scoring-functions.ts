@@ -1,69 +1,25 @@
 import { getDbInstance } from './database-init';
 import { 
-  MatchScore, 
-  ScoringConfig, 
-  MatchFormat, 
-  ModeDataJsonWithScoring
+  MatchResult, 
+  MatchFormat
 } from '@/shared/types';
 
 /**
- * Get match format configuration by combining match format + mode scoring config
- * For multi-map matches, this overrides maxRounds with the actual number of maps
+ * Get match format from database
  */
-export async function getMatchFormatConfig(
-  gameId: string, 
-  modeId: string, 
-  matchFormat: MatchFormat,
-  matchId?: string
-): Promise<ScoringConfig> {
+export async function getMatchFormat(matchId: string): Promise<MatchFormat> {
+  const db = await getDbInstance();
+  
   try {
-    // Load mode data from JSON files (since we store config in data files, not database)
-    const fs = await import('fs');
-    const path = await import('path');
-    
-    const modesPath = path.join(process.cwd(), 'data', 'games', gameId, 'modes.json');
-    
-    if (!fs.existsSync(modesPath)) {
-      throw new Error(`Modes file not found for game: ${gameId}`);
-    }
+    const query = `
+      SELECT match_format FROM matches WHERE id = ?
+    `;
 
-    const modesData: ModeDataJsonWithScoring[] = JSON.parse(fs.readFileSync(modesPath, 'utf8'));
-    const modeData = modesData.find(mode => mode.id === modeId);
-    
-    if (!modeData) {
-      throw new Error(`Mode not found: ${modeId} in game: ${gameId}`);
-    }
-
-    // Get format variant
-    const formatVariant = modeData.formatVariants[matchFormat];
-    if (!formatVariant) {
-      throw new Error(`Format "${matchFormat}" not supported for mode "${modeData.name}"`);
-    }
-
-    // Use the original format variant for individual map scoring
-    // The maxRounds should represent rounds within a single map, not the total maps in the match
-    const adjustedFormatVariant = { ...formatVariant };
-
-    // Build scoring configuration
-    const config: ScoringConfig = {
-      format: matchFormat,
-      scoringType: modeData.scoringType,
-      scoringTiming: modeData.scoringTiming,
-      formatVariant: adjustedFormatVariant,
-      validation: {
-        // Extract validation rules from format variant
-        minRounds: adjustedFormatVariant.maxRounds ? 1 : undefined,
-        maxRounds: adjustedFormatVariant.maxRounds as number | undefined,
-        targetPoints: adjustedFormatVariant.maxPoints as number | undefined,
-        targetEliminations: adjustedFormatVariant.targetEliminations as number | undefined,
-        timeLimit: adjustedFormatVariant.timeLimit as number | undefined,
-      }
-    };
-
-    return config;
+    const row = await db.get<{ match_format?: string }>(query, [matchId]);
+    return (row?.match_format as MatchFormat) || 'casual';
   } catch (error) {
-    console.error('Error getting match format config:', error);
-    throw new Error(`Failed to load scoring configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('Error in getMatchFormat:', error);
+    throw error;
   }
 }
 
@@ -123,21 +79,28 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
  * Get all match games for a match with their current status
  */
 export async function getMatchGames(matchId: string): Promise<Array<Record<string, unknown>>> {
-  const db = await getDbInstance();
+  console.log(`getMatchGames: Starting for matchId: ${matchId}`);
   
   try {
+    const db = await getDbInstance();
+    console.log('getMatchGames: Database instance obtained');
+    
     const query = `
-      SELECT mg.*, gm.name as map_name
+      SELECT mg.*, gm.name as map_name, gm.mode_id, gm.game_id
       FROM match_games mg
       LEFT JOIN game_maps gm ON mg.map_id = gm.id
       WHERE mg.match_id = ?
       ORDER BY mg.round ASC
     `;
     
+    console.log('getMatchGames: Executing query...');
     const games = await db.all<Record<string, unknown>>(query, [matchId]);
+    console.log(`getMatchGames: Query completed, found ${games?.length || 0} games`);
+    
     return games || [];
   } catch (error) {
     console.error('Error in getMatchGames:', error);
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
     throw error;
   }
 }
@@ -183,98 +146,68 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
 }
 
 /**
- * Save match score with format-aware JSON structure
+ * Save match result - simplified to only track winner
  */
-export async function saveMatchScore(
+export async function saveMatchResult(
   matchGameId: string,
-  matchScore: MatchScore,
-  isFinal: boolean = true
+  result: MatchResult
 ): Promise<void> {
-  console.log('saveMatchScore - Starting with matchGameId:', matchGameId);
-  console.log('saveMatchScore - MatchScore:', JSON.stringify(matchScore, null, 2));
+  console.log('saveMatchResult - Starting with matchGameId:', matchGameId);
+  console.log('saveMatchResult - Result:', JSON.stringify(result, null, 2));
   
   const db = await getDbInstance();
-  console.log('saveMatchScore - Database instance obtained');
   
   try {
     // First, ensure the match_games entry exists
-    console.log('saveMatchScore - Calling ensureMatchGameExists');
-    await ensureMatchGameExists(matchGameId, matchScore.matchId);
-    console.log('saveMatchScore - ensureMatchGameExists completed');
+    await ensureMatchGameExists(matchGameId, result.matchId);
     
-    // Serialize the match score as JSON
-    const scoreData = JSON.stringify(matchScore);
-    console.log('saveMatchScore - Score data serialized');
-    
-    // Update the match_games table with score data and winner
-    const status = isFinal ? 'completed' : 'ongoing';
-    const query = isFinal 
-      ? `UPDATE match_games 
-         SET score_data = ?, 
-             winner_id = ?,
-             status = ?,
-             completed_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
-      : `UPDATE match_games 
-         SET score_data = ?, 
-             winner_id = ?,
-             status = ?,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`;
+    // Update the match_games table with winner
+    const query = `UPDATE match_games 
+                   SET winner_id = ?,
+                       status = 'completed',
+                       completed_at = CURRENT_TIMESTAMP,
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?`;
 
-    // For progress saves, don't set a winner unless the match is actually complete
-    const winnerId = isFinal ? (matchScore.winner === 'team1' ? 'team1' : 
-                               matchScore.winner === 'team2' ? 'team2' : null) : null;
+    await db.run(query, [result.winner, matchGameId]);
+    console.log(`Saved match result for game ${matchGameId}: ${result.winner} wins`);
 
-    console.log('saveMatchScore - About to run UPDATE query with winnerId:', winnerId, 'status:', status, 'isFinal:', isFinal);
-    await db.run(query, [scoreData, winnerId, status, matchGameId]);
-    console.log(`Saved match score for game ${matchGameId}`);
-    console.log('saveMatchScore - UPDATE query completed');
-
-    // Only update match status to complete for final saves
-    if (isFinal) {
-      console.log('saveMatchScore - Calling updateMatchStatusIfComplete');
-      await updateMatchStatusIfComplete(matchGameId);
-      console.log('saveMatchScore - updateMatchStatusIfComplete completed');
-    } else {
-      console.log('saveMatchScore - Skipping updateMatchStatusIfComplete (progress save)');
-    }
+    // Update match status to complete if all games are done
+    await updateMatchStatusIfComplete(matchGameId);
     
   } catch (error) {
-    console.error('Error in saveMatchScore:', error);
+    console.error('Error in saveMatchResult:', error);
     throw error;
   }
 }
 
 /**
- * Get match score for displaying format-specific scores
+ * Get match result for a game
  */
-export async function getMatchScore(matchGameId: string): Promise<MatchScore | null> {
+export async function getMatchResult(matchGameId: string): Promise<MatchResult | null> {
   const db = await getDbInstance();
   
   try {
     const query = `
-      SELECT score_data, winner_id, completed_at
-      FROM match_games
-      WHERE id = ?
+      SELECT mg.match_id, mg.winner_id, mg.completed_at
+      FROM match_games mg
+      WHERE mg.id = ?
     `;
 
-    const row = await db.get<{ score_data?: string; winner_id?: string; completed_at?: string }>(query, [matchGameId]);
+    const row = await db.get<{ match_id?: string; winner_id?: string; completed_at?: string }>(query, [matchGameId]);
     
-    if (!row || !row.score_data) {
+    if (!row || !row.winner_id) {
       return null;
     }
     
-    try {
-      const matchScore: MatchScore = JSON.parse(row.score_data);
-      return matchScore;
-    } catch (parseErr) {
-      console.error('Error parsing score data:', parseErr);
-      throw new Error('Invalid score data format');
-    }
+    return {
+      matchId: row.match_id!,
+      gameId: matchGameId,
+      winner: row.winner_id as 'team1' | 'team2',
+      completedAt: new Date(row.completed_at!)
+    };
   } catch (error) {
-    console.error('Error in getMatchScore:', error);
+    console.error('Error in getMatchResult:', error);
     throw error;
   }
 }
@@ -320,24 +253,5 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
   } catch (error) {
     console.error('Error updating match status:', error);
     // Don't throw - this is a non-critical operation
-  }
-}
-
-/**
- * Get match format from database
- */
-export async function getMatchFormat(matchId: string): Promise<MatchFormat> {
-  const db = await getDbInstance();
-  
-  try {
-    const query = `
-      SELECT match_format FROM matches WHERE id = ?
-    `;
-
-    const row = await db.get<{ match_format?: string }>(query, [matchId]);
-    return (row?.match_format as MatchFormat) || 'casual';
-  } catch (error) {
-    console.error('Error in getMatchFormat:', error);
-    throw error;
   }
 }

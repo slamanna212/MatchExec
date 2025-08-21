@@ -1,99 +1,32 @@
 [
     {
-      "id": "convergence",
-      "name": "Convergence",
-      "description": "Convergence is played mostly like Convoy, with the difference that the attacking team needs to capture a mission area first.",
-      "scoringType": "vehicle",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "capturePhase": "relaxed",
-          "timeMultiplier": 1.2,
-          "description": "Capture mission area (3 sections) then escort vehicle with extra time"
-        },
-        "competitive": {
-          "capturePhase": "standard",
-          "timeMultiplier": 1.0,
-          "description": "Standard Convergence timing"
-        }
-      }
+      "id": "domination",
+      "name": "Domination",
+      "description": "Teams compete to control strategic points across the map."
     },
     {
       "id": "convoy",
       "name": "Convoy",
-      "description": "One team needs to escort a moving vehicle to the end of the map while the opposite team needs to stop them.",
-      "scoringType": "vehicle",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "speedMultiplier": 1.1,
-          "timeMultiplier": 1.2,
-          "description": "Vehicle escort with faster movement and extra time"
-        },
-        "competitive": {
-          "speedMultiplier": 1.0,
-          "timeMultiplier": 1.0,
-          "description": "Standard vehicle escort timing"
-        }
-      }
+      "description": "Escort vehicles to their destination while defending against enemy attacks."
     },
     {
-      "id": "domination",
-      "name": "Domination",
-      "description": "Two teams fight each other to hold control of a single point in a space called the Mission Area.",
-      "scoringType": "rounds",
-      "scoringTiming": "realtime",
-      "formatVariants": {
-        "casual": {
-          "maxRounds": 3,
-          "winCondition": "playAll",
-          "captureRate": 0.9,
-          "description": "Play all 3 rounds, most wins takes the match"
-        },
-        "competitive": {
-          "maxRounds": 5,
-          "winCondition": "playAll",
-          "captureRate": 1.0,
-          "description": "Play all 5 rounds, most wins takes the match"
-        }
-      }
+      "id": "convergence",
+      "name": "Convergence",
+      "description": "Fight to control critical convergence points in dynamic battles."
     },
     {
-      "id": "doom-match",
-      "name": "Doom Match",
-      "description": "It is a standard 8-12 player FFA deathmatch.",
-      "scoringType": "deathmatch",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "targetEliminations": 12,
-          "timeLimit": 480,
-          "description": "FFA, first to 12 eliminations or most in 8 minutes"
-        },
-        "competitive": {
-          "targetEliminations": 16,
-          "timeLimit": 420,
-          "description": "FFA, first to 16 eliminations or most in 7 minutes"
-        }
-      }
+      "id": "doomrush",
+      "name": "Doom Rush",
+      "description": "High-intensity combat with rapid respawns and aggressive gameplay."
     },
     {
       "id": "conquest",
       "name": "Conquest",
-      "description": "Standard team deathmatch mode in which players try to score as many eliminations as possible",
-      "scoringType": "deathmatch",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "targetCoins": 40,
-          "timeLimit": 480,
-          "description": "Team deathmatch, first to 40 coins"
-        },
-        "competitive": {
-          "targetCoins": 50,
-          "timeLimit": 420,
-          "description": "Team deathmatch, first to 50 coins"
-        }
-      }
+      "description": "Large-scale territorial control across expansive battlefields."
+    },
+    {
+      "id": "escalation",
+      "name": "Escalation",
+      "description": "Progressive power increases create intensifying combat scenarios."
     }
-  ]
+]

@@ -2,133 +2,21 @@
   {
     "id": "standard",
     "name": "Standard",
-    "description": "Standard 5v5 plant/defuse gameplay with first to 13 rounds winning.",
-    "scoringType": "rounds",
-    "scoringTiming": "realtime",
-    "formatVariants": {
-      "casual": {
-        "maxRounds": 13,
-        "overtimeEnabled": false,
-        "description": "Unrated standard play, first to 13 rounds"
-      },
-      "competitive": {
-        "maxRounds": 13,
-        "overtimeEnabled": true,
-        "overtimeType": "firstTo2Lead",
-        "description": "Ranked competitive play with overtime"
-      }
-    },
-    "roundScoring": {
-      "type": "plantDefuse",
-      "winConditions": ["elimination", "bombPlant", "bombDefuse", "timeExpire"],
-      "economySystem": true
-    }
-  },
-  {
-    "id": "swiftplay",
-    "name": "Swiftplay",
-    "description": "Faster-paced best-of-nine format. Same gameplay as Standard but shorter matches.",
-    "scoringType": "rounds",
-    "scoringTiming": "realtime",
-    "formatVariants": {
-      "casual": {
-        "maxRounds": 5,
-        "overtimeEnabled": false,
-        "description": "Quick best-of-9 format"
-      },
-      "competitive": {
-        "maxRounds": 5,
-        "overtimeEnabled": true,
-        "overtimeType": "firstTo2Lead",
-        "description": "Competitive Swiftplay with overtime"
-      }
-    },
-    "roundScoring": {
-      "type": "plantDefuse",
-      "winConditions": ["elimination", "bombPlant", "bombDefuse", "timeExpire"],
-      "economySystem": true
-    }
-  },
-  {
-    "id": "spike-rush",
-    "name": "Spike Rush",
-    "description": "Best-of-seven mode with random weapons and power-up orbs. Quick and chaotic fun.",
-    "scoringType": "rounds",
-    "scoringTiming": "realtime",
-    "formatVariants": {
-      "casual": {
-        "maxRounds": 4,
-        "overtimeEnabled": false,
-        "description": "Best-of-7 with random weapons"
-      }
-    },
-    "roundScoring": {
-      "type": "plantDefuse",
-      "winConditions": ["elimination", "bombPlant", "bombDefuse"],
-      "economySystem": false,
-      "randomWeapons": true,
-      "powerOrbs": true
-    }
+    "description": "Standard 5v5 plant/defuse gameplay with first to 13 rounds winning."
   },
   {
     "id": "deathmatch",
     "name": "Deathmatch",
-    "description": "Free-for-all combat to practice aim and warm up. First to 40 kills or highest kills in 9 minutes wins.",
-    "scoringType": "deathmatch",
-    "scoringTiming": "endgame",
-    "formatVariants": {
-      "casual": {
-        "targetEliminations": 40,
-        "timeLimit": 540,
-        "winCondition": "firstToOrTime",
-        "description": "FFA deathmatch, first to 40 kills"
-      }
-    },
-    "deathmatchScoring": {
-      "type": "eliminations",
-      "targetCount": 40,
-      "timeLimit": 540,
-      "mvpSelection": "mostKills"
-    }
+    "description": "Free-for-all elimination-based gameplay."
   },
   {
     "id": "escalation",
     "name": "Escalation",
-    "description": "Team-based mode progressing through weapon tiers. First team to complete all tiers wins.",
-    "scoringType": "points",
-    "scoringTiming": "endgame",
-    "formatVariants": {
-      "casual": {
-        "maxTiers": 12,
-        "winCondition": "firstToComplete",
-        "description": "Progress through 12 weapon tiers"
-      }
-    },
-    "pointScoring": {
-      "type": "tierProgression",
-      "maxTiers": 12,
-      "winCondition": "firstToComplete"
-    }
+    "description": "Team-based progression through different weapon types."
   },
   {
-    "id": "team-deathmatch",
-    "name": "Team Deathmatch",
-    "description": "5v5 team-based elimination mode. Work together to reach the kill target first.",
-    "scoringType": "deathmatch",
-    "scoringTiming": "endgame",
-    "formatVariants": {
-      "casual": {
-        "targetEliminations": 100,
-        "timeLimit": 600,
-        "winCondition": "firstToOrTime",
-        "description": "Team-based, first to 100 kills"
-      }
-    },
-    "deathmatchScoring": {
-      "type": "teamEliminations",
-      "targetCount": 100,
-      "timeLimit": 600,
-      "mvpSelection": "mostKills"
-    }
+    "id": "workshop",
+    "name": "Workshop",
+    "description": "Custom game modes and community creations."
   }
-] 
+]

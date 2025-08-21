@@ -34,7 +34,7 @@ export class MigrationRunner {
     await this.db.run(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
+        filename TEXT NOT NULL UNIQUE,
         executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -52,8 +52,8 @@ export class MigrationRunner {
 
   private async getExecutedMigrations(): Promise<string[]> {
     try {
-      const rows = await this.db.all<{ name: string }>('SELECT name FROM migrations');
-      return rows.map(row => row.name);
+      const rows = await this.db.all<{ filename: string }>('SELECT filename FROM migrations');
+      return rows.map(row => row.filename);
     } catch {
       // If migrations table doesn't exist yet, return empty array
       return [];
@@ -67,7 +67,7 @@ export class MigrationRunner {
 
     try {
       await this.db.exec(sql);
-      await this.db.run('INSERT INTO migrations (name) VALUES (?)', [filename]);
+      await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
     } catch (error) {
       console.error(`Migration ${filename} failed:`, error);
       throw error;

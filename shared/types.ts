@@ -143,10 +143,9 @@ export interface MatchGame {
   round: number;
   participant1_id: string;
   participant2_id: string;
-  winner_id?: string;
+  winner_id?: string; // 'team1', 'team2', or null
   map_id?: string;
   mode_id?: string;
-  score_data?: string; // JSON string containing MatchScore
   status: 'pending' | 'ongoing' | 'completed';
   scheduled_at?: Date;
   completed_at?: Date;
@@ -191,132 +190,15 @@ export interface MapDataJson {
   imageUrl?: string;
 }
 
-// Scoring system types
+// Simplified scoring system - only track match format and winner
 export type MatchFormat = 'casual' | 'competitive';
-export type ScoringType = 'rounds' | 'objective' | 'points' | 'deathmatch' | 'vehicle' | 'custom';
-export type ScoringTiming = 'realtime' | 'endgame';
 
-export interface FormatVariant {
-  description: string;
-  [key: string]: unknown; // Format-specific properties
-}
-
-export interface FormatVariants {
-  casual: FormatVariant;
-  competitive?: FormatVariant;
-}
-
-export interface ModeDataJsonWithScoring extends ModeDataJson {
-  scoringType: ScoringType;
-  scoringTiming: ScoringTiming;
-  formatVariants: FormatVariants;
-}
-
-// Base scoring interface
-export interface BaseScore {
+// Simple match result
+export interface MatchResult {
   matchId: string;
-  gameId: string;
-  format: MatchFormat;
-  scoringType: ScoringType;
-  winner: 'team1' | 'team2' | 'draw';
-  completedAt: Date;
-}
-
-// Round-based scoring (Valorant, Control, Domination)
-export interface RoundScore {
-  round: number;
+  gameId: string; // match_games.id
   winner: 'team1' | 'team2';
-  team1Score?: number;
-  team2Score?: number;
-  metadata?: Record<string, unknown>;
-}
-
-export interface RoundsScore extends BaseScore {
-  scoringType: 'rounds';
-  currentRound: number;
-  maxRounds: number;
-  rounds: RoundScore[];
-  team1Rounds: number;
-  team2Rounds: number;
-}
-
-// Objective-based scoring (Escort, Push, Hybrid)
-export interface ObjectiveScore extends BaseScore {
-  scoringType: 'objective';
-  team1Distance: number;
-  team2Distance: number;
-  team1Time?: number;
-  team2Time?: number;
-  checkpointsReached: {
-    team1: number;
-    team2: number;
-  };
-}
-
-// Points-based scoring (Flashpoint, Clash, Escalation)
-export interface PointsScore extends BaseScore {
-  scoringType: 'points';
-  team1Points: number;
-  team2Points: number;
-  targetPoints: number;
-  pointsHistory: Array<{
-    timestamp: Date;
-    team: 'team1' | 'team2';
-    points: number;
-    reason?: string;
-  }>;
-}
-
-// Deathmatch scoring (Doom Match, Conquest, Valorant DM)
-export interface DeathmatchScore extends BaseScore {
-  scoringType: 'deathmatch';
-  team1Eliminations: number;
-  team2Eliminations: number;
-  targetEliminations: number;
-  timeLimit?: number;
-  mvpPlayer?: string;
-}
-
-// Vehicle escort scoring (Convoy, Convergence)
-export interface VehicleScore extends BaseScore {
-  scoringType: 'vehicle';
-  team1Progress: number;
-  team2Progress: number;
-  team1Time?: number;
-  team2Time?: number;
-  checkpointsReached: {
-    team1: number;
-    team2: number;
-  };
-  vehicleSpeed?: number;
-}
-
-// Custom scoring for Workshop modes
-export interface CustomScore extends BaseScore {
-  scoringType: 'custom';
-  customData: Record<string, unknown>;
-}
-
-// Union type for all score types
-export type MatchScore = RoundsScore | ObjectiveScore | PointsScore | DeathmatchScore | VehicleScore | CustomScore;
-
-// Format-specific score variants
-export type CasualScore = MatchScore & { format: 'casual' };
-export type CompetitiveScore = MatchScore & { format: 'competitive' };
-
-// Score configuration based on match format and mode
-export interface ScoringConfig {
-  format: MatchFormat;
-  scoringType: ScoringType;
-  scoringTiming: ScoringTiming;
-  formatVariant: FormatVariant;
-  validation: {
-    minRounds?: number;
-    maxRounds?: number;
-    targetPoints?: number;
-    targetEliminations?: number;
-    timeLimit?: number;
-  };
+  completedAt: Date;
 }
 
 // Signup field types

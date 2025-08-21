@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Badge, Divider, Alert, Loader } from '@mantine/core';
-import { IconMap, IconCheck, IconClock, IconTrophy } from '@tabler/icons-react';
-import { MatchScore, ScoringConfig, ModeDataJsonWithScoring } from '@/shared/types';
-import { FormatDetector } from './FormatDetector';
+import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
+import { MatchResult } from '@/shared/types';
 
 interface MatchGame {
   id: string;
@@ -12,30 +11,27 @@ interface MatchGame {
   round: number;
   map_id: string;
   map_name: string;
+  mode_id: string;
+  game_id: string; // game type like "overwatch2"
   status: 'pending' | 'ongoing' | 'completed';
-  score_data?: string;
   winner_id?: string;
 }
 
-interface MapBasedScoringProps {
+interface SimpleMapScoringProps {
   matchId: string;
   gameType: string; // The game type (e.g., "marvelrivals", "overwatch2")
-  modeData: ModeDataJsonWithScoring;
-  scoringConfig: ScoringConfig;
-  onScoreSubmit: (score: MatchScore) => Promise<void>;
+  onResultSubmit: (result: MatchResult) => Promise<void>;
   submitting: boolean;
   onAllMapsCompleted?: () => void; // Optional callback when all maps are completed
 }
 
-export function MapBasedScoring({
+export function SimpleMapScoring({
   matchId,
   gameType,
-  modeData,
-  scoringConfig,
-  onScoreSubmit,
+  onResultSubmit,
   submitting,
   onAllMapsCompleted
-}: MapBasedScoringProps) {
+}: SimpleMapScoringProps) {
   const [matchGames, setMatchGames] = useState<MatchGame[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,11 +40,20 @@ export function MapBasedScoring({
   // Fetch match games
   useEffect(() => {
     const fetchMatchGames = async () => {
+      let response: Response | undefined;
       try {
         setLoading(true);
-        const response = await fetch(`/api/matches/${matchId}/games`);
+        setError(null);
+        response = await fetch(`/api/matches/${matchId}/games`);
         if (!response.ok) {
-          throw new Error('Failed to load match games');
+          let errorMessage = `HTTP ${response.status}: Failed to load match games`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (jsonError) {
+            console.error('Failed to parse error response as JSON:', jsonError);
+          }
+          throw new Error(errorMessage);
         }
         
         const data = await response.json();
@@ -63,6 +68,7 @@ export function MapBasedScoring({
         }
       } catch (err) {
         console.error('Error fetching match games:', err);
+        console.error('Response status:', response?.status);
         setError(err instanceof Error ? err.message : 'Failed to load match games');
       } finally {
         setLoading(false);
@@ -106,17 +112,20 @@ export function MapBasedScoring({
       .join(' ');
   };
 
-  const handleMapScoreSubmit = async (score: MatchScore) => {
-    // Update the score with the correct game ID
-    const updatedScore = {
-      ...score,
-      gameId: selectedGameId || score.gameId
-    };
-    
-    await onScoreSubmit(updatedScore);
-    
-    // Refresh match games after submission
+  const handleTeamWin = async (winner: 'team1' | 'team2') => {
+    if (!selectedGame) return;
+
     try {
+      const result: MatchResult = {
+        matchId,
+        gameId: selectedGame.id,
+        winner,
+        completedAt: new Date()
+      };
+      
+      await onResultSubmit(result);
+      
+      // Refresh match games after submission
       const response = await fetch(`/api/matches/${matchId}/games`);
       if (response.ok) {
         const data = await response.json();
@@ -133,11 +142,19 @@ export function MapBasedScoring({
           onAllMapsCompleted();
         }
       } else {
-        console.error('Failed to refresh match games after score submission:', response.status, response.statusText);
+        let errorMessage = `HTTP ${response.status}: Failed to refresh games`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (jsonError) {
+          console.error('Failed to parse error response as JSON:', jsonError);
+        }
+        console.error('Error refreshing match games:', response.status, errorMessage);
+        setError(errorMessage);
       }
-    } catch (fetchError) {
-      console.error('Error refreshing match games after score submission:', fetchError);
-      // Don't throw the error - just log it so the modal doesn't close unexpectedly
+    } catch (error) {
+      console.error('Error in handleTeamWin:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save result');
     }
   };
 
@@ -212,7 +229,14 @@ export function MapBasedScoring({
         </Stack>
       </Card>
 
-      {/* Selected Map Scoring */}
+      {/* Error display */}
+      {error && (
+        <Alert color="red" icon={<IconTrophy size={16} />}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Selected Map Winner Selection */}
       {selectedGame && (
         <Card withBorder p="md">
           <Stack gap="md">
@@ -224,21 +248,58 @@ export function MapBasedScoring({
                 <Badge color={getStatusColor(selectedGame.status)} size="sm">
                   {selectedGame.status}
                 </Badge>
+                {selectedGame.winner_id && (
+                  <Badge color={selectedGame.winner_id === 'team1' ? 'blue' : 'red'} size="sm">
+                    Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
+                  </Badge>
+                )}
               </Group>
             </Group>
 
             <Divider />
 
-            {/* Scoring Interface */}
-            <FormatDetector
-              matchId={matchId}
-              gameId={selectedGame.id}
-              gameType={gameType}
-              modeData={modeData}
-              scoringConfig={scoringConfig}
-              onScoreSubmit={handleMapScoreSubmit}
-              submitting={submitting}
-            />
+            {/* Winner Selection */}
+            {selectedGame.status !== 'completed' && (
+              <Stack gap="md">
+                <Text size="sm" c="dimmed" ta="center">
+                  <IconSwords size={16} style={{ marginRight: 8 }} />
+                  Who won this map?
+                </Text>
+                
+                <Group justify="center" gap="xl">
+                  <Button
+                    size="lg"
+                    color="blue"
+                    variant="outline"
+                    onClick={() => handleTeamWin('team1')}
+                    disabled={submitting}
+                    loading={submitting}
+                    leftSection={<IconTrophy size={20} />}
+                  >
+                    Blue Team Wins
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    color="red"
+                    variant="outline"
+                    onClick={() => handleTeamWin('team2')}
+                    disabled={submitting}
+                    loading={submitting}
+                    leftSection={<IconTrophy size={20} />}
+                  >
+                    Red Team Wins
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+
+            {/* Already completed */}
+            {selectedGame.status === 'completed' && (
+              <Alert color="green" icon={<IconCheck size={16} />}>
+                This map has been completed. Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
+              </Alert>
+            )}
           </Stack>
         </Card>
       )}

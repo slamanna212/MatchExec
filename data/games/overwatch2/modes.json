@@ -2,193 +2,36 @@
     {
       "id": "control",
       "name": "Control",
-      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds.",
-      "scoringType": "rounds",
-      "scoringTiming": "realtime",
-      "formatVariants": {
-        "casual": {
-          "maxRounds": 3,
-          "winCondition": "playAll",
-          "description": "Play all 3 rounds, most wins takes the match"
-        },
-        "competitive": {
-          "maxRounds": 5,
-          "winCondition": "playAll",
-          "description": "Play all 5 rounds, most wins takes the match"
-        }
-      },
-      "scoring": {
-        "type": "rounds",
-        "winCondition": "bestOf",
-        "maxRounds": 3,
-        "roundScoring": {
-          "type": "percentage",
-          "max": 100,
-          "winThreshold": 100
-        }
-      }
+      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds."
     },
     {
       "id": "escort",
       "name": "Escort",
-      "description": "Attackers escort a payload to its destination while defenders try to stop them.",
-      "scoringType": "objective",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "timeMultiplier": 1.2,
-          "description": "Standard escort with extra time bank"
-        },
-        "competitive": {
-          "timeMultiplier": 1.0,
-          "description": "Standard escort timing"
-        }
-      },
-      "scoring": {
-        "type": "objective",
-        "winCondition": "distance",
-        "checkpoints": 3,
-        "objectiveScoring": {
-          "type": "distance",
-          "unit": "meters",
-          "timeComponent": true
-        }
-      }
+      "description": "Attackers escort a payload to its destination while defenders try to stop them."
     },
     {
       "id": "hybrid",
       "name": "Hybrid",
-      "description": "Attackers first capture a point, then escort a payload on the next segment.",
-      "scoringType": "objective",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "timeMultiplier": 1.2,
-          "description": "Standard hybrid with extra time bank"
-        },
-        "competitive": {
-          "timeMultiplier": 1.0,
-          "description": "Standard hybrid timing"
-        }
-      },
-      "scoring": {
-        "type": "objective",
-        "winCondition": "distance",
-        "checkpoints": 2,
-        "objectiveScoring": {
-          "type": "distance",
-          "unit": "meters",
-          "timeComponent": true,
-          "captureFirst": true
-        }
-      }
+      "description": "Attackers first capture a point, then escort a payload on the next segment."
     },
     {
       "id": "push",
       "name": "Push",
-      "description": "Both teams vie to push a robot into the enemy base across multiple rounds.",
-      "scoringType": "objective",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "timeMultiplier": 1.2,
-          "description": "Standard push with extra time bank"
-        },
-        "competitive": {
-          "timeMultiplier": 1.0,
-          "description": "Standard push timing"
-        }
-      },
-      "scoring": {
-        "type": "objective",
-        "winCondition": "distance",
-        "checkpoints": 2,
-        "objectiveScoring": {
-          "type": "distance",
-          "unit": "meters",
-          "timeComponent": true,
-          "bidirectional": true
-        }
-      }
+      "description": "Both teams vie to push a robot into the enemy base across multiple rounds."
     },
     {
       "id": "flashpoint",
       "name": "Flashpoint",
-      "description": "Like Control but faster points on the same map.",
-      "scoringType": "points",
-      "scoringTiming": "realtime",
-      "formatVariants": {
-        "casual": {
-          "maxPoints": 3,
-          "unlockDelay": 50,
-          "description": "First to 3 captures, slower unlock"
-        },
-        "competitive": {
-          "maxPoints": 3,
-          "unlockDelay": 40,
-          "description": "First to 3 captures, standard timing"
-        }
-      },
-      "scoring": {
-        "type": "points",
-        "winCondition": "firstTo",
-        "maxPoints": 3,
-        "totalObjectives": 5,
-        "pointScoring": {
-          "type": "capture",
-          "unlockDelay": 40
-        }
-      }
+      "description": "Like Control but faster points on the same map."
     },
     {
       "id": "clash",
       "name": "Clash",
-      "description": "Tug of War in Overwatch 2.",
-      "scoringType": "points",
-      "scoringTiming": "realtime",
-      "formatVariants": {
-        "casual": {
-          "maxPoints": 3,
-          "description": "First to 3 points or final capture"
-        },
-        "competitive": {
-          "maxPoints": 5,
-          "description": "First to 5 points or final capture"
-        }
-      },
-      "scoring": {
-        "type": "points",
-        "winCondition": "firstToOrFinal",
-        "maxPoints": 5,
-        "totalObjectives": 5,
-        "pointScoring": {
-          "type": "linear",
-          "alternativeWin": "finalCapture"
-        }
-      }
+      "description": "Tug of War in Overwatch 2."
     },
     {
       "id": "workshop",
       "name": "Workshop",
-      "description": "Limited only by your imagination.",
-      "scoringType": "custom",
-      "scoringTiming": "endgame",
-      "formatVariants": {
-        "casual": {
-          "configurable": true,
-          "description": "Custom workshop rules"
-        },
-        "competitive": {
-          "configurable": true,
-          "description": "Custom workshop rules"
-        }
-      },
-      "scoring": {
-        "type": "custom",
-        "winCondition": "custom",
-        "customScoring": {
-          "configurable": true
-        }
-      }
-    }    
-  ]
+      "description": "Limited only by your imagination."
+    }
+]
