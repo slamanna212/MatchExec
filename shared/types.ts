@@ -53,6 +53,7 @@ export interface Match {
 // Database row types (includes fields not in the base interface)
 export interface MatchDbRow extends Match {
   maps?: string; // JSON string in database
+  map_codes?: string; // JSON string storing map codes
   event_image_url?: string;
   rules?: string;
   rounds?: number;
@@ -75,6 +76,7 @@ export interface GameDbRow {
   id: string;
   name: string;
   max_signups?: number;
+  map_codes_supported?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 
@@ -172,6 +174,7 @@ export interface GameDataJson {
   description: string;
   minPlayers: number;
   maxPlayers: number;
+  mapCodesSupported?: boolean;
   assets: {
     iconUrl: string;
   };
@@ -199,6 +202,11 @@ export interface MatchResult {
   gameId: string; // match_games.id
   winner: 'team1' | 'team2';
   completedAt: Date;
+}
+
+// Map codes type
+export interface MapCodes {
+  [mapId: string]: string; // mapId -> code (up to 24 characters)
 }
 
 // Signup field types

@@ -16,6 +16,7 @@ interface GameData {
   maxPlayers: number;
   maxSignups?: number;
   supportsAllModes?: boolean;
+  mapCodesSupported?: boolean;
   assets: {
     iconUrl: string;
     coverUrl?: string;
@@ -182,8 +183,8 @@ export class DatabaseSeeder {
     await this.db.run(`
       INSERT OR REPLACE INTO games (
         id, name, color, genre, developer, release_date, version, description,
-        min_players, max_players, max_signups, supports_all_modes, icon_url, cover_url, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        min_players, max_players, max_signups, supports_all_modes, map_codes_supported, icon_url, cover_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       gameData.id,
       gameData.name,
@@ -197,6 +198,7 @@ export class DatabaseSeeder {
       gameData.maxPlayers,
       gameData.maxSignups || null,
       gameData.supportsAllModes ? 1 : 0,
+      gameData.mapCodesSupported ? 1 : 0,
       gameData.assets.iconUrl,
       gameData.assets.coverUrl || null
     ]);

@@ -1,9 +1,29 @@
+.root {
+  border: none !important;
+}
+
 .indicator {
   background-color: var(--mantine-primary-color-filled);
 }
 
 .control:not(:has([data-active])) {
   background-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-7)) !important;
+  border: none !important;
+}
+
+.control {
+  border: none !important;
+  border-right: none !important;
+  border-left: none !important;
+}
+
+.control:not(:first-of-type) {
+  border-left: none !important;
+}
+
+.control::before,
+.control::after {
+  display: none !important;
 }
 
 .label {

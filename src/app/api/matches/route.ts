@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const db = await getDbInstance();
     
     let query = `
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
     `;
@@ -29,10 +29,12 @@ export async function GET(request: NextRequest) {
     
     const matches = await db.all<MatchDbRow>(query, params);
     
-    // Parse maps JSON for each match
+    // Parse maps and map codes JSON for each match
     const parsedMatches = matches.map(match => ({
       ...match,
-      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
+      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
+      map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {},
+      map_codes_supported: Boolean(match.map_codes_supported)
     }));
     
     return NextResponse.json(parsedMatches);
@@ -108,16 +110,18 @@ export async function POST(request: NextRequest) {
     ]);
     
     const match = await db.get<MatchDbRow>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       WHERE m.id = ?
     `, [matchId]);
     
-    // Parse maps for the returned match
+    // Parse maps and map codes for the returned match
     const parsedMatch = {
       ...(match || {}),
-      maps: match?.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []
+      maps: match?.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
+      map_codes: match?.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {},
+      map_codes_supported: Boolean(match?.map_codes_supported)
     };
 
     // DEBUG: Log what data we received

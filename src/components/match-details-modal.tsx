@@ -15,9 +15,10 @@ import {
   Grid,
   Image,
   Loader,
-  SegmentedControl
+  SegmentedControl,
+  TextInput
 } from '@mantine/core';
-import { IconTrophy } from '@tabler/icons-react';
+import { IconTrophy, IconDeviceFloppy } from '@tabler/icons-react';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
 
@@ -38,9 +39,11 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   game_name?: string;
   game_icon?: string;
   game_color?: string;
+  map_codes_supported?: boolean;
   rules?: string;
   rounds?: number;
   maps?: string[];
+  map_codes?: Record<string, string>;
   livestream_link?: string;
   created_at: string;
   updated_at: string;
@@ -115,9 +118,11 @@ export function MatchDetailsModal({
   onDelete,
   onAssign
 }: MatchDetailsModalProps) {
-  const [activeTab, setActiveTab] = useState<'participants' | 'announcements'>('participants');
+  const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'mapcodes'>('participants');
   const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
+  const [mapCodes, setMapCodes] = useState<Record<string, string>>({});
+  const [mapCodesSaving, setMapCodesSaving] = useState(false);
 
   // Fetch match games for battle/complete status matches
   useEffect(() => {
@@ -141,6 +146,62 @@ export function MatchDetailsModal({
 
     fetchMatchGames();
   }, [selectedMatch, opened]);
+
+  // Load map codes when modal opens
+  useEffect(() => {
+    if (!selectedMatch || !opened) return;
+    
+    // Initialize map codes from selected match data
+    if (selectedMatch.map_codes) {
+      setMapCodes(selectedMatch.map_codes);
+    } else {
+      // Initialize empty map codes for all maps
+      const initialMapCodes: Record<string, string> = {};
+      selectedMatch.maps?.forEach(mapId => {
+        initialMapCodes[mapId] = '';
+      });
+      setMapCodes(initialMapCodes);
+    }
+  }, [selectedMatch, opened]);
+
+  // Function to save map codes
+  const saveMapCodes = async () => {
+    if (!selectedMatch) return;
+    
+    try {
+      setMapCodesSaving(true);
+      const response = await fetch(`/api/matches/${selectedMatch.id}/map-codes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mapCodes }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save map codes');
+      }
+      
+      // Update the selected match with new map codes
+      if (selectedMatch) {
+        selectedMatch.map_codes = mapCodes;
+      }
+    } catch (error) {
+      console.error('Failed to save map codes:', error);
+    } finally {
+      setMapCodesSaving(false);
+    }
+  };
+
+  // Function to update a specific map code
+  const updateMapCode = (mapId: string, code: string) => {
+    // Limit to 24 characters
+    const trimmedCode = code.slice(0, 24);
+    setMapCodes(prev => ({
+      ...prev,
+      [mapId]: trimmedCode
+    }));
+  };
 
   // Helper function to get winner for a specific map
   const getMapWinner = (mapId: string) => {
@@ -305,8 +366,8 @@ export function MatchDetailsModal({
                             />
                           </div>
                           <div style={{ width: '50%' }}>
-                            <Group justify="space-between" align="flex-start">
-                              <div style={{ flex: 1 }}>
+                            <Stack gap="xs">
+                              <div>
                                 <Text fw={500} size="sm" lineClamp={1}>
                                   {mapDetail?.name || formatMapName(mapId)}
                                 </Text>
@@ -322,16 +383,14 @@ export function MatchDetailsModal({
                                 )}
                               </div>
                               {winner && (
-                                <div style={{ textAlign: 'right' }}>
-                                  <Group gap={4} justify="flex-end">
-                                    <IconTrophy size={14} color="gold" />
-                                    <Badge size="xs" color={winner.color} variant="filled">
-                                      {winner.team}
-                                    </Badge>
-                                  </Group>
-                                </div>
+                                <Group gap={4} justify="flex-start">
+                                  <IconTrophy size={14} color="gold" />
+                                  <Badge size="xs" color={winner.color} variant="filled">
+                                    {winner.team}
+                                  </Badge>
+                                </Group>
                               )}
-                            </Group>
+                            </Stack>
                           </div>
                         </Group>
                       </Card>
@@ -401,25 +460,32 @@ export function MatchDetailsModal({
 
         {showTabs ? (
           <>
-            <Group justify="center" mb="md">
-              <SegmentedControl
-                radius="xl"
-                size="md"
-                data={[
-                  { 
-                    label: `Participants (${participants.length}/${selectedMatch.max_participants})`, 
-                    value: 'participants' 
-                  },
-                  { 
-                    label: `Announcements (${reminders.length})`, 
-                    value: 'announcements' 
-                  }
-                ]}
-                value={activeTab}
-                onChange={(value) => setActiveTab(value as 'participants' | 'announcements')}
-                classNames={classes}
-              />
-            </Group>
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <Group justify="center" mb="sm">
+                <SegmentedControl
+                  radius="xl"
+                  size="sm"
+                  data={[
+                    { 
+                      label: `Players (${participants.length}/${selectedMatch.max_participants})`, 
+                      value: 'participants' 
+                    },
+                    { 
+                      label: `Alerts (${reminders.length})`, 
+                      value: 'announcements' 
+                    },
+                    ...(selectedMatch.map_codes_supported ? [{ 
+                      label: 'Map Codes', 
+                      value: 'mapcodes' 
+                    }] : [])
+                  ]}
+                  value={activeTab}
+                  onChange={(value) => setActiveTab(value as 'participants' | 'announcements' | 'mapcodes')}
+                  classNames={classes}
+                  style={{ minWidth: 'fit-content' }}
+                />
+              </Group>
+            </div>
 
             {activeTab === 'participants' && (
               <div>
@@ -537,6 +603,84 @@ export function MatchDetailsModal({
                 )}
               </div>
             )}
+
+            {activeTab === 'mapcodes' && selectedMatch.map_codes_supported && (
+              <div>
+                <Stack gap="md">
+                  <Group justify="space-between" align="center">
+                    <Text size="lg" fw={600}>Map Codes</Text>
+                    <Button
+                      size="sm"
+                      loading={mapCodesSaving}
+                      onClick={saveMapCodes}
+                      leftSection={<IconDeviceFloppy size={16} />}
+                    >
+                      Save Codes
+                    </Button>
+                  </Group>
+                  
+                  {selectedMatch.maps && selectedMatch.maps.length > 0 ? (
+                    <Stack gap="sm">
+                      {selectedMatch.maps.map(mapId => {
+                        const mapDetail = mapDetails[mapId];
+                        return (
+                          <Card key={mapId} shadow="sm" padding="md" radius="md" withBorder>
+                            <Group wrap="nowrap" align="center" gap="md">
+                              <div style={{ width: '40%' }}>
+                                <Image
+                                  src={mapDetail?.imageUrl}
+                                  alt={mapDetail?.name || formatMapName(mapId)}
+                                  height={60}
+                                  radius="sm"
+                                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                                />
+                              </div>
+                              <div style={{ width: '60%' }}>
+                                <Stack gap="xs">
+                                  <div>
+                                    <Text fw={500} size="sm" lineClamp={1}>
+                                      {mapDetail?.name || formatMapName(mapId)}
+                                    </Text>
+                                    {mapDetail?.location && (
+                                      <Text size="xs" c="dimmed" lineClamp={1}>
+                                        {mapDetail.location}
+                                      </Text>
+                                    )}
+                                    {mapDetail?.modeName && (
+                                      <Badge size="xs" variant="light" mt={2}>
+                                        {mapDetail.modeName}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <TextInput
+                                    placeholder="Enter map code"
+                                    value={mapCodes[mapId] || ''}
+                                    onChange={(event) => updateMapCode(mapId, event.currentTarget.value)}
+                                    maxLength={24}
+                                    size="sm"
+                                    styles={{
+                                      input: {
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.9em'
+                                      }
+                                    }}
+                                  />
+                                </Stack>
+                              </div>
+                            </Group>
+                          </Card>
+                        );
+                      })}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed" ta="center" py="md">
+                      No maps configured for this match
+                    </Text>
+                  )}
+                </Stack>
+              </div>
+            )}
+
           </>
         ) : (
           <div>
