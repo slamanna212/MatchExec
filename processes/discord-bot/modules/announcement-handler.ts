@@ -852,6 +852,183 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
+  async postMapScoreNotification(scoreData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    gameNumber: number;
+    mapId: string;
+    winner: 'team1' | 'team2';
+    winningTeamName: string;
+    winningPlayers: string[];
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for live updates (match_start)
+    const liveUpdateChannels = await this.getChannelsForNotificationType('match_start');
+    
+    if (liveUpdateChannels.length === 0) {
+      console.warn('⚠️ No channels configured for live updates');
+      return false;
+    }
+
+    try {
+      // Create score notification embed
+      const { embed, attachment } = await this.createMapScoreEmbed(scoreData);
+
+      // Build message options
+      const messageOptions: any = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured live update channels
+      for (const channelConfig of liveUpdateChannels) {
+        try {
+          const liveUpdateChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (liveUpdateChannel?.isTextBased() && 'send' in liveUpdateChannel) {
+            // Send score notification
+            await liveUpdateChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send map score notification to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send map score notification to any channels');
+        return false;
+      }
+
+      return { success: true, successCount };
+
+    } catch (error) {
+      console.error('❌ Error posting map score notification:', error);
+      return false;
+    }
+  }
+
+  private async createMapScoreEmbed(scoreData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    gameNumber: number;
+    mapId: string;
+    winner: 'team1' | 'team2';
+    winningTeamName: string;
+    winningPlayers: string[];
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data and map details
+    let gameName = scoreData.gameId;
+    let gameColor = 0x00d4aa; // Green for victory
+    let mapName = scoreData.mapId;
+    let mapImageUrl: string | null = null;
+    let attachment: AttachmentBuilder | undefined;
+    let totalMaps = 0;
+
+    if (this.db) {
+      try {
+        // Get game data
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [scoreData.gameId]);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+
+        // Get map data
+        const mapData = await this.db.get<{
+          name: string, 
+          image_url: string,
+          location: string,
+          mode_id: string
+        }>(`
+          SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+          FROM game_maps gm
+          WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
+          LIMIT 1
+        `, [scoreData.gameId, scoreData.mapId, `%${scoreData.mapId}%`]);
+
+        if (mapData) {
+          mapName = mapData.name;
+          mapImageUrl = mapData.image_url;
+        }
+
+        // Get total number of maps in this match
+        const mapCountData = await this.db.get<{total_maps: number}>(`
+          SELECT COUNT(*) as total_maps
+          FROM match_games
+          WHERE match_id = ?
+        `, [scoreData.matchId]);
+
+        if (mapCountData) {
+          totalMaps = mapCountData.total_maps;
+        }
+      } catch (error) {
+        console.error('Error fetching game/map data for score notification:', error);
+      }
+    }
+
+    // Create the embed
+    const mapProgress = totalMaps > 0 ? `${scoreData.gameNumber}/${totalMaps}` : scoreData.gameNumber.toString();
+    const embed = new EmbedBuilder()
+      .setTitle(`🏆 ${scoreData.winningTeamName} Wins Map ${scoreData.gameNumber}!`)
+      .setDescription(`**${scoreData.matchName}** - ${mapName}`)
+      .setColor(gameColor)
+      .addFields([
+        { name: '🎮 Game', value: gameName, inline: true },
+        { name: '🗺️ Map', value: mapName, inline: true },
+        { name: '📊 Map Progress', value: mapProgress, inline: true }
+      ])
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Live Score Update' });
+
+    // Add winning team players
+    if (scoreData.winningPlayers.length > 0) {
+      const playersList = scoreData.winningPlayers.join('\n');
+      embed.addFields([{ 
+        name: `${scoreData.winningTeamName} Players`, 
+        value: playersList, 
+        inline: false 
+      }]);
+    }
+
+    // Add map image if available
+    if (mapImageUrl) {
+      try {
+        const imagePath = path.join(process.cwd(), 'public', mapImageUrl.replace(/^\//, ''));
+        
+        if (fs.existsSync(imagePath)) {
+          attachment = new AttachmentBuilder(imagePath, {
+            name: `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`
+          });
+          
+          const attachmentName = `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
+          embed.setImage(`attachment://${attachmentName}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error handling map image for score notification:`, error);
+      }
+    }
+
+    return { embed, attachment };
+  }
+
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
   }

@@ -175,6 +175,9 @@ export async function saveMatchResult(
     await db.run(query, [result.winner, matchGameId]);
     console.log(`Saved match result for game ${matchGameId}: ${result.winner} wins`);
 
+    // Queue Discord score notification
+    await queueScoreNotification(matchGameId, result);
+
     // Set the next pending map to 'ongoing' if it exists
     await setNextMapToOngoing(result.matchId);
 
@@ -250,6 +253,81 @@ async function setNextMapToOngoing(matchId: string): Promise<void> {
   } catch (error) {
     console.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
+  }
+}
+
+/**
+ * Queue a Discord score notification for this game result
+ */
+async function queueScoreNotification(matchGameId: string, result: MatchResult): Promise<void> {
+  const db = await getDbInstance();
+  
+  try {
+    // Get match and game data
+    const gameDataQuery = `
+      SELECT mg.match_id, mg.round, mg.map_id,
+             m.name as match_name, m.game_id,
+             gm.name as map_name
+      FROM match_games mg
+      JOIN matches m ON mg.match_id = m.id
+      LEFT JOIN game_maps gm ON mg.map_id = gm.id
+      WHERE mg.id = ?
+    `;
+
+    const gameData = await db.get<{
+      match_id: string;
+      round: number;
+      map_id?: string;
+      match_name: string;
+      game_id: string;
+      map_name?: string;
+    }>(gameDataQuery, [matchGameId]);
+
+    if (!gameData) {
+      console.warn('No game data found for score notification');
+      return;
+    }
+
+    // Get winning team players
+    const winningTeamName = result.winner === 'team1' ? 'Blue Team' : 'Red Team';
+    const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
+    
+    const playersQuery = `
+      SELECT username
+      FROM match_participants
+      WHERE match_id = ? AND team_assignment = ?
+      ORDER BY username ASC
+    `;
+
+    const players = await db.all<{ username: string }>(playersQuery, [gameData.match_id, teamAssignment]);
+    const winningPlayers = players.map(p => p.username);
+
+    // Generate unique notification ID
+    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+    // Insert into score notification queue
+    const insertQuery = `
+      INSERT INTO discord_score_notification_queue (
+        id, match_id, game_id, map_id, game_number, winner,
+        winning_team_name, winning_players, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `;
+
+    await db.run(insertQuery, [
+      notificationId,
+      gameData.match_id,
+      gameData.game_id,
+      gameData.map_id || 'unknown',
+      gameData.round,
+      result.winner,
+      winningTeamName,
+      JSON.stringify(winningPlayers)
+    ]);
+
+    console.log(`✅ Queued score notification: ${winningTeamName} wins game ${gameData.round}`);
+  } catch (error) {
+    console.error('Error queueing score notification:', error);
+    // Don't throw - this is not critical for the main scoring flow
   }
 }
 

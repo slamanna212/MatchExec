@@ -38,6 +38,18 @@ interface QueuedReminder {
   created_at: string;
 }
 
+interface QueuedScoreNotification {
+  id: string;
+  match_id: string;
+  game_id: string;
+  map_id: string;
+  game_number: number;
+  winner: 'team1' | 'team2';
+  winning_team_name: string;
+  winning_players: string;
+  created_at: string;
+}
+
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
 
@@ -662,6 +674,111 @@ export class QueueProcessor {
     }
   }
 
+  async processScoreNotificationQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const scoreNotifications = await this.db.all<QueuedScoreNotification>(`
+        SELECT id, match_id, game_id, map_id, game_number, winner, 
+               winning_team_name, winning_players, created_at
+        FROM discord_score_notification_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const notification of scoreNotifications) {
+        try {
+          // Immediately mark as processing to prevent duplicate processing
+          const updateResult = await this.db.run(`
+            UPDATE discord_score_notification_queue 
+            SET status = 'processing', sent_at = datetime('now')
+            WHERE id = ? AND status = 'pending'
+          `, [notification.id]);
+          
+          if (updateResult.changes === 0) {
+            continue;
+          }
+
+          if (!this.announcementHandler) {
+            console.error('❌ AnnouncementHandler not available');
+            await this.db.run(`
+              UPDATE discord_score_notification_queue 
+              SET status = 'failed', sent_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['AnnouncementHandler not available', notification.id]);
+            continue;
+          }
+
+          // Get match name for the notification
+          const matchData = await this.db.get<{
+            name: string;
+          }>(`
+            SELECT name FROM matches WHERE id = ?
+          `, [notification.match_id]);
+
+          if (!matchData) {
+            throw new Error('Match not found');
+          }
+
+          // Parse winning players from JSON
+          let winningPlayers: string[] = [];
+          try {
+            winningPlayers = JSON.parse(notification.winning_players);
+          } catch (e) {
+            console.warn('Could not parse winning players JSON for notification:', notification.id);
+          }
+
+          // Build score notification data
+          const scoreData = {
+            matchId: notification.match_id,
+            matchName: matchData.name,
+            gameId: notification.game_id,
+            gameNumber: notification.game_number,
+            mapId: notification.map_id,
+            winner: notification.winner,
+            winningTeamName: notification.winning_team_name,
+            winningPlayers: winningPlayers
+          };
+
+          // Post the score notification
+          const result = await this.announcementHandler.postMapScoreNotification(scoreData);
+          
+          if (result && (result === true || (typeof result === 'object' && result.success))) {
+            // Mark as sent
+            await this.db.run(`
+              UPDATE discord_score_notification_queue 
+              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [notification.id]);
+
+            console.log(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_score_notification_queue 
+              SET status = 'failed', error_message = 'Failed to post score notification'
+              WHERE id = ?
+            `, [notification.id]);
+
+            console.error(`❌ Failed to post score notification for ${notification.id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing score notification ${notification.id}:`, error);
+          
+          // Mark as failed
+          await this.db.run(`
+            UPDATE discord_score_notification_queue 
+            SET status = 'failed', sent_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', notification.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing score notification queue:', error);
+    }
+  }
+
   async processAllQueues() {
     await Promise.all([
       this.processAnnouncementQueue(),
@@ -669,6 +786,7 @@ export class QueueProcessor {
       this.processStatusUpdateQueue(),
       this.processReminderQueue(),
       this.processPlayerReminderQueue(),
+      this.processScoreNotificationQueue(),
       this.processDiscordBotRequests()
     ]);
   }
