@@ -3,7 +3,7 @@
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, NumberInput, Checkbox, Select, Box, Grid } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
-import { IconSettings, IconVolume, IconMicrophone } from '@tabler/icons-react';
+import { IconSettings, IconVolume, IconMicrophone, IconCrown, IconPlayFootball, IconRadio, IconMicrophone2 } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
 
 interface DiscordSettings {
@@ -57,6 +57,22 @@ export default function SettingsPage() {
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
+
+  // Helper function to get icon for voice type
+  const getVoiceIcon = (voiceId: string) => {
+    switch (voiceId) {
+      case 'aria':
+        return IconCrown;
+      case 'british-football':
+        return IconPlayFootball;
+      case 'london-radio':
+        return IconRadio;
+      case 'wrestling-announcer':
+        return IconMicrophone2;
+      default:
+        return IconMicrophone;
+    }
+  };
 
   // Helper functions for player reminder conversion
   const minutesToValueUnit = (minutes: number) => {
@@ -460,29 +476,32 @@ export default function SettingsPage() {
                       <Text size="xs" c="dimmed" mb="md">Select the voice style for match announcements</Text>
                       
                       <Grid>
-                        {availableVoices.map((voice) => (
-                          <Grid.Col span={{ base: 12, sm: 6 }} key={voice.id}>
-                            <Card 
-                              shadow="sm" 
-                              padding="md" 
-                              radius="md" 
-                              withBorder
-                              style={{ 
-                                cursor: 'pointer',
-                                backgroundColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color-light)' : undefined,
-                                borderColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color)' : undefined
-                              }}
-                              onClick={() => announcerForm.setFieldValue('announcer_voice', voice.id)}
-                            >
-                              <Group gap="sm">
-                                <IconMicrophone size="1rem" />
-                                <Text fw={announcerForm.values.announcer_voice === voice.id ? 600 : 400}>
-                                  {voice.name}
-                                </Text>
-                              </Group>
-                            </Card>
-                          </Grid.Col>
-                        ))}
+                        {availableVoices.map((voice) => {
+                          const IconComponent = getVoiceIcon(voice.id);
+                          return (
+                            <Grid.Col span={{ base: 12, sm: 6 }} key={voice.id}>
+                              <Card 
+                                shadow="sm" 
+                                padding="md" 
+                                radius="md" 
+                                withBorder
+                                style={{ 
+                                  cursor: 'pointer',
+                                  backgroundColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color-light)' : undefined,
+                                  borderColor: announcerForm.values.announcer_voice === voice.id ? 'var(--mantine-primary-color)' : undefined
+                                }}
+                                onClick={() => announcerForm.setFieldValue('announcer_voice', voice.id)}
+                              >
+                                <Group gap="sm">
+                                  <IconComponent size="1.5rem" />
+                                  <Text fw={announcerForm.values.announcer_voice === voice.id ? 600 : 400}>
+                                    {voice.name}
+                                  </Text>
+                                </Group>
+                              </Card>
+                            </Grid.Col>
+                          );
+                        })}
                       </Grid>
                     </Box>
 
