@@ -114,11 +114,11 @@ export async function GET(
       }
     }
 
-    // Sort announcements by reminder time
+    // Sort announcements by reminder time (newest first)
     const allReminders = scheduledAnnouncements.sort((a, b) => {
       const timeA = new Date(a.reminder_time);
       const timeB = new Date(b.reminder_time);
-      return timeA.getTime() - timeB.getTime();
+      return timeB.getTime() - timeA.getTime();
     });
 
     return NextResponse.json({ 
