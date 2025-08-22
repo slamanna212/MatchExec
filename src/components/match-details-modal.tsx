@@ -354,19 +354,26 @@ export function MatchDetailsModal({
                   const winner = getMapWinner(mapId);
                   return (
                     <Grid.Col key={mapId} span={12}>
-                      <Card shadow="sm" padding="sm" radius="md" withBorder>
-                        <Group wrap="nowrap" align="center" gap="md">
-                          <div style={{ width: '50%' }}>
+                      <Card shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                        <Group wrap="nowrap" align="stretch" gap={0}>
+                          <div style={{ width: '50%', position: 'relative' }}>
                             <Image
                               src={mapDetail?.imageUrl}
                               alt={mapDetail?.name || formatMapName(mapId)}
-                              height={60}
-                              radius="sm"
+                              height={80}
+                              radius={0}
+                              style={{
+                                borderTopLeftRadius: 'var(--mantine-radius-md)',
+                                borderBottomLeftRadius: 'var(--mantine-radius-md)',
+                                objectFit: 'cover',
+                                width: '100%',
+                                height: '100%'
+                              }}
                               fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
                             />
                           </div>
-                          <div style={{ width: '50%' }}>
-                            <Stack gap="xs">
+                          <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
+                            <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                               <div>
                                 <Text fw={500} size="sm" lineClamp={1}>
                                   {mapDetail?.name || formatMapName(mapId)}
@@ -624,19 +631,26 @@ export function MatchDetailsModal({
                       {selectedMatch.maps.map(mapId => {
                         const mapDetail = mapDetails[mapId];
                         return (
-                          <Card key={mapId} shadow="sm" padding="md" radius="md" withBorder>
-                            <Group wrap="nowrap" align="center" gap="md">
-                              <div style={{ width: '40%' }}>
+                          <Card key={mapId} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                            <Group wrap="nowrap" align="stretch" gap={0}>
+                              <div style={{ width: '40%', position: 'relative' }}>
                                 <Image
                                   src={mapDetail?.imageUrl}
                                   alt={mapDetail?.name || formatMapName(mapId)}
-                                  height={60}
-                                  radius="sm"
+                                  height={80}
+                                  radius={0}
+                                  style={{
+                                    borderTopLeftRadius: 'var(--mantine-radius-md)',
+                                    borderBottomLeftRadius: 'var(--mantine-radius-md)',
+                                    objectFit: 'cover',
+                                    width: '100%',
+                                    height: '100%'
+                                  }}
                                   fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
                                 />
                               </div>
-                              <div style={{ width: '60%' }}>
-                                <Stack gap="xs">
+                              <div style={{ width: '60%', padding: 'var(--mantine-spacing-md)' }}>
+                                <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                                   <div>
                                     <Text fw={500} size="sm" lineClamp={1}>
                                       {mapDetail?.name || formatMapName(mapId)}
