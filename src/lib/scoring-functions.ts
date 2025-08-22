@@ -374,6 +374,10 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
       
       await db.run(updateMatchQuery, [matchId]);
       console.log(`Match ${matchId} marked as complete`);
+      
+      // Queue Discord deletion for match announcements and events
+      await queueDiscordDeletion(matchId);
+      
       return true; // Match is now complete
     }
     
@@ -458,6 +462,29 @@ async function queueVoiceAnnouncementForScore(
     console.log(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
   } catch (error) {
     console.error('❌ Error queuing voice announcement for score:', error);
+    // Don't throw - this is not critical for the main scoring flow
+  }
+}
+
+/**
+ * Queue Discord deletion for match announcements and events when match completes
+ */
+async function queueDiscordDeletion(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+    
+    // Generate unique deletion ID
+    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    
+    // Insert into Discord deletion queue
+    await db.run(`
+      INSERT INTO discord_deletion_queue (id, match_id, status)
+      VALUES (?, ?, 'pending')
+    `, [deletionId, matchId]);
+    
+    console.log(`🗑️ Discord deletion queued for completed match: ${matchId}`);
+  } catch (error) {
+    console.error('❌ Error queuing Discord deletion for completed match:', error);
     // Don't throw - this is not critical for the main scoring flow
   }
 }
