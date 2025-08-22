@@ -32,6 +32,7 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/ecosystem.config.js ./
+COPY --from=builder /app/scripts ./scripts
 
 # Create app_data directory and set ownership
 RUN mkdir -p /app/app_data/data && chown -R nextjs:nodejs /app/app_data
@@ -42,5 +43,9 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV NODE_ENV=production
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD node scripts/health-check.js
 
 CMD ["pm2-runtime", "ecosystem.config.js"]
