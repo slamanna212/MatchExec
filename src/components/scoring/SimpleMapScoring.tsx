@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Stack, Group, Card, Button, Text, Badge, Divider, Alert, Loader, Box, ActionIcon } from '@mantine/core';
 import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
@@ -24,6 +24,8 @@ interface SimpleMapScoringProps {
   submitting: boolean;
   onAllMapsCompleted?: () => void; // Optional callback when all maps are completed
 }
+
+const CARD_WIDTH = 180 + 16; // Card width + gap
 
 export function SimpleMapScoring({
   matchId,
@@ -141,7 +143,7 @@ export function SimpleMapScoring({
         }, 100);
       }
     }
-  }, [selectedGameId, matchGames]);
+  }, [selectedGameId, matchGames, scrollToMap]);
 
   const selectedGame = matchGames.find(game => game.id === selectedGameId);
 
@@ -181,14 +183,13 @@ export function SimpleMapScoring({
     return `/assets/games/${gameId}/maps/${mapId}.webp`;
   };
 
-  const CARD_WIDTH = 180 + 16; // Card width + gap
   
-  const getMaxScroll = () => {
+  const getMaxScroll = useCallback(() => {
     if (!containerRef.current) return 0;
     const containerWidth = containerRef.current.offsetWidth;
     const totalWidth = matchGames.length * CARD_WIDTH;
     return Math.max(0, totalWidth - containerWidth);
-  };
+  }, [matchGames.length]);
 
   const handleScrollLeft = () => {
     setScrollPosition(Math.max(0, scrollPosition - CARD_WIDTH));
@@ -199,7 +200,7 @@ export function SimpleMapScoring({
     setScrollPosition(Math.min(maxScroll, scrollPosition + CARD_WIDTH));
   };
 
-  const scrollToMap = (gameIndex: number) => {
+  const scrollToMap = useCallback((gameIndex: number) => {
     if (!containerRef.current) return;
     
     const containerWidth = containerRef.current.offsetWidth;
@@ -210,7 +211,7 @@ export function SimpleMapScoring({
     const targetScroll = Math.max(0, Math.min(maxScroll, centerPosition));
     
     setScrollPosition(targetScroll);
-  };
+  }, [getMaxScroll, setScrollPosition]);
 
   const handleTeamWin = async (winner: 'team1' | 'team2') => {
     if (!selectedGame) return;
