@@ -173,7 +173,7 @@ export class QueueProcessor {
             result = await this.announcementHandler.postEventAnnouncement(eventData);
           }
           
-          if (result && (result === true || (typeof result === 'object' && result.success))) {
+          if (result && typeof result === 'object' && result.success) {
             // Store Discord message information for later cleanup if needed (only for full announcements)
             if (this.db && typeof result === 'object' && 'mainMessage' in result && result.mainMessage && announcement.announcement_type !== 'timed') {
               try {
@@ -754,7 +754,7 @@ export class QueueProcessor {
           // Post the score notification
           const result = await this.announcementHandler.postMapScoreNotification(scoreData);
           
-          if (result && (result === true || (typeof result === 'object' && result.success))) {
+          if (result && typeof result === 'object' && result.success) {
             // Mark as sent
             await this.db.run(`
               UPDATE discord_score_notification_queue 

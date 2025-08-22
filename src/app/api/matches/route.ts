@@ -33,8 +33,7 @@ export async function GET(request: NextRequest) {
     const parsedMatches = matches.map(match => ({
       ...match,
       maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
-      map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {},
-      map_codes_supported: Boolean(match.map_codes_supported)
+      map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
     }));
     
     return NextResponse.json(parsedMatches);
@@ -120,8 +119,7 @@ export async function POST(request: NextRequest) {
     const parsedMatch = {
       ...(match || {}),
       maps: match?.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
-      map_codes: match?.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {},
-      map_codes_supported: Boolean(match?.map_codes_supported)
+      map_codes: match?.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
     };
 
     // DEBUG: Log what data we received

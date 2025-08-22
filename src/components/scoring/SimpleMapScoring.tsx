@@ -132,6 +132,26 @@ export function SimpleMapScoring({
     fetchMatchGames();
   }, [matchId]);
 
+  const getMaxScroll = useCallback(() => {
+    if (!containerRef.current) return 0;
+    const containerWidth = containerRef.current.offsetWidth;
+    const totalWidth = matchGames.length * CARD_WIDTH;
+    return Math.max(0, totalWidth - containerWidth);
+  }, [matchGames.length]);
+
+  const scrollToMap = useCallback((gameIndex: number) => {
+    if (!containerRef.current) return;
+    
+    const containerWidth = containerRef.current.offsetWidth;
+    const cardPosition = gameIndex * CARD_WIDTH;
+    const centerPosition = cardPosition - (containerWidth / 2) + (CARD_WIDTH / 2);
+    
+    const maxScroll = getMaxScroll();
+    const targetScroll = Math.max(0, Math.min(maxScroll, centerPosition));
+    
+    setScrollPosition(targetScroll);
+  }, [getMaxScroll, setScrollPosition]);
+
   // Auto-scroll to selected map when it changes
   useEffect(() => {
     if (selectedGameId && matchGames.length > 0) {
@@ -184,13 +204,6 @@ export function SimpleMapScoring({
   };
 
   
-  const getMaxScroll = useCallback(() => {
-    if (!containerRef.current) return 0;
-    const containerWidth = containerRef.current.offsetWidth;
-    const totalWidth = matchGames.length * CARD_WIDTH;
-    return Math.max(0, totalWidth - containerWidth);
-  }, [matchGames.length]);
-
   const handleScrollLeft = () => {
     setScrollPosition(Math.max(0, scrollPosition - CARD_WIDTH));
   };
@@ -199,19 +212,6 @@ export function SimpleMapScoring({
     const maxScroll = getMaxScroll();
     setScrollPosition(Math.min(maxScroll, scrollPosition + CARD_WIDTH));
   };
-
-  const scrollToMap = useCallback((gameIndex: number) => {
-    if (!containerRef.current) return;
-    
-    const containerWidth = containerRef.current.offsetWidth;
-    const cardPosition = gameIndex * CARD_WIDTH;
-    const centerPosition = cardPosition - (containerWidth / 2) + (CARD_WIDTH / 2);
-    
-    const maxScroll = getMaxScroll();
-    const targetScroll = Math.max(0, Math.min(maxScroll, centerPosition));
-    
-    setScrollPosition(targetScroll);
-  }, [getMaxScroll, setScrollPosition]);
 
   const handleTeamWin = async (winner: 'team1' | 'team2') => {
     if (!selectedGame) return;
