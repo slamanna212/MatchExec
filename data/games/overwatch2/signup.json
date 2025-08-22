@@ -1,0 +1,30 @@
+{
+  "fields": [
+    {
+      "id": "battlenet_name",
+      "type": "text",
+      "label": "Battle.net Name",
+      "placeholder": "PlayerName#1234",
+      "required": true
+    },
+    {
+      "id": "roles",
+      "type": "text",
+      "label": "Preferred Roles",
+      "placeholder": "Tank, DPS, Support",
+      "required": true
+    },
+    {
+      "id": "competitive_rank",
+      "type": "largetext",
+      "label": "Most Recent Competitive Rank",
+      "placeholder": "e.g., Diamond Support, Bronze DPS",
+      "required": true,
+      "helpText": "Enter your most recent season high competitive rank."
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}

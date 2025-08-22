@@ -1,0 +1,38 @@
+{
+  "fields": [
+    {
+      "id": "riot_id",
+      "type": "text",
+      "label": "Riot ID",
+      "placeholder": "PlayerName#TAG",
+      "required": true
+    },
+    {
+      "id": "preferred_agents",
+      "type": "text",
+      "label": "Preferred Agents",
+      "placeholder": "Jett, Phoenix, Sage",
+      "required": true
+    },
+    {
+      "id": "current_rank",
+      "type": "largetext",
+      "label": "Current Competitive Rank",
+      "placeholder": "e.g., Gold 2, Platinum 1, or Unranked",
+      "required": true,
+      "helpText": "Enter your current competitive rank or Unranked if you haven't played ranked yet."
+    },
+    {
+      "id": "role_preference",
+      "type": "text",
+      "label": "Role Preference",
+      "placeholder": "Duelist, Controller, Initiator, Sentinel",
+      "required": false,
+      "helpText": "What role do you prefer to play?"
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+} 

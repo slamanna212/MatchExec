@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
-import { SchedulerSettings } from '../../../../shared/types';
+import { SchedulerSettings } from '@/shared/types';
 
 export async function GET() {
   try {
@@ -12,10 +12,9 @@ export async function GET() {
     
     if (!settings) {
       return NextResponse.json({
-        match_check_cron: '0 */5 * * * *',
-        reminder_check_cron: '0 0 */4 * * *',
+        match_check_cron: '0 */1 * * * *',
         cleanup_check_cron: '0 0 2 * * *',
-        report_generation_cron: '0 0 0 * * 0'
+        channel_refresh_cron: '0 0 0 * * *'
       });
     }
     
@@ -37,9 +36,8 @@ export async function PUT(request: NextRequest) {
     // Validate cron expressions (basic validation)
     const cronFields = [
       'match_check_cron',
-      'reminder_check_cron', 
       'cleanup_check_cron',
-      'report_generation_cron'
+      'channel_refresh_cron'
     ];
     
     for (const field of cronFields) {
@@ -57,17 +55,15 @@ export async function PUT(request: NextRequest) {
     await db.run(
       `UPDATE scheduler_settings 
        SET match_check_cron = ?, 
-           reminder_check_cron = ?, 
            cleanup_check_cron = ?, 
-           report_generation_cron = ?,
+           channel_refresh_cron = ?,
            enabled = 1,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
       [
         body.match_check_cron,
-        body.reminder_check_cron,
         body.cleanup_check_cron,
-        body.report_generation_cron
+        body.channel_refresh_cron
       ]
     );
     

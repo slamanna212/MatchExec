@@ -42,19 +42,101 @@ export interface Match {
   guild_id: string;
   channel_id: string;
   max_participants: number;
-  status: 'created' | 'registration' | 'ongoing' | 'completed' | 'cancelled';
+  match_format: MatchFormat;
+  status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   start_date?: Date;
   end_date?: Date;
   created_at: Date;
   updated_at: Date;
 }
 
+// Database row types (includes fields not in the base interface)
+export interface MatchDbRow extends Match {
+  maps?: string; // JSON string in database
+  map_codes?: string; // JSON string storing map codes
+  event_image_url?: string;
+  rules?: string;
+  rounds?: number;
+  livestream_link?: string;
+  player_notifications?: number; // SQLite stores booleans as integers
+  announcement_voice_channel?: string;
+}
+
+export interface ParticipantDbRow {
+  id: string;
+  match_id: string;
+  user_id: string;
+  discord_user_id: string;
+  username: string;
+  joined_at: Date;
+  signup_data?: string; // JSON string
+}
+
+export interface GameDbRow {
+  id: string;
+  name: string;
+  max_signups?: number;
+  map_codes_supported?: number; // SQLite stores booleans as integers
+  [key: string]: unknown;
+}
+
+export interface DiscordSettingsDbRow {
+  application_id?: string;
+  bot_token?: string;
+  guild_id?: string;
+  announcement_role_id?: string;
+  mention_everyone?: number; // SQLite stores booleans as integers
+  event_duration_minutes?: number;
+  match_reminder_minutes?: number;
+  player_reminder_minutes?: number;
+  announcer_voice?: string;
+  voice_announcements_enabled?: number; // SQLite stores booleans as integers
+  [key: string]: unknown;
+}
+
+export interface DiscordChannel {
+  id: string;
+  discord_channel_id: string;
+  channel_name?: string;
+  channel_type: 'text' | 'voice';
+  send_announcements: boolean;
+  send_reminders: boolean;
+  send_match_start: boolean;
+  send_signup_updates: boolean;
+  last_name_refresh?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscordSettings {
+  bot_token: string;
+  guild_id: string;
+  announcement_role_id?: string;
+  mention_everyone?: boolean;
+  event_duration_minutes?: number;
+  match_reminder_minutes?: number;
+  player_reminder_minutes?: number;
+  announcer_voice?: string;
+  voice_announcements_enabled?: boolean;
+}
+
+// Match progress constants
+export const MATCH_FLOW_STEPS = {
+  created: { name: 'Creation', progress: 20 },
+  gather: { name: 'Gather', progress: 40 },
+  assign: { name: 'Assign', progress: 60 },
+  battle: { name: 'Battle', progress: 80 },
+  complete: { name: 'Complete', progress: 100 },
+  cancelled: { name: 'Cancelled', progress: 0 }
+} as const;
+
 export interface MatchParticipant {
   id: string;
   match_id: string;
   user_id: string;
   username: string;
-  joined_at: Date;
+  joined_at: Date | string;
+  signup_data?: Record<string, unknown>;
 }
 
 export interface MatchGame {
@@ -63,7 +145,7 @@ export interface MatchGame {
   round: number;
   participant1_id: string;
   participant2_id: string;
-  winner_id?: string;
+  winner_id?: string; // 'team1', 'team2', or null
   map_id?: string;
   mode_id?: string;
   status: 'pending' | 'ongoing' | 'completed';
@@ -92,6 +174,7 @@ export interface GameDataJson {
   description: string;
   minPlayers: number;
   maxPlayers: number;
+  mapCodesSupported?: boolean;
   assets: {
     iconUrl: string;
   };
@@ -110,13 +193,53 @@ export interface MapDataJson {
   imageUrl?: string;
 }
 
+// Simplified scoring system - only track match format and winner
+export type MatchFormat = 'casual' | 'competitive';
+
+// Simple match result
+export interface MatchResult {
+  matchId: string;
+  gameId: string; // match_games.id
+  winner: 'team1' | 'team2';
+  completedAt: Date;
+}
+
+// Map codes type
+export interface MapCodes {
+  [mapId: string]: string; // mapId -> code (up to 24 characters)
+}
+
+// Signup field types
+export interface SignupField {
+  id: string;
+  label: string;
+  type: string;
+}
+
+export interface SignupConfig {
+  fields: SignupField[];
+}
+
+// Reminder types
+export interface ReminderData {
+  id: string;
+  match_id: string;
+  reminder_time: string;
+  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
+  error_message?: string;
+  created_at: string;
+  sent_at?: string;
+  processed_at?: string;
+  type: 'discord_general' | 'discord_match' | 'discord_player' | 'timed_announcement';
+  description?: string;
+}
+
 // Scheduler settings types
 export interface SchedulerSettings {
   id: number;
   match_check_cron: string;
-  reminder_check_cron: string;
   cleanup_check_cron: string;
-  report_generation_cron: string;
+  channel_refresh_cron: string;
   enabled: boolean;
   created_at: Date;
   updated_at: Date;

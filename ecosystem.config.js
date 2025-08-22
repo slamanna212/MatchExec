@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'matchexec-web',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: 'server.js',
       env: {
         NODE_ENV: 'production',
         PORT: 3000
@@ -11,21 +11,24 @@ module.exports = {
     },
     {
       name: 'discord-bot',
-      script: './processes/discord-bot/index.js',
+      script: 'npx',
+      args: 'tsx ./processes/discord-bot/index.ts',
       env: {
         NODE_ENV: 'production'
       }
     },
     {
       name: 'scheduler',
-      script: './processes/scheduler/index.js',
+      script: 'npx',
+      args: 'tsx ./processes/scheduler/index.ts',
       env: {
         NODE_ENV: 'production'
       }
     },
     {
       name: 'worker',
-      script: './processes/worker/index.js',
+      script: 'npx',
+      args: 'tsx ./processes/worker/index.ts',
       env: {
         NODE_ENV: 'production'
       }

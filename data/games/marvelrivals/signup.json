@@ -1,0 +1,30 @@
+{
+  "fields": [
+    {
+      "id": "username",
+      "type": "text",
+      "label": "Username",
+      "placeholder": "PlayerName",
+      "required": true
+    },
+    {
+      "id": "roles",
+      "type": "text",
+      "label": "Preferred Roles",
+      "placeholder": "Vanguard, Duelist, etc",
+      "required": true
+    },
+    {
+      "id": "competitive_rank",
+      "type": "largetext",
+      "label": "Most Recent Competitive Rank",
+      "placeholder": "e.g., Silver Dualist, Eternity DPS",
+      "required": true,
+      "helpText": "Enter your most recent season high competitive rank."
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}

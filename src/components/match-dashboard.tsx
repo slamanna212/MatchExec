@@ -1,96 +1,265 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Card, 
   Text, 
   Button, 
-  Badge,
   Avatar,
   Divider,
   Loader,
   Group,
   Stack,
   Grid,
-  Modal,
-  Image
+  RingProgress
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match } from '../../shared/types';
+import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
 
-interface GameWithIcon {
-  id: string;
-  name: string;
-  genre: string;
-  developer: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  iconUrl: string;
-  coverUrl: string;
-  mapCount: number;
-  modeCount: number;
-}
-import { CreateMatchModal } from './create-match-modal';
+import { AssignPlayersModal } from './assign-players-modal';
+import { ScoringModal } from './scoring/ScoringModal';
 
-interface MatchWithGame extends Match {
+import { MatchDetailsModal } from './match-details-modal';
+
+// Utility function to properly convert SQLite UTC timestamps to Date objects
+const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
+  if (!timestamp) return null;
+  
+  // Check if timestamp already includes timezone info (Z, +offset, or -offset at the end)
+  // Note: SQLite date format "2025-08-09 00:40:16" contains dashes but they're part of the date, not timezone
+  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
+    return new Date(timestamp);
+  }
+  
+  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
+  // We need to treat this as UTC, so append 'Z'
+  return new Date(timestamp + 'Z');
+};
+
+interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
   game_icon?: string;
+  game_color?: string;
   rules?: string;
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  created_at: string;
+  updated_at: string;
+  start_date?: string;
+  end_date?: string;
 }
 
+interface MatchCardProps {
+  match: MatchWithGame;
+  mapNames: {[key: string]: string};
+  onViewDetails: (match: MatchWithGame) => void;
+  onAssignPlayers: (match: MatchWithGame) => void;
+  formatMapName: (mapId: string) => string;
+  getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
+}
+
+const MatchCard = memo(({ 
+  match, 
+  mapNames, 
+  onViewDetails, 
+  onAssignPlayers, 
+  formatMapName, 
+  getNextStatusButton 
+}: MatchCardProps) => {
+  return (
+    <Card 
+      shadow="sm" 
+      padding="lg" 
+      radius="md" 
+      withBorder
+      style={{ cursor: 'pointer' }}
+      onClick={() => onViewDetails(match)}
+    >
+      <Group mb="md">
+        <Avatar
+          src={match.game_icon}
+          alt={match.game_name}
+          size="md"
+        />
+        <Stack gap="xs" style={{ flex: 1 }}>
+          <Text fw={600}>{match.name}</Text>
+          <Text size="sm" c="dimmed">{match.game_name}</Text>
+        </Stack>
+        <RingProgress
+          size={50}
+          thickness={4}
+          sections={[
+            { 
+              value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
+              color: match.game_color || '#95a5a6'
+            }
+          ]}
+        />
+      </Group>
+      
+      <Divider mb="md" />
+      
+      <Stack gap="xs" style={{ minHeight: '140px' }}>
+        <div style={{ minHeight: '20px' }}>
+          {match.description && (
+            <Text size="sm" c="dimmed">{match.description}</Text>
+          )}
+        </div>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Rules:</Text>
+          <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
+        </Group>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Rounds:</Text>
+          <Text size="sm">{match.rounds || 'Not specified'}</Text>
+        </Group>
+        
+        <Group justify="space-between" align="center">
+          <Text size="sm" c="dimmed">Maps:</Text>
+          <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
+            {match.maps && match.maps.length > 0 ? (
+              match.maps.length > 1
+                ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
+                : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+            ) : (
+              'None selected'
+            )}
+          </Text>
+        </Group>
+        
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Max Participants:</Text>
+          <Text size="sm">{match.max_participants}</Text>
+        </Group>
+        <Group justify="space-between">
+          <Text size="sm" c="dimmed">Created:</Text>
+          <Text size="sm">{parseDbTimestamp(match.created_at)?.toLocaleDateString('en-US') || 'N/A'}</Text>
+        </Group>
+      </Stack>
+      
+      <Group mt="md" gap="xs">
+        {(match.status === 'gather' || match.status === 'assign') && (
+          <Button 
+            size="sm" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssignPlayers(match);
+            }}
+            style={{ flex: 1 }}
+          >
+            Assign
+          </Button>
+        )}
+        {getNextStatusButton(match)}
+      </Group>
+    </Card>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison to ensure re-render when match status or other critical props change
+  return (
+    prevProps.match.id === nextProps.match.id &&
+    prevProps.match.status === nextProps.match.status &&
+    prevProps.match.name === nextProps.match.name &&
+    prevProps.match.updated_at === nextProps.match.updated_at &&
+    prevProps.match.game_color === nextProps.match.game_color &&
+    JSON.stringify(prevProps.mapNames) === JSON.stringify(nextProps.mapNames)
+  );
+});
+
+MatchCard.displayName = 'MatchCard';
+
 export function MatchDashboard() {
+  const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
-  const [games, setGames] = useState<GameWithIcon[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
+  const [participants, setParticipants] = useState<{
+    id: string;
+    user_id: string;
+    username: string;
+    joined_at: string;
+    signup_data: Record<string, unknown>;
+  }[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
+  const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
+  const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
+  const [scoringModalOpen, setScoringModalOpen] = useState(false);
+  const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<MatchWithGame | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
+  const [reminders, setReminders] = useState<ReminderData[]>([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
 
-  useEffect(() => {
-    fetchMatches();
-    fetchGames();
-  }, []);
-
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async (silent = false) => {
     try {
       const response = await fetch('/api/matches');
       if (response.ok) {
         const data = await response.json();
-        setMatches(data);
+        // Only update if data actually changed to prevent unnecessary rerenders
+        setMatches(prevMatches => {
+          // More efficient comparison than JSON.stringify for arrays
+          if (prevMatches.length !== data.length) {
+            return data;
+          }
+          
+          // Check if any match has changed by comparing key properties
+          const hasChanges = data.some((match: MatchWithGame, index: number) => {
+            const prevMatch = prevMatches[index];
+            return !prevMatch || 
+              match.id !== prevMatch.id ||
+              match.status !== prevMatch.status ||
+              match.name !== prevMatch.name ||
+              match.created_at !== prevMatch.created_at ||
+              match.updated_at !== prevMatch.updated_at;
+          });
+          
+          return hasChanges ? data : prevMatches;
+        });
       }
     } catch (error) {
       console.error('Error fetching matches:', error);
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchGames = async () => {
-    try {
-      const response = await fetch('/api/games');
-      if (response.ok) {
-        const data = await response.json();
-        setGames(data);
+      if (!silent) {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching games:', error);
     }
-  };
+  }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'created': return 'gray';
-      case 'registration': return 'blue';
-      case 'ongoing': return 'yellow';
-      case 'completed': return 'green';
-      case 'cancelled': return 'red';
-      default: return 'gray';
-    }
-  };
+  // Fetch UI settings on component mount
+  useEffect(() => {
+    const fetchUISettings = async () => {
+      try {
+        const response = await fetch('/api/settings/ui');
+        if (response.ok) {
+          const uiSettings = await response.json();
+          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
+        }
+      } catch (error) {
+        console.error('Error fetching UI settings:', error);
+      }
+    };
+
+    fetchMatches();
+    fetchUISettings();
+  }, [fetchMatches]);
+
+  // Set up auto-refresh with configurable interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchMatches(true); // Silent refresh to prevent loading states
+    }, refreshInterval * 1000);
+
+    // Cleanup interval on unmount or when refreshInterval changes
+    return () => clearInterval(intervalId);
+  }, [refreshInterval, fetchMatches]);
+
+
+
 
   const formatMapName = (mapId: string) => {
     // Convert map ID to proper display name
@@ -112,7 +281,7 @@ export function MatchDashboard() {
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
         
-        maps.forEach((map: any) => {
+        maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
           mapNamesObj[map.id] = map.name;
           mapDetailsObj[map.id] = {
             name: map.name,
@@ -144,15 +313,119 @@ export function MatchDashboard() {
     });
   }, [matches]);
 
-  const handleMatchCreated = (match: Match) => {
-    // Add the new match to the top of the list
-    setMatches(prev => [match, ...prev]);
+  const handleCreateMatch = () => {
+    router.push('/matches/create');
   };
 
-  const handleViewDetails = (match: MatchWithGame) => {
+  const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
+    if (!silent) {
+      setParticipantsLoading(true);
+    }
+    try {
+      const response = await fetch(`/api/matches/${matchId}/participants`);
+      if (response.ok) {
+        const data = await response.json();
+        // Only update if data actually changed
+        setParticipants(prevParticipants => {
+          // More efficient comparison for participants array
+          if (prevParticipants.length !== data.participants.length) {
+            return data.participants;
+          }
+          
+          const hasChanges = data.participants.some((participant: {
+            id: string;
+            user_id: string;
+            username: string;
+            joined_at: string;
+            signup_data: Record<string, unknown>;
+          }, index: number) => {
+            const prevParticipant = prevParticipants[index];
+            return !prevParticipant ||
+              participant.id !== prevParticipant.id ||
+              participant.username !== prevParticipant.username ||
+              participant.joined_at !== prevParticipant.joined_at;
+          });
+          
+          return hasChanges ? data.participants : prevParticipants;
+        });
+        setSignupConfig(prevConfig => {
+          // Simple reference check for signup config since it rarely changes
+          if (!prevConfig && !data.signupConfig) return prevConfig;
+          if (!prevConfig || !data.signupConfig) return data.signupConfig;
+          
+          // Compare field count as a quick check
+          if (prevConfig.fields.length !== data.signupConfig.fields.length) {
+            return data.signupConfig;
+          }
+          
+          return prevConfig;
+        });
+      } else {
+        console.error('Failed to fetch participants');
+        if (!silent) {
+          setParticipants([]);
+          setSignupConfig(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching participants:', error);
+      if (!silent) {
+        setParticipants([]);
+        setSignupConfig(null);
+      }
+    } finally {
+      if (!silent) {
+        setParticipantsLoading(false);
+      }
+    }
+  }, []);
+
+  const fetchReminders = useCallback(async (matchId: string, silent = false) => {
+    if (!silent) {
+      setRemindersLoading(true);
+    }
+    try {
+      const response = await fetch(`/api/matches/${matchId}/reminders`);
+      if (response.ok) {
+        const data = await response.json();
+        setReminders(data.reminders || []);
+      } else {
+        console.error('Failed to fetch reminders');
+        if (!silent) {
+          setReminders([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching reminders:', error);
+      if (!silent) {
+        setReminders([]);
+      }
+    } finally {
+      if (!silent) {
+        setRemindersLoading(false);
+      }
+    }
+  }, []);
+
+  const handleViewDetails = useCallback((match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
-  };
+    fetchParticipants(match.id);
+    fetchReminders(match.id);
+  }, [fetchParticipants, fetchReminders]);
+
+  // Auto-refresh participants and reminders when details modal is open
+  useEffect(() => {
+    if (detailsModalOpen && selectedMatch) {
+      // Use the same refresh interval for participants and reminders
+      const participantsInterval = setInterval(() => {
+        fetchParticipants(selectedMatch.id, true); // Silent refresh
+        fetchReminders(selectedMatch.id, true); // Silent refresh
+      }, refreshInterval * 1000);
+
+      return () => clearInterval(participantsInterval);
+    }
+  }, [detailsModalOpen, selectedMatch, refreshInterval, fetchParticipants, fetchReminders]);
 
   const handleDeleteMatch = async (matchId: string) => {
     try {
@@ -172,12 +445,144 @@ export function MatchDashboard() {
     }
   };
 
+  const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/transition`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newStatus }),
+      });
+
+      if (response.ok) {
+        const updatedMatch = await response.json();
+        // Update the match in the list
+        setMatches(prev => prev.map(match => 
+          match.id === matchId ? updatedMatch : match
+        ));
+        
+        if (newStatus === 'gather') {
+          console.log(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
+        }
+      } else {
+        console.error('Failed to transition match status');
+      }
+    } catch (error) {
+      console.error('Error transitioning match status:', error);
+    }
+  }, []);
+
+  const getNextStatusButton = useCallback((match: MatchWithGame) => {
+    switch (match.status) {
+      case 'created':
+        return (
+          <Button 
+            size="sm" 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'gather');
+            }}
+            style={{ flex: 1 }}
+          >
+            Start Signups
+          </Button>
+        );
+      case 'gather':
+        return (
+          <Button 
+            size="sm" 
+            color="orange"
+            onClick={(e) => {
+              e.stopPropagation();
+              modals.openConfirmModal({
+                title: 'Close Signups',
+                children: (
+                  <Text size="sm">
+                    Are you sure you want to close signups for &quot;{match.name}&quot;? This will prevent new players from joining the match.
+                  </Text>
+                ),
+                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+                confirmProps: { color: 'orange' },
+                onConfirm: () => handleStatusTransition(match.id, 'assign'),
+              });
+            }}
+            style={{ flex: 1 }}
+          >
+            Close Signups
+          </Button>
+        );
+      case 'assign':
+        return (
+          <Button 
+            size="sm" 
+            color="yellow"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(match.id, 'battle');
+            }}
+            style={{ flex: 1 }}
+          >
+            Start Match
+          </Button>
+        );
+      case 'battle':
+        return (
+          <Group gap="xs" style={{ flex: 1 }}>
+            <Button 
+              size="sm" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedMatchForScoring(match);
+                setScoringModalOpen(true);
+              }}
+              style={{ flex: 1 }}
+            >
+              Scoring
+            </Button>
+            <Button 
+              size="sm" 
+              color="red"
+              onClick={(e) => {
+                e.stopPropagation();
+                modals.openConfirmModal({
+                  title: 'End Match',
+                  children: (
+                    <Text size="sm">
+                      Are you sure you want to end the match &quot;{match.name}&quot;? This will mark the match as complete.
+                    </Text>
+                  ),
+                  labels: { confirm: 'End Match', cancel: 'Cancel' },
+                  confirmProps: { color: 'red' },
+                  onConfirm: () => handleStatusTransition(match.id, 'complete'),
+                });
+              }}
+              style={{ flex: 1 }}
+            >
+              End Match
+            </Button>
+          </Group>
+        );
+      case 'complete':
+        return null; // No further transitions
+      case 'cancelled':
+        return null; // No further transitions
+      default:
+        return null;
+    }
+  }, [handleStatusTransition]);
+
+  const handleAssignPlayers = (match: MatchWithGame) => {
+    setSelectedMatchForAssignment(match);
+    setAssignPlayersModalOpen(true);
+  };
+
   const confirmDelete = (match: MatchWithGame) => {
     modals.openConfirmModal({
       title: 'Delete Match',
       children: (
         <Text size="sm">
-          Are you sure you want to delete "{match.name}"? This action cannot be undone.
+          Are you sure you want to delete &quot;{match.name}&quot;? This action cannot be undone.
         </Text>
       ),
       labels: { confirm: 'Delete', cancel: 'Cancel' },
@@ -185,6 +590,53 @@ export function MatchDashboard() {
       onConfirm: () => handleDeleteMatch(match.id),
     });
   };
+
+  // Memoize expensive match card rendering
+  // Handle score submission
+  const handleResultSubmit = async (result: MatchResult) => {
+    if (!selectedMatchForScoring) return;
+
+    try {
+      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${result.gameId}/result`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(result),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save result');
+      }
+      
+      // Refresh matches to show updated status
+      fetchMatches();
+      
+      // Close modal
+      setScoringModalOpen(false);
+      setSelectedMatchForScoring(null);
+    } catch (error) {
+      console.error('Error submitting result:', error);
+      throw error; // Re-throw to let the modal handle the error display
+    }
+  };
+
+  const memoizedMatchCards = useMemo(() => {
+    return matches.map((match) => (
+      <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
+        <MatchCard 
+          match={match}
+          mapNames={mapNames}
+          onViewDetails={handleViewDetails}
+          onAssignPlayers={handleAssignPlayers}
+          formatMapName={formatMapName}
+          getNextStatusButton={getNextStatusButton}
+        />
+      </Grid.Col>
+    ));
+  }, [matches, mapNames, handleViewDetails, getNextStatusButton]);
+
 
   if (loading) {
     return (
@@ -202,8 +654,8 @@ export function MatchDashboard() {
           <Text c="dimmed" mt="xs">Manage and view all matches</Text>
         </div>
         <Button 
-          size="lg"
-          onClick={() => setCreateModalOpen(true)}
+          size="md"
+          onClick={handleCreateMatch}
         >
           Create Match
         </Button>
@@ -215,246 +667,58 @@ export function MatchDashboard() {
         <Card p="xl">
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
-            <Text c="dimmed" mb="md">
-              Create your first match to get started
+            <Text c="dimmed">
+              Create a match to get started
             </Text>
-            <Button 
-              onClick={() => setCreateModalOpen(true)}
-            >
-              Create Match
-            </Button>
           </Stack>
         </Card>
       ) : (
         <Grid>
-          {matches.map((match) => (
-            <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
-              <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Group mb="md">
-                  <Avatar
-                    src={match.game_icon}
-                    alt={match.game_name}
-                    size="md"
-                  />
-                  <Stack gap="xs" style={{ flex: 1 }}>
-                    <Text fw={600}>{match.name}</Text>
-                    <Text size="sm" c="dimmed">{match.game_name}</Text>
-                  </Stack>
-                  <Badge 
-                    color={getStatusColor(match.status)} 
-                    size="sm"
-                  >
-                    {match.status}
-                  </Badge>
-                </Group>
-                
-                <Divider mb="md" />
-                
-                <Stack gap="xs" style={{ minHeight: '140px' }}>
-                  <div style={{ minHeight: '20px' }}>
-                    {match.description && (
-                      <Text size="sm" c="dimmed">{match.description}</Text>
-                    )}
-                  </div>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Rules:</Text>
-                    <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
-                  </Group>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Rounds:</Text>
-                    <Text size="sm">{match.rounds || 'Not specified'}</Text>
-                  </Group>
-                  
-                  <Group justify="space-between" align="center">
-                    <Text size="sm" c="dimmed">Maps:</Text>
-                    <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
-                      {match.maps && match.maps.length > 0 ? (
-                        match.maps.length > 1
-                          ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
-                          : mapNames[match.maps[0]] || formatMapName(match.maps[0])
-                      ) : (
-                        'None selected'
-                      )}
-                    </Text>
-                  </Group>
-                  
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Max Participants:</Text>
-                    <Text size="sm">{match.max_participants}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">Created:</Text>
-                    <Text size="sm">{new Date(match.created_at).toLocaleDateString('en-US')}</Text>
-                  </Group>
-                </Stack>
-                
-                <Group mt="md" gap="xs">
-                  <Button 
-                    size="sm" 
-                    variant="light" 
-                    style={{ flex: 1 }}
-                    onClick={() => handleViewDetails(match)}
-                  >
-                    View Details
-                  </Button>
-                  {match.status === 'created' && (
-                    <Button size="sm">
-                      Start Registration
-                    </Button>
-                  )}
-                </Group>
-              </Card>
-            </Grid.Col>
-          ))}
+          {memoizedMatchCards}
         </Grid>
       )}
 
-      <CreateMatchModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onMatchCreated={handleMatchCreated}
-        games={games}
+
+      <AssignPlayersModal
+        isOpen={assignPlayersModalOpen}
+        onClose={() => setAssignPlayersModalOpen(false)}
+        matchId={selectedMatchForAssignment?.id || ''}
+        matchName={selectedMatchForAssignment?.name || ''}
       />
 
-      <Modal
+      {selectedMatchForScoring && (
+        <ScoringModal
+          opened={scoringModalOpen}
+          onClose={() => {
+            setScoringModalOpen(false);
+            setSelectedMatchForScoring(null);
+          }}
+          matchId={selectedMatchForScoring.id}
+          gameId={selectedMatchForScoring.game_id}
+          matchFormat={selectedMatchForScoring.match_format || 'casual'}
+          onResultSubmit={handleResultSubmit}
+        />
+      )}
+
+      <MatchDetailsModal
         opened={detailsModalOpen}
         onClose={() => setDetailsModalOpen(false)}
         title="Match Details"
-        size="lg"
-      >
-        {selectedMatch && (
-          <Stack gap="md">
-            <Group>
-              <Avatar
-                src={selectedMatch.game_icon}
-                alt={selectedMatch.game_name}
-                size="lg"
-              />
-              <Stack gap="xs">
-                <Text size="xl" fw={600}>{selectedMatch.name}</Text>
-                <Text size="md" c="dimmed">{selectedMatch.game_name}</Text>
-                <Badge color={getStatusColor(selectedMatch.status)} size="sm">
-                  {selectedMatch.status}
-                </Badge>
-              </Stack>
-            </Group>
-
-            <Divider />
-
-            <Stack gap="sm">
-              {selectedMatch.description && (
-                <div>
-                  <Text size="sm" fw={500} c="dimmed">Description:</Text>
-                  <Text size="sm">{selectedMatch.description}</Text>
-                </div>
-              )}
-
-              {selectedMatch.rules && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Rules:</Text>
-                  <Text size="sm" tt="capitalize">{selectedMatch.rules}</Text>
-                </Group>
-              )}
-
-              {selectedMatch.rounds && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Rounds:</Text>
-                  <Text size="sm">{selectedMatch.rounds}</Text>
-                </Group>
-              )}
-
-              {selectedMatch.maps && selectedMatch.maps.length > 0 && (
-                <div>
-                  <Text size="sm" fw={500} c="dimmed" mb="md">Maps:</Text>
-                  <Grid>
-                    {selectedMatch.maps.map(mapId => {
-                      const mapDetail = mapDetails[mapId];
-                      return (
-                        <Grid.Col key={mapId} span={12}>
-                          <Card shadow="sm" padding="sm" radius="md" withBorder>
-                            <Group wrap="nowrap" align="center" gap="md">
-                              <div style={{ width: '50%' }}>
-                                <Image
-                                  src={mapDetail?.imageUrl}
-                                  alt={mapDetail?.name || formatMapName(mapId)}
-                                  height={60}
-                                  radius="sm"
-                                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                                />
-                              </div>
-                              <div style={{ width: '50%' }}>
-                                <Text fw={500} size="sm" lineClamp={1}>
-                                  {mapDetail?.name || formatMapName(mapId)}
-                                </Text>
-                                {mapDetail?.location && (
-                                  <Text size="xs" c="dimmed" lineClamp={1}>
-                                    {mapDetail.location}
-                                  </Text>
-                                )}
-                                {mapDetail?.modeName && (
-                                  <Badge size="xs" variant="light" mt={2}>
-                                    {mapDetail.modeName}
-                                  </Badge>
-                                )}
-                              </div>
-                            </Group>
-                          </Card>
-                        </Grid.Col>
-                      );
-                    })}
-                  </Grid>
-                </div>
-              )}
-
-              {selectedMatch.livestream_link && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Livestream:</Text>
-                  <Text size="sm" component="a" href={selectedMatch.livestream_link} target="_blank">
-                    View Stream
-                  </Text>
-                </Group>
-              )}
-
-              <Group justify="space-between">
-                <Text size="sm" fw={500} c="dimmed">Max Participants:</Text>
-                <Text size="sm">{selectedMatch.max_participants}</Text>
-              </Group>
-
-              {selectedMatch.start_date && (
-                <Group justify="space-between">
-                  <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
-                  <Text size="sm">{new Date(selectedMatch.start_date).toLocaleString('en-US')}</Text>
-                </Group>
-              )}
-
-              <Group justify="space-between">
-                <Text size="sm" fw={500} c="dimmed">Created:</Text>
-                <Text size="sm">{new Date(selectedMatch.created_at).toLocaleString('en-US')}</Text>
-              </Group>
-            </Stack>
-
-            <Divider />
-            
-            <Group justify="space-between" mt="md">
-              <Button
-                color="red"
-                variant="light"
-                onClick={() => confirmDelete(selectedMatch)}
-              >
-                Delete Match
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDetailsModalOpen(false)}
-              >
-                Close
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Modal>
+        selectedMatch={selectedMatch}
+        participants={participants}
+        participantsLoading={participantsLoading}
+        signupConfig={signupConfig}
+        reminders={reminders}
+        remindersLoading={remindersLoading}
+        mapDetails={mapDetails}
+        formatMapName={formatMapName}
+        parseDbTimestamp={parseDbTimestamp}
+        showTabs={true}
+        showDeleteButton={true}
+        showAssignButton={true}
+        onDelete={(match) => confirmDelete(match)}
+        onAssign={(match) => handleAssignPlayers(match)}
+      />
     </div>
   );
 }

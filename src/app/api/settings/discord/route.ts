@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { DiscordSettingsDbRow } from '@/shared/types';
 
 export async function GET() {
   try {
     const db = await getDbInstance();
     
-    const settings = await db.get(`
+    const settings = await db.get<DiscordSettingsDbRow>(` 
       SELECT 
         application_id,
         bot_token,
         guild_id,
-        announcement_channel_id,
-        results_channel_id,
-        participant_role_id,
-        event_duration_minutes
+        announcement_role_id,
+        mention_everyone,
+        event_duration_minutes,
+        match_reminder_minutes,
+        player_reminder_minutes,
+        announcer_voice,
+        voice_announcements_enabled
       FROM discord_settings 
       WHERE id = 1
     `);
@@ -24,18 +28,24 @@ export async function GET() {
       application_id: settings.application_id || '',
       bot_token: settings.bot_token ? '••••••••' : '',
       guild_id: settings.guild_id || '',
-      announcement_channel_id: settings.announcement_channel_id || '',
-      results_channel_id: settings.results_channel_id || '',
-      participant_role_id: settings.participant_role_id || '',
-      event_duration_minutes: settings.event_duration_minutes || 45
+      announcement_role_id: settings.announcement_role_id || '',
+      mention_everyone: Boolean(settings.mention_everyone),
+      event_duration_minutes: settings.event_duration_minutes || 45,
+      match_reminder_minutes: settings.match_reminder_minutes || 10,
+      player_reminder_minutes: settings.player_reminder_minutes || 120,
+      announcer_voice: settings.announcer_voice || 'wrestling-announcer',
+      voice_announcements_enabled: Boolean(settings.voice_announcements_enabled)
     } : {
       application_id: '',
       bot_token: '',
       guild_id: '',
-      announcement_channel_id: '',
-      results_channel_id: '',
-      participant_role_id: '',
-      event_duration_minutes: 45
+      announcement_role_id: '',
+      mention_everyone: false,
+      event_duration_minutes: 45,
+      match_reminder_minutes: 10,
+      player_reminder_minutes: 120,
+      announcer_voice: 'wrestling-announcer',
+      voice_announcements_enabled: false
     };
 
     return NextResponse.json(safeSettings);
@@ -57,44 +67,100 @@ export async function PUT(request: NextRequest) {
       application_id,
       bot_token,
       guild_id,
-      announcement_channel_id,
-      results_channel_id,
-      participant_role_id,
-      event_duration_minutes
+      announcement_role_id,
+      mention_everyone,
+      event_duration_minutes,
+      match_reminder_minutes,
+      player_reminder_minutes,
+      announcer_voice,
+      voice_announcements_enabled
     } = body;
 
-    // Update the settings (there should only be one row with id = 1)
+    // First ensure we have a settings row
     await db.run(`
-      UPDATE discord_settings SET
-        application_id = ?,
-        bot_token = COALESCE(?, bot_token),
-        guild_id = ?,
-        announcement_channel_id = ?,
-        results_channel_id = ?,
-        participant_role_id = ?,
-        event_duration_minutes = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = 1
-    `, [
-      application_id,
-      bot_token === '••••••••' ? null : bot_token, // Don't update if masked
-      guild_id,
-      announcement_channel_id,
-      results_channel_id,
-      participant_role_id,
-      event_duration_minutes || 45
-    ]);
+      INSERT INTO discord_settings (id) VALUES (1)
+      ON CONFLICT(id) DO NOTHING
+    `);
+
+    // Build the update query dynamically to only update provided fields
+    const updateFields = [];
+    const updateValues = [];
+
+    // Always update these fields if provided
+    if (application_id !== undefined) {
+      updateFields.push('application_id = ?');
+      updateValues.push(application_id || ''); // Convert null/undefined to empty string
+    }
+    
+    if (guild_id !== undefined) {
+      updateFields.push('guild_id = ?');
+      updateValues.push(guild_id || ''); // Convert null/undefined to empty string
+    }
+    
+    if (announcement_role_id !== undefined) {
+      updateFields.push('announcement_role_id = ?');
+      updateValues.push(announcement_role_id || '');
+    }
+    
+    if (mention_everyone !== undefined) {
+      updateFields.push('mention_everyone = ?');
+      updateValues.push(mention_everyone ? 1 : 0);
+    }
+    
+    if (event_duration_minutes !== undefined) {
+      updateFields.push('event_duration_minutes = ?');
+      updateValues.push(event_duration_minutes || 45);
+    }
+    
+    if (match_reminder_minutes !== undefined) {
+      updateFields.push('match_reminder_minutes = ?');
+      updateValues.push(match_reminder_minutes || 10);
+    }
+    
+    if (player_reminder_minutes !== undefined) {
+      updateFields.push('player_reminder_minutes = ?');
+      updateValues.push(player_reminder_minutes || 120);
+    }
+    
+    if (announcer_voice !== undefined) {
+      updateFields.push('announcer_voice = ?');
+      updateValues.push(announcer_voice || 'wrestling-announcer');
+    }
+    
+    if (voice_announcements_enabled !== undefined) {
+      updateFields.push('voice_announcements_enabled = ?');
+      updateValues.push(voice_announcements_enabled ? 1 : 0);
+    }
+
+    // Handle bot token separately
+    if (bot_token && bot_token !== '••••••••') {
+      updateFields.push('bot_token = ?');
+      updateValues.push(bot_token);
+    }
+
+    // Always update the timestamp
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+
+    if (updateFields.length > 1) { // More than just the timestamp
+      const updateQuery = `
+        UPDATE discord_settings SET
+          ${updateFields.join(', ')}
+        WHERE id = 1
+      `;
+      
+      await db.run(updateQuery, updateValues);
+    }
 
     // If bot token was updated, trigger bot restart
     if (bot_token && bot_token !== '••••••••') {
       try {
         // Attempt to restart the Discord bot process via PM2
-        const { exec } = require('child_process');
+        const { exec } = await import('child_process');
         const isDev = process.env.NODE_ENV === 'development';
         const processName = isDev ? 'discord-bot-dev' : 'discord-bot';
         
         // First check if the process exists
-        exec(`npx pm2 describe ${processName}`, (error, stdout, stderr) => {
+        exec(`npx pm2 describe ${processName}`, (error) => {
           if (error) {
             // Process doesn't exist, start it
             console.log(`🚀 Starting ${processName} process (not currently running)`);

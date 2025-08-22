@@ -1,0 +1,22 @@
+[
+  {
+    "id": "standard",
+    "name": "Standard",
+    "description": "Standard 5v5 plant/defuse gameplay with first to 13 rounds winning."
+  },
+  {
+    "id": "deathmatch",
+    "name": "Deathmatch",
+    "description": "Free-for-all elimination-based gameplay."
+  },
+  {
+    "id": "escalation",
+    "name": "Escalation",
+    "description": "Team-based progression through different weapon types."
+  },
+  {
+    "id": "workshop",
+    "name": "Workshop",
+    "description": "Custom game modes and community creations."
+  }
+]
