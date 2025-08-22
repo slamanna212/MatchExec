@@ -1,0 +1,17 @@
+.mapNameResponsive {
+  font-size: var(--mantine-font-size-sm);
+}
+
+.locationResponsive {
+  font-size: var(--mantine-font-size-xs);
+}
+
+@media (min-width: 768px) {
+  .mapNameResponsive {
+    font-size: var(--mantine-font-size-md);
+  }
+  
+  .locationResponsive {
+    font-size: var(--mantine-font-size-sm);
+  }
+}

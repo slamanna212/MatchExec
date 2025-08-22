@@ -21,6 +21,7 @@ import {
 import { IconTrophy, IconDeviceFloppy } from '@tabler/icons-react';
 import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
+import responsiveTextClasses from './responsive-text.module.css';
 
 interface ReminderData {
   id: string;
@@ -375,11 +376,11 @@ export function MatchDetailsModal({
                           <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
                             <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                               <div>
-                                <Text fw={500} size="sm" lineClamp={1}>
+                                <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
                                   {mapDetail?.name || formatMapName(mapId)}
                                 </Text>
                                 {mapDetail?.location && (
-                                  <Text size="xs" c="dimmed" lineClamp={1}>
+                                  <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                     {mapDetail.location}
                                   </Text>
                                 )}
@@ -652,11 +653,11 @@ export function MatchDetailsModal({
                               <div style={{ width: '60%', padding: 'var(--mantine-spacing-md)' }}>
                                 <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                                   <div>
-                                    <Text fw={500} size="sm" lineClamp={1}>
+                                    <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
                                       {mapDetail?.name || formatMapName(mapId)}
                                     </Text>
                                     {mapDetail?.location && (
-                                      <Text size="xs" c="dimmed" lineClamp={1}>
+                                      <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                         {mapDetail.location}
                                       </Text>
                                     )}
