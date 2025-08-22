@@ -50,6 +50,16 @@ interface QueuedScoreNotification {
   created_at: string;
 }
 
+interface QueuedVoiceAnnouncement {
+  id: string;
+  match_id: string;
+  announcement_type: 'welcome' | 'nextround' | 'finish';
+  blue_team_voice_channel: string | null;
+  red_team_voice_channel: string | null;
+  first_team: 'blue' | 'red';
+  created_at: string;
+}
+
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
 
@@ -779,6 +789,90 @@ export class QueueProcessor {
     }
   }
 
+  async processVoiceAnnouncementQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
+        SELECT id, match_id, announcement_type, blue_team_voice_channel, 
+               red_team_voice_channel, first_team, created_at
+        FROM discord_voice_announcement_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const announcement of voiceAnnouncements) {
+        try {
+          // Immediately mark as processing to prevent duplicate processing
+          const updateResult = await this.db.run(`
+            UPDATE discord_voice_announcement_queue 
+            SET status = 'processing', updated_at = datetime('now')
+            WHERE id = ? AND status = 'pending'
+          `, [announcement.id]);
+          
+          if (updateResult.changes === 0) {
+            continue;
+          }
+
+          if (!this.voiceHandler) {
+            console.error('❌ VoiceHandler not available');
+            await this.db.run(`
+              UPDATE discord_voice_announcement_queue 
+              SET status = 'failed', completed_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['VoiceHandler not available', announcement.id]);
+            continue;
+          }
+
+          console.log(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
+
+          // Play the team announcements sequentially
+          const result = await this.voiceHandler.playTeamAnnouncements(
+            announcement.blue_team_voice_channel,
+            announcement.red_team_voice_channel,
+            announcement.announcement_type,
+            announcement.first_team
+          );
+
+          if (result.success) {
+            // Update the alternation tracker
+            await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
+
+            // Mark as completed
+            await this.db.run(`
+              UPDATE discord_voice_announcement_queue 
+              SET status = 'completed', completed_at = datetime('now')
+              WHERE id = ?
+            `, [announcement.id]);
+
+            console.log(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_voice_announcement_queue 
+              SET status = 'failed', completed_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, [result.message, announcement.id]);
+
+            console.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
+          
+          // Mark as failed
+          await this.db.run(`
+            UPDATE discord_voice_announcement_queue 
+            SET status = 'failed', completed_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing voice announcement queue:', error);
+    }
+  }
+
   async processAllQueues() {
     await Promise.all([
       this.processAnnouncementQueue(),
@@ -787,6 +881,7 @@ export class QueueProcessor {
       this.processReminderQueue(),
       this.processPlayerReminderQueue(),
       this.processScoreNotificationQueue(),
+      this.processVoiceAnnouncementQueue(),
       this.processDiscordBotRequests()
     ]);
   }

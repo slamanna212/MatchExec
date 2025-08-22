@@ -179,10 +179,13 @@ export async function saveMatchResult(
     await queueScoreNotification(matchGameId, result);
 
     // Set the next pending map to 'ongoing' if it exists
-    await setNextMapToOngoing(result.matchId);
+    const hasNextMap = await setNextMapToOngoing(result.matchId);
 
     // Update match status to complete if all games are done
-    await updateMatchStatusIfComplete(matchGameId);
+    const isMatchComplete = await updateMatchStatusIfComplete(matchGameId);
+
+    // Queue voice announcements based on match state
+    await queueVoiceAnnouncementForScore(result.matchId, hasNextMap, isMatchComplete);
     
   } catch (error) {
     console.error('Error in saveMatchResult:', error);
@@ -224,7 +227,7 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
 /**
  * Set the next pending map to ongoing status
  */
-async function setNextMapToOngoing(matchId: string): Promise<void> {
+async function setNextMapToOngoing(matchId: string): Promise<boolean> {
   const db = await getDbInstance();
   
   try {
@@ -247,12 +250,15 @@ async function setNextMapToOngoing(matchId: string): Promise<void> {
       
       await db.run(updateQuery, [nextMap.id]);
       console.log(`Set next map ${nextMap.id} to ongoing status`);
+      return true; // There is a next map
     } else {
       console.log('No pending maps found to set as ongoing');
+      return false; // No next map
     }
   } catch (error) {
     console.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
+    return false;
   }
 }
 
@@ -334,7 +340,7 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
 /**
  * Update match status to complete if all games are scored
  */
-async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
+async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean> {
   const db = await getDbInstance();
   
   try {
@@ -346,7 +352,7 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
     const matchRow = await db.get<{ match_id?: string }>(matchQuery, [matchGameId]);
     const matchId = matchRow?.match_id;
 
-    if (!matchId) return;
+    if (!matchId) return false;
 
     // Check if all games in this match are completed
     const statusQuery = `
@@ -368,9 +374,90 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<void> {
       
       await db.run(updateMatchQuery, [matchId]);
       console.log(`Match ${matchId} marked as complete`);
+      return true; // Match is now complete
     }
+    
+    return false; // Match is not complete yet
   } catch (error) {
     console.error('Error updating match status:', error);
     // Don't throw - this is a non-critical operation
+    return false;
+  }
+}
+
+/**
+ * Queue voice announcements based on scoring results
+ */
+async function queueVoiceAnnouncementForScore(
+  matchId: string, 
+  hasNextMap: boolean, 
+  isMatchComplete: boolean
+): Promise<void> {
+  try {
+    const db = await getDbInstance();
+    
+    // Get match voice channel assignments
+    const match = await db.get<{
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+    }>(`
+      SELECT blue_team_voice_channel, red_team_voice_channel
+      FROM matches WHERE id = ?
+    `, [matchId]);
+
+    if (!match) {
+      console.warn('Match not found for voice announcement:', matchId);
+      return;
+    }
+
+    // Skip if no voice channels are configured
+    if (!match.blue_team_voice_channel && !match.red_team_voice_channel) {
+      console.log('📢 No voice channels configured for match:', matchId);
+      return;
+    }
+
+    let announcementType: 'nextround' | 'finish';
+    
+    if (isMatchComplete) {
+      // Match is complete - play finish announcements
+      announcementType = 'finish';
+    } else if (hasNextMap) {
+      // There's another map - play nextround announcements
+      announcementType = 'nextround';
+    } else {
+      // No more maps but match not complete - shouldn't happen, but skip
+      console.warn('No next map but match not complete for:', matchId);
+      return;
+    }
+
+    // Determine which team should go first (alternating)
+    const lastAlternation = await db.get<{ last_first_team: string }>(`
+      SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
+    `, [matchId]);
+
+    const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
+
+    // Generate unique announcement ID
+    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    
+    // Add to voice announcement queue
+    await db.run(`
+      INSERT INTO discord_voice_announcement_queue (
+        id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel, 
+        first_team, status
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `, [
+      announcementId,
+      matchId, 
+      announcementType, 
+      match.blue_team_voice_channel,
+      match.red_team_voice_channel,
+      firstTeam
+    ]);
+    
+    console.log(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
+  } catch (error) {
+    console.error('❌ Error queuing voice announcement for score:', error);
+    // Don't throw - this is not critical for the main scoring flow
   }
 }

@@ -73,6 +73,67 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
   }
 }
 
+// Queue a Discord voice announcement request that the Discord bot will process
+async function queueVoiceAnnouncement(
+  matchId: string, 
+  announcementType: 'welcome' | 'nextround' | 'finish'
+): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Get match voice channel assignments
+    const match = await db.get<{
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+    }>(`
+      SELECT blue_team_voice_channel, red_team_voice_channel
+      FROM matches WHERE id = ?
+    `, [matchId]);
+
+    if (!match) {
+      console.error('❌ Match not found for voice announcement:', matchId);
+      return false;
+    }
+
+    // Skip if no voice channels are configured
+    if (!match.blue_team_voice_channel && !match.red_team_voice_channel) {
+      console.log('📢 No voice channels configured for match:', matchId);
+      return true; // Not an error, just nothing to do
+    }
+
+    // Determine which team should go first (alternating)
+    const lastAlternation = await db.get<{ last_first_team: string }>(`
+      SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
+    `, [matchId]);
+
+    const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
+
+    // Generate unique announcement ID
+    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    
+    // Add to voice announcement queue
+    await db.run(`
+      INSERT INTO discord_voice_announcement_queue (
+        id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel, 
+        first_team, status
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `, [
+      announcementId,
+      matchId, 
+      announcementType, 
+      match.blue_team_voice_channel,
+      match.red_team_voice_channel,
+      firstTeam
+    ]);
+    
+    console.log(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing voice announcement:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
@@ -177,6 +238,20 @@ export async function POST(
       } catch (discordError) {
         console.error('❌ Error queuing Discord match start notification:', discordError);
         // Don't fail the API request if Discord queueing fails
+      }
+
+      // Queue welcome voice announcements when match starts
+      try {
+        const voiceAnnouncementSuccess = await queueVoiceAnnouncement(matchId, 'welcome');
+        
+        if (voiceAnnouncementSuccess) {
+          console.log(`🔊 Welcome voice announcement queued for match entering battle stage: ${matchId}`);
+        } else {
+          console.warn(`⚠️ Failed to queue welcome voice announcement for match: ${matchId}`);
+        }
+      } catch (voiceError) {
+        console.error('❌ Error queuing welcome voice announcement:', voiceError);
+        // Don't fail the API request if voice queueing fails
       }
 
       // Initialize match games for all maps

@@ -113,19 +113,27 @@ export class VoiceHandler {
         return null;
       }
 
+      // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
+      const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
+      const voiceDir = path.join(process.cwd(), cleanVoicePath);
+
       // Construct filename
       let filename: string;
       if (lineNumber) {
         filename = `${audioType}${lineNumber}.mp3`;
       } else {
-        // Random line selection (1-5 for most voices)
-        const randomNum = Math.floor(Math.random() * 5) + 1;
-        filename = `${audioType}${randomNum}.mp3`;
+        // Dynamically find available files and pick a random one
+        const availableFiles = await this.getAvailableAudioFiles(voiceDir, audioType);
+        if (availableFiles.length === 0) {
+          console.warn(`⚠️ No ${audioType} audio files found in ${voiceDir}`);
+          return null;
+        }
+        
+        const randomIndex = Math.floor(Math.random() * availableFiles.length);
+        filename = availableFiles[randomIndex];
       }
 
-      // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
-      const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
-      const fullPath = path.join(process.cwd(), cleanVoicePath, filename);
+      const fullPath = path.join(voiceDir, filename);
       
       // Check if file exists using fs
       const fs = require('fs');
@@ -138,6 +146,29 @@ export class VoiceHandler {
     } catch (error) {
       console.error('❌ Error getting audio file path:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get all available audio files of a specific type in a directory
+   */
+  private async getAvailableAudioFiles(voiceDir: string, audioType: string): Promise<string[]> {
+    try {
+      const fs = require('fs');
+      
+      if (!fs.existsSync(voiceDir)) {
+        return [];
+      }
+
+      const files = fs.readdirSync(voiceDir);
+      const audioFiles = files.filter((file: string) => 
+        file.startsWith(audioType) && file.endsWith('.mp3')
+      );
+
+      return audioFiles;
+    } catch (error) {
+      console.error('❌ Error getting available audio files:', error);
+      return [];
     }
   }
 
@@ -161,19 +192,24 @@ export class VoiceHandler {
         this.activeAudioPlayers.delete(channelId);
       }
 
-      // Get existing connection or create new one
-      let connection = getVoiceConnection(channel.guild.id);
-      
-      if (!connection) {
-        // Join the voice channel
-        connection = joinVoiceChannel({
-          channelId: channel.id,
-          guildId: channel.guild.id,
-          adapterCreator: channel.guild.voiceAdapterCreator,
-        });
-
-        this.voiceConnections.set(channelId, connection);
+      // Disconnect any existing connection for this guild to avoid conflicts
+      const existingConnection = getVoiceConnection(channel.guild.id);
+      if (existingConnection) {
+        try {
+          existingConnection.destroy();
+        } catch (error) {
+          console.warn(`⚠️ Error cleaning up existing connection:`, error);
+        }
       }
+
+      // Create new connection
+      const connection = joinVoiceChannel({
+        channelId: channel.id,
+        guildId: channel.guild.id,
+        adapterCreator: channel.guild.voiceAdapterCreator,
+      });
+
+      this.voiceConnections.set(channelId, connection);
 
       // Wait for connection to be ready
       await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
@@ -187,7 +223,6 @@ export class VoiceHandler {
 
       // Subscribe the connection to the audio player
       connection.subscribe(player);
-
 
       // Play the audio
       player.play(resource);
@@ -204,7 +239,9 @@ export class VoiceHandler {
             // Disconnect from voice channel after a short delay to allow cleanup
             setTimeout(() => {
               try {
-                connection.destroy();
+                if (connection.state.status !== 'destroyed') {
+                  connection.destroy();
+                }
                 this.voiceConnections.delete(channelId);
               } catch (error) {
                 console.warn(`⚠️ Error disconnecting from voice channel ${channelId}:`, error);
@@ -303,5 +340,101 @@ export class VoiceHandler {
 
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
+  }
+
+  /**
+   * Play announcements to both team voice channels sequentially
+   */
+  async playTeamAnnouncements(
+    blueTeamChannelId: string | null,
+    redTeamChannelId: string | null,
+    audioType: 'welcome' | 'nextround' | 'finish',
+    firstTeam: 'blue' | 'red' = 'blue'
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      if (!this.client.isReady()) {
+        return { success: false, message: 'Discord bot is not ready' };
+      }
+
+      if (!this.settings?.voice_announcements_enabled) {
+        return { success: false, message: 'Voice announcements are disabled' };
+      }
+
+      const channels = [];
+      
+      // Add channels in the order specified by firstTeam
+      if (firstTeam === 'blue') {
+        if (blueTeamChannelId) channels.push({ id: blueTeamChannelId, team: 'blue' });
+        if (redTeamChannelId) channels.push({ id: redTeamChannelId, team: 'red' });
+      } else {
+        if (redTeamChannelId) channels.push({ id: redTeamChannelId, team: 'red' });
+        if (blueTeamChannelId) channels.push({ id: blueTeamChannelId, team: 'blue' });
+      }
+
+      if (channels.length === 0) {
+        return { success: false, message: 'No voice channels configured' };
+      }
+
+      console.log(`🔊 Playing ${audioType} announcements to ${channels.length} channels, starting with ${firstTeam} team`);
+
+      // Play announcements sequentially
+      for (const channel of channels) {
+        console.log(`🔊 Playing ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
+        
+        const success = await this.playVoiceAnnouncement(channel.id, audioType);
+        
+        if (!success) {
+          console.warn(`⚠️ Failed to play ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
+        } else {
+          console.log(`✅ Successfully played ${audioType} announcement to ${channel.team} team channel`);
+        }
+        
+        // Longer delay between channels to ensure full cleanup and avoid conflicts
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      return { success: true, message: `Played ${audioType} announcements to ${channels.length} channels` };
+
+    } catch (error) {
+      console.error('❌ Error playing team announcements:', error);
+      return { success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+
+  /**
+   * Get the next team that should go first (alternating)
+   */
+  async getNextFirstTeam(matchId: string): Promise<'blue' | 'red'> {
+    try {
+      if (!this.db) return 'blue'; // Default to blue if no database
+
+      const result = await this.db.get<{ last_first_team: string }>(`
+        SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
+      `, [matchId]);
+
+      // If no record exists or last was red, return blue. If last was blue, return red.
+      return !result || result.last_first_team === 'red' ? 'blue' : 'red';
+    } catch (error) {
+      console.error('❌ Error getting next first team:', error);
+      return 'blue'; // Default to blue on error
+    }
+  }
+
+  /**
+   * Update which team went first for this match
+   */
+  async updateFirstTeam(matchId: string, firstTeam: 'blue' | 'red'): Promise<void> {
+    try {
+      if (!this.db) return;
+
+      await this.db.run(`
+        INSERT OR REPLACE INTO match_voice_alternation (match_id, last_first_team, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+      `, [matchId, firstTeam]);
+
+      console.log(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
+    } catch (error) {
+      console.error('❌ Error updating first team:', error);
+    }
   }
 }
