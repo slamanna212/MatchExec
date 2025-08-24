@@ -1,0 +1,16 @@
+[
+  {
+    "id": "summoners-rift",
+    "name": "Summoner's Rift",
+    "type": "Classic",
+    "location": "Runeterra",
+    "thumbnailUrl": "/public/assets/games/leagueoflegends/maps/summoners-rift.jpg"
+  },
+  {
+    "id": "howling-abyss",
+    "name": "Howling Abyss",
+    "type": "ARAM",
+    "location": "The Freljord",
+    "thumbnailUrl": "/public/assets/games/leagueoflegends/maps/howling-abyss.webp"
+  }
+]

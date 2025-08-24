@@ -1,0 +1,38 @@
+{
+  "fields": [
+    {
+      "id": "riot_id",
+      "type": "text",
+      "label": "Riot ID",
+      "placeholder": "PlayerName#TAG",
+      "required": true
+    },
+    {
+      "id": "preferred_champions",
+      "type": "text",
+      "label": "Preferred Champions",
+      "placeholder": "Jinx, Thresh, Lee Sin",
+      "required": true
+    },
+    {
+      "id": "current_rank",
+      "type": "largetext",
+      "label": "Current Ranked Tier",
+      "placeholder": "e.g., Gold IV, Platinum II, or Unranked",
+      "required": true,
+      "helpText": "Enter your current ranked tier or Unranked if you haven't played ranked yet."
+    },
+    {
+      "id": "role_preference",
+      "type": "text",
+      "label": "Primary Role",
+      "placeholder": "Top, Jungle, Mid, ADC, Support",
+      "required": false,
+      "helpText": "What role do you prefer to play?"
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}
