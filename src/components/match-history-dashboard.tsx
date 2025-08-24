@@ -11,7 +11,8 @@ import {
   Group,
   Stack,
   Grid,
-  RingProgress
+  RingProgress,
+  TextInput
 } from '@mantine/core';
 import { Match, MATCH_FLOW_STEPS, SignupConfig, ReminderData } from '@/shared/types';
 import Link from 'next/link';
@@ -155,6 +156,7 @@ export function MatchHistoryDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -336,9 +338,19 @@ export function MatchHistoryDashboard() {
     fetchReminders(match.id);
   }, [fetchParticipants, fetchReminders]);
 
+  // Filter matches based on search query
+  const filteredMatches = useMemo(() => {
+    return matches.filter(match =>
+      match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.game_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.rules?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [matches, searchQuery]);
+
   // Memoize expensive match card rendering
   const memoizedMatchCards = useMemo(() => {
-    return matches.map((match) => (
+    return filteredMatches.map((match) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
         <HistoryMatchCard 
           match={match}
@@ -348,7 +360,7 @@ export function MatchHistoryDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, handleViewDetails, formatMapName]);
+  }, [filteredMatches, mapNames, handleViewDetails, formatMapName]);
 
 
   if (loading) {
@@ -366,6 +378,14 @@ export function MatchHistoryDashboard() {
           <Text size="xl" fw={700}>Match History</Text>
           <Text c="dimmed" mt="xs">View completed matches</Text>
         </div>
+        {matches.length > 0 && (
+          <TextInput
+            placeholder="Search history..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.currentTarget.value)}
+            style={{ width: 300 }}
+          />
+        )}
       </Group>
 
       <Divider mb="xl" />
@@ -376,6 +396,21 @@ export function MatchHistoryDashboard() {
             <Text size="xl" fw={600}>No completed matches yet</Text>
             <Text c="dimmed" mb="md">
               Completed matches will appear here
+            </Text>
+            <Button 
+              component={Link}
+              href="/matches"
+            >
+              View Active Matches
+            </Button>
+          </Stack>
+        </Card>
+      ) : filteredMatches.length === 0 && searchQuery ? (
+        <Card p="xl">
+          <Stack align="center">
+            <Text size="xl" fw={600}>No matches found</Text>
+            <Text c="dimmed" mb="md">
+              No completed matches match your search for "{searchQuery}"
             </Text>
             <Button 
               component={Link}

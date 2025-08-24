@@ -1,7 +1,7 @@
 'use client'
 
 
-import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal } from '@mantine/core';
+import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, TextInput } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import { LazyImage } from '@/components/LazyImage';
@@ -49,6 +49,7 @@ export default function GamesPage() {
   const [maps, setMaps] = useState<GameMap[]>([]);
   const [modes, setModes] = useState<GameMode[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   useEffect(() => {
     async function fetchGames() {
@@ -73,6 +74,7 @@ export default function GamesPage() {
   const handleShowMaps = async (game: Game) => {
     setSelectedGame(game);
     setModalLoading(true);
+    setMapSearchQuery('');
     openMaps();
     
     try {
@@ -109,6 +111,13 @@ export default function GamesPage() {
       setModalLoading(false);
     }
   };
+
+  // Filter maps based on search query
+  const filteredMaps = maps.filter(map =>
+    map.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
+    map.modeName.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
+    (map.location && map.location.toLowerCase().includes(mapSearchQuery.toLowerCase()))
+  );
 
   if (loading) {
     return (
@@ -216,7 +225,13 @@ export default function GamesPage() {
           </Center>
         ) : (
           <Stack gap="md">
-            {maps.map((map) => (
+            <TextInput
+              placeholder="Search maps by name, mode, or location..."
+              value={mapSearchQuery}
+              onChange={(event) => setMapSearchQuery(event.currentTarget.value)}
+              mb="md"
+            />
+            {filteredMaps.map((map) => (
               <Card key={map.id} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                 <Group wrap="nowrap" align="stretch" gap={0}>
                   <div style={{ width: '50%', position: 'relative' }}>
@@ -253,6 +268,11 @@ export default function GamesPage() {
                 </Group>
               </Card>
             ))}
+            {filteredMaps.length === 0 && maps.length > 0 && (
+              <Text ta="center" c="dimmed">
+                No maps found matching "{mapSearchQuery}".
+              </Text>
+            )}
             {maps.length === 0 && !modalLoading && (
               <Text ta="center" c="dimmed">
                 No maps found for this game.

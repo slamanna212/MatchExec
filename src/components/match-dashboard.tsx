@@ -12,7 +12,8 @@ import {
   Group,
   Stack,
   Grid,
-  RingProgress
+  RingProgress,
+  TextInput
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
@@ -194,6 +195,7 @@ export function MatchDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -622,8 +624,19 @@ export function MatchDashboard() {
     }
   };
 
+  // Filter matches based on search query
+  const filteredMatches = useMemo(() => {
+    return matches.filter(match =>
+      match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.game_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.rules?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [matches, searchQuery]);
+
   const memoizedMatchCards = useMemo(() => {
-    return matches.map((match) => (
+    return filteredMatches.map((match) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
         <MatchCard 
           match={match}
@@ -635,7 +648,7 @@ export function MatchDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, handleViewDetails, getNextStatusButton]);
+  }, [filteredMatches, mapNames, handleViewDetails, getNextStatusButton]);
 
 
   if (loading) {
@@ -653,12 +666,22 @@ export function MatchDashboard() {
           <Text size="xl" fw={700}>Match Dashboard</Text>
           <Text c="dimmed" mt="xs">Manage and view all matches</Text>
         </div>
-        <Button 
-          size="md"
-          onClick={handleCreateMatch}
-        >
-          Create Match
-        </Button>
+        <Group>
+          {matches.length > 0 && (
+            <TextInput
+              placeholder="Search matches..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.currentTarget.value)}
+              style={{ width: 300 }}
+            />
+          )}
+          <Button 
+            size="md"
+            onClick={handleCreateMatch}
+          >
+            Create Match
+          </Button>
+        </Group>
       </Group>
 
       <Divider mb="xl" />
@@ -669,6 +692,15 @@ export function MatchDashboard() {
             <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed">
               Create a match to get started
+            </Text>
+          </Stack>
+        </Card>
+      ) : filteredMatches.length === 0 && searchQuery ? (
+        <Card p="xl">
+          <Stack align="center">
+            <Text size="xl" fw={600}>No matches found</Text>
+            <Text c="dimmed">
+              No matches match your search for "{searchQuery}"
             </Text>
           </Stack>
         </Card>
