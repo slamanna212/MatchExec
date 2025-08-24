@@ -4,6 +4,7 @@
 import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
+import { LazyImage } from '@/components/LazyImage';
 
 interface Game {
   id: string;
@@ -220,7 +221,7 @@ export default function GamesPage() {
                 <Group wrap="nowrap" align="stretch" gap={0}>
                   <div style={{ width: '50%', position: 'relative' }}>
                     {map.imageUrl && (
-                      <Image
+                      <LazyImage
                         src={map.imageUrl}
                         alt={map.name}
                         height={80}
