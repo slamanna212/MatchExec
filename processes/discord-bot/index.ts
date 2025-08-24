@@ -50,8 +50,8 @@ class MatchExecBot {
       // Set bot status to display website and version
       const versionInfo = getVersionInfo();
       const statusText = versionInfo.isDev 
-        ? `${versionInfo.version} | matchexec.com`
-        : `${versionInfo.version} | matchexec.com`;
+        ? `matchexec.com | ${versionInfo.version}`
+        : `matchexec.com | ${versionInfo.version}`;
       
       this.client.user.setPresence({
         activities: [{
