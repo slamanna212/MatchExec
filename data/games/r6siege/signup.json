@@ -1,0 +1,46 @@
+{
+  "fields": [
+    {
+      "id": "uplay_username",
+      "type": "text",
+      "label": "Uplay/Ubisoft Connect Username",
+      "placeholder": "YourUsername",
+      "required": true
+    },
+    {
+      "id": "preferred_operators",
+      "type": "text",
+      "label": "Preferred Operators",
+      "placeholder": "Ash, Thermite, Jager, Bandit",
+      "required": true
+    },
+    {
+      "id": "current_rank",
+      "type": "largetext",
+      "label": "Current Competitive Rank",
+      "placeholder": "e.g., Gold III, Platinum II, or Unranked",
+      "required": true,
+      "helpText": "Enter your current ranked competitive rank or Unranked if you haven't played ranked yet."
+    },
+    {
+      "id": "role_preference",
+      "type": "text",
+      "label": "Role Preference",
+      "placeholder": "Entry Fragger, Support, Anchor, Roamer",
+      "required": false,
+      "helpText": "What role do you prefer to play in matches?"
+    },
+    {
+      "id": "preferred_side",
+      "type": "text",
+      "label": "Preferred Side",
+      "placeholder": "Attack, Defense, or No Preference",
+      "required": false,
+      "helpText": "Do you prefer playing on Attack or Defense?"
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}

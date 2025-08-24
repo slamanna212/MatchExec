@@ -1,0 +1,184 @@
+[
+  {
+    "id": "bank",
+    "name": "Bank",
+    "type": "Standard",
+    "location": "Los Angeles, California, United States",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Bank.webp"
+  },
+  {
+    "id": "bartlett-u",
+    "name": "Bartlett U.",
+    "type": "Standard", 
+    "location": "Massachusetts, United States",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Bartlett_U.webp"
+  },
+  {
+    "id": "border",
+    "name": "Border",
+    "type": "Standard",
+    "location": "Middle East",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Border.webp"
+  },
+  {
+    "id": "chalet",
+    "name": "Chalet",
+    "type": "Standard",
+    "location": "Courchevel, France",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Chalet.webp"
+  },
+  {
+    "id": "close-quarter",
+    "name": "Close Quarter",
+    "type": "Training",
+    "location": "Training Facility",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Close_Quarter.webp"
+  },
+  {
+    "id": "clubhouse",
+    "name": "Clubhouse",
+    "type": "Standard",
+    "location": "England, United Kingdom",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Clubhouse.webp"
+  },
+  {
+    "id": "coastline",
+    "name": "Coastline",
+    "type": "Standard",
+    "location": "Ibiza, Spain",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Coastline.webp"
+  },
+  {
+    "id": "consulate",
+    "name": "Consulate",
+    "type": "Standard",
+    "location": "Ivory Coast",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Consulate.webp"
+  },
+  {
+    "id": "emerald-plains",
+    "name": "Emerald Plains",
+    "type": "Standard",
+    "location": "Ireland",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Emerald_Plains.webp"
+  },
+  {
+    "id": "favela",
+    "name": "Favela",
+    "type": "Standard",
+    "location": "Rio de Janeiro, Brazil",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Favela.webp"
+  },
+  {
+    "id": "fort-truth",
+    "name": "Fort Truth",
+    "type": "Event",
+    "location": "Unknown Location",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Fort_Truth.webp"
+  },
+  {
+    "id": "hereford",
+    "name": "Hereford Base",
+    "type": "Standard",
+    "location": "Hereford, England, United Kingdom",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/HEREFORD.webp"
+  },
+  {
+    "id": "house",
+    "name": "House",
+    "type": "Standard",
+    "location": "Los Angeles, California, United States",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/House.webp"
+  },
+  {
+    "id": "kafe",
+    "name": "Kafe Dostoyevsky",
+    "type": "Standard",
+    "location": "Moscow, Russia",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/kafe.webp"
+  },
+  {
+    "id": "kanal",
+    "name": "Kanal",
+    "type": "Standard",
+    "location": "Germany",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/kanal.webp"
+  },
+  {
+    "id": "lair",
+    "name": "Lair",
+    "type": "Event",
+    "location": "Unknown Location",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Lair.webp"
+  },
+  {
+    "id": "nighthaven-labs",
+    "name": "Nighthaven Labs",
+    "type": "Standard",
+    "location": "Denmark",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Nighthaven_Labs.webp"
+  },
+  {
+    "id": "oregon",
+    "name": "Oregon",
+    "type": "Standard",
+    "location": "Oregon, United States",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Oregon.webp"
+  },
+  {
+    "id": "outback",
+    "name": "Outback",
+    "type": "Standard",
+    "location": "Australia",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Outback.webp"
+  },
+  {
+    "id": "plane",
+    "name": "Presidential Plane",
+    "type": "Standard",
+    "location": "Airborne",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/plane.webp"
+  },
+  {
+    "id": "skyscraper",
+    "name": "Skyscraper",
+    "type": "Standard",
+    "location": "Nagoya, Japan",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Skyscraper.webp"
+  },
+  {
+    "id": "stadium",
+    "name": "Stadium",
+    "type": "Event",
+    "location": "Stadium",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Stadium.webp"
+  },
+  {
+    "id": "theme-park",
+    "name": "Theme Park",
+    "type": "Standard",
+    "location": "Japan",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Themepark.webp"
+  },
+  {
+    "id": "tower",
+    "name": "Tower",
+    "type": "Standard",
+    "location": "Seoul, South Korea",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/tower.jpg"
+  },
+  {
+    "id": "villa",
+    "name": "Villa",
+    "type": "Standard",
+    "location": "Italy",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/villa.jpg"
+  },
+  {
+    "id": "yacht",
+    "name": "Yacht",
+    "type": "Standard",
+    "location": "North Sea",
+    "thumbnailUrl": "/public/assets/games/r6siege/maps/Yacht.webp"
+  }
+]
