@@ -1,7 +1,7 @@
 'use client'
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Indicator } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
