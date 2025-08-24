@@ -1,10 +1,10 @@
 'use client'
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Indicator } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
-import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh } from '@tabler/icons-react';
+import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
 
 interface ChannelEditData {
@@ -135,6 +135,14 @@ export default function ChannelsPage() {
   const textChannels = channels.filter(ch => ch.channel_type === 'text');
   const voiceChannels = channels.filter(ch => ch.channel_type === 'voice');
 
+  // Calculate notification status
+  const notificationStatus = {
+    announcements: textChannels.some(ch => ch.send_announcements),
+    reminders: textChannels.some(ch => ch.send_reminders),
+    live_updates: textChannels.some(ch => ch.send_match_start),
+    signup_updates: textChannels.some(ch => ch.send_signup_updates)
+  };
+
   if (loading) {
     return (
       <Center h={400}>
@@ -171,6 +179,54 @@ export default function ChannelsPage() {
             </Group>
           </Group>
         </div>
+
+        {/* Notification Status Indicators */}
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="md" fw={600} mb="xs">Notification Status</Text>
+          <Text size="sm" c="dimmed" mb="md">Green indicates at least one channel is configured for this notification type</Text>
+          <Grid>
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Group gap="xs" align="center">
+                <IconCircle 
+                  size="0.8rem" 
+                  style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
+                  fill="currentColor"
+                />
+                <Text size="sm">Announcements</Text>
+              </Group>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Group gap="xs" align="center">
+                <IconCircle 
+                  size="0.8rem" 
+                  style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
+                  fill="currentColor"
+                />
+                <Text size="sm">Reminders</Text>
+              </Group>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Group gap="xs" align="center">
+                <IconCircle 
+                  size="0.8rem" 
+                  style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
+                  fill="currentColor"
+                />
+                <Text size="sm">Live Updates</Text>
+              </Group>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Group gap="xs" align="center">
+                <IconCircle 
+                  size="0.8rem" 
+                  style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
+                  fill="currentColor"
+                />
+                <Text size="sm">Signup Updates</Text>
+              </Group>
+            </Grid.Col>
+          </Grid>
+        </Card>
 
         {message && (
           <Alert color={message.type === 'success' ? 'green' : 'red'} onClose={() => setMessage(null)}>
