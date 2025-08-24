@@ -216,29 +216,38 @@ export default function GamesPage() {
         ) : (
           <Stack gap="md">
             {maps.map((map) => (
-              <Card key={map.id} shadow="sm" padding="md" radius="md" withBorder>
-                <Group wrap="nowrap">
-                  {map.imageUrl && (
-                    <Image
-                      src={map.imageUrl}
-                      alt={map.name}
-                      w={80}
-                      h={60}
-                      radius="sm"
-                      fallbackSrc="/assets/placeholder-map.png"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <Text fw={500}>{map.name}</Text>
-                    <Badge variant="light" size="sm" mt="xs">
-                      {map.modeName}
-                    </Badge>
-                    {map.location && (
-                      <Text size="sm" c="dimmed" mt="xs">
-                        {map.location}
-                      </Text>
+              <Card key={map.id} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                <Group wrap="nowrap" align="stretch" gap={0}>
+                  <div style={{ width: '50%', position: 'relative' }}>
+                    {map.imageUrl && (
+                      <Image
+                        src={map.imageUrl}
+                        alt={map.name}
+                        height={80}
+                        radius={0}
+                        fallbackSrc="/assets/placeholder-map.png"
+                        style={{
+                          borderTopLeftRadius: 'var(--mantine-radius-md)',
+                          borderBottomLeftRadius: 'var(--mantine-radius-md)',
+                          objectFit: 'cover',
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      />
                     )}
+                  </div>
+                  <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 'var(--mantine-spacing-xs)' }}>
+                      <Text fw={500}>{map.name}</Text>
+                      <Badge variant="light" size="sm">
+                        {map.modeName}
+                      </Badge>
+                      {map.location && (
+                        <Text size="sm" c="dimmed">
+                          {map.location}
+                        </Text>
+                      )}
+                    </div>
                   </div>
                 </Group>
               </Card>
