@@ -700,7 +700,7 @@ export function MatchDashboard() {
           <Stack align="center">
             <Text size="xl" fw={600}>No matches found</Text>
             <Text c="dimmed">
-              No matches match your search for "{searchQuery}"
+              No matches match your search for &quot;{searchQuery}&quot;
             </Text>
           </Stack>
         </Card>

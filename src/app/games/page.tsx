@@ -270,7 +270,7 @@ export default function GamesPage() {
             ))}
             {filteredMaps.length === 0 && maps.length > 0 && (
               <Text ta="center" c="dimmed">
-                No maps found matching "{mapSearchQuery}".
+                No maps found matching &quot;{mapSearchQuery}&quot;.
               </Text>
             )}
             {maps.length === 0 && !modalLoading && (
