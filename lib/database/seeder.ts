@@ -210,9 +210,9 @@ export class DatabaseSeeder {
 
     for (const mode of modesData) {
       await this.db.run(`
-        INSERT INTO game_modes (id, game_id, name, description, scoring_config, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [mode.id, gameId, mode.name, mode.description, mode.scoring ? JSON.stringify(mode.scoring) : null]);
+        INSERT INTO game_modes (id, game_id, name, description, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [mode.id, gameId, mode.name, mode.description]);
     }
   }
 
