@@ -19,6 +19,7 @@ export interface GameMode {
   game_id: string;
   name: string;
   description: string;
+  scoring_type: 'Normal' | 'FFA';
   created_at: Date;
   updated_at: Date;
 }
@@ -146,6 +147,8 @@ export interface MatchGame {
   participant1_id: string;
   participant2_id: string;
   winner_id?: string; // 'team1', 'team2', or null
+  participant_winner_id?: string; // For FFA modes: specific participant ID
+  is_ffa_mode: boolean; // True if this is a Free-For-All mode
   map_id?: string;
   mode_id?: string;
   status: 'pending' | 'ongoing' | 'completed';
@@ -184,6 +187,7 @@ export interface ModeDataJson {
   id: string;
   name: string;
   description: string;
+  scoringType?: 'Normal' | 'FFA';
 }
 
 export interface MapDataJson {
@@ -201,6 +205,8 @@ export interface MatchResult {
   matchId: string;
   gameId: string; // match_games.id
   winner: 'team1' | 'team2';
+  participantWinnerId?: string; // For FFA modes
+  isFfaMode?: boolean;
   completedAt: Date;
 }
 

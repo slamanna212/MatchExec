@@ -12,9 +12,12 @@ interface MatchGame {
   map_id: string;
   map_name: string;
   mode_id: string;
+  mode_scoring_type?: 'Normal' | 'FFA';
   game_id: string; // game type like "overwatch2"
   status: 'pending' | 'ongoing' | 'completed';
   winner_id?: string;
+  participant_winner_id?: string;
+  is_ffa_mode?: boolean;
 }
 
 interface SimpleMapScoringProps {
@@ -27,6 +30,12 @@ interface SimpleMapScoringProps {
 
 const CARD_WIDTH = 180 + 16; // Card width + gap
 
+interface MatchParticipant {
+  id: string;
+  username: string;
+  team_assignment?: string;
+}
+
 export function SimpleMapScoring({
   matchId,
   gameType,
@@ -35,13 +44,14 @@ export function SimpleMapScoring({
   onAllMapsCompleted
 }: SimpleMapScoringProps) {
   const [matchGames, setMatchGames] = useState<MatchGame[]>([]);
+  const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch match games
+  // Fetch match games and participants
   useEffect(() => {
     if (!matchId || matchId.trim() === '') {
       console.log('SimpleMapScoring: Waiting for valid matchId, current value:', matchId);
@@ -50,7 +60,7 @@ export function SimpleMapScoring({
       return;
     }
     
-    const fetchMatchGames = async () => {
+    const fetchMatchData = async () => {
       let response: Response | undefined;
       try {
         setLoading(true);
@@ -113,6 +123,19 @@ export function SimpleMapScoring({
         const data = await response.json();
         setMatchGames(data.games || []);
         
+        // Fetch participants for FFA modes
+        try {
+          const participantsResponse = await fetch(`/api/matches/${matchId}/participants`);
+          if (participantsResponse.ok) {
+            const participantsData = await participantsResponse.json();
+            setParticipants(participantsData.participants || []);
+          } else {
+            console.warn('Failed to fetch participants:', participantsResponse.status);
+          }
+        } catch (participantsError) {
+          console.warn('Error fetching participants:', participantsError);
+        }
+        
         // Auto-select the first pending/ongoing game
         const activeGame = data.games.find((game: MatchGame) => 
           game.status === 'pending' || game.status === 'ongoing'
@@ -129,7 +152,7 @@ export function SimpleMapScoring({
       }
     };
 
-    fetchMatchGames();
+    fetchMatchData();
   }, [matchId]);
 
   const getMaxScroll = useCallback(() => {
@@ -221,6 +244,7 @@ export function SimpleMapScoring({
         matchId,
         gameId: selectedGame.id,
         winner,
+        isFfaMode: false,
         completedAt: new Date()
       };
       
@@ -270,6 +294,66 @@ export function SimpleMapScoring({
       }, 1000);
     } catch (error) {
       console.error('Error in handleTeamWin:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save result');
+    }
+  };
+
+  const handleParticipantWin = async (participantId: string) => {
+    if (!selectedGame) return;
+
+    try {
+      const result: MatchResult = {
+        matchId,
+        gameId: selectedGame.id,
+        winner: 'team1', // Required field but not used in FFA mode
+        participantWinnerId: participantId,
+        isFfaMode: true,
+        completedAt: new Date()
+      };
+      
+      await onResultSubmit(result);
+      
+      // Update local state optimistically
+      const updatedGames = matchGames.map(game => 
+        game.id === selectedGame.id 
+          ? { ...game, status: 'completed' as const, participant_winner_id: participantId, is_ffa_mode: true }
+          : game
+      );
+      setMatchGames(updatedGames);
+      
+      // Move to next pending game if current one is completed
+      const nextGame = updatedGames.find((game: MatchGame) => 
+        game.status === 'pending' || game.status === 'ongoing'
+      );
+      if (nextGame && nextGame.id !== selectedGameId) {
+        setSelectedGameId(nextGame.id);
+      } else if (!nextGame && onAllMapsCompleted) {
+        // No more pending games - all maps are completed
+        onAllMapsCompleted();
+      }
+      
+      // Trigger a background refresh after a delay to sync with server
+      setTimeout(async () => {
+        try {
+          const refreshResponse = await fetch(`/api/matches/${matchId}/games`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (refreshResponse.ok) {
+            const data = await refreshResponse.json();
+            setMatchGames(data.games || []);
+          } else {
+            console.warn('Background refresh failed:', refreshResponse.status);
+          }
+        } catch (error) {
+          console.warn('Background refresh error:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error in handleParticipantWin:', error);
       setError(error instanceof Error ? error.message : 'Failed to save result');
     }
   };
@@ -459,7 +543,17 @@ export function SimpleMapScoring({
                 <Badge color={getStatusColor(selectedGame.status)} size="sm">
                   {selectedGame.status}
                 </Badge>
-                {selectedGame.winner_id && (
+                {selectedGame.mode_scoring_type === 'FFA' && (
+                  <Badge color="violet" size="sm">
+                    Free-For-All
+                  </Badge>
+                )}
+                {selectedGame.status === 'completed' && selectedGame.mode_scoring_type === 'FFA' && selectedGame.participant_winner_id && (
+                  <Badge color="green" size="sm">
+                    Winner: {participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown Player'}
+                  </Badge>
+                )}
+                {selectedGame.status === 'completed' && selectedGame.mode_scoring_type !== 'FFA' && selectedGame.winner_id && (
                   <Badge color={selectedGame.winner_id === 'team1' ? 'blue' : 'red'} size="sm">
                     Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
                   </Badge>
@@ -472,43 +566,76 @@ export function SimpleMapScoring({
             {/* Winner Selection */}
             {selectedGame.status !== 'completed' && (
               <Stack gap="md">
-                <Text size="sm" c="dimmed" ta="center">
-                  <IconSwords size={16} style={{ marginRight: 8 }} />
-                  Who won this map?
-                </Text>
-                
-                <Group justify="center" gap="xl">
-                  <Button
-                    size="lg"
-                    color="blue"
-                    variant="outline"
-                    onClick={() => handleTeamWin('team1')}
-                    disabled={submitting}
-                    loading={submitting}
-                    leftSection={<IconTrophy size={20} />}
-                  >
-                    Blue Team Wins
-                  </Button>
-                  
-                  <Button
-                    size="lg"
-                    color="red"
-                    variant="outline"
-                    onClick={() => handleTeamWin('team2')}
-                    disabled={submitting}
-                    loading={submitting}
-                    leftSection={<IconTrophy size={20} />}
-                  >
-                    Red Team Wins
-                  </Button>
-                </Group>
+                {selectedGame.mode_scoring_type === 'FFA' ? (
+                  <>
+                    <Text size="sm" c="dimmed" ta="center">
+                      <IconTrophy size={16} style={{ marginRight: 8 }} />
+                      Select the winner of this Free-For-All match:
+                    </Text>
+                    
+                    <Stack gap="sm" align="center">
+                      {participants.map((participant) => (
+                        <Button
+                          key={participant.id}
+                          size="md"
+                          color="violet"
+                          variant="outline"
+                          onClick={() => handleParticipantWin(participant.id)}
+                          disabled={submitting}
+                          loading={submitting}
+                          leftSection={<IconTrophy size={18} />}
+                          style={{ minWidth: 200 }}
+                        >
+                          {participant.username} Wins
+                        </Button>
+                      ))}
+                    </Stack>
+                  </>
+                ) : (
+                  <>
+                    <Text size="sm" c="dimmed" ta="center">
+                      <IconSwords size={16} style={{ marginRight: 8 }} />
+                      Who won this map?
+                    </Text>
+                    
+                    <Group justify="center" gap="xl">
+                      <Button
+                        size="lg"
+                        color="blue"
+                        variant="outline"
+                        onClick={() => handleTeamWin('team1')}
+                        disabled={submitting}
+                        loading={submitting}
+                        leftSection={<IconTrophy size={20} />}
+                      >
+                        Blue Team Wins
+                      </Button>
+                      
+                      <Button
+                        size="lg"
+                        color="red"
+                        variant="outline"
+                        onClick={() => handleTeamWin('team2')}
+                        disabled={submitting}
+                        loading={submitting}
+                        leftSection={<IconTrophy size={20} />}
+                      >
+                        Red Team Wins
+                      </Button>
+                    </Group>
+                  </>
+                )}
               </Stack>
             )}
 
             {/* Already completed */}
             {selectedGame.status === 'completed' && (
               <Alert color="green" icon={<IconCheck size={16} />}>
-                This map has been completed. Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
+                {selectedGame.mode_scoring_type === 'FFA' ? (
+                  <>This FFA match has been completed. Winner: {participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown Player'}</>
+                ) : (
+                  <>This map has been completed. Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}</>
+                )}
               </Alert>
             )}
           </Stack>

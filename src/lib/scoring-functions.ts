@@ -89,9 +89,11 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
     console.log('getMatchGames: Database instance obtained');
     
     const query = `
-      SELECT mg.*, gm.name as map_name, gm.mode_id, gm.game_id
+      SELECT mg.*, gm.name as map_name, gm.mode_id, gm.game_id, 
+             gamemode.scoring_type as mode_scoring_type
       FROM match_games mg
       LEFT JOIN game_maps gm ON mg.map_id = gm.id
+      LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
       WHERE mg.match_id = ?
       ORDER BY mg.round ASC
     `;
@@ -149,7 +151,7 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
 }
 
 /**
- * Save match result - simplified to only track winner
+ * Save match result - handles both team-based and FFA scoring
  */
 export async function saveMatchResult(
   matchGameId: string,
@@ -164,16 +166,32 @@ export async function saveMatchResult(
     // First, ensure the match_games entry exists
     await ensureMatchGameExists(matchGameId, result.matchId);
     
-    // Update the match_games table with winner
-    const query = `UPDATE match_games 
-                   SET winner_id = ?,
-                       status = 'completed',
-                       completed_at = CURRENT_TIMESTAMP,
-                       updated_at = CURRENT_TIMESTAMP
-                   WHERE id = ?`;
+    // Handle FFA vs Normal scoring differently
+    if (result.isFfaMode && result.participantWinnerId) {
+      // FFA Mode: Save individual participant winner, don't count toward team wins
+      const query = `UPDATE match_games 
+                     SET participant_winner_id = ?,
+                         is_ffa_mode = 1,
+                         status = 'completed',
+                         completed_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`;
 
-    await db.run(query, [result.winner, matchGameId]);
-    console.log(`Saved match result for game ${matchGameId}: ${result.winner} wins`);
+      await db.run(query, [result.participantWinnerId, matchGameId]);
+      console.log(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
+    } else {
+      // Normal Mode: Save team winner
+      const query = `UPDATE match_games 
+                     SET winner_id = ?,
+                         is_ffa_mode = 0,
+                         status = 'completed',
+                         completed_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`;
+
+      await db.run(query, [result.winner, matchGameId]);
+      console.log(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
+    }
 
     // Queue Discord score notification
     await queueScoreNotification(matchGameId, result);
@@ -201,14 +219,30 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
   
   try {
     const query = `
-      SELECT mg.match_id, mg.winner_id, mg.completed_at
+      SELECT mg.match_id, mg.winner_id, mg.participant_winner_id, mg.is_ffa_mode, mg.completed_at
       FROM match_games mg
       WHERE mg.id = ?
     `;
 
-    const row = await db.get<{ match_id?: string; winner_id?: string; completed_at?: string }>(query, [matchGameId]);
+    const row = await db.get<{ 
+      match_id?: string; 
+      winner_id?: string; 
+      participant_winner_id?: string;
+      is_ffa_mode?: number;
+      completed_at?: string 
+    }>(query, [matchGameId]);
     
-    if (!row || !row.winner_id) {
+    if (!row) {
+      return null;
+    }
+    
+    const isFfaMode = Boolean(row.is_ffa_mode);
+    
+    // For FFA modes, require participant_winner_id; for normal modes, require winner_id
+    if (isFfaMode && !row.participant_winner_id) {
+      return null;
+    }
+    if (!isFfaMode && !row.winner_id) {
       return null;
     }
     
@@ -216,6 +250,8 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
       matchId: row.match_id!,
       gameId: matchGameId,
       winner: row.winner_id as 'team1' | 'team2',
+      participantWinnerId: row.participant_winner_id,
+      isFfaMode,
       completedAt: new Date(row.completed_at!)
     };
   } catch (error) {
@@ -463,6 +499,126 @@ async function queueVoiceAnnouncementForScore(
   } catch (error) {
     console.error('❌ Error queuing voice announcement for score:', error);
     // Don't throw - this is not critical for the main scoring flow
+  }
+}
+
+/**
+ * Get overall match score (team wins for Normal modes only, excluding FFA)
+ */
+export async function getOverallMatchScore(matchId: string): Promise<{
+  team1Wins: number;
+  team2Wins: number;
+  totalNormalGames: number;
+  overallWinner: 'team1' | 'team2' | 'tie' | null;
+}> {
+  const db = await getDbInstance();
+  
+  try {
+    const query = `
+      SELECT 
+        COUNT(*) as total_normal_games,
+        SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
+        SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
+      FROM match_games mg
+      WHERE mg.match_id = ? 
+        AND mg.status = 'completed'
+        AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL)
+        AND mg.winner_id IS NOT NULL
+    `;
+
+    const result = await db.get<{
+      total_normal_games: number;
+      team1_wins: number;
+      team2_wins: number;
+    }>(query, [matchId]);
+
+    const team1Wins = result?.team1_wins || 0;
+    const team2Wins = result?.team2_wins || 0;
+    const totalNormalGames = result?.total_normal_games || 0;
+
+    let overallWinner: 'team1' | 'team2' | 'tie' | null = null;
+    if (totalNormalGames > 0) {
+      if (team1Wins > team2Wins) {
+        overallWinner = 'team1';
+      } else if (team2Wins > team1Wins) {
+        overallWinner = 'team2';
+      } else {
+        overallWinner = 'tie';
+      }
+    }
+
+    return {
+      team1Wins,
+      team2Wins,
+      totalNormalGames,
+      overallWinner
+    };
+  } catch (error) {
+    console.error('Error getting overall match score:', error);
+    return {
+      team1Wins: 0,
+      team2Wins: 0,
+      totalNormalGames: 0,
+      overallWinner: null
+    };
+  }
+}
+
+/**
+ * Get match games with FFA results and participants
+ */
+export async function getMatchGamesWithResults(matchId: string): Promise<Array<{
+  id: string;
+  round: number;
+  map_name: string;
+  mode_scoring_type: string;
+  status: string;
+  winner_id?: string;
+  participant_winner_id?: string;
+  participant_winner_name?: string;
+  is_ffa_mode: boolean;
+}>> {
+  const db = await getDbInstance();
+  
+  try {
+    const query = `
+      SELECT 
+        mg.id,
+        mg.round,
+        mg.winner_id,
+        mg.participant_winner_id,
+        mg.is_ffa_mode,
+        mg.status,
+        gm.name as map_name,
+        gamemode.scoring_type as mode_scoring_type,
+        mp.username as participant_winner_name
+      FROM match_games mg
+      LEFT JOIN game_maps gm ON mg.map_id = gm.id
+      LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
+      LEFT JOIN match_participants mp ON mg.participant_winner_id = mp.id
+      WHERE mg.match_id = ?
+      ORDER BY mg.round ASC
+    `;
+
+    const games = await db.all<{
+      id: string;
+      round: number;
+      map_name: string;
+      mode_scoring_type: string;
+      status: string;
+      winner_id?: string;
+      participant_winner_id?: string;
+      participant_winner_name?: string;
+      is_ffa_mode: number;
+    }>(query, [matchId]);
+
+    return games.map(game => ({
+      ...game,
+      is_ffa_mode: Boolean(game.is_ffa_mode)
+    }));
+  } catch (error) {
+    console.error('Error getting match games with results:', error);
+    return [];
   }
 }
 

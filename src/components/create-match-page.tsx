@@ -85,6 +85,7 @@ export function CreateMatchPage() {
   const [startSignups, setStartSignups] = useState(true);
   const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
+  const [flexibleModeSelects, setFlexibleModeSelects] = useState<Record<string, string>>({});
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -377,6 +378,15 @@ export function CreateMatchPage() {
     setMapsForMode([]);
   };
 
+  const handleFlexibleModeChange = (mapId: string, modeId: string | null) => {
+    if (!modeId) return;
+    
+    setFlexibleModeSelects(prev => ({
+      ...prev,
+      [mapId]: modeId
+    }));
+  };
+
   const handleFlexibleMapSelect = (map: GameMapWithMode, modeId: string) => {
     const mode = availableModes.find(m => m.id === modeId);
     if (!mode) return;
@@ -411,6 +421,9 @@ export function CreateMatchPage() {
     updateFormData('maps', newMapIds);
     updateFormData('rounds', newMapIds.length);
     setShowMapSelector(false);
+    setSelectedMode('');
+    setMapsForMode([]);
+    setFlexibleModeSelects({});
   };
 
   const handleRemoveMap = (mapId: string) => {
@@ -424,6 +437,9 @@ export function CreateMatchPage() {
 
   const handleAddMapClick = () => {
     setShowMapSelector(true);
+    setSelectedMode('');
+    setMapsForMode([]);
+    setFlexibleModeSelects({});
   };
 
   const convertToUTC = (date: string, time: string): Date => {
@@ -872,6 +888,7 @@ export function CreateMatchPage() {
                       value={selectedMode}
                       onChange={(value) => value && handleModeSelect(value)}
                       mb="md"
+                      disabled={availableModes.length === 0}
                     />
 
                     {selectedMode && (
@@ -935,8 +952,24 @@ export function CreateMatchPage() {
                               placeholder="Select mode"
                               size="xs"
                               data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
-                              onChange={(value) => value && handleFlexibleMapSelect(map, value)}
+                              value={flexibleModeSelects[map.id] || null}
+                              onChange={(value) => handleFlexibleModeChange(map.id, value)}
+                              disabled={availableModes.length === 0}
+                              mb="xs"
                             />
+                            <Button
+                              size="xs"
+                              fullWidth
+                              disabled={!flexibleModeSelects[map.id]}
+                              onClick={() => {
+                                const selectedModeId = flexibleModeSelects[map.id];
+                                if (selectedModeId) {
+                                  handleFlexibleMapSelect(map, selectedModeId);
+                                }
+                              }}
+                            >
+                              Add Map
+                            </Button>
                           </Card>
                         </Grid.Col>
                       ))}
@@ -951,6 +984,7 @@ export function CreateMatchPage() {
                       setShowMapSelector(false);
                       setSelectedMode('');
                       setMapsForMode([]);
+                      setFlexibleModeSelects({});
                     }}
                   >
                     Cancel

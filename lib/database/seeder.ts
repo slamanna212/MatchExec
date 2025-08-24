@@ -27,6 +27,7 @@ interface ModeData {
   id: string;
   name: string;
   description: string;
+  scoringType?: string; // FFA or Normal
   scoring?: Record<string, unknown>; // Flexible scoring configuration
 }
 
@@ -209,10 +210,11 @@ export class DatabaseSeeder {
     await this.db.run('DELETE FROM game_modes WHERE game_id = ?', [gameId]);
 
     for (const mode of modesData) {
+      const scoringType = mode.scoringType || 'Normal';
       await this.db.run(`
-        INSERT INTO game_modes (id, game_id, name, description, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [mode.id, gameId, mode.name, mode.description]);
+        INSERT INTO game_modes (id, game_id, name, description, scoring_type, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [mode.id, gameId, mode.name, mode.description, scoringType]);
     }
   }
 
@@ -253,10 +255,10 @@ export class DatabaseSeeder {
       // Traditional approach: map type defines the mode
       for (const map of mapsData) {
         // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
-        // Special handling for "Doom Match" -> "doom-match"
+        // Special handling for "Doom Match" -> "doommatch"
         let modeId = map.type.toLowerCase();
         if (modeId === 'doom match') {
-          modeId = 'doom-match';
+          modeId = 'doommatch';
         }
         
         // Fix image URL by removing /public prefix for Next.js static assets
