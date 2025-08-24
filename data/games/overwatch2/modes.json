@@ -2,36 +2,43 @@
     {
       "id": "control",
       "name": "Control",
-      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds."
+      "description": "Teams fight to capture and hold a single objective. Best-of-three rounds.",
+      "scoringType": "Normal"
     },
     {
       "id": "escort",
       "name": "Escort",
-      "description": "Attackers escort a payload to its destination while defenders try to stop them."
+      "description": "Attackers escort a payload to its destination while defenders try to stop them.",
+      "scoringType": "Normal"
     },
     {
       "id": "hybrid",
       "name": "Hybrid",
-      "description": "Attackers first capture a point, then escort a payload on the next segment."
+      "description": "Attackers first capture a point, then escort a payload on the next segment.",
+      "scoringType": "Normal"
     },
     {
       "id": "push",
       "name": "Push",
-      "description": "Both teams vie to push a robot into the enemy base across multiple rounds."
+      "description": "Both teams vie to push a robot into the enemy base across multiple rounds.",
+      "scoringType": "Normal"
     },
     {
       "id": "flashpoint",
       "name": "Flashpoint",
-      "description": "Like Control but faster points on the same map."
+      "description": "Like Control but faster points on the same map.",
+      "scoringType": "Normal"
     },
     {
       "id": "clash",
       "name": "Clash",
-      "description": "Tug of War in Overwatch 2."
+      "description": "Tug of War in Overwatch 2.",
+      "scoringType": "Normal"
     },
     {
       "id": "workshop",
       "name": "Workshop",
-      "description": "Limited only by your imagination."
+      "description": "Limited only by your imagination.",
+      "scoringType": "FFA"
     }
 ]

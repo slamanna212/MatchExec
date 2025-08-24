@@ -1,22 +1,44 @@
 [
   {
-    "id": "standard",
-    "name": "Standard",
-    "description": "Standard 5v5 plant/defuse gameplay with first to 13 rounds winning."
+    "id": "normal",
+    "name": "Normal",
+    "description": "Standard Plant/Defuse mode. Teams play multiple rounds on Attack or Defense, then swap sides for the rest.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "swiftplay",
+    "name": "Swiftplay",
+    "description": "Best-of-nine mode with similar gameplay rules to Unrated, but adapted for shorter match length.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "spike-rush",
+    "name": "Spike Rush",
+    "description": "Best-of-seven mode where all players start with the same random weapon. Random orbs provide buffs/debuffs.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "premier",
+    "name": "Premier",
+    "description": "Tournament mode using Competitive rules, focused on top-tier competition with map pick/ban phases.",
+    "scoringType": "Normal"
   },
   {
     "id": "deathmatch",
     "name": "Deathmatch",
-    "description": "Free-for-all elimination-based gameplay."
+    "description": "12-player free-for-all mode to practice gunplay. First to 40 kills or 9 minutes wins.",
+    "scoringType": "FFA"
   },
   {
     "id": "escalation",
     "name": "Escalation",
-    "description": "Team-based progression through different weapon types."
+    "description": "5v5 team mode racing through weapon/ability levels. First team to finish level 12 or furthest along in 10 minutes wins.",
+    "scoringType": "Normal"
   },
   {
-    "id": "workshop",
-    "name": "Workshop",
-    "description": "Custom game modes and community creations."
+    "id": "team-deathmatch",
+    "name": "Team Deathmatch",
+    "description": "5v5 mode where first team to 100 kills wins. Includes weapon spawners and recovery orbs.",
+    "scoringType": "Normal"
   }
 ]
