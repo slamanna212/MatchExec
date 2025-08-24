@@ -223,6 +223,11 @@ export function SimpleMapScoring({
   };
 
   const getMapImageUrl = (gameId: string, mapId: string) => {
+    // Handle special cases where maps don't use webp format
+    if (gameId === 'overwatch2' && mapId === 'ow2-workshop') {
+      return `/assets/games/${gameId}/maps/${mapId}.jpg`;
+    }
+    // Default to webp for all other maps
     return `/assets/games/${gameId}/maps/${mapId}.webp`;
   };
 

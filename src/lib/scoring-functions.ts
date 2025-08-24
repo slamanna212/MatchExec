@@ -330,19 +330,41 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
       return;
     }
 
-    // Get winning team players
-    const winningTeamName = result.winner === 'team1' ? 'Blue Team' : 'Red Team';
-    const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
+    // Handle FFA vs team mode differently
+    let winningTeamName: string;
+    let winningPlayers: string[];
     
-    const playersQuery = `
-      SELECT username
-      FROM match_participants
-      WHERE match_id = ? AND team_assignment = ?
-      ORDER BY username ASC
-    `;
+    if (result.isFfaMode && result.participantWinnerId) {
+      // FFA Mode: Get the individual winner's name
+      const participantQuery = `
+        SELECT username
+        FROM match_participants
+        WHERE match_id = ? AND id = ?
+      `;
+      const participant = await db.get<{ username: string }>(participantQuery, [gameData.match_id, result.participantWinnerId]);
+      
+      if (participant) {
+        winningTeamName = participant.username;
+        winningPlayers = [participant.username];
+      } else {
+        winningTeamName = 'Unknown Player';
+        winningPlayers = ['Unknown Player'];
+      }
+    } else {
+      // Team Mode: Get winning team players
+      winningTeamName = result.winner === 'team1' ? 'Blue Team' : 'Red Team';
+      const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
+      
+      const playersQuery = `
+        SELECT username
+        FROM match_participants
+        WHERE match_id = ? AND team_assignment = ?
+        ORDER BY username ASC
+      `;
 
-    const players = await db.all<{ username: string }>(playersQuery, [gameData.match_id, teamAssignment]);
-    const winningPlayers = players.map(p => p.username);
+      const players = await db.all<{ username: string }>(playersQuery, [gameData.match_id, teamAssignment]);
+      winningPlayers = players.map(p => p.username);
+    }
 
     // Generate unique notification ID
     const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
