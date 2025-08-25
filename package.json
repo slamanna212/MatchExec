@@ -20,7 +20,7 @@
     "version:major": "npm version major --no-git-tag-version"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.0",
     "@mantine/core": "^8.2.5",
     "@mantine/dates": "^8.2.5",
     "@mantine/form": "^8.2.5",
