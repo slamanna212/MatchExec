@@ -278,7 +278,6 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
               <Button
                 onClick={handleSave}
                 loading={saving}
-                disabled={participants.length === 0}
               >
                 Save Team Assignments
               </Button>
