@@ -103,7 +103,7 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Header>
         <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
           <AppShell.Section>
-            <Group mb="md" justify="center">
+            <Group mb="md" justify="center" hiddenFrom="base" visibleFrom="md">
               <Image
                 src="/logo.svg"
                 alt="MatchExec Logo"
@@ -158,7 +158,7 @@ export function Navigation({ children }: NavigationProps) {
 
       <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
         <AppShell.Section>
-          <Group mb="xs" justify="center">
+          <Group mb="xs" justify="center" hiddenFrom="base" visibleFrom="md">
             <Image
               src="/logo.svg"
               alt="MatchExec Logo"
