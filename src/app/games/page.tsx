@@ -121,7 +121,7 @@ export default function GamesPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="container mx-auto p-6 max-w-6xl">
         <Center h={400}>
           <Loader size="lg" />
         </Center>
@@ -130,12 +130,12 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="container mx-auto p-6 max-w-6xl">
       <Stack gap="xl">
 
         <Grid>
           {games.map((game) => (
-            <Grid.Col key={game.id} span={{ base: 12, md: 6 }}>
+            <Grid.Col key={game.id} span={{ base: 12, md: 6, lg: 4 }}>
               <Card shadow="sm" padding="lg" radius="md" withBorder h="320px">
                 <Group wrap="nowrap" h="100%">
                   <div style={{ width: '180px', height: '280px', flexShrink: 0, position: 'relative' }}>
