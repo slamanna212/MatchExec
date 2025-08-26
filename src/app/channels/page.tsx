@@ -181,7 +181,7 @@ export default function ChannelsPage() {
           <Text size="md" fw={600} mb="xs">Notification Status</Text>
           <Text size="sm" c="dimmed" mb="md">Green indicates at least one channel is configured for this notification type</Text>
           <Grid>
-            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
                 <IconCircle 
                   size="0.8rem" 
@@ -191,7 +191,7 @@ export default function ChannelsPage() {
                 <Text size="sm">Announcements</Text>
               </Group>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
                 <IconCircle 
                   size="0.8rem" 
@@ -201,7 +201,7 @@ export default function ChannelsPage() {
                 <Text size="sm">Reminders</Text>
               </Group>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
                 <IconCircle 
                   size="0.8rem" 
@@ -211,7 +211,7 @@ export default function ChannelsPage() {
                 <Text size="sm">Live Updates</Text>
               </Group>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
                 <IconCircle 
                   size="0.8rem" 
