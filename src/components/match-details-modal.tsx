@@ -582,16 +582,6 @@ export function MatchDetailsModal({
                               </Text>
                             )}
                             
-                            <Text size="xs" c="dimmed">
-                              Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                                year: 'numeric', 
-                                month: 'numeric', 
-                                day: 'numeric', 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true 
-                              }) || 'N/A'}
-                            </Text>
                             
                             {(reminder.sent_at || reminder.processed_at) && (
                               <Text size="xs" c="dimmed">
@@ -787,16 +777,6 @@ export function MatchDetailsModal({
                                 </Text>
                               )}
                               
-                              <Text size="xs" c="dimmed">
-                                Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                                  year: 'numeric', 
-                                  month: 'numeric', 
-                                  day: 'numeric', 
-                                  hour: 'numeric', 
-                                  minute: '2-digit',
-                                  hour12: true 
-                                }) || 'N/A'}
-                              </Text>
                               
                               {(reminder.sent_at || reminder.processed_at) && (
                                 <Text size="xs" c="dimmed">
