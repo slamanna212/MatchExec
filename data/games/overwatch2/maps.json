@@ -46,14 +46,14 @@
       "name": "Shambali Monastery",
       "type": "Escort",
       "location": "Nepal",
-      "thumbnailUrl": "/public/assets/games/overwatch2/maps/shambali-monastery.webp"
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/Shambali.png"
     },
     {
       "id": "watchpoint-gibraltar",
       "name": "Watchpoint: Gibraltar",
       "type": "Escort",
       "location": "Gibraltar",
-      "thumbnailUrl": "/public/assets/games/overwatch2/maps/watchpoint-gibraltar.webp"
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/watchpoint-gibraltar.jpg"
     },
     {
       "id": "blizzard-world",
@@ -81,7 +81,7 @@
       "name": "Kings Row",
       "type": "Hybrid",
       "location": "London, United Kingdom",
-      "thumbnailUrl": "/public/assets/games/overwatch2/maps/kings-row.webp"
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/kings-row.jpg"
     },
     {
       "id": "midtown",
