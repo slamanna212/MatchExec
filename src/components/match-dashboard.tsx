@@ -526,7 +526,7 @@ export function MatchDashboard() {
         return (
           <Button 
             size="sm" 
-            color="yellow"
+            color="green"
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'battle');

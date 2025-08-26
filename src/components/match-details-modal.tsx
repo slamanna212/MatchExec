@@ -823,24 +823,12 @@ export function MatchDetailsModal({
             </Button>
           )}
           {!showDeleteButton && <div />}
-          <Group>
-            {showAssignButton && (selectedMatch.status === 'gather' || selectedMatch.status === 'assign') && (
-              <Button
-                onClick={() => {
-                  onClose();
-                  onAssign?.(selectedMatch);
-                }}
-              >
-                Assign
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={onClose}
-            >
-              Close
-            </Button>
-          </Group>
+          <Button
+            variant="outline"
+            onClick={onClose}
+          >
+            Close
+          </Button>
         </Group>
       </Stack>
     </Modal>
