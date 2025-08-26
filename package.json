@@ -42,7 +42,7 @@
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "sqlite3": "^5.1.7",
-    "tsx": "^4.20.4"
+    "tsx": "^4.20.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
