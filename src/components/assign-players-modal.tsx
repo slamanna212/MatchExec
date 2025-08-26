@@ -69,6 +69,20 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     redTeamVoiceChannel: null
   });
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
+  const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Check if screen is mobile size (same breakpoint as Navigation component)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint from Mantine
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -117,6 +131,30 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
           : p
       )
     );
+  };
+
+  const handleDragStart = (e: React.DragEvent, participantId: string) => {
+    e.dataTransfer.setData('text/plain', participantId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedParticipant(participantId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetTeam: 'reserve' | 'blue' | 'red') => {
+    e.preventDefault();
+    const participantId = e.dataTransfer.getData('text/plain');
+    if (participantId) {
+      handleTeamChange(participantId, targetTeam);
+    }
+    setDraggedParticipant(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedParticipant(null);
   };
 
   const handleSave = async () => {
@@ -186,16 +224,29 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     }
   };
 
-  const renderParticipantCard = (participant: MatchParticipant, index: number) => (
-    <Card 
-      key={participant.id} 
-      shadow="md" 
-      padding="md" 
-      radius="md" 
-      withBorder 
-      mb="sm"
-      style={getPlayerCardStyles(participant.team_assignment)}
-    >
+  const renderParticipantCard = (participant: MatchParticipant, index: number) => {
+    const isDragging = draggedParticipant === participant.id;
+    const isDragDisabled = isMobile;
+    
+    return (
+      <Card 
+        key={participant.id} 
+        shadow="md" 
+        padding="md" 
+        radius="md" 
+        withBorder 
+        mb="sm"
+        style={{
+          ...(isDragging 
+            ? { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)', opacity: 0.6 }
+            : getPlayerCardStyles(participant.team_assignment)
+          ),
+          cursor: isDragDisabled ? 'default' : 'grab'
+        }}
+        draggable={!isDragDisabled}
+        onDragStart={isDragDisabled ? undefined : (e) => handleDragStart(e, participant.id)}
+        onDragEnd={isDragDisabled ? undefined : handleDragEnd}
+      >
       <Group justify="space-between" align="center">
         <Group align="center">
           <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
@@ -245,13 +296,22 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         </Group>
       )}
     </Card>
-  );
+    );
+  };
 
   const renderTeamSection = (team: 'reserve' | 'blue' | 'red', title: string, color: string) => {
     const teamParticipants = getTeamParticipants(team);
     
     return (
-      <Card shadow="xs" padding="lg" radius="md" withBorder>
+      <Card 
+        shadow="xs" 
+        padding="lg" 
+        radius="md" 
+        withBorder
+        onDragOver={isMobile ? undefined : handleDragOver}
+        onDrop={isMobile ? undefined : (e) => handleDrop(e, team)}
+        style={{ minHeight: '200px' }}
+      >
         <Group justify="space-between" mb="md">
           <Text size="lg" fw={600} c={color}>{title}</Text>
           <Badge size="lg" color={color} variant="light">
