@@ -246,7 +246,7 @@ export function MatchDetailsModal({
           <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
             <Group justify="space-between" align="center">
               <Group align="center">
-                <Avatar size="sm" color={selectedMatch?.status === 'complete' ? 'green' : 'blue'}>
+                <Avatar size="sm" color={selectedMatch?.status === 'complete' ? 'green' : 'teal'}>
                   {index + 1}
                 </Avatar>
                 <div>
