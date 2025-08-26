@@ -13,7 +13,8 @@ import {
   Stack,
   Grid,
   RingProgress,
-  TextInput
+  TextInput,
+  useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
@@ -69,13 +70,19 @@ const MatchCard = memo(({
   formatMapName, 
   getNextStatusButton 
 }: MatchCardProps) => {
+  const { colorScheme } = useMantineColorScheme();
+  
   return (
     <Card 
-      shadow="sm" 
+      shadow={colorScheme === 'light' ? 'lg' : 'sm'}
       padding="lg" 
       radius="md" 
       withBorder
-      style={{ cursor: 'pointer' }}
+      bg={colorScheme === 'light' ? 'white' : undefined}
+      style={{ 
+        cursor: 'pointer',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+      }}
       onClick={() => onViewDetails(match)}
     >
       <Group mb="md">
@@ -175,6 +182,7 @@ MatchCard.displayName = 'MatchCard';
 
 export function MatchDashboard() {
   const router = useRouter();
+  const { colorScheme } = useMantineColorScheme();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -687,7 +695,15 @@ export function MatchDashboard() {
       <Divider mb="xl" />
 
       {matches.length === 0 ? (
-        <Card p="xl">
+        <Card 
+          p="xl" 
+          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+          withBorder
+          bg={colorScheme === 'light' ? 'white' : undefined}
+          style={{ 
+            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+          }}
+        >
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed">
@@ -696,7 +712,15 @@ export function MatchDashboard() {
           </Stack>
         </Card>
       ) : filteredMatches.length === 0 && searchQuery ? (
-        <Card p="xl">
+        <Card 
+          p="xl" 
+          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+          withBorder
+          bg={colorScheme === 'light' ? 'white' : undefined}
+          style={{ 
+            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+          }}
+        >
           <Stack align="center">
             <Text size="xl" fw={600}>No matches found</Text>
             <Text c="dimmed">

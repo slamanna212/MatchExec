@@ -3,6 +3,7 @@
 import { MantineProvider, createTheme } from '@mantine/core'
 import { ModalsProvider } from '@mantine/modals'
 import '@mantine/core/styles.css'
+import './globals.css'
 
 const theme = createTheme({
   primaryColor: 'violet',
@@ -18,6 +19,18 @@ const theme = createTheme({
       '#6d28d9',
       '#5b21b6',
       '#420d4a'
+    ],
+    gray: [
+      '#f8f9fa',
+      '#f1f3f4', // slightly darker for our background
+      '#e9ecef',
+      '#dee2e6',
+      '#ced4da',
+      '#adb5bd',
+      '#6c757d',
+      '#495057',
+      '#343a40',
+      '#212529'
     ]
   }
 })
