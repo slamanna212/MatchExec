@@ -3,7 +3,7 @@
     {
       "id": "uplay_username",
       "type": "text",
-      "label": "Uplay/Ubisoft Connect Username",
+      "label": "Uplay Username",
       "placeholder": "YourUsername",
       "required": true
     },
