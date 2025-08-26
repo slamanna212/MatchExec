@@ -44,14 +44,13 @@ jobs:
         tag_name: v${{ steps.package_version.outputs.version }}
         release_name: Release v${{ steps.package_version.outputs.version }}
         body: |
-          ## Changes
+          ## 🐛 Bug Fixes
           
-          This release includes all changes merged to main branch.
+          ## ✨ New Features
+
+          ## 🎮 Game Data
           
           **Docker Image:** `ghcr.io/${{ github.repository_owner }}/matchexec:v${{ steps.package_version.outputs.version }}`
-          
-          ## Full Changelog
-          See commit history for detailed changes.
         draft: true
         prerelease: false
         
