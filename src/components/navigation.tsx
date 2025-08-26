@@ -25,7 +25,8 @@ import {
   IconClock,
   IconBrandDiscord,
   IconPaint,
-  IconVolume
+  IconVolume,
+  IconInfoCircle
 } from '@tabler/icons-react'
 import { getVersionInfo, VersionInfo } from '@/lib/version-client'
 
@@ -72,6 +73,7 @@ export function Navigation({ children }: NavigationProps) {
         { label: 'UI', href: '/settings#ui', icon: IconPaint }
       ]
     },
+    { label: 'Info', href: '/info', icon: IconInfoCircle },
     { label: 'Dev', href: '/dev', icon: IconCode },
   ]
 
