@@ -138,15 +138,39 @@ export default function GamesPage() {
             <Grid.Col key={game.id} span={{ base: 12, md: 6 }}>
               <Card shadow="sm" padding="lg" radius="md" withBorder h="320px">
                 <Group wrap="nowrap" h="100%">
-                  <div style={{ width: '180px', height: '280px', flexShrink: 0 }}>
+                  <div style={{ width: '180px', height: '280px', flexShrink: 0, position: 'relative' }}>
                     {game.coverUrl && (
-                      <Image
-                        src={game.coverUrl}
-                        alt={`${game.name} cover`}
-                        radius="md"
-                        fallbackSrc="/assets/placeholder-cover.png"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
+                      <>
+                        {/* Blurred background */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            backgroundImage: `url(${game.coverUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            filter: 'blur(10px)',
+                            zIndex: 1
+                          }}
+                        />
+                        {/* Main image */}
+                        <Image
+                          src={game.coverUrl}
+                          alt={`${game.name} cover`}
+                          radius="md"
+                          fallbackSrc="/assets/placeholder-cover.png"
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'contain',
+                            position: 'relative',
+                            zIndex: 2
+                          }}
+                        />
+                      </>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -158,9 +182,6 @@ export default function GamesPage() {
                     </Badge>
                     <Text size="sm" c="dimmed" mt="xs">
                       {game.developer}
-                    </Text>
-                    <Text size="sm" mt="xs">
-                      {game.description}
                     </Text>
                     <Group mt={{ base: "xs", md: "md" }} gap="xl">
                       <div 
