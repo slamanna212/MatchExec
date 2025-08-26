@@ -132,7 +132,12 @@ const MatchCard = memo(({
             {match.maps && match.maps.length > 0 ? (
               (() => {
                 const cleanMapId = match.maps[0].replace(/-\d+$/, '');
-                const mapName = mapNames[cleanMapId] || formatMapName(cleanMapId);
+                const mapName = mapNames[cleanMapId];
+                
+                if (!mapName) {
+                  return 'Loading...';
+                }
+                
                 return match.maps.length > 1
                   ? `${mapName} +${match.maps.length - 1} more`
                   : mapName;
