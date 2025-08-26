@@ -16,6 +16,23 @@ import {
   Divider
 } from '@mantine/core';
 
+interface SignupField {
+  id: string;
+  label: string;
+  type: 'text' | 'select' | 'number';
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+interface SignupConfig {
+  id: string;
+  name: string;
+  fields: SignupField[];
+  created_at: string;
+  updated_at: string;
+}
+
 interface MatchParticipant {
   id: string;
   user_id: string;
@@ -51,6 +68,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     blueTeamVoiceChannel: null,
     redTeamVoiceChannel: null
   });
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -66,6 +84,11 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
           ...p,
           team_assignment: p.team_assignment || 'reserve'
         })));
+        
+        // Set signup config if available
+        if (data.signupConfig) {
+          setSignupConfig(data.signupConfig);
+        }
       }
       
       if (voiceChannelsResponse.ok) {
@@ -132,16 +155,55 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     return participants.filter(p => p.team_assignment === team);
   };
 
+  const getPlayerCardStyles = (team: 'reserve' | 'blue' | 'red') => {
+    switch(team) {
+      case 'blue':
+        return { 
+          backgroundColor: 'var(--mantine-color-blue-2)',
+          borderColor: 'var(--mantine-color-blue-4)'
+        };
+      case 'red':
+        return { 
+          backgroundColor: 'var(--mantine-color-red-2)',
+          borderColor: 'var(--mantine-color-red-4)'
+        };
+      case 'reserve':
+        return { 
+          backgroundColor: 'var(--mantine-color-yellow-2)',
+          borderColor: 'var(--mantine-color-yellow-4)'
+        };
+      default:
+        return {};
+    }
+  };
+
+  const getBadgeColor = (team: 'reserve' | 'blue' | 'red') => {
+    switch(team) {
+      case 'blue': return 'orange';    // Contrasts with blue
+      case 'red': return 'cyan';       // Contrasts with red  
+      case 'reserve': return 'grape';  // Contrasts with yellow
+      default: return 'dark';
+    }
+  };
+
   const renderParticipantCard = (participant: MatchParticipant, index: number) => (
-    <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder mb="sm">
+    <Card 
+      key={participant.id} 
+      shadow="md" 
+      padding="md" 
+      radius="md" 
+      withBorder 
+      mb="sm"
+      style={getPlayerCardStyles(participant.team_assignment)}
+    >
       <Group justify="space-between" align="center">
         <Group align="center">
-          <Avatar size="sm" color="blue">
+          <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
             {index + 1}
           </Avatar>
           <div>
-            <Text fw={500} size="sm">{participant.username}</Text>
-            <Text size="xs" c="dimmed">
+            <Text fw={500} size="sm" c="dark">{participant.username}</Text>
+            <Text size="xs" c="gray.7">
               Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
             </Text>
           </div>
@@ -157,16 +219,29 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             { value: 'red', label: 'Red Team' }
           ]}
           w={120}
+          styles={{
+            input: {
+              backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+              border: '1px solid var(--mantine-color-gray-5)',
+              backdropFilter: 'blur(2px)',
+              color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+            }
+          }}
         />
       </Group>
       
       {participant.signup_data && Object.keys(participant.signup_data).length > 0 && (
         <Group mt="xs" gap="xs">
-          {Object.entries(participant.signup_data).map(([key, value]) => (
-            <Badge key={key} size="xs" variant="light">
-              {key}: {String(value)}
-            </Badge>
-          ))}
+          {Object.entries(participant.signup_data).map(([key, value]) => {
+            const field = signupConfig?.fields.find(f => f.id === key);
+            const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
+            
+            return (
+              <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment)}>
+                {displayLabel}: {String(value)}
+              </Badge>
+            );
+          })}
         </Group>
       )}
     </Card>
@@ -176,7 +251,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     const teamParticipants = getTeamParticipants(team);
     
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card shadow="xs" padding="lg" radius="md" withBorder>
         <Group justify="space-between" mb="md">
           <Text size="lg" fw={600} c={color}>{title}</Text>
           <Badge size="lg" color={color} variant="light">
