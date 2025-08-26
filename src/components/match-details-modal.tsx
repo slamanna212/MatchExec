@@ -351,7 +351,9 @@ export function MatchDetailsModal({
               </Group>
               <Grid>
                 {selectedMatch.maps.map(mapId => {
-                  const mapDetail = mapDetails[mapId];
+                  // Strip timestamp from map ID to look up details
+                  const cleanMapId = mapId.replace(/-\d+$/, '');
+                  const mapDetail = mapDetails[cleanMapId];
                   const winner = getMapWinner(mapId);
                   return (
                     <Grid.Col key={mapId} span={12}>
@@ -360,7 +362,7 @@ export function MatchDetailsModal({
                           <div style={{ width: '50%', position: 'relative' }}>
                             <Image
                               src={mapDetail?.imageUrl}
-                              alt={mapDetail?.name || formatMapName(mapId)}
+                              alt={mapDetail?.name || formatMapName(cleanMapId)}
                               height={80}
                               radius={0}
                               style={{
@@ -377,16 +379,24 @@ export function MatchDetailsModal({
                             <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                               <div>
                                 <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
-                                  {mapDetail?.name || formatMapName(mapId)}
+                                  {mapDetail?.name || formatMapName(cleanMapId)}
                                 </Text>
                                 {mapDetail?.location && (
                                   <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                     {mapDetail.location}
                                   </Text>
                                 )}
-                                {mapDetail?.modeName && (
+                                {(mapDetail?.modeName || cleanMapId.includes('-')) && (
                                   <Badge size="xs" variant="light" mt={2}>
-                                    {mapDetail.modeName}
+                                    {mapDetail?.modeName || (() => {
+                                      // Fallback: extract mode from map ID
+                                      const parts = cleanMapId.split('-');
+                                      const lastPart = parts[parts.length - 1];
+                                      return lastPart === 'bomb' ? 'Bomb' :
+                                             lastPart === 'hostage' ? 'Hostage' :
+                                             lastPart === 'secure-area' ? 'Secure Area' :
+                                             lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+                                    })()}
                                   </Badge>
                                 )}
                               </div>
@@ -630,14 +640,16 @@ export function MatchDetailsModal({
                   {selectedMatch.maps && selectedMatch.maps.length > 0 ? (
                     <Stack gap="sm">
                       {selectedMatch.maps.map(mapId => {
-                        const mapDetail = mapDetails[mapId];
+                        // Strip timestamp from map ID to look up details
+                        const cleanMapId = mapId.replace(/-\d+$/, '');
+                        const mapDetail = mapDetails[cleanMapId];
                         return (
                           <Card key={mapId} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                             <Group wrap="nowrap" align="stretch" gap={0}>
                               <div style={{ width: '40%', position: 'relative' }}>
                                 <Image
                                   src={mapDetail?.imageUrl}
-                                  alt={mapDetail?.name || formatMapName(mapId)}
+                                  alt={mapDetail?.name || formatMapName(cleanMapId)}
                                   height={80}
                                   radius={0}
                                   style={{
@@ -654,16 +666,24 @@ export function MatchDetailsModal({
                                 <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                                   <div>
                                     <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
-                                      {mapDetail?.name || formatMapName(mapId)}
+                                      {mapDetail?.name || formatMapName(cleanMapId)}
                                     </Text>
                                     {mapDetail?.location && (
                                       <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                         {mapDetail.location}
                                       </Text>
                                     )}
-                                    {mapDetail?.modeName && (
+                                    {(mapDetail?.modeName || cleanMapId.includes('-')) && (
                                       <Badge size="xs" variant="light" mt={2}>
-                                        {mapDetail.modeName}
+                                        {mapDetail?.modeName || (() => {
+                                          // Fallback: extract mode from map ID
+                                          const parts = cleanMapId.split('-');
+                                          const lastPart = parts[parts.length - 1];
+                                          return lastPart === 'bomb' ? 'Bomb' :
+                                                 lastPart === 'hostage' ? 'Hostage' :
+                                                 lastPart === 'secure-area' ? 'Secure Area' :
+                                                 lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+                                        })()}
                                       </Badge>
                                     )}
                                   </div>

@@ -393,7 +393,7 @@ export function CreateMatchPage() {
     }
 
     // Extract base map ID (remove mode suffix if it exists)
-    const baseMapId = map.id.includes('-') ? map.id.split('-')[0] : map.id;
+    const baseMapId = map.id.includes('-') ? map.id.replace(/-[^-]+$/, '') : map.id;
     const combinedId = `${baseMapId}-${modeId}-${Date.now()}`;
 
     const selectedMap: SelectedMapCard = {

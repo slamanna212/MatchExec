@@ -265,8 +265,11 @@ export class AnnouncementHandler {
     if (!this.db) return null;
 
     try {
-      // Get map data from database
-      const mapData = await this.db.get<{
+      // Strip timestamp suffix from map identifier if present (e.g., "yacht-hostage-1756235829102" -> "yacht-hostage")
+      const cleanMapId = mapIdentifier.replace(/-\d+$/, '');
+      
+      // Get map data from database - try exact match first
+      let mapData = await this.db.get<{
         name: string, 
         image_url: string, 
         location: string,
@@ -276,7 +279,29 @@ export class AnnouncementHandler {
         FROM game_maps gm
         WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
         LIMIT 1
-      `, [gameId, mapIdentifier, `%${mapIdentifier}%`]);
+      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+
+      // If no exact match, try matching by base map name regardless of mode/naming variations
+      if (!mapData) {
+        const parts = cleanMapId.split('-');
+        if (parts.length >= 2) {
+          const baseMapName = parts[0]; // e.g., "emerald", "bartlett"
+          const remainingParts = parts.slice(1).join('-'); // e.g., "secure-area" or "u-hostage"
+          
+          // Try to find any map with matching base name and similar remaining parts
+          mapData = await this.db.get<{
+            name: string, 
+            image_url: string, 
+            location: string,
+            mode_id: string
+          }>(`
+            SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+            FROM game_maps gm
+            WHERE gm.game_id = ? AND gm.id LIKE ?
+            LIMIT 1
+          `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
+        }
+      }
 
       if (!mapData) {
         // Fallback embed for unknown maps

@@ -114,9 +114,13 @@ const HistoryMatchCard = memo(({
           <Text size="sm" c="dimmed">Maps:</Text>
           <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
             {match.maps && match.maps.length > 0 ? (
-              match.maps.length > 1
-                ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
-                : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+              (() => {
+                const cleanMapId = match.maps[0].replace(/-\d+$/, '');
+                const mapName = mapNames[cleanMapId] || formatMapName(cleanMapId);
+                return match.maps.length > 1
+                  ? `${mapName} +${match.maps.length - 1} more`
+                  : mapName;
+              })()
             ) : (
               'None selected'
             )}
@@ -242,15 +246,57 @@ export function MatchHistoryDashboard() {
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
         
-        maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-          mapNamesObj[map.id] = map.name;
-          mapDetailsObj[map.id] = {
-            name: map.name,
-            imageUrl: map.imageUrl,
-            modeName: map.modeName,
-            location: map.location
-          };
-        });
+        // Check if this game supports all modes (flexible mode combinations)
+        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
+        
+        if (supportsAllModes) {
+          // For flexible games, get all possible modes and create all combinations
+          const modesResponse = await fetch(`/api/games/${gameId}/modes`);
+          let modes: {id: string, name: string}[] = [];
+          
+          if (modesResponse.ok) {
+            modes = await modesResponse.json();
+          }
+          
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+            // Add the original map entry
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location
+            };
+            
+            // For flexible games, create entries for all possible mode combinations
+            // Extract base map name by removing the mode suffix
+            const baseMapName = map.id.replace(/-[^-]+$/, '');
+            
+            modes.forEach(mode => {
+              const modeSpecificId = `${baseMapName}-${mode.id}`;
+              if (modeSpecificId !== map.id) {
+                mapNamesObj[modeSpecificId] = map.name;
+                mapDetailsObj[modeSpecificId] = {
+                  name: map.name,
+                  imageUrl: map.imageUrl,
+                  modeName: mode.name,
+                  location: map.location
+                };
+              }
+            });
+          });
+        } else {
+          // For fixed mode games, use the API data as-is
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location
+            };
+          });
+        }
         
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
