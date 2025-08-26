@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Title, Text, Button, Stack, Alert } from '@mantine/core';
 import { IconInfoCircle, IconRocket, IconSettings } from '@tabler/icons-react';
 
@@ -31,10 +32,11 @@ export default function WelcomePage() {
     <Stack gap="lg">
       <div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-          <img 
+          <Image 
             src="/logo.svg" 
             alt="MatchExec"
-            style={{ width: '80px', height: '80px' }}
+            width={80}
+            height={80}
           />
         </div>
         <Title order={1} ta="center" mb="xs">

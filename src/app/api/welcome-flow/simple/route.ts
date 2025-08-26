@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const dbPath = path.join(process.cwd(), 'app_data/data/matchexec.db');
     
-    return new Promise((resolve) => {
+    return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
           console.error('Database connection error:', err);
@@ -17,7 +17,7 @@ export async function GET() {
         db.get(
           'SELECT setting_value FROM app_settings WHERE setting_key = ?',
           ['welcome_flow_completed'],
-          (err, row: any) => {
+          (err, row: { setting_value: string } | undefined) => {
             db.close();
             
             if (err) {

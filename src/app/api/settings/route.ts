@@ -1,6 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 
+interface DiscordSettings {
+  application_id: string;
+  bot_token: string;
+  guild_id: string;
+  announcement_role_id: string;
+  mention_everyone: number;
+  event_duration_minutes: number;
+  match_reminder_minutes: number;
+  player_reminder_minutes: number;
+  announcer_voice: string;
+  voice_announcements_enabled: number;
+}
+
 export async function GET() {
   try {
     const db = await getDbInstance();
@@ -21,7 +34,7 @@ export async function GET() {
           voice_announcements_enabled
         FROM discord_settings 
         WHERE id = 1
-      `),
+      `) as Promise<DiscordSettings | undefined>,
       db.get(`SELECT * FROM ui_settings WHERE id = 1`),
       db.get(`SELECT * FROM scheduler_settings WHERE id = 1`),
       db.all(`SELECT id, name, path FROM voices ORDER BY name ASC`)

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
 
-export async function PUT(request: Request) {
+export async function PUT(request: Request): Promise<NextResponse> {
   try {
     const { screen } = await request.json();
     const dbPath = path.join(process.cwd(), 'app_data/data/matchexec.db');
@@ -12,7 +12,7 @@ export async function PUT(request: Request) {
       last_accessed: new Date().toISOString()
     };
 
-    return new Promise((resolve) => {
+    return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
           console.error('Database connection error:', err);

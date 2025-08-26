@@ -9,7 +9,6 @@ interface WelcomeFlowWrapperProps {
 
 export default function WelcomeFlowWrapper({ children }: WelcomeFlowWrapperProps) {
   const [isCheckingFirstRun, setIsCheckingFirstRun] = useState(true);
-  const [isFirstRun, setIsFirstRun] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -26,7 +25,6 @@ export default function WelcomeFlowWrapper({ children }: WelcomeFlowWrapperProps
         if (response.ok) {
           const data = await response.json();
           if (data.isFirstRun) {
-            setIsFirstRun(true);
             router.push('/welcome');
           }
         }
