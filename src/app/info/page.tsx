@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, Text, Stack, Button, Group } from '@mantine/core';
-import { IconBrandGithub, IconInfoCircle } from '@tabler/icons-react';
+import { IconBrandGithub, IconInfoCircle, IconBook } from '@tabler/icons-react';
 
 export default function InfoPage() {
   return (
@@ -33,6 +33,15 @@ export default function InfoPage() {
                   rel="noopener noreferrer"
                 >
                   Submit GitHub Issue
+                </Button>
+                <Button
+                  leftSection={<IconBook size="1rem" />}
+                  component="a"
+                  href="https://github.com/slamanna212/MatchExec/wiki"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Wiki
                 </Button>
               </Group>
             </Stack>
