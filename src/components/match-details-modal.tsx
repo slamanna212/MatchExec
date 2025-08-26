@@ -115,9 +115,7 @@ export function MatchDetailsModal({
   parseDbTimestamp,
   showTabs = true,
   showDeleteButton = false,
-  showAssignButton = false,
-  onDelete,
-  onAssign
+  onDelete
 }: MatchDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'mapcodes'>('participants');
   const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
