@@ -354,13 +354,8 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === selectedMode);
     if (!mode) return;
 
-    // Check if map is already selected
-    if (selectedMaps.some(selectedMap => selectedMap.id === map.id)) {
-      return;
-    }
-
     const selectedMap: SelectedMapCard = {
-      id: map.id,
+      id: `${map.id}-${Date.now()}`,
       name: map.name,
       modeId: selectedMode,
       modeName: mode.name,
@@ -399,12 +394,7 @@ export function CreateMatchPage() {
 
     // Extract base map ID (remove mode suffix if it exists)
     const baseMapId = map.id.includes('-') ? map.id.split('-')[0] : map.id;
-    const combinedId = `${baseMapId}-${modeId}`;
-
-    // Check if map with this combinedId is already selected
-    if (selectedMaps.some(selectedMap => selectedMap.id === combinedId)) {
-      return;
-    }
+    const combinedId = `${baseMapId}-${modeId}-${Date.now()}`;
 
     const selectedMap: SelectedMapCard = {
       id: combinedId,
