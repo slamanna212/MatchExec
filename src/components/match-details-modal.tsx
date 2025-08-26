@@ -530,22 +530,6 @@ export function MatchDetailsModal({
                             <Group gap="xs">
                               <Badge 
                                 size="xs" 
-                                variant="light" 
-                                color={
-                                  reminder.type === 'timed_announcement' ? 'indigo' :
-                                  reminder.type === 'discord_general' ? 'blue' :
-                                  reminder.type === 'discord_match' ? 'purple' :
-                                  'green'
-                                }
-                                style={{ textTransform: 'none' }}
-                              >
-                                {reminder.type === 'timed_announcement' ? 'Announcement' :
-                                 reminder.type === 'discord_general' ? 'General' :
-                                 reminder.type === 'discord_match' ? 'Match' :
-                                 'Player DM'}
-                              </Badge>
-                              <Badge 
-                                size="xs" 
                                 variant="light"
                                 color={
                                   reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
@@ -738,19 +722,6 @@ export function MatchDetailsModal({
                           <Group justify="space-between" align="flex-start">
                             <Stack gap="xs" style={{ flex: 1 }}>
                               <Group gap="xs">
-                                <Badge 
-                                  size="xs" 
-                                  variant="light" 
-                                  color={
-                                    reminder.type === 'discord_general' ? 'blue' :
-                                    reminder.type === 'discord_match' ? 'purple' :
-                                    'green'
-                                  }
-                                >
-                                  {reminder.type === 'discord_general' ? 'General' :
-                                   reminder.type === 'discord_match' ? 'Match' :
-                                   'Player DM'}
-                                </Badge>
                                 <Badge 
                                   size="xs" 
                                   variant="light"
