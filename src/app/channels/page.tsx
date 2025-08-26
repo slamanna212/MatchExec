@@ -155,11 +155,7 @@ export default function ChannelsPage() {
     <div className="max-w-6xl mx-auto">
       <Stack gap="xl">
         <div>
-          <Group justify="space-between" align="center">
-            <div>
-              <Text size="xl" fw={700}>Discord Channels</Text>
-              <Text c="dimmed" mt="xs">Manage text and voice channels for notifications</Text>
-            </div>
+          <Group justify="flex-end" align="center">
             <Group>
               <Button
                 variant="outline"

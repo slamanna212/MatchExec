@@ -132,10 +132,6 @@ export default function GamesPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
-        <div>
-          <Text size="xl" fw={700}>Games</Text>
-          <Text c="dimmed" mt="xs">Available games for tournament management</Text>
-        </div>
 
         <Grid>
           {games.map((game) => (

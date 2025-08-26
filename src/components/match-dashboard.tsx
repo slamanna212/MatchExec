@@ -669,11 +669,7 @@ export function MatchDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Text size="xl" fw={700}>Match Dashboard</Text>
-          <Text c="dimmed" mt="xs">Manage and view all matches</Text>
-        </div>
+      <Group justify="center" mb="xl">
         <Group gap="sm" wrap="nowrap">
           {matches.length > 0 && (
             <TextInput

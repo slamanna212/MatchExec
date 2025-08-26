@@ -373,11 +373,7 @@ export function MatchHistoryDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Text size="xl" fw={700}>Match History</Text>
-          <Text c="dimmed" mt="xs">View completed matches</Text>
-        </div>
+      <Group justify="flex-end" mb="xl">
         {matches.length > 0 && (
           <TextInput
             placeholder="Search history..."

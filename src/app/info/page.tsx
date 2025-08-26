@@ -7,10 +7,6 @@ export default function InfoPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
-        <div>
-          <Text size="xl" fw={700}>Info</Text>
-          <Text c="dimmed" mt="xs">Information and support resources</Text>
-        </div>
 
         <Stack gap="lg">
           <Card shadow="sm" padding="lg" radius="md" withBorder>
