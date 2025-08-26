@@ -669,7 +669,7 @@ export function MatchDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="center" mb="xl">
+      <div className="flex justify-center md:justify-end mb-6">
         <Group gap="sm" wrap="nowrap">
           {matches.length > 0 && (
             <TextInput
@@ -690,7 +690,7 @@ export function MatchDashboard() {
             Create Match
           </Button>
         </Group>
-      </Group>
+      </div>
 
       <Divider mb="xl" />
 
