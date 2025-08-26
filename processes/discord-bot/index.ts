@@ -43,7 +43,7 @@ class MatchExecBot {
   }
 
   private setupEventListeners() {
-    this.client.once('ready', async () => {
+    this.client.once('clientReady', async () => {
       if (!this.client.user) return;
       
       
