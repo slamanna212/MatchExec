@@ -7,7 +7,6 @@
   "releaseDate": "2009-10-27",
   "patch": "15.15",
   "dataVersion": "1.0.1",
-  "description": "A 5v5 multiplayer online battle arena where two teams of champions compete to destroy the opposing team's Nexus.",
   "minPlayers": 2,
   "maxPlayers": 10,
   "maxSignups": 20,

@@ -7,7 +7,6 @@
   "releaseDate": "2015-12-01",
   "patch": "Y9S4",
   "dataVersion": "1.0.0",
-  "description": "A 5v5 tactical shooter emphasizing environmental destruction and player cooperation. Features Operators from various counter-terrorism units.",
   "minPlayers": 2,
   "maxPlayers": 10,
   "maxSignups": 20,
