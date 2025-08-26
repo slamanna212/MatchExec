@@ -29,14 +29,6 @@
       "placeholder": "Entry Fragger, Support, Anchor, Roamer",
       "required": false,
       "helpText": "What role do you prefer to play in matches?"
-    },
-    {
-      "id": "preferred_side",
-      "type": "text",
-      "label": "Preferred Side",
-      "placeholder": "Attack, Defense, or No Preference",
-      "required": false,
-      "helpText": "Do you prefer playing on Attack or Defense?"
     }
   ],
   "submitButton": {
