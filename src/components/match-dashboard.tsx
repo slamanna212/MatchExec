@@ -674,18 +674,22 @@ export function MatchDashboard() {
           <Text size="xl" fw={700}>Match Dashboard</Text>
           <Text c="dimmed" mt="xs">Manage and view all matches</Text>
         </div>
-        <Group>
+        <Group gap="sm" wrap="nowrap">
           {matches.length > 0 && (
             <TextInput
               placeholder="Search matches..."
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              style={{ width: 300 }}
+              style={{ 
+                width: 'clamp(150px, 50vw, 300px)',
+                flexShrink: 1
+              }}
             />
           )}
           <Button 
             size="md"
             onClick={handleCreateMatch}
+            style={{ flexShrink: 0 }}
           >
             Create Match
           </Button>
