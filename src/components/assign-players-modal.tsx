@@ -233,8 +233,8 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         };
       case 'reserve':
         return { 
-          backgroundColor: 'var(--mantine-color-yellow-2)',
-          borderColor: 'var(--mantine-color-yellow-4)'
+          backgroundColor: '#FFD54F',
+          borderColor: '#FFC107'
         };
       default:
         return {};
@@ -245,7 +245,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     switch(team) {
       case 'blue': return 'orange';    // Contrasts with blue
       case 'red': return 'cyan';       // Contrasts with red  
-      case 'reserve': return 'grape';  // Contrasts with yellow
+      case 'reserve': return 'violet'; // Primary site color
       default: return 'dark';
     }
   };
