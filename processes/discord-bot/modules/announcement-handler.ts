@@ -124,7 +124,7 @@ export class AnnouncementHandler {
     }
   }
 
-  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]): Promise<any> {
+  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<any> {
     try {
       // Create thread - using public thread for better visibility
       const thread = await message.startThread({
@@ -133,12 +133,30 @@ export class AnnouncementHandler {
         reason: 'Map details for event'
       });
 
+      // Get map notes if matchId is provided
+      let mapNotes: Record<string, string> = {};
+      if (matchId && this.db) {
+        try {
+          const notesResult = await this.db.all<{map_id: string, notes: string}>(`
+            SELECT map_id, notes 
+            FROM match_games 
+            WHERE match_id = ? AND notes IS NOT NULL AND notes != ''
+          `, [matchId]);
+          
+          notesResult.forEach(note => {
+            mapNotes[note.map_id] = note.notes;
+          });
+        } catch (error) {
+          console.error('Error fetching map notes for Discord:', error);
+        }
+      }
 
       // Create an embed for each map
       for (let i = 0; i < maps.length; i++) {
         const mapIdentifier = maps[i];
         const mapNumber = i + 1;
-        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber);
+        const mapNote = mapNotes[mapIdentifier];
+        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber, mapNote);
         if (mapEmbedData) {
           const messageOptions: any = { embeds: [mapEmbedData.embed] };
           if (mapEmbedData.attachment) {
@@ -261,7 +279,7 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
-  private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
+  private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number, mapNote?: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
     if (!this.db) return null;
 
     try {
@@ -352,6 +370,10 @@ export class AnnouncementHandler {
 
       if (mapData.location) {
         embed.addFields({ name: '📍 Location', value: mapData.location, inline: true });
+      }
+
+      if (mapNote && mapNote.trim()) {
+        embed.addFields({ name: '📝 Note', value: mapNote.trim(), inline: false });
       }
 
       // Add image if available - use as attachment for local files

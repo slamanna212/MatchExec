@@ -236,7 +236,7 @@ export function MatchHistoryDashboard() {
   }, []);
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -244,7 +244,7 @@ export function MatchHistoryDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
         
         // Check if this game supports all modes (flexible mode combinations)
         const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
@@ -258,14 +258,15 @@ export function MatchHistoryDashboard() {
             modes = await modesResponse.json();
           }
           
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
             // Add the original map entry
             mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
               modeName: map.modeName,
-              location: map.location
+              location: map.location,
+              note: map.note
             };
             
             // For flexible games, create entries for all possible mode combinations
@@ -280,20 +281,22 @@ export function MatchHistoryDashboard() {
                   name: map.name,
                   imageUrl: map.imageUrl,
                   modeName: mode.name,
-                  location: map.location
+                  location: map.location,
+                  note: map.note
                 };
               }
             });
           });
         } else {
           // For fixed mode games, use the API data as-is
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
             mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
               modeName: map.modeName,
-              location: map.location
+              location: map.location,
+              note: map.note
             };
           });
         }

@@ -206,7 +206,7 @@ export class QueueProcessor {
 
                 // Create maps thread if there are maps
                 if (eventData.maps && eventData.maps.length > 0) {
-                  const thread = await this.announcementHandler.createMapsThread((result as any).mainMessage, eventData.name, eventData.game_id, eventData.maps);
+                  const thread = await this.announcementHandler.createMapsThread((result as any).mainMessage, eventData.name, eventData.game_id, eventData.maps, eventData.id);
                   threadId = thread?.id || null;
                 }
 

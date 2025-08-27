@@ -90,7 +90,7 @@ interface MatchDetailsModalProps {
   signupConfig: SignupConfig | null;
   reminders: ReminderData[];
   remindersLoading: boolean;
-  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}};
+  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
   formatMapName: (mapId: string) => string;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   showTabs?: boolean;
@@ -213,6 +213,7 @@ export function MatchDetailsModal({
       color: game.winner_id === 'team1' ? 'blue' : 'red'
     };
   };
+
 
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {
@@ -397,6 +398,11 @@ export function MatchDetailsModal({
                                              lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
                                     })()}
                                   </Badge>
+                                )}
+                                {mapDetail?.note && (
+                                  <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapDetail.note}>
+                                    📝 {mapDetail.note}
+                                  </Text>
                                 )}
                               </div>
                               {winner && (
@@ -658,6 +664,11 @@ export function MatchDetailsModal({
                                                  lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
                                         })()}
                                       </Badge>
+                                    )}
+                                    {mapDetail?.note && (
+                                      <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapDetail.note}>
+                                        📝 {mapDetail.note}
+                                      </Text>
                                     )}
                                   </div>
                                   <TextInput

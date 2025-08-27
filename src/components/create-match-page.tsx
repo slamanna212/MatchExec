@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress, NumberInput } from '@mantine/core';
-import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft } from '@tabler/icons-react';
+import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft, IconNote } from '@tabler/icons-react';
 import { GameMap } from '@/shared/types';
+import { MapNoteModal } from './map-note-modal';
 
 interface GameWithIcon {
   id: string;
@@ -61,6 +62,7 @@ interface SelectedMapCard {
   modeId: string;
   modeName: string;
   imageUrl?: string;
+  note?: string;
 }
 
 export function CreateMatchPage() {
@@ -86,6 +88,9 @@ export function CreateMatchPage() {
   const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
   const [flexibleModeSelects, setFlexibleModeSelects] = useState<Record<string, string>>({});
+  const [mapNoteModalOpen, setMapNoteModalOpen] = useState(false);
+  const [selectedMapForNote, setSelectedMapForNote] = useState<SelectedMapCard | null>(null);
+  const [mapNotes, setMapNotes] = useState<Record<string, string>>({});
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -234,6 +239,29 @@ export function CreateMatchPage() {
 
   const updateFormData = (field: keyof MatchFormData, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleOpenNoteModal = (map: SelectedMapCard) => {
+    setSelectedMapForNote(map);
+    setMapNoteModalOpen(true);
+  };
+
+  const handleSaveNote = (note: string) => {
+    if (selectedMapForNote) {
+      setMapNotes(prev => ({
+        ...prev,
+        [selectedMapForNote.id]: note
+      }));
+      
+      // Update the selected maps with the note
+      setSelectedMaps(prev => 
+        prev.map(map => 
+          map.id === selectedMapForNote.id 
+            ? { ...map, note: note }
+            : map
+        )
+      );
+    }
   };
 
   const sortAnnouncements = (announcements: AnnouncementTime[]) => {
@@ -470,6 +498,28 @@ export function CreateMatchPage() {
 
       if (response.ok) {
         const newMatch = await response.json();
+        
+        // Save map notes if any exist
+        const mapNotesToSave = selectedMaps.filter(map => map.note && map.note.trim()).map(map => ({
+          mapId: map.id,
+          note: map.note!.trim()
+        }));
+        
+        if (mapNotesToSave.length > 0) {
+          try {
+            for (const mapNote of mapNotesToSave) {
+              await fetch(`/api/matches/${newMatch.id}/map-notes`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(mapNote),
+              });
+            }
+          } catch (noteError) {
+            console.error('Error saving map notes:', noteError);
+          }
+        }
         
         // If "Start Signups" is checked, automatically transition to gather stage
         if (startSignups) {
@@ -857,14 +907,32 @@ export function CreateMatchPage() {
                       <Stack gap={2} style={{ flex: 1 }}>
                         <Text fw={500} size="sm">{map.name}</Text>
                         <Badge size="xs" variant="light">{map.modeName}</Badge>
+                        {map.note && (
+                          <Text size="xs" c="dimmed" lineClamp={1} title={map.note}>
+                            📝 {map.note}
+                          </Text>
+                        )}
                       </Stack>
-                      <ActionIcon
-                        color="red"
-                        variant="light"
-                        onClick={() => handleRemoveMap(map.id)}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
+                      <Stack gap={2} align="center">
+                        <ActionIcon
+                          color="blue"
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleOpenNoteModal(map)}
+                          title="Add/Edit Note"
+                        >
+                          <IconNote size={14} />
+                        </ActionIcon>
+                        <ActionIcon
+                          color="red"
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleRemoveMap(map.id)}
+                          title="Remove Map"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      </Stack>
                     </Group>
                   </Card>
                 </Grid.Col>
@@ -1100,6 +1168,14 @@ export function CreateMatchPage() {
           </Stack>
         )}
       </Stack>
+      
+      <MapNoteModal
+        opened={mapNoteModalOpen}
+        onClose={() => setMapNoteModalOpen(false)}
+        mapName={selectedMapForNote?.name || ''}
+        initialNote={selectedMapForNote?.note || mapNotes[selectedMapForNote?.id || ''] || ''}
+        onSave={handleSaveNote}
+      />
     </Container>
   );
 }

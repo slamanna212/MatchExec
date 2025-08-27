@@ -290,7 +290,7 @@ export function MatchDashboard() {
   };
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -298,7 +298,7 @@ export function MatchDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
         
         // Check if this game supports all modes (flexible mode combinations)
         const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
@@ -357,6 +357,28 @@ export function MatchDashboard() {
       }
     } catch (error) {
       console.error('Error fetching map names:', error);
+    }
+  };
+
+  const fetchMapNotes = async (matchId: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/map-notes`);
+      if (response.ok) {
+        const { notes } = await response.json();
+        
+        // Update mapDetails with notes
+        setMapDetails(prev => {
+          const updated = { ...prev };
+          Object.keys(notes).forEach(mapId => {
+            if (updated[mapId]) {
+              updated[mapId] = { ...updated[mapId], note: notes[mapId] };
+            }
+          });
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching map notes:', error);
     }
   };
 
@@ -473,6 +495,7 @@ export function MatchDashboard() {
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
+    fetchMapNotes(match.id);
   }, [fetchParticipants, fetchReminders]);
 
   // Auto-refresh participants and reminders when details modal is open
