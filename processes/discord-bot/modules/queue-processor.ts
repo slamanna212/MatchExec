@@ -60,6 +60,14 @@ interface QueuedVoiceAnnouncement {
   created_at: string;
 }
 
+interface QueuedMapCode {
+  id: string;
+  match_id: string;
+  map_name: string;
+  map_code: string;
+  created_at: string;
+}
+
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
 
@@ -873,6 +881,85 @@ export class QueueProcessor {
     }
   }
 
+  async processMapCodeQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const mapCodes = await this.db.all<QueuedMapCode>(`
+        SELECT id, match_id, map_name, map_code, created_at
+        FROM discord_map_code_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const mapCodeRequest of mapCodes) {
+        try {
+          // Immediately mark as processing to prevent duplicate processing
+          const updateResult = await this.db.run(`
+            UPDATE discord_map_code_queue 
+            SET status = 'processing', processed_at = datetime('now')
+            WHERE id = ? AND status = 'pending'
+          `, [mapCodeRequest.id]);
+          
+          if (updateResult.changes === 0) {
+            continue;
+          }
+
+          if (!this.reminderHandler) {
+            console.error('❌ ReminderHandler not available');
+            await this.db.run(`
+              UPDATE discord_map_code_queue 
+              SET status = 'failed', processed_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['ReminderHandler not available', mapCodeRequest.id]);
+            continue;
+          }
+
+          console.log(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+
+          // Send map code PMs via the reminder handler
+          const result = await this.reminderHandler.sendMapCodePMs(
+            mapCodeRequest.match_id,
+            mapCodeRequest.map_name,
+            mapCodeRequest.map_code
+          );
+
+          if (result) {
+            // Mark as completed
+            await this.db.run(`
+              UPDATE discord_map_code_queue 
+              SET status = 'processed', processed_at = datetime('now')
+              WHERE id = ?
+            `, [mapCodeRequest.id]);
+
+            console.log(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_map_code_queue 
+              SET status = 'failed', processed_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['Failed to send map code PMs', mapCodeRequest.id]);
+
+            console.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
+          
+          // Mark as failed
+          await this.db.run(`
+            UPDATE discord_map_code_queue 
+            SET status = 'failed', processed_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', mapCodeRequest.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing map code queue:', error);
+    }
+  }
+
   async processAllQueues() {
     await Promise.all([
       this.processAnnouncementQueue(),
@@ -882,6 +969,7 @@ export class QueueProcessor {
       this.processPlayerReminderQueue(),
       this.processScoreNotificationQueue(),
       this.processVoiceAnnouncementQueue(),
+      this.processMapCodeQueue(),
       this.processDiscordBotRequests()
     ]);
   }

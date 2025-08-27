@@ -71,6 +71,8 @@ export interface ParticipantDbRow {
   username: string;
   joined_at: Date;
   signup_data?: string; // JSON string
+  team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: number; // SQLite stores booleans as integers
 }
 
 export interface GameDbRow {

@@ -269,13 +269,15 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
   try {
     // Find the first pending map and set it to ongoing
     const nextMapQuery = `
-      SELECT id FROM match_games 
-      WHERE match_id = ? AND status = 'pending' 
-      ORDER BY round ASC 
+      SELECT mg.id, mg.map_id, gm.name as map_name 
+      FROM match_games mg
+      LEFT JOIN game_maps gm ON mg.map_id = gm.id
+      WHERE mg.match_id = ? AND mg.status = 'pending' 
+      ORDER BY mg.round ASC 
       LIMIT 1
     `;
     
-    const nextMap = await db.get<{ id: string }>(nextMapQuery, [matchId]);
+    const nextMap = await db.get<{ id: string; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
     
     if (nextMap) {
       const updateQuery = `
@@ -286,6 +288,15 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
       
       await db.run(updateQuery, [nextMap.id]);
       console.log(`Set next map ${nextMap.id} to ongoing status`);
+
+      // Queue map code PMs for the new map if map codes are supported
+      try {
+        await queueMapCodePMsForNext(matchId, nextMap.map_name);
+      } catch (mapCodeError) {
+        console.error('Error queuing map code PMs for next map:', mapCodeError);
+        // Don't throw - this is a non-critical operation
+      }
+
       return true; // There is a next map
     } else {
       console.log('No pending maps found to set as ongoing');
@@ -295,6 +306,74 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
     console.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
     return false;
+  }
+}
+
+// Queue map code PMs for the next map
+async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promise<void> {
+  console.log('🔍 queueMapCodePMsForNext called with:', matchId, mapName);
+  
+  if (!mapName) {
+    console.log('No map name available for map code PMs');
+    return;
+  }
+
+  const db = await getDbInstance();
+  
+  try {
+    // Check if map codes are supported and get the map code
+    const matchData = await db.get<{
+      map_codes?: string;
+      map_codes_supported?: number;
+    }>(`
+      SELECT m.map_codes, g.map_codes_supported
+      FROM matches m
+      LEFT JOIN games g ON m.game_id = g.id
+      WHERE m.id = ?
+    `, [matchId]);
+
+    console.log('🔍 matchData:', matchData);
+    
+    if (matchData?.map_codes_supported) {
+      const mapCodes = matchData.map_codes ? JSON.parse(matchData.map_codes) : {};
+      const cleanMapName = mapName.replace(/-\d+$/, '');
+      
+      // Try exact match first
+      let mapCode = mapCodes[cleanMapName];
+      
+      // If exact match fails, try case-insensitive and normalized lookup
+      if (!mapCode) {
+        const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const mapCodeKey = Object.keys(mapCodes).find(key => 
+          key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
+        );
+        if (mapCodeKey) {
+          mapCode = mapCodes[mapCodeKey];
+        }
+      }
+      
+      console.log('🔍 mapCodes:', mapCodes);
+      console.log('🔍 cleanMapName:', cleanMapName);
+      console.log('🔍 mapCode:', mapCode);
+      
+      if (mapCode) {
+        // Generate unique ID for the queue entry
+        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Add to map code PM queue
+        await db.run(`
+          INSERT INTO discord_map_code_queue (id, match_id, map_name, map_code, status)
+          VALUES (?, ?, ?, ?, 'pending')
+        `, [queueId, matchId, mapName, mapCode]);
+        
+        console.log('📱 Map code PMs queued for next map:', mapName, 'in match:', matchId);
+      } else {
+        console.log('No map code found for map:', mapName);
+      }
+    }
+  } catch (error) {
+    console.error('Error queuing map code PMs for next map:', error);
+    throw error;
   }
 }
 

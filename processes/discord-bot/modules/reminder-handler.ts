@@ -353,6 +353,152 @@ export class ReminderHandler {
     return embed;
   }
 
+  async sendMapCodePMs(matchId: string, mapName: string, mapCode: string): Promise<boolean> {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    if (!this.db) {
+      console.error('❌ Database not available');
+      return false;
+    }
+
+    try {
+      // Get match data
+      const matchData = await this.db.get<{
+        id: string;
+        name: string;
+        game_name?: string;
+        game_color?: string;
+      }>(`
+        SELECT m.*, g.name as game_name, g.color as game_color
+        FROM matches m
+        LEFT JOIN games g ON m.game_id = g.id
+        WHERE m.id = ?
+      `, [matchId]);
+
+      if (!matchData) {
+        console.error('❌ Match not found for map code PMs:', matchId);
+        return false;
+      }
+
+      // Get participants who should receive map codes
+      const participants = await this.db.all<{
+        discord_user_id: string;
+        username: string;
+        team_assignment?: string;
+      }>(`
+        SELECT discord_user_id, username, team_assignment
+        FROM match_participants
+        WHERE match_id = ? AND discord_user_id IS NOT NULL AND receives_map_codes = 1
+      `, [matchId]);
+
+      if (!participants || participants.length === 0) {
+        console.log('ℹ️ No participants configured to receive map codes for match:', matchId);
+        return true; // Not an error, just no one to notify
+      }
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      // Send DM to each participant who should receive map codes
+      for (const participant of participants) {
+        try {
+          const user = await this.client.users.fetch(participant.discord_user_id);
+          
+          // Create map code embed
+          const embed = await this.createMapCodeEmbed(
+            matchData, 
+            participant,
+            mapName,
+            mapCode
+          );
+
+          await user.send({
+            embeds: [embed]
+          });
+
+          successCount++;
+
+        } catch (error) {
+          failureCount++;
+          console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, error);
+        }
+      }
+
+      console.log(`📱 Map code PMs sent: ${successCount} successful, ${failureCount} failed`);
+      return successCount > 0; // Success if at least one DM was sent
+
+    } catch (error) {
+      console.error('❌ Error sending map code PMs:', error);
+      return false;
+    }
+  }
+
+  private async createMapCodeEmbed(
+    matchData: {
+      name: string;
+      game_name?: string;
+      game_color?: string;
+    }, 
+    participant: {
+      username: string;
+      team_assignment?: string;
+    },
+    mapName: string,
+    mapCode: string
+  ): Promise<EmbedBuilder> {
+    // Parse game color or use default
+    let gameColor = 0x2196f3; // default blue for map codes
+    if (matchData.game_color) {
+      try {
+        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
+      } catch (error) {
+        console.error('Error parsing game color:', error);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🗺️ Map Code: ${mapName}`)
+      .setDescription(`Here's your map code for **${matchData.name}**`)
+      .setColor(gameColor)
+      .addFields(
+        { 
+          name: '🔢 Map Code', 
+          value: `\`${mapCode}\``, 
+          inline: false 
+        },
+        { 
+          name: '🗺️ Map Name', 
+          value: mapName, 
+          inline: true 
+        }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Good luck!' });
+
+    // Add game info if available
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    // Add team assignment if available
+    if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
+      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' : 
+                       participant.team_assignment === 'red' ? '🔴' : '🟡';
+      const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
+      
+      embed.addFields({ 
+        name: '👥 Your Team', 
+        value: `${teamEmoji} ${teamName} Team`, 
+        inline: true 
+      });
+    }
+
+    return embed;
+  }
+
   private async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates'): Promise<DiscordChannel[]> {
     if (!this.db) {
       return [];

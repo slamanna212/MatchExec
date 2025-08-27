@@ -13,8 +13,10 @@ import {
   Badge,
   Avatar,
   Loader,
-  Divider
+  Divider,
+  ActionIcon
 } from '@mantine/core';
+import { IconMapRoute } from '@tabler/icons-react';
 
 interface SignupField {
   id: string;
@@ -40,6 +42,7 @@ interface MatchParticipant {
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: boolean;
 }
 
 interface VoiceChannel {
@@ -71,6 +74,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [mapCodesSupported, setMapCodesSupported] = useState(false);
 
   // Check if screen is mobile size (same breakpoint as Navigation component)
   useEffect(() => {
@@ -87,16 +91,18 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     try {
-      const [participantsResponse, voiceChannelsResponse] = await Promise.all([
+      const [participantsResponse, voiceChannelsResponse, matchResponse] = await Promise.all([
         fetch(`/api/matches/${matchId}/participants`),
-        fetch(`/api/matches/${matchId}/voice-channels`)
+        fetch(`/api/matches/${matchId}/voice-channels`),
+        fetch(`/api/matches/${matchId}`)
       ]);
       
       if (participantsResponse.ok) {
         const data = await participantsResponse.json();
         setParticipants(data.participants.map((p: MatchParticipant) => ({
           ...p,
-          team_assignment: p.team_assignment || 'reserve'
+          team_assignment: p.team_assignment || 'reserve',
+          receives_map_codes: p.receives_map_codes || false
         })));
         
         // Set signup config if available
@@ -109,6 +115,15 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         const voiceData = await voiceChannelsResponse.json();
         setVoiceChannels(voiceData.voiceChannels);
         setVoiceChannelAssignments(voiceData.currentAssignments);
+      }
+
+      if (matchResponse.ok) {
+        const matchData = await matchResponse.json();
+        console.log('Match data received:', matchData);
+        console.log('Map codes supported:', matchData.map_codes_supported);
+        setMapCodesSupported(matchData.map_codes_supported || false);
+      } else {
+        console.error('Failed to fetch match data:', matchResponse.status);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -128,6 +143,16 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
       prev.map(p => 
         p.id === participantId 
           ? { ...p, team_assignment: newTeam }
+          : p
+      )
+    );
+  };
+
+  const handleMapCodesToggle = (participantId: string) => {
+    setParticipants(prev => 
+      prev.map(p => 
+        p.id === participantId 
+          ? { ...p, receives_map_codes: !p.receives_map_codes }
           : p
       )
     );
@@ -162,7 +187,8 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     try {
       const teamAssignments = participants.map(p => ({
         participantId: p.id,
-        team: p.team_assignment
+        team: p.team_assignment,
+        receives_map_codes: p.receives_map_codes || false
       }));
 
       const response = await fetch(`/api/matches/${matchId}/assign-teams`, {
@@ -247,7 +273,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         onDragStart={isDragDisabled ? undefined : (e) => handleDragStart(e, participant.id)}
         onDragEnd={isDragDisabled ? undefined : handleDragEnd}
       >
-      <Group justify="space-between" align="center">
+      <Group justify="space-between" align="center" mb="xs">
         <Group align="center">
           <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
             {index + 1}
@@ -259,27 +285,57 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             </Text>
           </div>
         </Group>
-        
-        <Select
-          size="xs"
-          value={participant.team_assignment}
-          onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
-          data={[
-            { value: 'reserve', label: 'Reserve' },
-            { value: 'blue', label: 'Blue Team' },
-            { value: 'red', label: 'Red Team' }
-          ]}
-          w={120}
-          styles={{
-            input: {
-              backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
-              border: '1px solid var(--mantine-color-gray-5)',
-              backdropFilter: 'blur(2px)',
-              color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
-            }
-          }}
-        />
+        {mapCodesSupported && (
+          <ActionIcon
+            size="xl"
+            variant="subtle"
+            onClick={() => handleMapCodesToggle(participant.id)}
+            title={participant.receives_map_codes ? "Will receive map codes" : "Click to receive map codes"}
+            style={{
+              border: 'none',
+              padding: 0,
+              minWidth: 'unset',
+              minHeight: 'unset',
+              width: 'auto',
+              height: 'auto',
+              backgroundColor: 'transparent',
+              color: participant.receives_map_codes 
+                ? `var(--mantine-color-${getBadgeColor(participant.team_assignment)}-6)`
+                : 'var(--mantine-color-gray-5)'
+            }}
+            styles={{
+              root: {
+                '&:hover': {
+                  backgroundColor: 'transparent'
+                }
+              }
+            }}
+          >
+            <IconMapRoute size={30} />
+          </ActionIcon>
+        )}
       </Group>
+      
+      <Select
+        size="xs"
+        value={participant.team_assignment}
+        onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
+        data={[
+          { value: 'reserve', label: 'Reserve' },
+          { value: 'blue', label: 'Blue Team' },
+          { value: 'red', label: 'Red Team' }
+        ]}
+        w={120}
+        mb="xs"
+        styles={{
+          input: {
+            backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+            border: '1px solid var(--mantine-color-gray-5)',
+            backdropFilter: 'blur(2px)',
+            color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+          }
+        }}
+      />
       
       {participant.signup_data && Object.keys(participant.signup_data).length > 0 && (
         <Group mt="xs" gap="xs">

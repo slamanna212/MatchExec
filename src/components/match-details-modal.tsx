@@ -115,7 +115,8 @@ export function MatchDetailsModal({
   parseDbTimestamp,
   showTabs = true,
   showDeleteButton = false,
-  onDelete
+  onDelete,
+  onAssign
 }: MatchDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'mapcodes'>('participants');
   const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
@@ -782,16 +783,28 @@ export function MatchDetailsModal({
         <Divider />
         
         <Group justify="space-between" mt="md">
-          {showDeleteButton && (
-            <Button
-              color="red"
-              variant="light"
-              onClick={() => onDelete?.(selectedMatch)}
-            >
-              Delete Match
-            </Button>
-          )}
-          {!showDeleteButton && <div />}
+          <Group gap="sm">
+            {showDeleteButton && (
+              <Button
+                color="red"
+                variant="light"
+                onClick={() => onDelete?.(selectedMatch)}
+              >
+                Delete Match
+              </Button>
+            )}
+            {(selectedMatch.status === 'gather' || selectedMatch.status === 'assign' || selectedMatch.status === 'battle') && (
+              <Button
+                variant="light"
+                onClick={() => {
+                  onClose();
+                  onAssign?.(selectedMatch);
+                }}
+              >
+                Assign Players
+              </Button>
+            )}
+          </Group>
           <Button
             variant="outline"
             onClick={onClose}

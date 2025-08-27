@@ -73,6 +73,28 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
   }
 }
 
+// Queue a Discord map code PM request that the Discord bot will process
+async function queueMapCodePMs(matchId: string, mapName: string, mapCode: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Generate unique ID for the queue entry
+    const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Add to map code PM queue
+    await db.run(`
+      INSERT INTO discord_map_code_queue (id, match_id, map_name, map_code, status)
+      VALUES (?, ?, ?, ?, 'pending')
+    `, [queueId, matchId, mapName, mapCode]);
+    
+    console.log('📱 Map code PMs queued for match:', matchId, '-> map:', mapName);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing map code PMs:', error);
+    return false;
+  }
+}
+
 // Queue a Discord voice announcement request that the Discord bot will process
 async function queueVoiceAnnouncement(
   matchId: string, 
@@ -262,6 +284,59 @@ export async function POST(
       } catch (initError) {
         console.error('❌ Error initializing match games:', initError);
         // Don't fail the API request if match games initialization fails
+      }
+
+      // Send map codes for the first map
+      try {
+        // Get match data to check if map codes are supported
+        const matchWithGame = await db.get<{
+          game_id: string;
+          maps?: string;
+          map_codes?: string;
+          map_codes_supported?: number;
+        }>(`
+          SELECT m.maps, m.map_codes, g.map_codes_supported
+          FROM matches m
+          LEFT JOIN games g ON m.game_id = g.id
+          WHERE m.id = ?
+        `, [matchId]);
+
+        if (matchWithGame?.map_codes_supported) {
+          const maps = matchWithGame.maps ? JSON.parse(matchWithGame.maps) : [];
+          const mapCodes = matchWithGame.map_codes ? JSON.parse(matchWithGame.map_codes) : {};
+          
+          if (maps.length > 0) {
+            const firstMapName = maps[0];
+            const cleanMapName = firstMapName.replace(/-\d+$/, '');
+            
+            // Try exact match first
+            let firstMapCode = mapCodes[cleanMapName];
+            
+            // If exact match fails, try case-insensitive and normalized lookup
+            if (!firstMapCode) {
+              const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const mapCodeKey = Object.keys(mapCodes).find(key => 
+                key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
+              );
+              if (mapCodeKey) {
+                firstMapCode = mapCodes[mapCodeKey];
+              }
+            }
+            
+            if (firstMapCode) {
+              const mapCodeSuccess = await queueMapCodePMs(matchId, firstMapName, firstMapCode);
+              
+              if (mapCodeSuccess) {
+                console.log(`📱 Map code PMs queued for first map "${firstMapName}" in match: ${matchId}`);
+              } else {
+                console.warn(`⚠️ Failed to queue map code PMs for first map in match: ${matchId}`);
+              }
+            }
+          }
+        }
+      } catch (mapCodeError) {
+        console.error('❌ Error queuing map code PMs for first map:', mapCodeError);
+        // Don't fail the API request if map code queueing fails
       }
     }
 

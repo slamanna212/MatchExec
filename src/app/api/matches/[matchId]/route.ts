@@ -2,6 +2,52 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { MatchDbRow } from '@/shared/types';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ matchId: string }> }
+) {
+  try {
+    const db = await getDbInstance();
+    const { matchId } = await params;
+    
+    // Fetch match with game info including map_codes_supported
+    const match = await db.get<MatchDbRow & { 
+      game_name?: string; 
+      game_icon?: string; 
+      game_color?: string; 
+      map_codes_supported?: number;
+    }>(`
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported
+      FROM matches m
+      LEFT JOIN games g ON m.game_id = g.id
+      WHERE m.id = ?
+    `, [matchId]);
+    
+    if (!match) {
+      return NextResponse.json(
+        { error: 'Match not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Parse JSON fields and convert SQLite integers to booleans
+    const parsedMatch = {
+      ...match,
+      maps: match.maps ? JSON.parse(match.maps) : [],
+      map_codes: match.map_codes ? JSON.parse(match.map_codes) : {},
+      map_codes_supported: Boolean(match.map_codes_supported)
+    };
+    
+    return NextResponse.json(parsedMatch);
+  } catch (error) {
+    console.error('Error fetching match:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch match' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
