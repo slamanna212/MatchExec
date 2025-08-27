@@ -57,15 +57,33 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
         // First map should be 'ongoing', rest should be 'pending'
         const status = i === 0 ? 'ongoing' : 'pending';
         
+        // Check if there's a temporary note-only entry (Round 0) for this map
+        const noteEntry = await db.get(`
+          SELECT notes FROM match_games 
+          WHERE match_id = ? AND map_id = ? AND round = 0
+          LIMIT 1
+        `, [matchId, mapId]);
+        
+        const existingNote = noteEntry ? noteEntry.notes : '';
+        
         const insertQuery = `
           INSERT INTO match_games (
             id, match_id, round, participant1_id, participant2_id,
-            map_id, status, created_at, updated_at
-          ) VALUES (?, ?, ?, 'team1', 'team2', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            map_id, notes, status, created_at, updated_at
+          ) VALUES (?, ?, ?, 'team1', 'team2', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `;
         
-        await db.run(insertQuery, [gameId, matchId, i + 1, mapId, status]);
-        console.log(`Created match game ${gameId} for map ${mapId} with status ${status}`);
+        await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
+        console.log(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
+        
+        // Clean up the temporary Round 0 entry if it exists
+        if (noteEntry) {
+          await db.run(`
+            DELETE FROM match_games 
+            WHERE match_id = ? AND map_id = ? AND round = 0
+          `, [matchId, mapId]);
+          console.log(`Cleaned up temporary note entry for ${mapId}`);
+        }
       } else {
         console.log(`Match game ${gameId} already exists`);
       }
@@ -88,19 +106,39 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
     const db = await getDbInstance();
     console.log('getMatchGames: Database instance obtained');
     
-    const query = `
-      SELECT mg.*, gm.name as map_name, gm.mode_id, gm.game_id, 
-             gamemode.scoring_type as mode_scoring_type
+    // First get the match games
+    const gamesQuery = `
+      SELECT mg.*
       FROM match_games mg
-      LEFT JOIN game_maps gm ON mg.map_id = gm.id
-      LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
       WHERE mg.match_id = ?
       ORDER BY mg.round ASC
     `;
     
-    console.log('getMatchGames: Executing query...');
-    const games = await db.all<Record<string, unknown>>(query, [matchId]);
+    console.log('getMatchGames: Executing games query...');
+    const games = await db.all<Record<string, unknown>>(gamesQuery, [matchId]);
     console.log(`getMatchGames: Query completed, found ${games?.length || 0} games`);
+    
+    // Now enrich each game with map data by stripping timestamps
+    for (const game of games) {
+      const cleanMapId = String(game.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      
+      const mapQuery = `
+        SELECT gm.name, gm.image_url, gm.mode_id, gm.game_id, gamemode.scoring_type as mode_scoring_type
+        FROM game_maps gm
+        LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
+        WHERE gm.id = ?
+        LIMIT 1
+      `;
+      
+      const mapData = await db.get(mapQuery, [cleanMapId]);
+      if (mapData) {
+        game.map_name = mapData.name;
+        game.image_url = mapData.image_url;
+        game.mode_id = mapData.mode_id;
+        game.game_id = mapData.game_id;
+        game.mode_scoring_type = mapData.mode_scoring_type;
+      }
+    }
     
     return games || [];
   } catch (error) {

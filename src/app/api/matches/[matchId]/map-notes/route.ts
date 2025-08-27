@@ -21,24 +21,23 @@ export async function POST(
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    // Update or insert the note for this specific map in this match
-    // We need to find the match_game entry for this map
+    // Check if there's already a match_game entry for this map (from scoring system)
     const matchGame = await db.get(`
       SELECT id FROM match_games 
-      WHERE match_id = ? AND map_id = ?
+      WHERE match_id = ? AND map_id = ? AND round > 0
       LIMIT 1
     `, [matchId, mapId]);
 
     if (matchGame) {
-      // Update existing match_game record
+      // Update existing match_game record with the note
       await db.run(`
         UPDATE match_games 
         SET notes = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [note || '', matchGame.id]);
     } else {
-      // Create a new match_game record for this map note
-      // We'll use a simplified structure for just storing notes
+      // No scoring entry exists yet, create a temporary note-only entry
+      // This will be cleaned up when the scoring system initializes
       const gameId = `note-${matchId}-${mapId}-${Date.now()}`;
       await db.run(`
         INSERT INTO match_games (

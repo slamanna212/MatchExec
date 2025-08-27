@@ -56,7 +56,8 @@ export class AnnouncementHandler {
         eventData.max_participants,
         eventData.livestream_link,
         eventData.event_image_url,
-        eventData.start_date
+        eventData.start_date,
+        eventData.id
       );
 
       // Create signup button
@@ -155,7 +156,18 @@ export class AnnouncementHandler {
       for (let i = 0; i < maps.length; i++) {
         const mapIdentifier = maps[i];
         const mapNumber = i + 1;
-        const mapNote = mapNotes[mapIdentifier];
+        
+        // Try to find the note for this map by index to handle duplicate map names
+        let mapNote = mapNotes[mapIdentifier];
+        if (!mapNote) {
+          // Get the clean map ID without timestamp
+          const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+          
+          // Find all notes that match this base map ID and get by index
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(cleanMapId + '-')).sort();
+          mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
+        }
+        
         const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber, mapNote);
         if (mapEmbedData) {
           const messageOptions: any = { embeds: [mapEmbedData.embed] };
@@ -182,7 +194,8 @@ export class AnnouncementHandler {
     maxParticipants: number,
     livestreamLink?: string,
     eventImageUrl?: string,
-    startDate?: string
+    startDate?: string,
+    matchId?: string
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     // Get game data from database for nice name and color
     let gameName = gameId;
@@ -233,13 +246,42 @@ export class AnnouncementHandler {
       );
     }
 
-    // Add maps count if provided (but not the actual maps - those go in thread)
+    // Add maps with notes if provided
     if (maps.length > 0) {
-      embed.addFields({ 
-        name: '🗺️ Maps', 
-        value: `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`, 
-        inline: false 
-      });
+      let mapDisplay = '';
+      
+      // Get map names from database for better display (without notes)
+      if (this.db) {
+        try {
+          const mapNames: string[] = [];
+          for (const mapId of maps) {
+            // Strip timestamp from map ID if present
+            const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+            
+            try {
+              const mapData = await this.db.get<{name: string}>(`
+                SELECT name FROM game_maps 
+                WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+                LIMIT 1
+              `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+              
+              const displayName = mapData ? mapData.name : cleanMapId;
+              mapNames.push(`**${displayName}**`);
+            } catch (error) {
+              console.error(`Error fetching map name for ${mapId}:`, error);
+              mapNames.push(`**${cleanMapId}**`);
+            }
+          }
+          
+          mapDisplay = mapNames.join('\n');
+        } catch (error) {
+          console.error('Error fetching map names for Discord:', error);
+          mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+        }
+      } else {
+        mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+      }
+      
     }
 
     // Add livestream link if provided
@@ -283,8 +325,8 @@ export class AnnouncementHandler {
     if (!this.db) return null;
 
     try {
-      // Strip timestamp suffix from map identifier if present (e.g., "yacht-hostage-1756235829102" -> "yacht-hostage")
-      const cleanMapId = mapIdentifier.replace(/-\d+$/, '');
+      // Strip timestamp suffix from map identifier if present (e.g., "yacht-hostage-1756235829102-abc123" -> "yacht-hostage")
+      const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
       
       // Get map data from database - try exact match first
       let mapData = await this.db.get<{
@@ -778,7 +820,7 @@ export class AnnouncementHandler {
           const mapNames: string[] = [];
           for (const mapId of eventData.maps) {
             // Clean the map ID (remove timestamp suffix if present)
-            const cleanMapId = mapId.replace(/-\d+$/, '');
+            const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
             
             // Get map name from database
             const mapData = await this.db.get<{ name: string }>(`
@@ -1014,6 +1056,7 @@ export class AnnouncementHandler {
     let gameColor = 0x00d4aa; // Green for victory
     let mapName = scoreData.mapId;
     let mapImageUrl: string | null = null;
+    let mapNote: string | null = null;
     let attachment: AttachmentBuilder | undefined;
     let totalMaps = 0;
 
@@ -1031,7 +1074,8 @@ export class AnnouncementHandler {
           }
         }
 
-        // Get map data
+        // Get map data (strip timestamp from map ID first)
+        const cleanMapId = scoreData.mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
         const mapData = await this.db.get<{
           name: string, 
           image_url: string,
@@ -1042,11 +1086,23 @@ export class AnnouncementHandler {
           FROM game_maps gm
           WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
           LIMIT 1
-        `, [scoreData.gameId, scoreData.mapId, `%${scoreData.mapId}%`]);
+        `, [scoreData.gameId, cleanMapId, `%${cleanMapId}%`]);
 
         if (mapData) {
           mapName = mapData.name;
           mapImageUrl = mapData.image_url;
+        }
+
+        // Get map notes for this specific map
+        const mapNoteData = await this.db.get<{notes: string}>(`
+          SELECT notes 
+          FROM match_games 
+          WHERE match_id = ? AND map_id = ? AND notes IS NOT NULL AND notes != ''
+          LIMIT 1
+        `, [scoreData.matchId, scoreData.mapId]);
+
+        if (mapNoteData && mapNoteData.notes) {
+          mapNote = mapNoteData.notes;
         }
 
         // Get total number of maps in this match
@@ -1084,6 +1140,15 @@ export class AnnouncementHandler {
       embed.addFields([{ 
         name: `${scoreData.winningTeamName} Players`, 
         value: playersList, 
+        inline: false 
+      }]);
+    }
+
+    // Add map note if available
+    if (mapNote && mapNote.trim()) {
+      embed.addFields([{ 
+        name: '📝 Map Note', 
+        value: mapNote.trim(), 
         inline: false 
       }]);
     }

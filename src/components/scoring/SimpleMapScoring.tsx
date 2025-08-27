@@ -11,6 +11,7 @@ interface MatchGame {
   round: number;
   map_id: string;
   map_name: string;
+  image_url?: string;
   mode_id: string;
   mode_scoring_type?: 'Normal' | 'FFA';
   game_id: string; // game type like "overwatch2"
@@ -435,7 +436,7 @@ export function SimpleMapScoring({
                         cursor: submitting ? 'not-allowed' : 'pointer',
                         minWidth: 180,
                         height: 120,
-                        backgroundImage: `linear-gradient(${selectedGameId === game.id ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'}), url('${getMapImageUrl(gameType, game.map_id)}')`,
+                        backgroundImage: `linear-gradient(${selectedGameId === game.id ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'}), url('${game.image_url || getMapImageUrl(gameType, game.map_id)}')`,
                         backgroundSize: 'cover', // Full card coverage
                         backgroundPosition: 'center',
                         backgroundRepeat: 'no-repeat',

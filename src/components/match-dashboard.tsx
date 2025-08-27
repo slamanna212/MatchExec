@@ -131,7 +131,7 @@ const MatchCard = memo(({
           <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
             {match.maps && match.maps.length > 0 ? (
               (() => {
-                const cleanMapId = match.maps[0].replace(/-\d+$/, '');
+                const cleanMapId = match.maps[0].replace(/-\d+-[a-zA-Z0-9]+$/, '');
                 const mapName = mapNames[cleanMapId];
                 
                 if (!mapName) {
@@ -291,6 +291,7 @@ export function MatchDashboard() {
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -365,13 +366,21 @@ export function MatchDashboard() {
       const response = await fetch(`/api/matches/${matchId}/map-notes`);
       if (response.ok) {
         const { notes } = await response.json();
+        setMapNotes(notes);
         
-        // Update mapDetails with notes
+        // Also create mapDetails entries for timestamped map IDs so they can be looked up
         setMapDetails(prev => {
           const updated = { ...prev };
-          Object.keys(notes).forEach(mapId => {
-            if (updated[mapId]) {
-              updated[mapId] = { ...updated[mapId], note: notes[mapId] };
+          Object.keys(notes).forEach(timestampedMapId => {
+            if (!updated[timestampedMapId]) {
+              // Get base map ID by stripping timestamp
+              const baseMapId = timestampedMapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+              const baseMapDetail = updated[baseMapId];
+              
+              if (baseMapDetail) {
+                // Create a copy of base map details for the timestamped ID
+                updated[timestampedMapId] = { ...baseMapDetail };
+              }
             }
           });
           return updated;
@@ -496,6 +505,8 @@ export function MatchDashboard() {
     fetchParticipants(match.id);
     fetchReminders(match.id);
     fetchMapNotes(match.id);
+    // Ensure map details are loaded for this game
+    fetchMapNames(match.game_id);
   }, [fetchParticipants, fetchReminders]);
 
   // Auto-refresh participants and reminders when details modal is open
@@ -841,6 +852,7 @@ export function MatchDashboard() {
         reminders={reminders}
         remindersLoading={remindersLoading}
         mapDetails={mapDetails}
+        mapNotes={mapNotes}
         formatMapName={formatMapName}
         parseDbTimestamp={parseDbTimestamp}
         showTabs={true}

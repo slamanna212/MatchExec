@@ -91,6 +91,7 @@ interface MatchDetailsModalProps {
   reminders: ReminderData[];
   remindersLoading: boolean;
   mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
+  mapNotes: {[key: string]: string};
   formatMapName: (mapId: string) => string;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   showTabs?: boolean;
@@ -111,6 +112,7 @@ export function MatchDetailsModal({
   reminders,
   remindersLoading,
   mapDetails,
+  mapNotes,
   formatMapName,
   parseDbTimestamp,
   showTabs = true,
@@ -351,9 +353,12 @@ export function MatchDetailsModal({
               </Group>
               <Grid>
                 {selectedMatch.maps.map((mapId, index) => {
-                  // Strip timestamp from map ID to look up details
-                  const cleanMapId = mapId.replace(/-\d+$/, '');
-                  const mapDetail = mapDetails[cleanMapId];
+                  const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+                  const mapDetail = mapDetails[cleanMapId] || mapDetails[mapId];
+                  
+                  // Direct lookup since mapId should match the note key exactly
+                  const mapNote = mapNotes[mapId];
+                  
                   const winner = getMapWinner(mapId);
                   return (
                     <Grid.Col key={`${mapId}-${index}`} span={12}>
@@ -399,9 +404,9 @@ export function MatchDetailsModal({
                                     })()}
                                   </Badge>
                                 )}
-                                {mapDetail?.note && (
-                                  <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapDetail.note}>
-                                    📝 {mapDetail.note}
+                                {mapNote && (
+                                  <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapNote}>
+                                    📝 {mapNote}
                                   </Text>
                                 )}
                               </div>
@@ -619,9 +624,11 @@ export function MatchDetailsModal({
                   {selectedMatch.maps && selectedMatch.maps.length > 0 ? (
                     <Stack gap="sm">
                       {selectedMatch.maps.map((mapId, index) => {
-                        // Strip timestamp from map ID to look up details
-                        const cleanMapId = mapId.replace(/-\d+$/, '');
-                        const mapDetail = mapDetails[cleanMapId];
+                        const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+                        const mapDetail = mapDetails[cleanMapId] || mapDetails[mapId];
+                        
+                        // Direct lookup since mapId should match the note key exactly
+                        const mapNote = mapNotes[mapId];
                         return (
                           <Card key={`${mapId}-${index}`} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                             <Group wrap="nowrap" align="stretch" gap={0}>
@@ -665,9 +672,9 @@ export function MatchDetailsModal({
                                         })()}
                                       </Badge>
                                     )}
-                                    {mapDetail?.note && (
-                                      <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapDetail.note}>
-                                        📝 {mapDetail.note}
+                                    {mapNote && (
+                                      <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapNote}>
+                                        📝 {mapNote}
                                       </Text>
                                     )}
                                   </div>

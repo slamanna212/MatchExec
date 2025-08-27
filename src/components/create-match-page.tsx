@@ -382,8 +382,9 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === selectedMode);
     if (!mode) return;
 
+    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const selectedMap: SelectedMapCard = {
-      id: `${map.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: timestampedId,
       name: map.name,
       modeId: selectedMode,
       modeName: mode.name,
@@ -391,7 +392,7 @@ export function CreateMatchPage() {
     };
 
     const newSelectedMaps = [...selectedMaps, selectedMap];
-    const newMapIds = [...(formData.maps || []), map.id];
+    const newMapIds = [...(formData.maps || []), timestampedId];
     
     setSelectedMaps(newSelectedMaps);
     updateFormData('maps', newMapIds);
