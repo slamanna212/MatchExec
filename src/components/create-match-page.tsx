@@ -383,7 +383,7 @@ export function CreateMatchPage() {
     if (!mode) return;
 
     const selectedMap: SelectedMapCard = {
-      id: `${map.id}-${Date.now()}`,
+      id: `${map.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: map.name,
       modeId: selectedMode,
       modeName: mode.name,
@@ -422,7 +422,7 @@ export function CreateMatchPage() {
 
     // Extract base map ID (remove mode suffix if it exists)
     const baseMapId = map.id.includes('-') ? map.id.replace(/-[^-]+$/, '') : map.id;
-    const combinedId = `${baseMapId}-${modeId}-${Date.now()}`;
+    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const selectedMap: SelectedMapCard = {
       id: combinedId,
@@ -487,6 +487,7 @@ export function CreateMatchPage() {
         announcementVoiceChannel: formData.announcementVoiceChannel || null,
         announcements: formData.announcements || []
       };
+
 
       const response = await fetch('/api/matches', {
         method: 'POST',

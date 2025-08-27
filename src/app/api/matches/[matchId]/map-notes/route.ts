@@ -3,9 +3,10 @@ import { getDbInstance } from '@/lib/database-init';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
+    const { matchId } = await params;
     const { mapId, note } = await request.json();
     
     if (!mapId) {
@@ -15,7 +16,7 @@ export async function POST(
     const db = await getDbInstance();
     
     // Check if the match exists
-    const match = await db.get(`SELECT id FROM matches WHERE id = ?`, [params.matchId]);
+    const match = await db.get(`SELECT id FROM matches WHERE id = ?`, [matchId]);
     if (!match) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
@@ -26,7 +27,7 @@ export async function POST(
       SELECT id FROM match_games 
       WHERE match_id = ? AND map_id = ?
       LIMIT 1
-    `, [params.matchId, mapId]);
+    `, [matchId, mapId]);
 
     if (matchGame) {
       // Update existing match_game record
@@ -38,13 +39,13 @@ export async function POST(
     } else {
       // Create a new match_game record for this map note
       // We'll use a simplified structure for just storing notes
-      const gameId = `note-${params.matchId}-${mapId}-${Date.now()}`;
+      const gameId = `note-${matchId}-${mapId}-${Date.now()}`;
       await db.run(`
         INSERT INTO match_games (
           id, match_id, round, participant1_id, participant2_id, 
           map_id, notes, status, created_at, updated_at
         ) VALUES (?, ?, 0, 'system', 'system', ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [gameId, params.matchId, mapId, note || '']);
+      `, [gameId, matchId, mapId, note || '']);
     }
 
     return NextResponse.json({ success: true, note });
@@ -57,9 +58,10 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
+    const { matchId } = await params;
     const db = await getDbInstance();
     
     // Get all map notes for this match
@@ -67,7 +69,7 @@ export async function GET(
       SELECT map_id, notes 
       FROM match_games 
       WHERE match_id = ? AND notes IS NOT NULL AND notes != ''
-    `, [params.matchId]);
+    `, [matchId]);
 
     const notesMap: Record<string, string> = {};
     mapNotes.forEach((note: { map_id: string; notes: string }) => {

@@ -350,13 +350,13 @@ export function MatchDetailsModal({
                 )}
               </Group>
               <Grid>
-                {selectedMatch.maps.map(mapId => {
+                {selectedMatch.maps.map((mapId, index) => {
                   // Strip timestamp from map ID to look up details
                   const cleanMapId = mapId.replace(/-\d+$/, '');
                   const mapDetail = mapDetails[cleanMapId];
                   const winner = getMapWinner(mapId);
                   return (
-                    <Grid.Col key={mapId} span={12}>
+                    <Grid.Col key={`${mapId}-${index}`} span={12}>
                       <Card shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                         <Group wrap="nowrap" align="stretch" gap={0}>
                           <div style={{ width: '50%', position: 'relative' }}>
@@ -618,12 +618,12 @@ export function MatchDetailsModal({
                   
                   {selectedMatch.maps && selectedMatch.maps.length > 0 ? (
                     <Stack gap="sm">
-                      {selectedMatch.maps.map(mapId => {
+                      {selectedMatch.maps.map((mapId, index) => {
                         // Strip timestamp from map ID to look up details
                         const cleanMapId = mapId.replace(/-\d+$/, '');
                         const mapDetail = mapDetails[cleanMapId];
                         return (
-                          <Card key={mapId} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                          <Card key={`${mapId}-${index}`} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                             <Group wrap="nowrap" align="stretch" gap={0}>
                               <div style={{ width: '40%', position: 'relative' }}>
                                 <Image
