@@ -746,11 +746,44 @@ export class AnnouncementHandler {
       .setTimestamp()
       .setFooter({ text: 'Match Starting' });
 
-    // Add maps if available
+    // Add maps if available - fetch names from database
     if (eventData.maps && eventData.maps.length > 0) {
-      const mapList = eventData.maps.length > 3 
-        ? `${eventData.maps.slice(0, 3).join(', ')} +${eventData.maps.length - 3} more`
-        : eventData.maps.join(', ');
+      let mapList = eventData.maps.join(', '); // Fallback to IDs
+      
+      // Try to get map names from database
+      if (this.db) {
+        try {
+          const mapNames: string[] = [];
+          for (const mapId of eventData.maps) {
+            // Clean the map ID (remove timestamp suffix if present)
+            const cleanMapId = mapId.replace(/-\d+$/, '');
+            
+            // Get map name from database
+            const mapData = await this.db.get<{ name: string }>(`
+              SELECT name FROM game_maps 
+              WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+              LIMIT 1
+            `, [eventData.game_id, cleanMapId, `%${cleanMapId}%`]);
+            
+            if (mapData) {
+              mapNames.push(mapData.name);
+            } else {
+              // Fallback to the original ID if name not found
+              mapNames.push(mapId);
+            }
+          }
+          
+          if (mapNames.length > 0) {
+            mapList = mapNames.length > 3 
+              ? `${mapNames.slice(0, 3).join(', ')} +${mapNames.length - 3} more`
+              : mapNames.join(', ');
+          }
+        } catch (error) {
+          console.error('Error fetching map names for match start:', error);
+          // Keep the original mapList as fallback
+        }
+      }
+      
       embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
     }
 

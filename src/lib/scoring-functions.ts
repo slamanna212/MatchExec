@@ -360,11 +360,33 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
         // Generate unique ID for the queue entry
         const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
+        // Get the actual map name from database instead of using potentially raw mapName
+        let displayMapName = mapName; // Fallback to passed mapName
+        try {
+          // Clean the map name (remove timestamp suffix if present)
+          const cleanMapName = mapName.replace(/-\d+$/, '');
+          
+          // Get actual map name from database  
+          const mapNameData = await db.get<{ name: string }>(`
+            SELECT name FROM game_maps 
+            WHERE game_id = (SELECT game_id FROM matches WHERE id = ?) 
+              AND (id = ? OR LOWER(name) LIKE LOWER(?))
+            LIMIT 1
+          `, [matchId, cleanMapName, `%${cleanMapName}%`]);
+          
+          if (mapNameData) {
+            displayMapName = mapNameData.name;
+          }
+        } catch (error) {
+          console.error('Error fetching map name for PM queue:', error);
+          // Keep original mapName as fallback
+        }
+
         // Add to map code PM queue
         await db.run(`
           INSERT INTO discord_map_code_queue (id, match_id, map_name, map_code, status)
           VALUES (?, ?, ?, ?, 'pending')
-        `, [queueId, matchId, mapName, mapCode]);
+        `, [queueId, matchId, displayMapName, mapCode]);
         
         console.log('📱 Map code PMs queued for next map:', mapName, 'in match:', matchId);
       } else {

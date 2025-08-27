@@ -306,17 +306,34 @@ export async function POST(
           const mapCodes = matchWithGame.map_codes ? JSON.parse(matchWithGame.map_codes) : {};
           
           if (maps.length > 0) {
-            const firstMapName = maps[0];
-            const cleanMapName = firstMapName.replace(/-\d+$/, '');
+            const firstMapId = maps[0];
+            const cleanMapId = firstMapId.replace(/-\d+$/, '');
+            
+            // Get the actual map name from database instead of using map ID
+            let firstMapName = firstMapId; // Fallback to ID
+            try {
+              const mapNameData = await db.get<{ name: string }>(`
+                SELECT name FROM game_maps 
+                WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+                LIMIT 1
+              `, [matchWithGame.game_id, cleanMapId, `%${cleanMapId}%`]);
+              
+              if (mapNameData) {
+                firstMapName = mapNameData.name;
+              }
+            } catch (error) {
+              console.error('Error fetching map name for first map PM queue:', error);
+              // Keep original firstMapId as fallback
+            }
             
             // Try exact match first
-            let firstMapCode = mapCodes[cleanMapName];
+            let firstMapCode = mapCodes[cleanMapId];
             
             // If exact match fails, try case-insensitive and normalized lookup
             if (!firstMapCode) {
-              const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const normalizedCleanId = cleanMapId.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
               const mapCodeKey = Object.keys(mapCodes).find(key => 
-                key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
+                key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanId
               );
               if (mapCodeKey) {
                 firstMapCode = mapCodes[mapCodeKey];
