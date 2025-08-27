@@ -534,6 +534,9 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
       await db.run(updateMatchQuery, [matchId]);
       console.log(`Match ${matchId} marked as complete`);
       
+      // Queue match winner notification
+      await queueMatchWinnerNotification(matchId);
+      
       // Queue Discord deletion for match announcements and events
       await queueDiscordDeletion(matchId);
       
@@ -742,6 +745,85 @@ export async function getMatchGamesWithResults(matchId: string): Promise<Array<{
   } catch (error) {
     console.error('Error getting match games with results:', error);
     return [];
+  }
+}
+
+/**
+ * Queue match winner notification when match completes
+ */
+async function queueMatchWinnerNotification(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+    
+    // Get match data and final scores
+    const matchData = await db.get<{
+      name: string;
+      game_id: string;
+    }>(`
+      SELECT name, game_id FROM matches WHERE id = ?
+    `, [matchId]);
+
+    if (!matchData) {
+      console.warn('Match not found for winner notification:', matchId);
+      return;
+    }
+
+    // Get overall match score
+    const scoreData = await getOverallMatchScore(matchId);
+    
+    if (scoreData.totalNormalGames === 0) {
+      console.warn('No completed normal games found for match winner notification:', matchId);
+      return;
+    }
+
+    // Determine winner and winning team data
+    let winner: 'team1' | 'team2' | 'tie' = scoreData.overallWinner || 'tie';
+    let winningTeamName: string;
+    let winningPlayers: string[] = [];
+
+    if (winner === 'tie') {
+      winningTeamName = 'Match Tied';
+    } else {
+      winningTeamName = winner === 'team1' ? 'Blue Team' : 'Red Team';
+      const teamAssignment = winner === 'team1' ? 'blue' : 'red';
+      
+      // Get winning team players
+      const players = await db.all<{ username: string }>(`
+        SELECT username
+        FROM match_participants
+        WHERE match_id = ? AND team_assignment = ?
+        ORDER BY username ASC
+      `, [matchId, teamAssignment]);
+      
+      winningPlayers = players.map(p => p.username);
+    }
+
+    // Generate unique notification ID
+    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+    // Insert into match winner notification queue
+    await db.run(`
+      INSERT INTO discord_match_winner_queue (
+        id, match_id, match_name, game_id, winner, winning_team_name, 
+        winning_players, team1_score, team2_score, total_maps, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, [
+      notificationId,
+      matchId,
+      matchData.name,
+      matchData.game_id,
+      winner,
+      winningTeamName,
+      JSON.stringify(winningPlayers),
+      scoreData.team1Wins,
+      scoreData.team2Wins,
+      scoreData.totalNormalGames
+    ]);
+
+    console.log(`🏆 Match winner notification queued: ${winningTeamName} wins ${matchData.name} (${scoreData.team1Wins}-${scoreData.team2Wins})`);
+  } catch (error) {
+    console.error('❌ Error queuing match winner notification:', error);
+    // Don't throw - this is not critical for the main scoring flow
   }
 }
 

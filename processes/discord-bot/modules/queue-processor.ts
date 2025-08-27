@@ -68,6 +68,20 @@ interface QueuedMapCode {
   created_at: string;
 }
 
+interface QueuedMatchWinner {
+  id: string;
+  match_id: string;
+  match_name: string;
+  game_id: string;
+  winner: 'team1' | 'team2' | 'tie';
+  winning_team_name: string;
+  winning_players: string;
+  team1_score: number;
+  team2_score: number;
+  total_maps: number;
+  created_at: string;
+}
+
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
 
@@ -960,6 +974,105 @@ export class QueueProcessor {
     }
   }
 
+  async processMatchWinnerNotificationQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const winnerNotifications = await this.db.all<QueuedMatchWinner>(`
+        SELECT id, match_id, match_name, game_id, winner, winning_team_name, 
+               winning_players, team1_score, team2_score, total_maps, created_at
+        FROM discord_match_winner_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const notification of winnerNotifications) {
+        try {
+          // Immediately mark as processing to prevent duplicate processing
+          const updateResult = await this.db.run(`
+            UPDATE discord_match_winner_queue 
+            SET status = 'processing', sent_at = datetime('now')
+            WHERE id = ? AND status = 'pending'
+          `, [notification.id]);
+          
+          if (updateResult.changes === 0) {
+            continue;
+          }
+
+          if (!this.announcementHandler) {
+            console.error('❌ AnnouncementHandler not available');
+            await this.db.run(`
+              UPDATE discord_match_winner_queue 
+              SET status = 'failed', sent_at = datetime('now'), error_message = ?
+              WHERE id = ?
+            `, ['AnnouncementHandler not available', notification.id]);
+            continue;
+          }
+
+          // Parse winning players from JSON
+          let winningPlayers: string[] = [];
+          try {
+            winningPlayers = JSON.parse(notification.winning_players);
+          } catch (e) {
+            console.warn('Could not parse winning players JSON for winner notification:', notification.id);
+          }
+
+          // Build winner notification data
+          const winnerData = {
+            matchId: notification.match_id,
+            matchName: notification.match_name,
+            gameId: notification.game_id,
+            winner: notification.winner,
+            winningTeamName: notification.winning_team_name,
+            winningPlayers: winningPlayers,
+            team1Score: notification.team1_score,
+            team2Score: notification.team2_score,
+            totalMaps: notification.total_maps
+          };
+
+          // Wait 15 seconds to ensure last map winner embed goes out first
+          console.log(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
+          await new Promise(resolve => setTimeout(resolve, 15000));
+          
+          // Post the match winner notification
+          const result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
+          
+          if (result && typeof result === 'object' && result.success) {
+            // Mark as sent
+            await this.db.run(`
+              UPDATE discord_match_winner_queue 
+              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [notification.id]);
+
+            console.log(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
+          } else {
+            // Mark as failed
+            await this.db.run(`
+              UPDATE discord_match_winner_queue 
+              SET status = 'failed', error_message = 'Failed to post match winner notification'
+              WHERE id = ?
+            `, [notification.id]);
+
+            console.error(`❌ Failed to post match winner notification for ${notification.id}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing match winner notification ${notification.id}:`, error);
+          
+          // Mark as failed
+          await this.db.run(`
+            UPDATE discord_match_winner_queue 
+            SET status = 'failed', sent_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', notification.id]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing match winner notification queue:', error);
+    }
+  }
+
   async processAllQueues() {
     await Promise.all([
       this.processAnnouncementQueue(),
@@ -970,6 +1083,7 @@ export class QueueProcessor {
       this.processScoreNotificationQueue(),
       this.processVoiceAnnouncementQueue(),
       this.processMapCodeQueue(),
+      this.processMatchWinnerNotificationQueue(),
       this.processDiscordBotRequests()
     ]);
   }

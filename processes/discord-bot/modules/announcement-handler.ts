@@ -1087,6 +1087,174 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
+  async postMatchWinnerNotification(winnerData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    winner: 'team1' | 'team2' | 'tie';
+    winningTeamName: string;
+    winningPlayers: string[];
+    team1Score: number;
+    team2Score: number;
+    totalMaps: number;
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for live updates (match_start)
+    const matchEndChannels = await this.getChannelsForNotificationType('match_start');
+    
+    if (matchEndChannels.length === 0) {
+      console.warn('⚠️ No channels configured for match end notifications');
+      return false;
+    }
+
+    try {
+      // Create match winner embed
+      const { embed, attachment } = await this.createMatchWinnerEmbed(winnerData);
+
+      // Build message options
+      const messageOptions: any = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured match end channels
+      for (const channelConfig of matchEndChannels) {
+        try {
+          const matchEndChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (matchEndChannel?.isTextBased() && 'send' in matchEndChannel) {
+            // Send match winner notification
+            await matchEndChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send match winner notification to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send match winner notification to any channels');
+        return false;
+      }
+
+      return { success: true, successCount };
+
+    } catch (error) {
+      console.error('❌ Error posting match winner notification:', error);
+      return false;
+    }
+  }
+
+  private async createMatchWinnerEmbed(winnerData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    winner: 'team1' | 'team2' | 'tie';
+    winningTeamName: string;
+    winningPlayers: string[];
+    team1Score: number;
+    team2Score: number;
+    totalMaps: number;
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data
+    let gameName = winnerData.gameId;
+    let gameColor = winnerData.winner === 'tie' ? 0xffa500 : 0x00d4aa; // Orange for tie, green for victory
+    let attachment: AttachmentBuilder | undefined;
+
+    if (this.db) {
+      try {
+        // Get game data
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [winnerData.gameId]);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching game data for match winner notification:', error);
+      }
+    }
+
+    // Create appropriate title and description based on winner
+    let title: string;
+    let description: string;
+    
+    if (winnerData.winner === 'tie') {
+      title = `🤝 ${winnerData.matchName} - Match Tied!`;
+      description = `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`;
+    } else {
+      title = `🏆 ${winnerData.winningTeamName} Wins ${winnerData.matchName}!`;
+      const losingScore = winnerData.winner === 'team1' ? winnerData.team2Score : winnerData.team1Score;
+      const winningScore = winnerData.winner === 'team1' ? winnerData.team1Score : winnerData.team2Score;
+      description = `**${winnerData.matchName}** is complete! Final score: **${winningScore}-${losingScore}**`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setColor(gameColor)
+      .addFields([
+        { name: '🎮 Game', value: gameName, inline: true },
+        { name: '📊 Final Score', value: `${winnerData.team1Score} - ${winnerData.team2Score}`, inline: true },
+        { name: '🗺️ Maps Played', value: winnerData.totalMaps.toString(), inline: true }
+      ])
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Match Complete' });
+
+    // Add winning team players (if not a tie)
+    if (winnerData.winner !== 'tie' && winnerData.winningPlayers.length > 0) {
+      const playersList = winnerData.winningPlayers.join('\n');
+      embed.addFields([{ 
+        name: `${winnerData.winningTeamName} Players`, 
+        value: playersList, 
+        inline: false 
+      }]);
+    }
+
+    // Add link to original match info if available
+    if (this.db) {
+      try {
+        const originalMessage = await this.db.get<{
+          message_id: string;
+          channel_id: string;
+        }>(`
+          SELECT message_id, channel_id 
+          FROM discord_match_messages 
+          WHERE match_id = ? AND message_type = 'announcement'
+          LIMIT 1
+        `, [winnerData.matchId]);
+
+        if (originalMessage && this.client.guilds.cache.first()) {
+          const guildId = this.client.guilds.cache.first()?.id;
+          const messageLink = `https://discord.com/channels/${guildId}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+          embed.addFields([{ 
+            name: '🔗 Match Details', 
+            value: `[View Original Match Info](${messageLink})`, 
+            inline: false 
+          }]);
+        }
+      } catch (error) {
+        console.error('Error finding original announcement message for match winner:', error);
+      }
+    }
+
+    return { embed, attachment };
+  }
+
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
   }
