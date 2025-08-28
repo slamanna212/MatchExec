@@ -237,6 +237,7 @@ export function MatchHistoryDashboard() {
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -380,12 +381,28 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
+  const fetchMapNotes = useCallback(async (matchId: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/map-notes`);
+      if (response.ok) {
+        const data = await response.json();
+        setMapNotes(data.notes || {});
+      } else {
+        setMapNotes({});
+      }
+    } catch (error) {
+      console.error('Error fetching map notes:', error);
+      setMapNotes({});
+    }
+  }, []);
+
   const handleViewDetails = useCallback((match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
-  }, [fetchParticipants, fetchReminders]);
+    fetchMapNotes(match.id);
+  }, [fetchParticipants, fetchReminders, fetchMapNotes]);
 
   // Filter matches based on search query
   const filteredMatches = useMemo(() => {
@@ -482,11 +499,14 @@ export function MatchHistoryDashboard() {
         reminders={reminders}
         remindersLoading={remindersLoading}
         mapDetails={mapDetails}
+        mapNotes={mapNotes}
         formatMapName={formatMapName}
         parseDbTimestamp={parseDbTimestamp}
         showTabs={true}
         showDeleteButton={false}
         showAssignButton={false}
+        onDelete={() => {}}
+        onAssign={() => {}}
       />
     </div>
   );
