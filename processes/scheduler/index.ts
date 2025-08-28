@@ -1,4 +1,4 @@
-import { getDbInstance } from '../../src/lib/database-init';
+import { getDbInstance } from '../../lib/database-init';
 import * as cron from 'node-cron';
 import { SchedulerSettings } from '../../shared/types';
 

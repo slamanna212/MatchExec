@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import { getDbInstance } from '../../src/lib/database-init.js';
+import { getDbInstance } from '../../lib/database-init';
 import { Database } from '../../lib/database/connection';
 import { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
