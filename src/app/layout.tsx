@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
 import { Providers } from "./providers";
 import { Navigation } from "@/components/navigation";
 import { ColorSchemeScript } from '@mantine/core';
+import WelcomeFlowWrapper from '@/components/WelcomeFlowWrapper';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,15 +29,20 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-title" content="MatchExec" />
+        <meta name="theme-color" content="#241459" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <link rel="manifest" href="/manifest.json" />
         <ColorSchemeScript defaultColorScheme="dark" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <Navigation>
-            {children}
-          </Navigation>
+          <WelcomeFlowWrapper>
+            <Navigation>
+              {children}
+            </Navigation>
+          </WelcomeFlowWrapper>
         </Providers>
       </body>
     </html>

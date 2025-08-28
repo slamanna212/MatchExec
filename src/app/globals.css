@@ -1,29 +1,10 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
 
 /* Force consistent NavLink hover colors with higher specificity */
 [data-mantine-color-scheme="dark"] .m_f0824112:hover,
@@ -36,4 +17,9 @@ body {
 [data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
 .m_f0824112[data-active="true"] {
   background-color: #4c1d95 !important;
+}
+
+/* Override Mantine's light mode body background - must come after Mantine styles */
+:root[data-mantine-color-scheme='light'] {
+  --mantine-color-body: #f1f3f4;
 }

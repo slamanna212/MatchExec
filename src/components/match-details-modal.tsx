@@ -90,7 +90,8 @@ interface MatchDetailsModalProps {
   signupConfig: SignupConfig | null;
   reminders: ReminderData[];
   remindersLoading: boolean;
-  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}};
+  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
+  mapNotes: {[key: string]: string};
   formatMapName: (mapId: string) => string;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   showTabs?: boolean;
@@ -111,11 +112,11 @@ export function MatchDetailsModal({
   reminders,
   remindersLoading,
   mapDetails,
+  mapNotes,
   formatMapName,
   parseDbTimestamp,
   showTabs = true,
   showDeleteButton = false,
-  showAssignButton = false,
   onDelete,
   onAssign
 }: MatchDetailsModalProps) {
@@ -215,6 +216,7 @@ export function MatchDetailsModal({
     };
   };
 
+
   // Memoize participants list to prevent unnecessary rerenders
   const memoizedParticipantsList = useMemo(() => {
     if (participantsLoading) {
@@ -248,7 +250,7 @@ export function MatchDetailsModal({
           <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder>
             <Group justify="space-between" align="center">
               <Group align="center">
-                <Avatar size="sm" color={selectedMatch?.status === 'complete' ? 'green' : 'blue'}>
+                <Avatar size="sm" color={selectedMatch?.status === 'complete' ? 'green' : 'teal'}>
                   {index + 1}
                 </Avatar>
                 <div>
@@ -350,17 +352,22 @@ export function MatchDetailsModal({
                 )}
               </Group>
               <Grid>
-                {selectedMatch.maps.map(mapId => {
-                  const mapDetail = mapDetails[mapId];
+                {selectedMatch.maps.map((mapId, index) => {
+                  const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+                  const mapDetail = mapDetails[cleanMapId] || mapDetails[mapId];
+                  
+                  // Direct lookup since mapId should match the note key exactly
+                  const mapNote = mapNotes[mapId];
+                  
                   const winner = getMapWinner(mapId);
                   return (
-                    <Grid.Col key={mapId} span={12}>
+                    <Grid.Col key={`${mapId}-${index}`} span={12}>
                       <Card shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                         <Group wrap="nowrap" align="stretch" gap={0}>
                           <div style={{ width: '50%', position: 'relative' }}>
                             <Image
                               src={mapDetail?.imageUrl}
-                              alt={mapDetail?.name || formatMapName(mapId)}
+                              alt={mapDetail?.name || formatMapName(cleanMapId)}
                               height={80}
                               radius={0}
                               style={{
@@ -377,17 +384,30 @@ export function MatchDetailsModal({
                             <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                               <div>
                                 <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
-                                  {mapDetail?.name || formatMapName(mapId)}
+                                  {mapDetail?.name || formatMapName(cleanMapId)}
                                 </Text>
                                 {mapDetail?.location && (
                                   <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                     {mapDetail.location}
                                   </Text>
                                 )}
-                                {mapDetail?.modeName && (
+                                {(mapDetail?.modeName || cleanMapId.includes('-')) && (
                                   <Badge size="xs" variant="light" mt={2}>
-                                    {mapDetail.modeName}
+                                    {mapDetail?.modeName || (() => {
+                                      // Fallback: extract mode from map ID
+                                      const parts = cleanMapId.split('-');
+                                      const lastPart = parts[parts.length - 1];
+                                      return lastPart === 'bomb' ? 'Bomb' :
+                                             lastPart === 'hostage' ? 'Hostage' :
+                                             lastPart === 'secure-area' ? 'Secure Area' :
+                                             lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+                                    })()}
                                   </Badge>
+                                )}
+                                {mapNote && (
+                                  <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapNote}>
+                                    📝 {mapNote}
+                                  </Text>
                                 )}
                               </div>
                               {winner && (
@@ -522,22 +542,6 @@ export function MatchDetailsModal({
                             <Group gap="xs">
                               <Badge 
                                 size="xs" 
-                                variant="light" 
-                                color={
-                                  reminder.type === 'timed_announcement' ? 'indigo' :
-                                  reminder.type === 'discord_general' ? 'blue' :
-                                  reminder.type === 'discord_match' ? 'purple' :
-                                  'green'
-                                }
-                                style={{ textTransform: 'none' }}
-                              >
-                                {reminder.type === 'timed_announcement' ? 'Announcement' :
-                                 reminder.type === 'discord_general' ? 'General' :
-                                 reminder.type === 'discord_match' ? 'Match' :
-                                 'Player DM'}
-                              </Badge>
-                              <Badge 
-                                size="xs" 
                                 variant="light"
                                 color={
                                   reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
@@ -574,16 +578,6 @@ export function MatchDetailsModal({
                               </Text>
                             )}
                             
-                            <Text size="xs" c="dimmed">
-                              Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                                year: 'numeric', 
-                                month: 'numeric', 
-                                day: 'numeric', 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true 
-                              }) || 'N/A'}
-                            </Text>
                             
                             {(reminder.sent_at || reminder.processed_at) && (
                               <Text size="xs" c="dimmed">
@@ -629,15 +623,19 @@ export function MatchDetailsModal({
                   
                   {selectedMatch.maps && selectedMatch.maps.length > 0 ? (
                     <Stack gap="sm">
-                      {selectedMatch.maps.map(mapId => {
-                        const mapDetail = mapDetails[mapId];
+                      {selectedMatch.maps.map((mapId, index) => {
+                        const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+                        const mapDetail = mapDetails[cleanMapId] || mapDetails[mapId];
+                        
+                        // Direct lookup since mapId should match the note key exactly
+                        const mapNote = mapNotes[mapId];
                         return (
-                          <Card key={mapId} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                          <Card key={`${mapId}-${index}`} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
                             <Group wrap="nowrap" align="stretch" gap={0}>
                               <div style={{ width: '40%', position: 'relative' }}>
                                 <Image
                                   src={mapDetail?.imageUrl}
-                                  alt={mapDetail?.name || formatMapName(mapId)}
+                                  alt={mapDetail?.name || formatMapName(cleanMapId)}
                                   height={80}
                                   radius={0}
                                   style={{
@@ -654,17 +652,30 @@ export function MatchDetailsModal({
                                 <Stack gap="xs" justify="center" style={{ height: '100%' }}>
                                   <div>
                                     <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
-                                      {mapDetail?.name || formatMapName(mapId)}
+                                      {mapDetail?.name || formatMapName(cleanMapId)}
                                     </Text>
                                     {mapDetail?.location && (
                                       <Text c="dimmed" lineClamp={1} className={responsiveTextClasses.locationResponsive}>
                                         {mapDetail.location}
                                       </Text>
                                     )}
-                                    {mapDetail?.modeName && (
+                                    {(mapDetail?.modeName || cleanMapId.includes('-')) && (
                                       <Badge size="xs" variant="light" mt={2}>
-                                        {mapDetail.modeName}
+                                        {mapDetail?.modeName || (() => {
+                                          // Fallback: extract mode from map ID
+                                          const parts = cleanMapId.split('-');
+                                          const lastPart = parts[parts.length - 1];
+                                          return lastPart === 'bomb' ? 'Bomb' :
+                                                 lastPart === 'hostage' ? 'Hostage' :
+                                                 lastPart === 'secure-area' ? 'Secure Area' :
+                                                 lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+                                        })()}
                                       </Badge>
+                                    )}
+                                    {mapNote && (
+                                      <Text size="xs" c="dimmed" lineClamp={1} mt="xs" title={mapNote}>
+                                        📝 {mapNote}
+                                      </Text>
                                     )}
                                   </div>
                                   <TextInput
@@ -732,19 +743,6 @@ export function MatchDetailsModal({
                               <Group gap="xs">
                                 <Badge 
                                   size="xs" 
-                                  variant="light" 
-                                  color={
-                                    reminder.type === 'discord_general' ? 'blue' :
-                                    reminder.type === 'discord_match' ? 'purple' :
-                                    'green'
-                                  }
-                                >
-                                  {reminder.type === 'discord_general' ? 'General' :
-                                   reminder.type === 'discord_match' ? 'Match' :
-                                   'Player DM'}
-                                </Badge>
-                                <Badge 
-                                  size="xs" 
                                   variant="light"
                                   color={
                                     reminder.status === 'sent' || reminder.status === 'processed' ? 'green' :
@@ -769,16 +767,6 @@ export function MatchDetailsModal({
                                 </Text>
                               )}
                               
-                              <Text size="xs" c="dimmed">
-                                Created: {parseDbTimestamp(reminder.created_at)?.toLocaleString('en-US', { 
-                                  year: 'numeric', 
-                                  month: 'numeric', 
-                                  day: 'numeric', 
-                                  hour: 'numeric', 
-                                  minute: '2-digit',
-                                  hour12: true 
-                                }) || 'N/A'}
-                              </Text>
                               
                               {(reminder.sent_at || reminder.processed_at) && (
                                 <Text size="xs" c="dimmed">
@@ -813,34 +801,34 @@ export function MatchDetailsModal({
         <Divider />
         
         <Group justify="space-between" mt="md">
-          {showDeleteButton && (
-            <Button
-              color="red"
-              variant="light"
-              onClick={() => onDelete?.(selectedMatch)}
-            >
-              Delete Match
-            </Button>
-          )}
-          {!showDeleteButton && <div />}
-          <Group>
-            {showAssignButton && (selectedMatch.status === 'gather' || selectedMatch.status === 'assign') && (
+          <Group gap="sm">
+            {showDeleteButton && (
               <Button
+                color="red"
+                variant="light"
+                onClick={() => onDelete?.(selectedMatch)}
+              >
+                Delete Match
+              </Button>
+            )}
+            {(selectedMatch.status === 'gather' || selectedMatch.status === 'assign' || selectedMatch.status === 'battle') && (
+              <Button
+                variant="light"
                 onClick={() => {
                   onClose();
                   onAssign?.(selectedMatch);
                 }}
               >
-                Assign
+                Assign Players
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={onClose}
-            >
-              Close
-            </Button>
           </Group>
+          <Button
+            variant="outline"
+            onClick={onClose}
+          >
+            Close
+          </Button>
         </Group>
       </Stack>
     </Modal>

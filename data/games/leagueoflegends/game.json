@@ -1,0 +1,19 @@
+{
+  "id": "leagueoflegends",
+  "name": "League of Legends",
+  "color": "#C8AA6E",
+  "genre": "MOBA",
+  "developer": "Riot Games",
+  "releaseDate": "2009-10-27",
+  "patch": "15.15",
+  "dataVersion": "1.0.1",
+  "minPlayers": 2,
+  "maxPlayers": 10,
+  "maxSignups": 20,
+  "mapCodesSupported": false,
+  "supportsAllModes": true,
+  "assets": {
+    "iconUrl": "/assets/games/leagueoflegends/icon.png",
+    "coverUrl": "/assets/games/leagueoflegends/cover.jpg"
+  }
+}

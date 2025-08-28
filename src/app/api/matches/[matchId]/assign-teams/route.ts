@@ -17,14 +17,14 @@ export async function POST(
     const db = await getDbInstance();
 
     // Update team assignments for all participants
-    const updatePromises = teamAssignments.map(async (assignment: { participantId: string; team: string }) => {
+    const updatePromises = teamAssignments.map(async (assignment: { participantId: string; team: string; receives_map_codes?: boolean }) => {
       if (!['reserve', 'blue', 'red'].includes(assignment.team)) {
         throw new Error(`Invalid team assignment: ${assignment.team}`);
       }
 
       return db.run(
-        'UPDATE match_participants SET team_assignment = ? WHERE id = ? AND match_id = ?',
-        [assignment.team, assignment.participantId, matchId]
+        'UPDATE match_participants SET team_assignment = ?, receives_map_codes = ? WHERE id = ? AND match_id = ?',
+        [assignment.team, assignment.receives_map_codes || false, assignment.participantId, matchId]
       );
     });
 

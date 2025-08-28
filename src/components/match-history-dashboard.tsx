@@ -11,7 +11,8 @@ import {
   Group,
   Stack,
   Grid,
-  RingProgress
+  RingProgress,
+  TextInput
 } from '@mantine/core';
 import { Match, MATCH_FLOW_STEPS, SignupConfig, ReminderData } from '@/shared/types';
 import Link from 'next/link';
@@ -113,9 +114,13 @@ const HistoryMatchCard = memo(({
           <Text size="sm" c="dimmed">Maps:</Text>
           <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
             {match.maps && match.maps.length > 0 ? (
-              match.maps.length > 1
-                ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
-                : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+              (() => {
+                const cleanMapId = match.maps[0].replace(/-\d+$/, '');
+                const mapName = mapNames[cleanMapId] || formatMapName(cleanMapId);
+                return match.maps.length > 1
+                  ? `${mapName} +${match.maps.length - 1} more`
+                  : mapName;
+              })()
             ) : (
               'None selected'
             )}
@@ -155,6 +160,7 @@ export function MatchHistoryDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -230,7 +236,8 @@ export function MatchHistoryDashboard() {
   }, []);
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -238,17 +245,62 @@ export function MatchHistoryDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
         
-        maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-          mapNamesObj[map.id] = map.name;
-          mapDetailsObj[map.id] = {
-            name: map.name,
-            imageUrl: map.imageUrl,
-            modeName: map.modeName,
-            location: map.location
-          };
-        });
+        // Check if this game supports all modes (flexible mode combinations)
+        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
+        
+        if (supportsAllModes) {
+          // For flexible games, get all possible modes and create all combinations
+          const modesResponse = await fetch(`/api/games/${gameId}/modes`);
+          let modes: {id: string, name: string}[] = [];
+          
+          if (modesResponse.ok) {
+            modes = await modesResponse.json();
+          }
+          
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
+            // Add the original map entry
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location,
+              note: map.note
+            };
+            
+            // For flexible games, create entries for all possible mode combinations
+            // Extract base map name by removing the mode suffix
+            const baseMapName = map.id.replace(/-[^-]+$/, '');
+            
+            modes.forEach(mode => {
+              const modeSpecificId = `${baseMapName}-${mode.id}`;
+              if (modeSpecificId !== map.id) {
+                mapNamesObj[modeSpecificId] = map.name;
+                mapDetailsObj[modeSpecificId] = {
+                  name: map.name,
+                  imageUrl: map.imageUrl,
+                  modeName: mode.name,
+                  location: map.location,
+                  note: map.note
+                };
+              }
+            });
+          });
+        } else {
+          // For fixed mode games, use the API data as-is
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location,
+              note: map.note
+            };
+          });
+        }
         
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
@@ -329,16 +381,42 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
+  const fetchMapNotes = useCallback(async (matchId: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/map-notes`);
+      if (response.ok) {
+        const data = await response.json();
+        setMapNotes(data.notes || {});
+      } else {
+        setMapNotes({});
+      }
+    } catch (error) {
+      console.error('Error fetching map notes:', error);
+      setMapNotes({});
+    }
+  }, []);
+
   const handleViewDetails = useCallback((match: MatchWithGame) => {
     setSelectedMatch(match);
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
-  }, [fetchParticipants, fetchReminders]);
+    fetchMapNotes(match.id);
+  }, [fetchParticipants, fetchReminders, fetchMapNotes]);
+
+  // Filter matches based on search query
+  const filteredMatches = useMemo(() => {
+    return matches.filter(match =>
+      match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.game_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.rules?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [matches, searchQuery]);
 
   // Memoize expensive match card rendering
   const memoizedMatchCards = useMemo(() => {
-    return matches.map((match) => (
+    return filteredMatches.map((match) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
         <HistoryMatchCard 
           match={match}
@@ -348,7 +426,7 @@ export function MatchHistoryDashboard() {
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, handleViewDetails, formatMapName]);
+  }, [filteredMatches, mapNames, handleViewDetails, formatMapName]);
 
 
   if (loading) {
@@ -361,11 +439,15 @@ export function MatchHistoryDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Text size="xl" fw={700}>Match History</Text>
-          <Text c="dimmed" mt="xs">View completed matches</Text>
-        </div>
+      <Group justify="flex-end" mb="xl">
+        {matches.length > 0 && (
+          <TextInput
+            placeholder="Search history..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.currentTarget.value)}
+            style={{ width: 300 }}
+          />
+        )}
       </Group>
 
       <Divider mb="xl" />
@@ -376,6 +458,21 @@ export function MatchHistoryDashboard() {
             <Text size="xl" fw={600}>No completed matches yet</Text>
             <Text c="dimmed" mb="md">
               Completed matches will appear here
+            </Text>
+            <Button 
+              component={Link}
+              href="/matches"
+            >
+              View Active Matches
+            </Button>
+          </Stack>
+        </Card>
+      ) : filteredMatches.length === 0 && searchQuery ? (
+        <Card p="xl">
+          <Stack align="center">
+            <Text size="xl" fw={600}>No matches found</Text>
+            <Text c="dimmed" mb="md">
+              No completed matches match your search for &quot;{searchQuery}&quot;
             </Text>
             <Button 
               component={Link}
@@ -402,11 +499,14 @@ export function MatchHistoryDashboard() {
         reminders={reminders}
         remindersLoading={remindersLoading}
         mapDetails={mapDetails}
+        mapNotes={mapNotes}
         formatMapName={formatMapName}
         parseDbTimestamp={parseDbTimestamp}
         showTabs={true}
         showDeleteButton={false}
         showAssignButton={false}
+        onDelete={() => {}}
+        onAssign={() => {}}
       />
     </div>
   );

@@ -28,13 +28,16 @@ export function ScoreDisplay({
   showEditButton = false
 }: ScoreDisplayProps) {
   const [result, setResult] = useState<MatchResult | null>(null);
+  const [participants, setParticipants] = useState<Array<{ id: string; username: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchResult = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
+        
+        // Fetch result
         const response = await fetch(`/api/matches/${matchId}/games/${gameId}/result`);
         
         if (response.status === 404) {
@@ -48,6 +51,19 @@ export function ScoreDisplay({
         
         const resultData = await response.json();
         setResult(resultData);
+        
+        // Fetch participants if it's an FFA mode
+        if (resultData.isFfaMode) {
+          try {
+            const participantsResponse = await fetch(`/api/matches/${matchId}/participants`);
+            if (participantsResponse.ok) {
+              const participantsData = await participantsResponse.json();
+              setParticipants(participantsData.participants || []);
+            }
+          } catch (participantsError) {
+            console.warn('Failed to fetch participants:', participantsError);
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load result');
       } finally {
@@ -55,7 +71,7 @@ export function ScoreDisplay({
       }
     };
 
-    fetchResult();
+    fetchData();
   }, [matchId, gameId]);
 
   if (loading) {
@@ -86,9 +102,17 @@ export function ScoreDisplay({
   }
 
   const getWinnerDisplay = () => {
+    if (result?.isFfaMode && result.participantWinnerId) {
+      const winner = participants.find(p => p.id === result.participantWinnerId);
+      return {
+        text: `${winner?.username || 'Unknown Player'} Wins`,
+        color: 'violet'
+      };
+    }
+    
     return {
-      text: result.winner === 'team1' ? 'Blue Team Wins' : 'Red Team Wins',
-      color: result.winner === 'team1' ? 'blue' : 'red'
+      text: result?.winner === 'team1' ? 'Blue Team Wins' : 'Red Team Wins',
+      color: result?.winner === 'team1' ? 'blue' : 'red'
     };
   };
 
@@ -102,7 +126,14 @@ export function ScoreDisplay({
           <Group gap="sm">
             <IconTrophy size={20} color="gold" />
             <div>
-              <Text fw={600} size="sm">Match Result</Text>
+              <Group gap="sm">
+                <Text fw={600} size="sm">Match Result</Text>
+                {result?.isFfaMode && (
+                  <Badge size="xs" color="violet" variant="outline">
+                    FFA
+                  </Badge>
+                )}
+              </Group>
               <Badge size="sm" color={winner.color} variant="filled" mt={4}>
                 {winner.text}
               </Badge>

@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress, NumberInput } from '@mantine/core';
-import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft } from '@tabler/icons-react';
+import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft, IconNote } from '@tabler/icons-react';
 import { GameMap } from '@/shared/types';
+import { MapNoteModal } from './map-note-modal';
 
 interface GameWithIcon {
   id: string;
@@ -61,6 +62,7 @@ interface SelectedMapCard {
   modeId: string;
   modeName: string;
   imageUrl?: string;
+  note?: string;
 }
 
 export function CreateMatchPage() {
@@ -85,6 +87,10 @@ export function CreateMatchPage() {
   const [startSignups, setStartSignups] = useState(true);
   const [currentGameSupportsAllModes, setCurrentGameSupportsAllModes] = useState(false);
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
+  const [flexibleModeSelects, setFlexibleModeSelects] = useState<Record<string, string>>({});
+  const [mapNoteModalOpen, setMapNoteModalOpen] = useState(false);
+  const [selectedMapForNote, setSelectedMapForNote] = useState<SelectedMapCard | null>(null);
+  const [mapNotes, setMapNotes] = useState<Record<string, string>>({});
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -235,6 +241,29 @@ export function CreateMatchPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleOpenNoteModal = (map: SelectedMapCard) => {
+    setSelectedMapForNote(map);
+    setMapNoteModalOpen(true);
+  };
+
+  const handleSaveNote = (note: string) => {
+    if (selectedMapForNote) {
+      setMapNotes(prev => ({
+        ...prev,
+        [selectedMapForNote.id]: note
+      }));
+      
+      // Update the selected maps with the note
+      setSelectedMaps(prev => 
+        prev.map(map => 
+          map.id === selectedMapForNote.id 
+            ? { ...map, note: note }
+            : map
+        )
+      );
+    }
+  };
+
   const sortAnnouncements = (announcements: AnnouncementTime[]) => {
     return [...announcements].sort((a, b) => {
       // Convert to minutes for comparison
@@ -353,13 +382,9 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === selectedMode);
     if (!mode) return;
 
-    // Check if map is already selected
-    if (selectedMaps.some(selectedMap => selectedMap.id === map.id)) {
-      return;
-    }
-
+    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const selectedMap: SelectedMapCard = {
-      id: map.id,
+      id: timestampedId,
       name: map.name,
       modeId: selectedMode,
       modeName: mode.name,
@@ -367,7 +392,7 @@ export function CreateMatchPage() {
     };
 
     const newSelectedMaps = [...selectedMaps, selectedMap];
-    const newMapIds = [...(formData.maps || []), map.id];
+    const newMapIds = [...(formData.maps || []), timestampedId];
     
     setSelectedMaps(newSelectedMaps);
     updateFormData('maps', newMapIds);
@@ -375,6 +400,15 @@ export function CreateMatchPage() {
     setShowMapSelector(false);
     setSelectedMode('');
     setMapsForMode([]);
+  };
+
+  const handleFlexibleModeChange = (mapId: string, modeId: string | null) => {
+    if (!modeId) return;
+    
+    setFlexibleModeSelects(prev => ({
+      ...prev,
+      [mapId]: modeId
+    }));
   };
 
   const handleFlexibleMapSelect = (map: GameMapWithMode, modeId: string) => {
@@ -388,13 +422,8 @@ export function CreateMatchPage() {
     }
 
     // Extract base map ID (remove mode suffix if it exists)
-    const baseMapId = map.id.includes('-') ? map.id.split('-')[0] : map.id;
-    const combinedId = `${baseMapId}-${modeId}`;
-
-    // Check if map with this combinedId is already selected
-    if (selectedMaps.some(selectedMap => selectedMap.id === combinedId)) {
-      return;
-    }
+    const baseMapId = map.id.includes('-') ? map.id.replace(/-[^-]+$/, '') : map.id;
+    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const selectedMap: SelectedMapCard = {
       id: combinedId,
@@ -411,6 +440,9 @@ export function CreateMatchPage() {
     updateFormData('maps', newMapIds);
     updateFormData('rounds', newMapIds.length);
     setShowMapSelector(false);
+    setSelectedMode('');
+    setMapsForMode([]);
+    setFlexibleModeSelects({});
   };
 
   const handleRemoveMap = (mapId: string) => {
@@ -424,6 +456,9 @@ export function CreateMatchPage() {
 
   const handleAddMapClick = () => {
     setShowMapSelector(true);
+    setSelectedMode('');
+    setMapsForMode([]);
+    setFlexibleModeSelects({});
   };
 
   const convertToUTC = (date: string, time: string): Date => {
@@ -454,6 +489,7 @@ export function CreateMatchPage() {
         announcements: formData.announcements || []
       };
 
+
       const response = await fetch('/api/matches', {
         method: 'POST',
         headers: {
@@ -464,6 +500,28 @@ export function CreateMatchPage() {
 
       if (response.ok) {
         const newMatch = await response.json();
+        
+        // Save map notes if any exist
+        const mapNotesToSave = selectedMaps.filter(map => map.note && map.note.trim()).map(map => ({
+          mapId: map.id,
+          note: map.note!.trim()
+        }));
+        
+        if (mapNotesToSave.length > 0) {
+          try {
+            for (const mapNote of mapNotesToSave) {
+              await fetch(`/api/matches/${newMatch.id}/map-notes`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(mapNote),
+              });
+            }
+          } catch (noteError) {
+            console.error('Error saving map notes:', noteError);
+          }
+        }
         
         // If "Start Signups" is checked, automatically transition to gather stage
         if (startSignups) {
@@ -807,26 +865,76 @@ export function CreateMatchPage() {
                 <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
                   <Card shadow="sm" padding="md" radius="md" withBorder>
                     <Card.Section>
-                      <Image
-                        src={map.imageUrl}
-                        alt={map.name}
-                        height={120}
-                        fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                      />
+                      <Box
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          aspectRatio: '16/9',
+                          overflow: 'hidden',
+                          borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0'
+                        }}
+                      >
+                        {/* Blur background */}
+                        <Box
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            backgroundImage: `url(${map.imageUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            filter: 'blur(10px)',
+                            transform: 'scale(1.1)'
+                          }}
+                        />
+                        {/* Main image */}
+                        <Image
+                          src={map.imageUrl}
+                          alt={map.name}
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            zIndex: 1
+                          }}
+                          fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                        />
+                      </Box>
                     </Card.Section>
                     
                     <Group justify="space-between" mt="xs">
                       <Stack gap={2} style={{ flex: 1 }}>
                         <Text fw={500} size="sm">{map.name}</Text>
                         <Badge size="xs" variant="light">{map.modeName}</Badge>
+                        {map.note && (
+                          <Text size="xs" c="dimmed" lineClamp={1} title={map.note}>
+                            📝 {map.note}
+                          </Text>
+                        )}
                       </Stack>
-                      <ActionIcon
-                        color="red"
-                        variant="light"
-                        onClick={() => handleRemoveMap(map.id)}
-                      >
-                        <IconX size={16} />
-                      </ActionIcon>
+                      <Stack gap={2} align="center">
+                        <ActionIcon
+                          color="blue"
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleOpenNoteModal(map)}
+                          title="Add/Edit Note"
+                        >
+                          <IconNote size={14} />
+                        </ActionIcon>
+                        <ActionIcon
+                          color="red"
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleRemoveMap(map.id)}
+                          title="Remove Map"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      </Stack>
                     </Group>
                   </Card>
                 </Grid.Col>
@@ -872,6 +980,7 @@ export function CreateMatchPage() {
                       value={selectedMode}
                       onChange={(value) => value && handleModeSelect(value)}
                       mb="md"
+                      disabled={availableModes.length === 0}
                     />
 
                     {selectedMode && (
@@ -891,12 +1000,44 @@ export function CreateMatchPage() {
                                   onClick={() => handleMapSelect(map)}
                                 >
                                   <Card.Section>
-                                    <Image
-                                      src={map.imageUrl}
-                                      alt={map.name}
-                                      height={80}
-                                      fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                                    />
+                                    <Box
+                                      style={{
+                                        position: 'relative',
+                                        width: '100%',
+                                        aspectRatio: '16/9',
+                                        overflow: 'hidden',
+                                        borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0'
+                                      }}
+                                    >
+                                      {/* Blur background */}
+                                      <Box
+                                        style={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          left: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          backgroundImage: `url(${map.imageUrl})`,
+                                          backgroundSize: 'cover',
+                                          backgroundPosition: 'center',
+                                          filter: 'blur(10px)',
+                                          transform: 'scale(1.1)'
+                                        }}
+                                      />
+                                      {/* Main image */}
+                                      <Image
+                                        src={map.imageUrl}
+                                        alt={map.name}
+                                        style={{
+                                          position: 'relative',
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'contain',
+                                          zIndex: 1
+                                        }}
+                                        fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                                      />
+                                    </Box>
                                   </Card.Section>
                                   <Text fw={500} size="sm" mt="xs">{map.name}</Text>
                                 </Card>
@@ -923,20 +1064,68 @@ export function CreateMatchPage() {
                             withBorder
                           >
                             <Card.Section>
-                              <Image
-                                src={map.imageUrl}
-                                alt={map.name}
-                                height={80}
-                                fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                              />
+                              <Box
+                                style={{
+                                  position: 'relative',
+                                  width: '100%',
+                                  aspectRatio: '16/9',
+                                  overflow: 'hidden',
+                                  borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0'
+                                }}
+                              >
+                                {/* Blur background */}
+                                <Box
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    backgroundImage: `url(${map.imageUrl})`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                    filter: 'blur(10px)',
+                                    transform: 'scale(1.1)'
+                                  }}
+                                />
+                                {/* Main image */}
+                                <Image
+                                  src={map.imageUrl}
+                                  alt={map.name}
+                                  style={{
+                                    position: 'relative',
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain',
+                                    zIndex: 1
+                                  }}
+                                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
+                                />
+                              </Box>
                             </Card.Section>
                             <Text fw={500} size="sm" mt="xs" mb="xs">{map.name}</Text>
                             <Select
                               placeholder="Select mode"
                               size="xs"
                               data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
-                              onChange={(value) => value && handleFlexibleMapSelect(map, value)}
+                              value={flexibleModeSelects[map.id] || null}
+                              onChange={(value) => handleFlexibleModeChange(map.id, value)}
+                              disabled={availableModes.length === 0}
+                              mb="xs"
                             />
+                            <Button
+                              size="xs"
+                              fullWidth
+                              disabled={!flexibleModeSelects[map.id]}
+                              onClick={() => {
+                                const selectedModeId = flexibleModeSelects[map.id];
+                                if (selectedModeId) {
+                                  handleFlexibleMapSelect(map, selectedModeId);
+                                }
+                              }}
+                            >
+                              Add Map
+                            </Button>
                           </Card>
                         </Grid.Col>
                       ))}
@@ -951,6 +1140,7 @@ export function CreateMatchPage() {
                       setShowMapSelector(false);
                       setSelectedMode('');
                       setMapsForMode([]);
+                      setFlexibleModeSelects({});
                     }}
                   >
                     Cancel
@@ -980,6 +1170,14 @@ export function CreateMatchPage() {
           </Stack>
         )}
       </Stack>
+      
+      <MapNoteModal
+        opened={mapNoteModalOpen}
+        onClose={() => setMapNoteModalOpen(false)}
+        mapName={selectedMapForNote?.name || ''}
+        initialNote={selectedMapForNote?.note || mapNotes[selectedMapForNote?.id || ''] || ''}
+        onSave={handleSaveNote}
+      />
     </Container>
   );
 }

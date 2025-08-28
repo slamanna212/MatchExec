@@ -13,8 +13,27 @@ import {
   Badge,
   Avatar,
   Loader,
-  Divider
+  Divider,
+  ActionIcon
 } from '@mantine/core';
+import { IconMapRoute } from '@tabler/icons-react';
+
+interface SignupField {
+  id: string;
+  label: string;
+  type: 'text' | 'select' | 'number';
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+interface SignupConfig {
+  id: string;
+  name: string;
+  fields: SignupField[];
+  created_at: string;
+  updated_at: string;
+}
 
 interface MatchParticipant {
   id: string;
@@ -23,6 +42,7 @@ interface MatchParticipant {
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: boolean;
 }
 
 interface VoiceChannel {
@@ -51,27 +71,59 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     blueTeamVoiceChannel: null,
     redTeamVoiceChannel: null
   });
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
+  const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mapCodesSupported, setMapCodesSupported] = useState(false);
+
+  // Check if screen is mobile size (same breakpoint as Navigation component)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint from Mantine
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     try {
-      const [participantsResponse, voiceChannelsResponse] = await Promise.all([
+      const [participantsResponse, voiceChannelsResponse, matchResponse] = await Promise.all([
         fetch(`/api/matches/${matchId}/participants`),
-        fetch(`/api/matches/${matchId}/voice-channels`)
+        fetch(`/api/matches/${matchId}/voice-channels`),
+        fetch(`/api/matches/${matchId}`)
       ]);
       
       if (participantsResponse.ok) {
         const data = await participantsResponse.json();
         setParticipants(data.participants.map((p: MatchParticipant) => ({
           ...p,
-          team_assignment: p.team_assignment || 'reserve'
+          team_assignment: p.team_assignment || 'reserve',
+          receives_map_codes: p.receives_map_codes || false
         })));
+        
+        // Set signup config if available
+        if (data.signupConfig) {
+          setSignupConfig(data.signupConfig);
+        }
       }
       
       if (voiceChannelsResponse.ok) {
         const voiceData = await voiceChannelsResponse.json();
         setVoiceChannels(voiceData.voiceChannels);
         setVoiceChannelAssignments(voiceData.currentAssignments);
+      }
+
+      if (matchResponse.ok) {
+        const matchData = await matchResponse.json();
+        console.log('Match data received:', matchData);
+        console.log('Map codes supported:', matchData.map_codes_supported);
+        setMapCodesSupported(matchData.map_codes_supported || false);
+      } else {
+        console.error('Failed to fetch match data:', matchResponse.status);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -96,12 +148,47 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     );
   };
 
+  const handleMapCodesToggle = (participantId: string) => {
+    setParticipants(prev => 
+      prev.map(p => 
+        p.id === participantId 
+          ? { ...p, receives_map_codes: !p.receives_map_codes }
+          : p
+      )
+    );
+  };
+
+  const handleDragStart = (e: React.DragEvent, participantId: string) => {
+    e.dataTransfer.setData('text/plain', participantId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedParticipant(participantId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetTeam: 'reserve' | 'blue' | 'red') => {
+    e.preventDefault();
+    const participantId = e.dataTransfer.getData('text/plain');
+    if (participantId) {
+      handleTeamChange(participantId, targetTeam);
+    }
+    setDraggedParticipant(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedParticipant(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const teamAssignments = participants.map(p => ({
         participantId: p.id,
-        team: p.team_assignment
+        team: p.team_assignment,
+        receives_map_codes: p.receives_map_codes || false
       }));
 
       const response = await fetch(`/api/matches/${matchId}/assign-teams`, {
@@ -132,51 +219,155 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
     return participants.filter(p => p.team_assignment === team);
   };
 
-  const renderParticipantCard = (participant: MatchParticipant, index: number) => (
-    <Card key={participant.id} shadow="sm" padding="md" radius="md" withBorder mb="sm">
-      <Group justify="space-between" align="center">
+  const getPlayerCardStyles = (team: 'reserve' | 'blue' | 'red') => {
+    switch(team) {
+      case 'blue':
+        return { 
+          backgroundColor: 'var(--mantine-color-blue-2)',
+          borderColor: 'var(--mantine-color-blue-4)'
+        };
+      case 'red':
+        return { 
+          backgroundColor: 'var(--mantine-color-red-2)',
+          borderColor: 'var(--mantine-color-red-4)'
+        };
+      case 'reserve':
+        return { 
+          backgroundColor: '#FFD54F',
+          borderColor: '#FFC107'
+        };
+      default:
+        return {};
+    }
+  };
+
+  const getBadgeColor = (team: 'reserve' | 'blue' | 'red') => {
+    switch(team) {
+      case 'blue': return 'orange';    // Contrasts with blue
+      case 'red': return 'cyan';       // Contrasts with red  
+      case 'reserve': return 'violet'; // Primary site color
+      default: return 'dark';
+    }
+  };
+
+  const renderParticipantCard = (participant: MatchParticipant, index: number) => {
+    const isDragging = draggedParticipant === participant.id;
+    const isDragDisabled = isMobile;
+    
+    return (
+      <Card 
+        key={participant.id} 
+        shadow="md" 
+        padding="md" 
+        radius="md" 
+        withBorder 
+        mb="sm"
+        style={{
+          ...(isDragging 
+            ? { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)', opacity: 0.6 }
+            : getPlayerCardStyles(participant.team_assignment || 'reserve')
+          ),
+          cursor: isDragDisabled ? 'default' : 'grab'
+        }}
+        draggable={!isDragDisabled}
+        onDragStart={isDragDisabled ? undefined : (e) => handleDragStart(e, participant.id)}
+        onDragEnd={isDragDisabled ? undefined : handleDragEnd}
+      >
+      <Group justify="space-between" align="center" mb="xs">
         <Group align="center">
-          <Avatar size="sm" color="blue">
+          <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled">
             {index + 1}
           </Avatar>
           <div>
-            <Text fw={500} size="sm">{participant.username}</Text>
-            <Text size="xs" c="dimmed">
+            <Text fw={500} size="sm" c="dark">{participant.username}</Text>
+            <Text size="xs" c="gray.7">
               Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
             </Text>
           </div>
         </Group>
-        
-        <Select
-          size="xs"
-          value={participant.team_assignment}
-          onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
-          data={[
-            { value: 'reserve', label: 'Reserve' },
-            { value: 'blue', label: 'Blue Team' },
-            { value: 'red', label: 'Red Team' }
-          ]}
-          w={120}
-        />
+        {mapCodesSupported && (
+          <ActionIcon
+            size="xl"
+            variant="subtle"
+            onClick={() => handleMapCodesToggle(participant.id)}
+            title={participant.receives_map_codes ? "Will receive map codes" : "Click to receive map codes"}
+            style={{
+              border: 'none',
+              padding: 0,
+              minWidth: 'unset',
+              minHeight: 'unset',
+              width: 'auto',
+              height: 'auto',
+              backgroundColor: 'transparent',
+              color: participant.receives_map_codes 
+                ? `var(--mantine-color-${getBadgeColor(participant.team_assignment || 'reserve')}-6)`
+                : 'var(--mantine-color-gray-5)'
+            }}
+            styles={{
+              root: {
+                '&:hover': {
+                  backgroundColor: 'transparent'
+                }
+              }
+            }}
+          >
+            <IconMapRoute size={30} />
+          </ActionIcon>
+        )}
       </Group>
+      
+      <Select
+        size="xs"
+        value={participant.team_assignment}
+        onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
+        data={[
+          { value: 'reserve', label: 'Reserve' },
+          { value: 'blue', label: 'Blue Team' },
+          { value: 'red', label: 'Red Team' }
+        ]}
+        w={120}
+        mb="xs"
+        styles={{
+          input: {
+            backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+            border: '1px solid var(--mantine-color-gray-5)',
+            backdropFilter: 'blur(2px)',
+            color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+          }
+        }}
+      />
       
       {participant.signup_data && Object.keys(participant.signup_data).length > 0 && (
         <Group mt="xs" gap="xs">
-          {Object.entries(participant.signup_data).map(([key, value]) => (
-            <Badge key={key} size="xs" variant="light">
-              {key}: {String(value)}
-            </Badge>
-          ))}
+          {Object.entries(participant.signup_data).map(([key, value]) => {
+            const field = signupConfig?.fields.find(f => f.id === key);
+            const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
+            
+            return (
+              <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment || 'reserve')}>
+                {displayLabel}: {String(value)}
+              </Badge>
+            );
+          })}
         </Group>
       )}
     </Card>
-  );
+    );
+  };
 
   const renderTeamSection = (team: 'reserve' | 'blue' | 'red', title: string, color: string) => {
     const teamParticipants = getTeamParticipants(team);
     
     return (
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Card 
+        shadow="xs" 
+        padding="lg" 
+        radius="md" 
+        withBorder
+        onDragOver={isMobile ? undefined : handleDragOver}
+        onDrop={isMobile ? undefined : (e) => handleDrop(e, team)}
+        style={{ minHeight: '200px' }}
+      >
         <Group justify="space-between" mb="md">
           <Text size="lg" fw={600} c={color}>{title}</Text>
           <Badge size="lg" color={color} variant="light">
@@ -278,7 +469,6 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
               <Button
                 onClick={handleSave}
                 loading={saving}
-                disabled={participants.length === 0}
               >
                 Save Team Assignments
               </Button>

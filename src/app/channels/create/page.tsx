@@ -276,8 +276,6 @@ export default function CreateChannelPage() {
               Back to Channels
             </Button>
           </Group>
-          <Text size="xl" fw={700}>Add Discord Channel</Text>
-          <Text c="dimmed" mt="xs">Configure a new Discord channel for the bot</Text>
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>

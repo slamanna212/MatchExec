@@ -1,9 +1,10 @@
 'use client'
 
 
-import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal } from '@mantine/core';
+import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, TextInput } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
+import { LazyImage } from '@/components/LazyImage';
 
 interface Game {
   id: string;
@@ -48,6 +49,7 @@ export default function GamesPage() {
   const [maps, setMaps] = useState<GameMap[]>([]);
   const [modes, setModes] = useState<GameMode[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   useEffect(() => {
     async function fetchGames() {
@@ -72,6 +74,7 @@ export default function GamesPage() {
   const handleShowMaps = async (game: Game) => {
     setSelectedGame(game);
     setModalLoading(true);
+    setMapSearchQuery('');
     openMaps();
     
     try {
@@ -109,9 +112,16 @@ export default function GamesPage() {
     }
   };
 
+  // Filter maps based on search query
+  const filteredMaps = maps.filter(map =>
+    map.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
+    map.modeName.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
+    (map.location && map.location.toLowerCase().includes(mapSearchQuery.toLowerCase()))
+  );
+
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="container mx-auto p-6 max-w-6xl">
         <Center h={400}>
           <Loader size="lg" />
         </Center>
@@ -120,27 +130,47 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="container mx-auto p-6 max-w-6xl">
       <Stack gap="xl">
-        <div>
-          <Text size="xl" fw={700}>Games</Text>
-          <Text c="dimmed" mt="xs">Available games for tournament management</Text>
-        </div>
 
         <Grid>
           {games.map((game) => (
-            <Grid.Col key={game.id} span={{ base: 12, md: 6 }}>
-              <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Group wrap="nowrap">
-                  <div style={{ width: '50%', height: '50%', flexShrink: 0 }}>
+            <Grid.Col key={game.id} span={{ base: 12, md: 6, lg: 4 }}>
+              <Card shadow="sm" padding="lg" radius="md" withBorder h="320px">
+                <Group wrap="nowrap" h="100%">
+                  <div style={{ width: '180px', height: '280px', flexShrink: 0, position: 'relative' }}>
                     {game.coverUrl && (
-                      <Image
-                        src={game.coverUrl}
-                        alt={`${game.name} cover`}
-                        radius="md"
-                        fallbackSrc="/assets/placeholder-cover.png"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
+                      <>
+                        {/* Blurred background */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            backgroundImage: `url(${game.coverUrl})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            filter: 'blur(10px)',
+                            zIndex: 1
+                          }}
+                        />
+                        {/* Main image */}
+                        <Image
+                          src={game.coverUrl}
+                          alt={`${game.name} cover`}
+                          radius="md"
+                          fallbackSrc="/assets/placeholder-cover.png"
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'contain',
+                            position: 'relative',
+                            zIndex: 2
+                          }}
+                        />
+                      </>
                     )}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -152,9 +182,6 @@ export default function GamesPage() {
                     </Badge>
                     <Text size="sm" c="dimmed" mt="xs">
                       {game.developer}
-                    </Text>
-                    <Text size="sm" mt="xs">
-                      {game.description}
                     </Text>
                     <Group mt={{ base: "xs", md: "md" }} gap="xl">
                       <div 
@@ -215,34 +242,54 @@ export default function GamesPage() {
           </Center>
         ) : (
           <Stack gap="md">
-            {maps.map((map) => (
-              <Card key={map.id} shadow="sm" padding="md" radius="md" withBorder>
-                <Group wrap="nowrap">
-                  {map.imageUrl && (
-                    <Image
-                      src={map.imageUrl}
-                      alt={map.name}
-                      w={80}
-                      h={60}
-                      radius="sm"
-                      fallbackSrc="/assets/placeholder-map.png"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <Text fw={500}>{map.name}</Text>
-                    <Badge variant="light" size="sm" mt="xs">
-                      {map.modeName}
-                    </Badge>
-                    {map.location && (
-                      <Text size="sm" c="dimmed" mt="xs">
-                        {map.location}
-                      </Text>
+            <TextInput
+              placeholder="Search maps by name, mode, or location..."
+              value={mapSearchQuery}
+              onChange={(event) => setMapSearchQuery(event.currentTarget.value)}
+              mb="md"
+            />
+            {filteredMaps.map((map) => (
+              <Card key={map.id} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+                <Group wrap="nowrap" align="stretch" gap={0}>
+                  <div style={{ width: '50%', position: 'relative' }}>
+                    {map.imageUrl && (
+                      <LazyImage
+                        src={map.imageUrl}
+                        alt={map.name}
+                        height={80}
+                        radius={0}
+                        fallbackSrc="/assets/placeholder-map.png"
+                        style={{
+                          borderTopLeftRadius: 'var(--mantine-radius-md)',
+                          borderBottomLeftRadius: 'var(--mantine-radius-md)',
+                          objectFit: 'cover',
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      />
                     )}
+                  </div>
+                  <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 'var(--mantine-spacing-xs)' }}>
+                      <Text fw={500}>{map.name}</Text>
+                      <Badge variant="light" size="sm">
+                        {map.modeName}
+                      </Badge>
+                      {map.location && (
+                        <Text size="sm" c="dimmed">
+                          {map.location}
+                        </Text>
+                      )}
+                    </div>
                   </div>
                 </Group>
               </Card>
             ))}
+            {filteredMaps.length === 0 && maps.length > 0 && (
+              <Text ta="center" c="dimmed">
+                No maps found matching &quot;{mapSearchQuery}&quot;.
+              </Text>
+            )}
             {maps.length === 0 && !modalLoading && (
               <Text ta="center" c="dimmed">
                 No maps found for this game.

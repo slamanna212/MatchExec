@@ -1,0 +1,45 @@
+name: Bug Report
+description: I have an issue with MatchExec
+title: "[Bug]: "
+labels: ["Triage", "Bug"]
+projects: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please make sure you search for similar issues before submitting. Thank you for your bug report!
+  - type: textarea
+    id: describe-the-bug
+    attributes:
+      label: Describe the bug
+      description: Make sure to attach screenshots if possible!
+      placeholder: Tell us what you see!
+      value: "A clear and concise description of what the bug is. What did you expect to happen?"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we recreate this bug?
+      description: Be detailed!
+      placeholder: Tell us what you see!
+      value: "1. Go to '...' 2. Click on '....' 3. Scroll down to '....' 4. See error"
+    validations:
+      required: true
+  - type: input
+    id: matchexec-version
+    attributes:
+      label: Dispatcharr Version
+      description: What version of MatchExec are you running?
+      placeholder: Located bottom left of main screen
+    validations:
+      required: true
+  - type: input
+    id: docker-version
+    attributes:
+      label: Docker Version
+      description: What version of Docker are you running?
+      placeholder: docker --version
+    validations:
+      required: true

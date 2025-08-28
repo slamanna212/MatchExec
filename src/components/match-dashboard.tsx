@@ -12,7 +12,9 @@ import {
   Group,
   Stack,
   Grid,
-  RingProgress
+  RingProgress,
+  TextInput,
+  useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
@@ -56,7 +58,6 @@ interface MatchCardProps {
   mapNames: {[key: string]: string};
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
-  formatMapName: (mapId: string) => string;
   getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
@@ -65,16 +66,21 @@ const MatchCard = memo(({
   mapNames, 
   onViewDetails, 
   onAssignPlayers, 
-  formatMapName, 
   getNextStatusButton 
 }: MatchCardProps) => {
+  const { colorScheme } = useMantineColorScheme();
+  
   return (
     <Card 
-      shadow="sm" 
+      shadow={colorScheme === 'light' ? 'lg' : 'sm'}
       padding="lg" 
       radius="md" 
       withBorder
-      style={{ cursor: 'pointer' }}
+      bg={colorScheme === 'light' ? 'white' : undefined}
+      style={{ 
+        cursor: 'pointer',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+      }}
       onClick={() => onViewDetails(match)}
     >
       <Group mb="md">
@@ -122,9 +128,18 @@ const MatchCard = memo(({
           <Text size="sm" c="dimmed">Maps:</Text>
           <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
             {match.maps && match.maps.length > 0 ? (
-              match.maps.length > 1
-                ? `${mapNames[match.maps[0]] || formatMapName(match.maps[0])} +${match.maps.length - 1} more`
-                : mapNames[match.maps[0]] || formatMapName(match.maps[0])
+              (() => {
+                const cleanMapId = match.maps[0].replace(/-\d+-[a-zA-Z0-9]+$/, '');
+                const mapName = mapNames[cleanMapId];
+                
+                if (!mapName) {
+                  return 'Loading...';
+                }
+                
+                return match.maps.length > 1
+                  ? `${mapName} +${match.maps.length - 1} more`
+                  : mapName;
+              })()
             ) : (
               'None selected'
             )}
@@ -174,6 +189,7 @@ MatchCard.displayName = 'MatchCard';
 
 export function MatchDashboard() {
   const router = useRouter();
+  const { colorScheme } = useMantineColorScheme();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -194,6 +210,7 @@ export function MatchDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
@@ -271,7 +288,8 @@ export function MatchDashboard() {
   };
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}}>({});
+  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -279,23 +297,95 @@ export function MatchDashboard() {
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string}} = {};
+        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
         
-        maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-          mapNamesObj[map.id] = map.name;
-          mapDetailsObj[map.id] = {
-            name: map.name,
-            imageUrl: map.imageUrl,
-            modeName: map.modeName,
-            location: map.location
-          };
-        });
+        // Check if this game supports all modes (flexible mode combinations)
+        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
+        
+        if (supportsAllModes) {
+          // For flexible games, get all possible modes and create all combinations
+          const modesResponse = await fetch(`/api/games/${gameId}/modes`);
+          let modes: {id: string, name: string}[] = [];
+          
+          if (modesResponse.ok) {
+            modes = await modesResponse.json();
+          }
+          
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+            // Add the original map entry
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location
+            };
+            
+            // For flexible games, create entries for all possible mode combinations
+            // Extract base map name by removing the mode suffix
+            const baseMapName = map.id.replace(/-[^-]+$/, '');
+            
+            modes.forEach(mode => {
+              const modeSpecificId = `${baseMapName}-${mode.id}`;
+              if (modeSpecificId !== map.id) {
+                mapNamesObj[modeSpecificId] = map.name;
+                mapDetailsObj[modeSpecificId] = {
+                  name: map.name,
+                  imageUrl: map.imageUrl,
+                  modeName: mode.name,
+                  location: map.location
+                };
+              }
+            });
+          });
+        } else {
+          // For fixed mode games, use the API data as-is
+          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
+            mapNamesObj[map.id] = map.name;
+            mapDetailsObj[map.id] = {
+              name: map.name,
+              imageUrl: map.imageUrl,
+              modeName: map.modeName,
+              location: map.location
+            };
+          });
+        }
         
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
       console.error('Error fetching map names:', error);
+    }
+  };
+
+  const fetchMapNotes = async (matchId: string) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/map-notes`);
+      if (response.ok) {
+        const { notes } = await response.json();
+        setMapNotes(notes);
+        
+        // Also create mapDetails entries for timestamped map IDs so they can be looked up
+        setMapDetails(prev => {
+          const updated = { ...prev };
+          Object.keys(notes).forEach(timestampedMapId => {
+            if (!updated[timestampedMapId]) {
+              // Get base map ID by stripping timestamp
+              const baseMapId = timestampedMapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+              const baseMapDetail = updated[baseMapId];
+              
+              if (baseMapDetail) {
+                // Create a copy of base map details for the timestamped ID
+                updated[timestampedMapId] = { ...baseMapDetail };
+              }
+            }
+          });
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching map notes:', error);
     }
   };
 
@@ -412,6 +502,9 @@ export function MatchDashboard() {
     setDetailsModalOpen(true);
     fetchParticipants(match.id);
     fetchReminders(match.id);
+    fetchMapNotes(match.id);
+    // Ensure map details are loaded for this game
+    fetchMapNames(match.game_id);
   }, [fetchParticipants, fetchReminders]);
 
   // Auto-refresh participants and reminders when details modal is open
@@ -516,7 +609,7 @@ export function MatchDashboard() {
         return (
           <Button 
             size="sm" 
-            color="yellow"
+            color="green"
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'battle');
@@ -622,20 +715,30 @@ export function MatchDashboard() {
     }
   };
 
+  // Filter matches based on search query
+  const filteredMatches = useMemo(() => {
+    return matches.filter(match =>
+      match.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.game_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      match.rules?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [matches, searchQuery]);
+
   const memoizedMatchCards = useMemo(() => {
-    return matches.map((match) => (
+    return filteredMatches.map((match) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
         <MatchCard 
           match={match}
           mapNames={mapNames}
           onViewDetails={handleViewDetails}
           onAssignPlayers={handleAssignPlayers}
-          formatMapName={formatMapName}
           getNextStatusButton={getNextStatusButton}
         />
       </Grid.Col>
     ));
-  }, [matches, mapNames, handleViewDetails, getNextStatusButton]);
+  }, [filteredMatches, mapNames, handleViewDetails, getNextStatusButton]);
 
 
   if (loading) {
@@ -648,27 +751,62 @@ export function MatchDashboard() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Text size="xl" fw={700}>Match Dashboard</Text>
-          <Text c="dimmed" mt="xs">Manage and view all matches</Text>
-        </div>
-        <Button 
-          size="md"
-          onClick={handleCreateMatch}
-        >
-          Create Match
-        </Button>
-      </Group>
+      <div className="flex justify-center md:justify-end mb-6">
+        <Group gap="sm" wrap="nowrap">
+          {matches.length > 0 && (
+            <TextInput
+              placeholder="Search matches..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.currentTarget.value)}
+              style={{ 
+                width: 'clamp(150px, 50vw, 300px)',
+                flexShrink: 1
+              }}
+            />
+          )}
+          <Button 
+            size="md"
+            onClick={handleCreateMatch}
+            style={{ flexShrink: 0 }}
+          >
+            Create Match
+          </Button>
+        </Group>
+      </div>
 
       <Divider mb="xl" />
 
       {matches.length === 0 ? (
-        <Card p="xl">
+        <Card 
+          p="xl" 
+          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+          withBorder
+          bg={colorScheme === 'light' ? 'white' : undefined}
+          style={{ 
+            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+          }}
+        >
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed">
               Create a match to get started
+            </Text>
+          </Stack>
+        </Card>
+      ) : filteredMatches.length === 0 && searchQuery ? (
+        <Card 
+          p="xl" 
+          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+          withBorder
+          bg={colorScheme === 'light' ? 'white' : undefined}
+          style={{ 
+            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+          }}
+        >
+          <Stack align="center">
+            <Text size="xl" fw={600}>No matches found</Text>
+            <Text c="dimmed">
+              No matches match your search for &quot;{searchQuery}&quot;
             </Text>
           </Stack>
         </Card>
@@ -711,6 +849,7 @@ export function MatchDashboard() {
         reminders={reminders}
         remindersLoading={remindersLoading}
         mapDetails={mapDetails}
+        mapNotes={mapNotes}
         formatMapName={formatMapName}
         parseDbTimestamp={parseDbTimestamp}
         showTabs={true}

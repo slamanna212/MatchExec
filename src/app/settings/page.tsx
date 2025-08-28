@@ -138,66 +138,47 @@ export default function SettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [discordResponse, appResponse, schedulerResponse, uiResponse, voicesResponse, announcerResponse] = await Promise.all([
-          fetch('/api/settings/discord'),
-          fetch('/api/settings/discord'), // We'll use the same endpoint for now
-          fetch('/api/settings/scheduler'),
-          fetch('/api/settings/ui'),
-          fetch('/api/settings/voices'),
-          fetch('/api/settings/announcer')
-        ]);
+        // Single API call to get all settings
+        const response = await fetch('/api/settings');
         
-        if (discordResponse.ok) {
-          const discordData = await discordResponse.json();
-          // Ensure all values are proper types, not null
-          const sanitizedDiscordData = {
-            application_id: discordData.application_id || '',
-            bot_token: discordData.bot_token || '',
-            guild_id: discordData.guild_id || '',
-            announcement_role_id: discordData.announcement_role_id || '',
-            mention_everyone: discordData.mention_everyone || false,
-          };
-          form.setValues(sanitizedDiscordData);
-        }
-
-        if (appResponse.ok) {
-          const appData = await appResponse.json();
-          const sanitizedAppData = {
-            event_duration_minutes: appData.event_duration_minutes || 45,
-            match_reminder_minutes: appData.match_reminder_minutes || 10,
-            player_reminder_minutes: appData.player_reminder_minutes || 120,
-          };
-          appForm.setValues(sanitizedAppData);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Set Discord form values
+          form.setValues({
+            application_id: data.discord.application_id || '',
+            bot_token: data.discord.bot_token || '',
+            guild_id: data.discord.guild_id || '',
+            announcement_role_id: data.discord.announcement_role_id || '',
+            mention_everyone: data.discord.mention_everyone || false,
+          });
+          
+          // Set Application form values
+          appForm.setValues({
+            event_duration_minutes: data.discord.event_duration_minutes || 45,
+            match_reminder_minutes: data.discord.match_reminder_minutes || 10,
+            player_reminder_minutes: data.discord.player_reminder_minutes || 120,
+          });
           
           // Set player reminder display values
-          const playerReminderDisplay = minutesToValueUnit(sanitizedAppData.player_reminder_minutes);
+          const playerReminderDisplay = minutesToValueUnit(data.discord.player_reminder_minutes || 120);
           setPlayerReminderValue(playerReminderDisplay.value);
           setPlayerReminderUnit(playerReminderDisplay.unit);
-
-        }
-        
-        if (schedulerResponse.ok) {
-          const schedulerData = await schedulerResponse.json();
-          setSchedulerSettings(schedulerData);
-        }
-
-        if (uiResponse.ok) {
-          const uiData = await uiResponse.json();
-          uiForm.setValues(uiData);
-        }
-
-        if (voicesResponse.ok) {
-          const voicesData = await voicesResponse.json();
-          setAvailableVoices(voicesData.map((voice: {id: string; name: string}) => ({
+          
+          // Set Scheduler settings
+          setSchedulerSettings(data.scheduler);
+          
+          // Set UI settings
+          uiForm.setValues(data.ui);
+          
+          // Set available voices
+          setAvailableVoices(data.voices.map((voice: {id: string; name: string}) => ({
             id: voice.id,
             name: voice.name
           })));
-        }
-
-
-        if (announcerResponse.ok) {
-          const announcerData = await announcerResponse.json();
-          announcerForm.setValues(announcerData);
+          
+          // Set Announcer form values
+          announcerForm.setValues(data.announcer);
         }
 
       } catch (error) {
@@ -368,10 +349,6 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
-        <div>
-          <Text size="xl" fw={700}>Settings</Text>
-          <Text c="dimmed" mt="xs">Configure application and match settings</Text>
-        </div>
 
         <Stack gap="lg">
           <Card shadow="sm" padding="lg" radius="md" withBorder id="application">

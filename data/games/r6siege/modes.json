@@ -1,0 +1,20 @@
+[
+  {
+    "id": "bomb",
+    "name": "Bomb",
+    "description": "Attackers must plant a defuser on one of two bomb sites. Defenders must prevent planting or counter-defuse within 45 seconds.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "secure-area",
+    "name": "Secure Area",
+    "description": "Attackers must locate and hold a room with a biohazard container for 10 consecutive seconds. Defenders must prevent the area from being secured.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "hostage",
+    "name": "Hostage",
+    "description": "Attackers must safely extract the hostage to the extraction point. Defenders must prevent the rescue while keeping the hostage alive.",
+    "scoringType": "Normal"
+  }
+]

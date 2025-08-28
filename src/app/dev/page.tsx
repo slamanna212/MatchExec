@@ -40,10 +40,6 @@ export default function DevPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
-        <div>
-          <Text size="xl" fw={700}>Developer Tools</Text>
-          <Text c="dimmed" mt="xs">Development utilities and system information</Text>
-        </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Group justify="space-between" mb="md">

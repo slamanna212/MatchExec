@@ -56,7 +56,8 @@ export class AnnouncementHandler {
         eventData.max_participants,
         eventData.livestream_link,
         eventData.event_image_url,
-        eventData.start_date
+        eventData.start_date,
+        eventData.id
       );
 
       // Create signup button
@@ -124,7 +125,7 @@ export class AnnouncementHandler {
     }
   }
 
-  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[]): Promise<any> {
+  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<any> {
     try {
       // Create thread - using public thread for better visibility
       const thread = await message.startThread({
@@ -133,12 +134,41 @@ export class AnnouncementHandler {
         reason: 'Map details for event'
       });
 
+      // Get map notes if matchId is provided
+      let mapNotes: Record<string, string> = {};
+      if (matchId && this.db) {
+        try {
+          const notesResult = await this.db.all<{map_id: string, notes: string}>(`
+            SELECT map_id, notes 
+            FROM match_games 
+            WHERE match_id = ? AND notes IS NOT NULL AND notes != ''
+          `, [matchId]);
+          
+          notesResult.forEach(note => {
+            mapNotes[note.map_id] = note.notes;
+          });
+        } catch (error) {
+          console.error('Error fetching map notes for Discord:', error);
+        }
+      }
 
       // Create an embed for each map
       for (let i = 0; i < maps.length; i++) {
         const mapIdentifier = maps[i];
         const mapNumber = i + 1;
-        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber);
+        
+        // Try to find the note for this map by index to handle duplicate map names
+        let mapNote = mapNotes[mapIdentifier];
+        if (!mapNote) {
+          // Get the clean map ID without timestamp
+          const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+          
+          // Find all notes that match this base map ID and get by index
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(cleanMapId + '-')).sort();
+          mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
+        }
+        
+        const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber, mapNote);
         if (mapEmbedData) {
           const messageOptions: any = { embeds: [mapEmbedData.embed] };
           if (mapEmbedData.attachment) {
@@ -164,7 +194,8 @@ export class AnnouncementHandler {
     maxParticipants: number,
     livestreamLink?: string,
     eventImageUrl?: string,
-    startDate?: string
+    startDate?: string,
+    matchId?: string
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     // Get game data from database for nice name and color
     let gameName = gameId;
@@ -215,13 +246,42 @@ export class AnnouncementHandler {
       );
     }
 
-    // Add maps count if provided (but not the actual maps - those go in thread)
+    // Add maps with notes if provided
     if (maps.length > 0) {
-      embed.addFields({ 
-        name: '🗺️ Maps', 
-        value: `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`, 
-        inline: false 
-      });
+      let mapDisplay = '';
+      
+      // Get map names from database for better display (without notes)
+      if (this.db) {
+        try {
+          const mapNames: string[] = [];
+          for (const mapId of maps) {
+            // Strip timestamp from map ID if present
+            const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+            
+            try {
+              const mapData = await this.db.get<{name: string}>(`
+                SELECT name FROM game_maps 
+                WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+                LIMIT 1
+              `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+              
+              const displayName = mapData ? mapData.name : cleanMapId;
+              mapNames.push(`**${displayName}**`);
+            } catch (error) {
+              console.error(`Error fetching map name for ${mapId}:`, error);
+              mapNames.push(`**${cleanMapId}**`);
+            }
+          }
+          
+          mapDisplay = mapNames.join('\n');
+        } catch (error) {
+          console.error('Error fetching map names for Discord:', error);
+          mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+        }
+      } else {
+        mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+      }
+      
     }
 
     // Add livestream link if provided
@@ -261,12 +321,15 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
-  private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
+  private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number, mapNote?: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
     if (!this.db) return null;
 
     try {
-      // Get map data from database
-      const mapData = await this.db.get<{
+      // Strip timestamp suffix from map identifier if present (e.g., "yacht-hostage-1756235829102-abc123" -> "yacht-hostage")
+      const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      
+      // Get map data from database - try exact match first
+      let mapData = await this.db.get<{
         name: string, 
         image_url: string, 
         location: string,
@@ -276,7 +339,29 @@ export class AnnouncementHandler {
         FROM game_maps gm
         WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
         LIMIT 1
-      `, [gameId, mapIdentifier, `%${mapIdentifier}%`]);
+      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+
+      // If no exact match, try matching by base map name regardless of mode/naming variations
+      if (!mapData) {
+        const parts = cleanMapId.split('-');
+        if (parts.length >= 2) {
+          const baseMapName = parts[0]; // e.g., "emerald", "bartlett"
+          const remainingParts = parts.slice(1).join('-'); // e.g., "secure-area" or "u-hostage"
+          
+          // Try to find any map with matching base name and similar remaining parts
+          mapData = await this.db.get<{
+            name: string, 
+            image_url: string, 
+            location: string,
+            mode_id: string
+          }>(`
+            SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+            FROM game_maps gm
+            WHERE gm.game_id = ? AND gm.id LIKE ?
+            LIMIT 1
+          `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
+        }
+      }
 
       if (!mapData) {
         // Fallback embed for unknown maps
@@ -327,6 +412,10 @@ export class AnnouncementHandler {
 
       if (mapData.location) {
         embed.addFields({ name: '📍 Location', value: mapData.location, inline: true });
+      }
+
+      if (mapNote && mapNote.trim()) {
+        embed.addFields({ name: '📝 Note', value: mapNote.trim(), inline: false });
       }
 
       // Add image if available - use as attachment for local files
@@ -721,11 +810,44 @@ export class AnnouncementHandler {
       .setTimestamp()
       .setFooter({ text: 'Match Starting' });
 
-    // Add maps if available
+    // Add maps if available - fetch names from database
     if (eventData.maps && eventData.maps.length > 0) {
-      const mapList = eventData.maps.length > 3 
-        ? `${eventData.maps.slice(0, 3).join(', ')} +${eventData.maps.length - 3} more`
-        : eventData.maps.join(', ');
+      let mapList = eventData.maps.join(', '); // Fallback to IDs
+      
+      // Try to get map names from database
+      if (this.db) {
+        try {
+          const mapNames: string[] = [];
+          for (const mapId of eventData.maps) {
+            // Clean the map ID (remove timestamp suffix if present)
+            const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+            
+            // Get map name from database
+            const mapData = await this.db.get<{ name: string }>(`
+              SELECT name FROM game_maps 
+              WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+              LIMIT 1
+            `, [eventData.game_id, cleanMapId, `%${cleanMapId}%`]);
+            
+            if (mapData) {
+              mapNames.push(mapData.name);
+            } else {
+              // Fallback to the original ID if name not found
+              mapNames.push(mapId);
+            }
+          }
+          
+          if (mapNames.length > 0) {
+            mapList = mapNames.length > 3 
+              ? `${mapNames.slice(0, 3).join(', ')} +${mapNames.length - 3} more`
+              : mapNames.join(', ');
+          }
+        } catch (error) {
+          console.error('Error fetching map names for match start:', error);
+          // Keep the original mapList as fallback
+        }
+      }
+      
       embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
     }
 
@@ -934,6 +1056,7 @@ export class AnnouncementHandler {
     let gameColor = 0x00d4aa; // Green for victory
     let mapName = scoreData.mapId;
     let mapImageUrl: string | null = null;
+    let mapNote: string | null = null;
     let attachment: AttachmentBuilder | undefined;
     let totalMaps = 0;
 
@@ -951,7 +1074,8 @@ export class AnnouncementHandler {
           }
         }
 
-        // Get map data
+        // Get map data (strip timestamp from map ID first)
+        const cleanMapId = scoreData.mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
         const mapData = await this.db.get<{
           name: string, 
           image_url: string,
@@ -962,11 +1086,23 @@ export class AnnouncementHandler {
           FROM game_maps gm
           WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
           LIMIT 1
-        `, [scoreData.gameId, scoreData.mapId, `%${scoreData.mapId}%`]);
+        `, [scoreData.gameId, cleanMapId, `%${cleanMapId}%`]);
 
         if (mapData) {
           mapName = mapData.name;
           mapImageUrl = mapData.image_url;
+        }
+
+        // Get map notes for this specific map
+        const mapNoteData = await this.db.get<{notes: string}>(`
+          SELECT notes 
+          FROM match_games 
+          WHERE match_id = ? AND map_id = ? AND notes IS NOT NULL AND notes != ''
+          LIMIT 1
+        `, [scoreData.matchId, scoreData.mapId]);
+
+        if (mapNoteData && mapNoteData.notes) {
+          mapNote = mapNoteData.notes;
         }
 
         // Get total number of maps in this match
@@ -1008,6 +1144,15 @@ export class AnnouncementHandler {
       }]);
     }
 
+    // Add map note if available
+    if (mapNote && mapNote.trim()) {
+      embed.addFields([{ 
+        name: '📝 Map Note', 
+        value: mapNote.trim(), 
+        inline: false 
+      }]);
+    }
+
     // Add map image if available
     if (mapImageUrl) {
       try {
@@ -1023,6 +1168,174 @@ export class AnnouncementHandler {
         }
       } catch (error) {
         console.error(`❌ Error handling map image for score notification:`, error);
+      }
+    }
+
+    return { embed, attachment };
+  }
+
+  async postMatchWinnerNotification(winnerData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    winner: 'team1' | 'team2' | 'tie';
+    winningTeamName: string;
+    winningPlayers: string[];
+    team1Score: number;
+    team2Score: number;
+    totalMaps: number;
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for live updates (match_start)
+    const matchEndChannels = await this.getChannelsForNotificationType('match_start');
+    
+    if (matchEndChannels.length === 0) {
+      console.warn('⚠️ No channels configured for match end notifications');
+      return false;
+    }
+
+    try {
+      // Create match winner embed
+      const { embed, attachment } = await this.createMatchWinnerEmbed(winnerData);
+
+      // Build message options
+      const messageOptions: any = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured match end channels
+      for (const channelConfig of matchEndChannels) {
+        try {
+          const matchEndChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (matchEndChannel?.isTextBased() && 'send' in matchEndChannel) {
+            // Send match winner notification
+            await matchEndChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send match winner notification to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error('❌ Failed to send match winner notification to any channels');
+        return false;
+      }
+
+      return { success: true, successCount };
+
+    } catch (error) {
+      console.error('❌ Error posting match winner notification:', error);
+      return false;
+    }
+  }
+
+  private async createMatchWinnerEmbed(winnerData: {
+    matchId: string;
+    matchName: string;
+    gameId: string;
+    winner: 'team1' | 'team2' | 'tie';
+    winningTeamName: string;
+    winningPlayers: string[];
+    team1Score: number;
+    team2Score: number;
+    totalMaps: number;
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data
+    let gameName = winnerData.gameId;
+    let gameColor = winnerData.winner === 'tie' ? 0xffa500 : 0x00d4aa; // Orange for tie, green for victory
+    let attachment: AttachmentBuilder | undefined;
+
+    if (this.db) {
+      try {
+        // Get game data
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [winnerData.gameId]);
+        
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching game data for match winner notification:', error);
+      }
+    }
+
+    // Create appropriate title and description based on winner
+    let title: string;
+    let description: string;
+    
+    if (winnerData.winner === 'tie') {
+      title = `🤝 ${winnerData.matchName} - Match Tied!`;
+      description = `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`;
+    } else {
+      title = `🏆 ${winnerData.winningTeamName} Wins ${winnerData.matchName}!`;
+      const losingScore = winnerData.winner === 'team1' ? winnerData.team2Score : winnerData.team1Score;
+      const winningScore = winnerData.winner === 'team1' ? winnerData.team1Score : winnerData.team2Score;
+      description = `**${winnerData.matchName}** is complete! Final score: **${winningScore}-${losingScore}**`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setColor(gameColor)
+      .addFields([
+        { name: '🎮 Game', value: gameName, inline: true },
+        { name: '📊 Final Score', value: `${winnerData.team1Score} - ${winnerData.team2Score}`, inline: true },
+        { name: '🗺️ Maps Played', value: winnerData.totalMaps.toString(), inline: true }
+      ])
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Match Complete' });
+
+    // Add winning team players (if not a tie)
+    if (winnerData.winner !== 'tie' && winnerData.winningPlayers.length > 0) {
+      const playersList = winnerData.winningPlayers.join('\n');
+      embed.addFields([{ 
+        name: `${winnerData.winningTeamName} Players`, 
+        value: playersList, 
+        inline: false 
+      }]);
+    }
+
+    // Add link to original match info if available
+    if (this.db) {
+      try {
+        const originalMessage = await this.db.get<{
+          message_id: string;
+          channel_id: string;
+        }>(`
+          SELECT message_id, channel_id 
+          FROM discord_match_messages 
+          WHERE match_id = ? AND message_type = 'announcement'
+          LIMIT 1
+        `, [winnerData.matchId]);
+
+        if (originalMessage && this.client.guilds.cache.first()) {
+          const guildId = this.client.guilds.cache.first()?.id;
+          const messageLink = `https://discord.com/channels/${guildId}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+          embed.addFields([{ 
+            name: '🔗 Match Details', 
+            value: `[View Original Match Info](${messageLink})`, 
+            inline: false 
+          }]);
+        }
+      } catch (error) {
+        console.error('Error finding original announcement message for match winner:', error);
       }
     }
 

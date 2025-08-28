@@ -2,31 +2,31 @@
     {
       "id": "domination",
       "name": "Domination",
-      "description": "Teams compete to control strategic points across the map."
+      "description": "Teams compete to control strategic points across the map.",
+      "scoringType": "Normal"
     },
     {
       "id": "convoy",
       "name": "Convoy",
-      "description": "Escort vehicles to their destination while defending against enemy attacks."
+      "description": "Escort vehicles to their destination while defending against enemy attacks.",
+      "scoringType": "Normal"
     },
     {
       "id": "convergence",
       "name": "Convergence",
-      "description": "Fight to control critical convergence points in dynamic battles."
+      "description": "Fight to control critical convergence points in dynamic battles.",
+      "scoringType": "Normal"
     },
     {
-      "id": "doomrush",
-      "name": "Doom Rush",
-      "description": "High-intensity combat with rapid respawns and aggressive gameplay."
+      "id": "doommatch",
+      "name": "Doom Match",
+      "description": "High-intensity combat with rapid respawns and aggressive gameplay.",
+      "scoringType": "FFA"
     },
     {
       "id": "conquest",
       "name": "Conquest",
-      "description": "Standard team deathmatch mode in which players compete for eliminations"
-    },
-    {
-      "id": "escalation",
-      "name": "Escalation",
-      "description": "Progressive power increases create intensifying combat scenarios."
+      "description": "Standard team deathmatch mode in which players compete for eliminations",
+      "scoringType": "Normal"
     }
 ]

@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  matchexec:
+    image: ghcr.io/slamanna212/matchexec:latest
+    container_name: MatchExec
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=UTC
+    volumes:
+      - ./app_data:/app/app_data
+      - ./uploads:/app/public/uploads
+    restart: unless-stopped
