@@ -58,7 +58,6 @@ interface MatchCardProps {
   mapNames: {[key: string]: string};
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
-  formatMapName: (mapId: string) => string;
   getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
@@ -67,7 +66,6 @@ const MatchCard = memo(({
   mapNames, 
   onViewDetails, 
   onAssignPlayers, 
-  formatMapName, 
   getNextStatusButton 
 }: MatchCardProps) => {
   const { colorScheme } = useMantineColorScheme();

@@ -815,7 +815,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
     }
 
     // Determine winner and winning team data
-    let winner: 'team1' | 'team2' | 'tie' = scoreData.overallWinner || 'tie';
+    const winner: 'team1' | 'team2' | 'tie' = scoreData.overallWinner || 'tie';
     let winningTeamName: string;
     let winningPlayers: string[] = [];
 
