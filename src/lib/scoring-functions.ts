@@ -62,7 +62,7 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
           SELECT notes FROM match_games 
           WHERE match_id = ? AND map_id = ? AND round = 0
           LIMIT 1
-        `, [matchId, mapId]);
+        `, [matchId, mapId]) as { notes: string } | undefined;
         
         const existingNote = noteEntry ? noteEntry.notes : '';
         
@@ -130,7 +130,13 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
         LIMIT 1
       `;
       
-      const mapData = await db.get(mapQuery, [cleanMapId]);
+      const mapData = await db.get(mapQuery, [cleanMapId]) as {
+        name: string;
+        image_url?: string;
+        mode_id?: string;
+        game_id: string;
+        mode_scoring_type?: string;
+      } | undefined;
       if (mapData) {
         game.map_name = mapData.name;
         game.image_url = mapData.image_url;

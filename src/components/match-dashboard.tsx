@@ -734,7 +734,6 @@ export function MatchDashboard() {
           mapNames={mapNames}
           onViewDetails={handleViewDetails}
           onAssignPlayers={handleAssignPlayers}
-          formatMapName={formatMapName}
           getNextStatusButton={getNextStatusButton}
         />
       </Grid.Col>

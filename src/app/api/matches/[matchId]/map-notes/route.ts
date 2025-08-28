@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { MatchGame } from '../../../../../../shared/types';
 
 export async function POST(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function POST(
       SELECT id FROM match_games 
       WHERE match_id = ? AND map_id = ? AND round > 0
       LIMIT 1
-    `, [matchId, mapId]);
+    `, [matchId, mapId]) as Pick<MatchGame, 'id'> | undefined;
 
     if (matchGame) {
       // Update existing match_game record with the note
@@ -68,10 +69,10 @@ export async function GET(
       SELECT map_id, notes 
       FROM match_games 
       WHERE match_id = ? AND notes IS NOT NULL AND notes != ''
-    `, [matchId]);
+    `, [matchId]) as { map_id: string; notes: string }[];
 
     const notesMap: Record<string, string> = {};
-    mapNotes.forEach((note: { map_id: string; notes: string }) => {
+    mapNotes.forEach((note) => {
       notesMap[note.map_id] = note.notes;
     });
 

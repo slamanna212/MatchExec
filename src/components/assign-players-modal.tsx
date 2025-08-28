@@ -265,7 +265,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         style={{
           ...(isDragging 
             ? { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)', opacity: 0.6 }
-            : getPlayerCardStyles(participant.team_assignment)
+            : getPlayerCardStyles(participant.team_assignment || 'reserve')
           ),
           cursor: isDragDisabled ? 'default' : 'grab'
         }}
@@ -275,7 +275,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
       >
       <Group justify="space-between" align="center" mb="xs">
         <Group align="center">
-          <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
+          <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled">
             {index + 1}
           </Avatar>
           <div>
@@ -300,7 +300,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
               height: 'auto',
               backgroundColor: 'transparent',
               color: participant.receives_map_codes 
-                ? `var(--mantine-color-${getBadgeColor(participant.team_assignment)}-6)`
+                ? `var(--mantine-color-${getBadgeColor(participant.team_assignment || 'reserve')}-6)`
                 : 'var(--mantine-color-gray-5)'
             }}
             styles={{
@@ -344,7 +344,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
             
             return (
-              <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment)}>
+              <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment || 'reserve')}>
                 {displayLabel}: {String(value)}
               </Badge>
             );
