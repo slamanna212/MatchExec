@@ -33,16 +33,16 @@ RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 RUN npm install -g pm2
 
-# Copy minimal package.json for processes and install only required dependencies
-COPY --from=builder /app/processes-package.json ./package.json
-RUN npm install --only=production
-
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Install additional process dependencies without overwriting standalone package.json
+COPY --from=builder /app/processes-package.json ./processes-package.json
+RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --only=production
 
 COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
