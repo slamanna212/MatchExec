@@ -10,22 +10,31 @@ async function checkWebApp() {
       port: 3000,
       path: '/api/health',
       method: 'GET',
-      timeout: 5000
+      timeout: 10000
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           const response = JSON.parse(data);
-          resolve(res.statusCode === 200 && response.status === 'healthy');
-        } catch {
+          const isHealthy = res.statusCode === 200 && response.status === 'healthy';
+          if (!isHealthy) {
+            console.log(`Web app check failed: status ${res.statusCode}, response:`, data);
+          }
+          resolve(isHealthy);
+        } catch (error) {
+          console.log(`Web app check failed: JSON parse error:`, error.message, 'data:', data);
           resolve(false);
         }
       });
     });
     
-    req.on('error', () => resolve(false));
+    req.on('error', (error) => {
+      console.log(`Web app check failed: request error:`, error.message);
+      resolve(false);
+    });
     req.on('timeout', () => {
+      console.log(`Web app check failed: request timeout`);
       req.destroy();
       resolve(false);
     });
@@ -44,8 +53,16 @@ function checkPM2Processes() {
       .filter(p => p.pm2_env.status === 'online')
       .map(p => p.name);
     
+    const missingProcesses = requiredProcesses.filter(name => !runningProcesses.includes(name));
+    if (missingProcesses.length > 0) {
+      console.log(`PM2 check failed: missing processes:`, missingProcesses);
+      console.log(`Running processes:`, runningProcesses);
+      console.log(`All processes:`, processes.map(p => ({ name: p.name, status: p.pm2_env.status })));
+    }
+    
     return requiredProcesses.every(name => runningProcesses.includes(name));
-  } catch {
+  } catch (error) {
+    console.log(`PM2 check failed: command error:`, error.message);
     return false;
   }
 }
