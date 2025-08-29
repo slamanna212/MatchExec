@@ -21,7 +21,7 @@ import {
   IconMoon,
   IconHistory,
   IconHash,
-  IconApps,
+  IconAdjustments,
   IconClock,
   IconBrandDiscord,
   IconPaint,
@@ -66,7 +66,7 @@ export function Navigation({ children }: NavigationProps) {
       href: '/settings', 
       icon: IconSettings,
       links: [
-        { label: 'Application', href: '/settings/application', icon: IconApps },
+        { label: 'Application', href: '/settings/application', icon: IconAdjustments },
         { label: 'Announcer', href: '/settings/announcer', icon: IconVolume },
         { label: 'Scheduler', href: '/settings/scheduler', icon: IconClock },
         { label: 'Discord', href: '/settings/discord', icon: IconBrandDiscord },

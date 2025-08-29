@@ -3,7 +3,7 @@
 import { Card, Text, Stack, Group, SimpleGrid } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { 
-  IconApps, 
+  IconAdjustments, 
   IconVolume, 
   IconClock, 
   IconBrandDiscord, 
@@ -16,8 +16,8 @@ const settingsCategories = [
     title: 'Application',
     description: 'Configure general application behavior and timing',
     href: '/settings/application',
-    icon: IconApps,
-    color: '#4c7',
+    icon: IconAdjustments,
+    color: '#27ae60',
   },
   {
     title: 'Announcer', 
