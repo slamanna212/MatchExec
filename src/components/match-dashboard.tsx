@@ -79,7 +79,16 @@ const MatchCard = memo(({
       bg={colorScheme === 'light' ? 'white' : undefined}
       style={{ 
         cursor: 'pointer',
+        transition: 'all 0.2s ease',
         borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(match)}
     >
