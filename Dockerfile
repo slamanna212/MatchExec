@@ -7,7 +7,17 @@ RUN npm ci --only=production
 
 FROM base AS builder
 RUN npm ci
-COPY . .
+# Copy source code files in order of change frequency (least to most likely to change)
+COPY shared ./shared
+COPY lib ./lib
+COPY data ./data
+COPY migrations ./migrations
+COPY scripts ./scripts
+COPY processes ./processes
+COPY src ./src
+COPY public ./public
+COPY *.config.* ./
+COPY tsconfig.json ./
 RUN npm run build
 
 FROM node:24-alpine AS runner
