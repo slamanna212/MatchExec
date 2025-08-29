@@ -41,9 +41,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-# Copy standalone but exclude package.json to avoid overwriting
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/server.js ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 COPY --from=builder /app/processes ./processes
