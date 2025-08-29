@@ -4,7 +4,7 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS base
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 py3-setuptools make g++
 
 COPY package*.json ./
 RUN npm ci --only=production
@@ -29,7 +29,7 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 
 # Install build dependencies for native modules in runner stage
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 py3-setuptools make g++
 
 RUN npm install -g pm2
 
