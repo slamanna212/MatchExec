@@ -62,7 +62,7 @@ jobs:
 
           ## 🎮 Game Data
           
-          **Docker Image:** `ghcr.io/${{ github.repository_owner }}/matchexec:v${{ steps.package_version.outputs.version }}`
+          **Docker Image:** `ghcr.io/${{ github.actor }}/matchexec:v${{ steps.package_version.outputs.version }}`
         draft: true
         prerelease: false
         
@@ -73,7 +73,7 @@ jobs:
     - name: Log in to GitHub Container Registry
       if: steps.check_tag.outputs.exists == 'false'
       run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.repository_owner }} --password-stdin ghcr.io
+        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
         
     - name: Build and push production Docker image
       if: steps.check_tag.outputs.exists == 'false'
@@ -83,8 +83,8 @@ jobs:
         platforms: linux/${{ matrix.platform }}
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/matchexec:v${{ steps.package_version.outputs.version }}-${{ matrix.platform }}
-          ghcr.io/${{ github.repository_owner }}/matchexec:latest-${{ matrix.platform }}
+          ghcr.io/${{ github.actor }}/matchexec:v${{ steps.package_version.outputs.version }}-${{ matrix.platform }}
+          ghcr.io/${{ github.actor }}/matchexec:latest-${{ matrix.platform }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
@@ -100,17 +100,17 @@ jobs:
     - name: Log in to GitHub Container Registry
       if: needs.build.outputs.tag_exists == 'false'
       run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.repository_owner }} --password-stdin ghcr.io
+        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
         
     - name: Create and push manifest
       if: needs.build.outputs.tag_exists == 'false'
       run: |
-        docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/matchexec:v${{ needs.build.outputs.version }} \
-          ghcr.io/${{ github.repository_owner }}/matchexec:v${{ needs.build.outputs.version }}-amd64 \
-          ghcr.io/${{ github.repository_owner }}/matchexec:v${{ needs.build.outputs.version }}-arm64
-        docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/matchexec:latest \
-          ghcr.io/${{ github.repository_owner }}/matchexec:latest-amd64 \
-          ghcr.io/${{ github.repository_owner }}/matchexec:latest-arm64
+        docker buildx imagetools create -t ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }} \
+          ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}-amd64 \
+          ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}-arm64
+        docker buildx imagetools create -t ghcr.io/${{ github.actor }}/matchexec:latest \
+          ghcr.io/${{ github.actor }}/matchexec:latest-amd64 \
+          ghcr.io/${{ github.actor }}/matchexec:latest-arm64
           
     - name: Create Release
       if: needs.build.outputs.tag_exists == 'false'
@@ -127,6 +127,6 @@ jobs:
 
           ## 🎮 Game Data
           
-          **Docker Image:** `ghcr.io/${{ github.repository_owner }}/matchexec:v${{ needs.build.outputs.version }}`
+          **Docker Image:** `ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}`
         draft: true
         prerelease: false
