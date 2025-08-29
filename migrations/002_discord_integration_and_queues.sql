@@ -38,8 +38,13 @@ CREATE TABLE IF NOT EXISTS discord_channels (
   send_signup_updates BOOLEAN DEFAULT 1,
   last_name_refresh DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (guild_id) REFERENCES discord_settings(guild_id) ON DELETE CASCADE
 );
+
+-- Add updated_at column if it doesn't exist (for existing databases)
+-- This will fail silently if the column already exists
+ALTER TABLE discord_channels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 -- Voice and TTS configuration
 CREATE TABLE IF NOT EXISTS voices (
