@@ -90,10 +90,33 @@ class MatchExecBot {
     process.on('SIGTERM', () => this.shutdown());
   }
 
+  private async checkWelcomeFlowCompleted(): Promise<boolean> {
+    if (!this.db) return false;
+    
+    try {
+      const result = await this.db.get<{ setting_value: string }>(
+        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+        ['welcome_flow_completed']
+      );
+      
+      return result?.setting_value === 'true';
+    } catch (error) {
+      console.error('❌ Error checking welcome flow status:', error);
+      return false;
+    }
+  }
+
   private async initialize() {
     try {
       // Connect to database (migrations should be run separately)
       this.db = await initializeDatabase();
+      
+      // Check if welcome flow is completed
+      const welcomeCompleted = await this.checkWelcomeFlowCompleted();
+      if (!welcomeCompleted) {
+        console.log('⏳ Welcome flow not completed yet, waiting...');
+        return false;
+      }
       
       // Initialize settings manager
       this.settingsManager = new SettingsManager(this.db);
@@ -101,7 +124,7 @@ class MatchExecBot {
 
       if (!this.settings?.bot_token) {
         console.warn('⚠️ Bot token not configured');
-        return;
+        return false;
       }
 
       // Initialize modules
@@ -128,9 +151,12 @@ class MatchExecBot {
 
       // Start periodic tasks
       this.startPeriodicTasks();
+      
+      return true;
 
     } catch (error) {
       console.error('❌ Failed to initialize bot:', error);
+      return false;
     }
   }
 
@@ -230,7 +256,14 @@ class MatchExecBot {
 
   async start() {
     // Initialize database and settings first
-    await this.initialize();
+    const initialized = await this.initialize();
+    
+    if (!initialized) {
+      // If initialization failed due to incomplete welcome flow, 
+      // set up a periodic check to try again
+      this.startWelcomeFlowWatcher();
+      return;
+    }
     
     if (!this.settings?.bot_token) {
       console.error('❌ No bot token available, cannot start bot');
@@ -239,9 +272,34 @@ class MatchExecBot {
 
     try {
       await this.client.login(this.settings.bot_token);
+      console.log('✅ Discord bot successfully connected');
     } catch (error) {
       console.error('❌ Failed to login to Discord:', error);
     }
+  }
+
+  private startWelcomeFlowWatcher() {
+    console.log('👀 Watching for welcome flow completion...');
+    
+    const checkInterval = setInterval(async () => {
+      const welcomeCompleted = await this.checkWelcomeFlowCompleted();
+      
+      if (welcomeCompleted) {
+        console.log('✅ Welcome flow completed! Initializing Discord bot...');
+        clearInterval(checkInterval);
+        
+        // Try to initialize and start the bot again
+        const initialized = await this.initialize();
+        if (initialized && this.settings?.bot_token) {
+          try {
+            await this.client.login(this.settings.bot_token);
+            console.log('✅ Discord bot successfully connected');
+          } catch (error) {
+            console.error('❌ Failed to login to Discord:', error);
+          }
+        }
+      }
+    }, 5000); // Check every 5 seconds
   }
 }
 
