@@ -1,4 +1,4 @@
-import { initializeDatabase } from '../../lib/database';
+import { waitForDatabaseReady } from '../../lib/database';
 
 class MatchExecWorker {
   private isRunning = false;
@@ -7,8 +7,9 @@ class MatchExecWorker {
     console.log('⚙️ Starting MatchExec Worker...');
     
     try {
-      // Initialize database
-      await initializeDatabase();
+      // Wait for database to be ready (migrated and seeded)
+      console.log('⏳ Waiting for database to be ready...');
+      await waitForDatabaseReady();
       
       this.isRunning = true;
       console.log('✅ Worker started successfully');
