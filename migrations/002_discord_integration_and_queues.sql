@@ -42,9 +42,6 @@ CREATE TABLE IF NOT EXISTS discord_channels (
   FOREIGN KEY (guild_id) REFERENCES discord_settings(guild_id) ON DELETE CASCADE
 );
 
--- Add updated_at column if it doesn't exist (for existing databases)
--- This will fail silently if the column already exists
-ALTER TABLE discord_channels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 -- Voice and TTS configuration
 CREATE TABLE IF NOT EXISTS voices (
