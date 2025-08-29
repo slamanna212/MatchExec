@@ -46,6 +46,7 @@ RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sq
 
 COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
