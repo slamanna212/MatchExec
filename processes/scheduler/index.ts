@@ -1,4 +1,4 @@
-import { getDbInstance } from '../../lib/database-init';
+import { initializeDatabase } from '../../lib/database';
 import * as cron from 'node-cron';
 import { SchedulerSettings } from '../../shared/types';
 
@@ -11,8 +11,8 @@ class MatchExecScheduler {
     console.log('🕐 Starting MatchExec Scheduler...');
     
     try {
-      // Connect to database (migrations should be run by worker process)
-      this.db = await getDbInstance();
+      // Initialize database with migrations and seeding
+      this.db = await initializeDatabase();
       
       this.isRunning = true;
       

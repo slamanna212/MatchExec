@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import { getDbInstance } from '../../lib/database-init';
-import { Database } from '../../lib/database/connection';
+import { initializeDatabase } from '../../lib/database';
+import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 
@@ -93,7 +93,7 @@ class MatchExecBot {
   private async initialize() {
     try {
       // Connect to database (migrations should be run separately)
-      this.db = await getDbInstance();
+      this.db = await initializeDatabase();
       
       // Initialize settings manager
       this.settingsManager = new SettingsManager(this.db);
