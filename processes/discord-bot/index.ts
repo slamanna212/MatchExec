@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import { initializeDatabase } from '../../lib/database';
+import { waitForDatabaseReady } from '../../lib/database';
 import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
@@ -108,8 +108,8 @@ class MatchExecBot {
 
   private async initialize() {
     try {
-      // Connect to database (migrations should be run separately)
-      this.db = await initializeDatabase();
+      // Wait for database to be ready (migrations should be run separately)
+      this.db = await waitForDatabaseReady();
       
       // Check if welcome flow is completed
       const welcomeCompleted = await this.checkWelcomeFlowCompleted();
