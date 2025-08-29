@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get guild_id from discord_settings
-    const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1');
+    const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1') as { guild_id?: string } | undefined;
     
     if (!discordSettings?.guild_id) {
       return NextResponse.json(
