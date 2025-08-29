@@ -61,6 +61,7 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
