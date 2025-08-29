@@ -45,7 +45,13 @@ async function checkWebApp() {
 
 function checkPM2Processes() {
   try {
-    const output = execSync('pm2 jlist', { encoding: 'utf8' });
+    // Try global pm2 first, then local npx pm2
+    let output;
+    try {
+      output = execSync('pm2 jlist', { encoding: 'utf8' });
+    } catch {
+      output = execSync('npx pm2 jlist', { encoding: 'utf8' });
+    }
     const processes = JSON.parse(output);
     
     const requiredProcesses = ['matchexec-web', 'discord-bot', 'scheduler', 'worker'];
