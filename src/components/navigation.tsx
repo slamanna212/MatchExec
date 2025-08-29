@@ -74,7 +74,7 @@ export function Navigation({ children }: NavigationProps) {
       ]
     },
     { label: 'Info', href: '/info', icon: IconInfoCircle },
-    { label: 'Dev', href: '/dev', icon: IconCode },
+    ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', icon: IconCode }] : []),
   ]
 
   // Prevent hydration mismatch by not rendering until mounted
