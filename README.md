@@ -1,3 +1,10 @@
+# 🏆 MatchExec — Your Personal Video Game Tournament Manager
+<p align="center">
+  <img src="https://raw.githubusercontent.com/slamanna212/MatchExec/refs/heads/dev/public/logo.svg" height="200" alt="MatchExec Logo" />
+</p>
+
+---
+
 # 5 Stages of a Match
 Created - Gather - Assign - Battle - Complete 
 
