@@ -15,7 +15,7 @@ export class DatabaseReadinessChecker {
         await this.checkDatabaseReady();
         console.log('✅ Database is ready');
         return;
-      } catch (error) {
+      } catch {
         const elapsed = Date.now() - startTime;
         console.log(`⏳ Database not ready yet (${elapsed}ms elapsed), checking again in ${checkIntervalMs}ms...`);
         await this.sleep(checkIntervalMs);
