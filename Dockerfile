@@ -29,7 +29,7 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 
 # Install build dependencies for native modules in runner stage
-RUN apk add --no-cache python3 py3-setuptools make g++
+RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 RUN npm install -g pm2
 
@@ -67,4 +67,4 @@ ENV HOSTNAME=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node scripts/health-check.js
 
-CMD ["pm2-runtime", "ecosystem.config.js"]
+CMD ["npx", "tsx", "scripts/docker-start.ts"]
