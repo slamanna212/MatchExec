@@ -78,7 +78,7 @@ export async function PUT(request: NextRequest) {
 
     // First ensure we have a settings row
     await db.run(`
-      INSERT INTO discord_settings (id) VALUES (1)
+      INSERT INTO discord_settings (id, guild_id, bot_token) VALUES (1, '', '')
       ON CONFLICT(id) DO NOTHING
     `);
 
