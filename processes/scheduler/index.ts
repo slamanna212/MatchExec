@@ -207,9 +207,9 @@ class MatchExecScheduler {
           const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
           await this.db.run(`
-            INSERT INTO discord_reminder_queue (id, match_id, reminder_time, status)
-            VALUES (?, ?, ?, 'pending')
-          `, [reminderId, match.id, reminderTime.toISOString()]);
+            INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
+            VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
+          `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
           
           console.log(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
         }
@@ -300,14 +300,23 @@ class MatchExecScheduler {
         
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
-          const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Get all participants for this match
+          const participants = await this.db.all(
+            'SELECT user_id FROM match_participants WHERE match_id = ?',
+            [match.id]
+          );
           
-          await this.db.run(`
-            INSERT INTO discord_player_reminder_queue (id, match_id, reminder_time, status)
-            VALUES (?, ?, ?, 'pending')
-          `, [reminderId, match.id, reminderTime.toISOString()]);
+          // Create reminder queue entry for each participant
+          for (const participant of participants) {
+            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            await this.db.run(`
+              INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
+              VALUES (?, ?, ?, 'player_reminder', ?, ?, 'pending')
+            `, [reminderId, match.id, participant.user_id, reminderTime.toISOString(), reminderTime.toISOString()]);
+          }
           
-          console.log(`📱 Queued player reminder DMs for match: ${match.name} at ${reminderTime.toISOString()}`);
+          console.log(`📱 Queued player reminder DMs for match: ${match.name} (${participants.length} participants) at ${reminderTime.toISOString()}`);
         }
       }
     } catch (error) {
@@ -322,8 +331,8 @@ class MatchExecScheduler {
       
       // Add to Discord reminder queue that the bot will process
       await this.db.run(`
-        INSERT INTO discord_match_reminder_queue (id, match_id, status)
-        VALUES (?, ?, 'pending')
+        INSERT INTO discord_match_reminder_queue (id, match_id, reminder_type, scheduled_for, status)
+        VALUES (?, ?, 'general_reminder', datetime('now'), 'pending')
       `, [reminderId, matchId]);
       
       console.log('📢 Discord match reminder queued for match:', matchId);
