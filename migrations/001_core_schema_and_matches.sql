@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS matches (
   start_date DATETIME NOT NULL,
   start_time DATETIME NOT NULL,
   end_time DATETIME,
-  status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'active', 'completed', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'gather', 'assign', 'battle', 'complete', 'cancelled')),
   max_participants INTEGER,
   current_participants INTEGER DEFAULT 0,
   winner_team TEXT,
