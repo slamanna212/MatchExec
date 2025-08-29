@@ -1,4 +1,5 @@
-FROM node:24-alpine AS base
+# Support multi-platform builds
+FROM --platform=$BUILDPLATFORM node:24-alpine AS base
 
 WORKDIR /app
 
@@ -14,6 +15,7 @@ COPY data ./data
 COPY migrations ./migrations
 COPY scripts ./scripts
 COPY processes ./processes
+COPY processes-package.json ./
 COPY src ./src
 COPY public ./public
 COPY *.config.* ./
