@@ -103,20 +103,25 @@ CREATE TABLE IF NOT EXISTS discord_announcement_queue (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
   announcement_type TEXT,
+  announcement_data TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  posted_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS discord_status_update_queue (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
+  new_status TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
@@ -131,6 +136,8 @@ CREATE TABLE IF NOT EXISTS discord_reminder_queue (
   scheduled_for DATETIME NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  sent_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
@@ -151,11 +158,14 @@ CREATE TABLE IF NOT EXISTS discord_player_reminder_queue (
   match_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   reminder_type TEXT NOT NULL,
+  reminder_time DATETIME,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   scheduled_for DATETIME NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  sent_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
@@ -183,20 +193,31 @@ CREATE TABLE IF NOT EXISTS discord_bot_requests (
   id TEXT PRIMARY KEY,
   request_type TEXT NOT NULL,
   request_data TEXT,
+  type TEXT,
+  data TEXT,
+  result TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  processed_at DATETIME
+  processed_at DATETIME,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS discord_score_notification_queue (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
   game_id TEXT NOT NULL,
+  map_id TEXT,
+  game_number INTEGER,
+  winner TEXT,
+  winning_team_name TEXT,
+  winning_players TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  sent_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
   FOREIGN KEY (game_id) REFERENCES match_games(id) ON DELETE CASCADE
 );
@@ -205,10 +226,16 @@ CREATE TABLE IF NOT EXISTS discord_voice_announcement_queue (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
   announcement_type TEXT NOT NULL,
+  blue_team_voice_channel TEXT,
+  red_team_voice_channel TEXT,
+  first_team TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
@@ -228,10 +255,20 @@ CREATE TABLE IF NOT EXISTS discord_map_code_queue (
 CREATE TABLE IF NOT EXISTS discord_match_winner_queue (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
+  match_name TEXT,
+  game_id TEXT,
+  winner TEXT,
+  winning_team_name TEXT,
+  winning_players TEXT,
+  team1_score INTEGER,
+  team2_score INTEGER,
+  total_maps INTEGER,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
+  sent_at DATETIME,
+  error_message TEXT,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 
