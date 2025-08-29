@@ -73,7 +73,7 @@ jobs:
     - name: Log in to GitHub Container Registry
       if: steps.check_tag.outputs.exists == 'false'
       run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+        echo ${{ secrets.GHCR_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
         
     - name: Build and push production Docker image
       if: steps.check_tag.outputs.exists == 'false'
@@ -100,7 +100,7 @@ jobs:
     - name: Log in to GitHub Container Registry
       if: needs.build.outputs.tag_exists == 'false'
       run: |
-        echo ${{ secrets.GITHUB_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+        echo ${{ secrets.GHCR_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
         
     - name: Create and push manifest
       if: needs.build.outputs.tag_exists == 'false'
