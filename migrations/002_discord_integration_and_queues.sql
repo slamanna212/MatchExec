@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS team_voice_channels (
 CREATE TABLE IF NOT EXISTS match_voice_alternation (
   match_id TEXT PRIMARY KEY,
   current_team TEXT NOT NULL,
+  last_first_team TEXT,
   last_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
@@ -279,6 +280,7 @@ CREATE INDEX IF NOT EXISTS idx_discord_channels_guild_id ON discord_channels(gui
 CREATE INDEX IF NOT EXISTS idx_discord_match_messages_match_id ON discord_match_messages(match_id);
 CREATE INDEX IF NOT EXISTS idx_discord_events_match_id ON discord_events(match_id);
 CREATE INDEX IF NOT EXISTS idx_team_voice_channels_match_id ON team_voice_channels(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_voice_alternation_last_team ON match_voice_alternation(last_first_team);
 
 -- Queue indexes for performance
 CREATE INDEX IF NOT EXISTS idx_discord_announcement_queue_status ON discord_announcement_queue(status);

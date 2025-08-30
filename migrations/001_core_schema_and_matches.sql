@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS match_games (
   team_b TEXT,
   winner_team TEXT,
   participant_winner_id TEXT,
+  participant1_id TEXT,
+  participant2_id TEXT,
   is_ffa_mode BOOLEAN DEFAULT 0,
   score_a INTEGER DEFAULT 0,
   score_b INTEGER DEFAULT 0,
@@ -150,4 +152,6 @@ CREATE INDEX IF NOT EXISTS idx_match_participants_user_id ON match_participants(
 
 CREATE INDEX IF NOT EXISTS idx_match_games_match_id ON match_games(match_id);
 CREATE INDEX IF NOT EXISTS idx_match_games_participant_winner ON match_games(participant_winner_id);
+CREATE INDEX IF NOT EXISTS idx_match_games_participant1 ON match_games(participant1_id);
+CREATE INDEX IF NOT EXISTS idx_match_games_participant2 ON match_games(participant2_id);
 CREATE INDEX IF NOT EXISTS idx_match_games_ffa_mode ON match_games(is_ffa_mode);
