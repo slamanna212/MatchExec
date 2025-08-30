@@ -4,10 +4,11 @@ import path from 'path';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const filePath = path.join(process.cwd(), 'public', 'uploads', ...params.path);
+    const resolvedParams = await params;
+    const filePath = path.join(process.cwd(), 'public', 'uploads', ...resolvedParams.path);
     
     // Security check - ensure the path is within uploads directory
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
