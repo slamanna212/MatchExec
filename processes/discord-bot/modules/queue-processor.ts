@@ -333,7 +333,7 @@ export class QueueProcessor {
           // Mark deletion as completed
           await this.db.run(`
             UPDATE discord_deletion_queue 
-            SET status = 'processed', processed_at = datetime('now')
+            SET status = 'completed', processed_at = datetime('now')
             WHERE id = ?
           `, [deletion.id]);
 
@@ -392,7 +392,7 @@ export class QueueProcessor {
           }
           
           // Mark as completed or failed based on result
-          const finalStatus = success ? 'processed' : 'failed';
+          const finalStatus = success ? 'completed' : 'failed';
           const errorMessage = success ? null : 'Failed to update Discord messages';
           
           await this.db.run(`
@@ -943,7 +943,7 @@ export class QueueProcessor {
             // Mark as completed
             await this.db.run(`
               UPDATE discord_map_code_queue 
-              SET status = 'processed', processed_at = datetime('now')
+              SET status = 'completed', processed_at = datetime('now')
               WHERE id = ?
             `, [mapCodeRequest.id]);
 
