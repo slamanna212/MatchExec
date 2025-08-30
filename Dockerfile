@@ -25,16 +25,11 @@ COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
 
-# Install only process dependencies (production only)
-RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --omit=dev --production
+# Install only essential process dependencies
+RUN npm install discord.js@14.22.1 @discordjs/voice@0.19.0 node-cron@4.2.1 sqlite3@5.1.7 tsx@4.20.5 pm2@6.0.8 express@5.1.0 bufferutil@4.0.9 ffmpeg-static@5.2.0 --no-package-lock
 
-# Clean up unnecessary files from node_modules
-RUN find /app/node_modules -name "*.md" -delete && \
-    find /app/node_modules -type d -name "test*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/node_modules -type d -name "spec*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/node_modules -type d -name "example*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/node_modules -type d -name "doc*" -exec rm -rf {} + 2>/dev/null || true && \
-    find /app/node_modules -name "*.map" -delete && \
+# Quick cleanup of largest unnecessary files
+RUN rm -rf /app/node_modules/*/test* /app/node_modules/*/tests* /app/node_modules/*/example* /app/node_modules/*/docs* /app/node_modules/*/*.md 2>/dev/null || true && \
     npm cache clean --force
 
 FROM node:24-alpine AS runner
