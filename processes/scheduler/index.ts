@@ -430,12 +430,14 @@ class MatchExecScheduler {
 
   private async queueTimedAnnouncement(matchId: string, announcement: any): Promise<boolean> {
     try {
-      // Let SQLite auto-generate the ID since it's AUTOINCREMENT
+      // Generate unique ID for the announcement queue entry
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       await this.db.run(`
         INSERT INTO discord_announcement_queue (
-          match_id, status, announcement_type, announcement_data
-        ) VALUES (?, 'pending', 'timed', ?)
-      `, [matchId, JSON.stringify(announcement)]);
+          id, match_id, status, announcement_type, announcement_data
+        ) VALUES (?, ?, 'pending', 'timed', ?)
+      `, [announcementId, matchId, JSON.stringify(announcement)]);
       
       console.log(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before)`);
       return true;

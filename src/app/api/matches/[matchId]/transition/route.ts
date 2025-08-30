@@ -18,11 +18,14 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
       return true;
     }
     
+    // Generate unique ID for the announcement queue entry
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     // Add to announcement queue with explicit 'standard' type
     await db.run(`
-      INSERT INTO discord_announcement_queue (match_id, announcement_type, status)
-      VALUES (?, 'standard', 'pending')
-    `, [matchId]);
+      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
+      VALUES (?, ?, 'standard', 'pending')
+    `, [announcementId, matchId]);
     
     console.log('📢 Discord announcement queued for match:', matchId);
     return true;
