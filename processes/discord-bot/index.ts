@@ -63,7 +63,12 @@ class MatchExecBot {
       
       // Register slash commands
       if (this.interactionHandler) {
-        await this.interactionHandler.registerSlashCommands();
+        try {
+          await this.interactionHandler.registerSlashCommands();
+        } catch (error) {
+          console.error('❌ Error registering slash commands:', error);
+          // Don't crash if slash command registration fails
+        }
       }
       
       this.isReady = true;
@@ -88,6 +93,17 @@ class MatchExecBot {
 
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
+    
+    // Add global error handlers to prevent crashes
+    process.on('uncaughtException', (error) => {
+      console.error('❌ Uncaught Exception:', error);
+      // Don't exit, just log the error
+    });
+    
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+      // Don't exit, just log the error
+    });
   }
 
   private async checkWelcomeFlowCompleted(): Promise<boolean> {
@@ -192,6 +208,7 @@ class MatchExecBot {
       await this.queueProcessor.processAllQueues();
     } catch (error) {
       console.error('❌ Error processing queues:', error);
+      // Don't let queue processing errors crash the bot
     }
   }
 
