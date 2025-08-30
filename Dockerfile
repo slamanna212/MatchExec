@@ -25,11 +25,17 @@ COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
 
-# Install only essential process dependencies
-RUN npm install discord.js@14.22.1 @discordjs/voice@0.19.0 node-cron@4.2.1 sqlite3@5.1.7 tsx@4.20.5 pm2@6.0.8 express@5.1.0 bufferutil@4.0.9 ffmpeg-static@5.2.0 --no-package-lock
+# Create separate stage for production dependencies only
+FROM node:24-alpine AS production-deps
+WORKDIR /app
 
-# Quick cleanup of largest unnecessary files
-RUN rm -rf /app/node_modules/*/test* /app/node_modules/*/tests* /app/node_modules/*/example* /app/node_modules/*/docs* /app/node_modules/*/*.md 2>/dev/null || true && \
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 py3-setuptools make g++
+
+# Copy and install only production dependencies
+COPY production.package.json ./package.json
+RUN npm install && \
+    rm -rf /app/node_modules/*/test* /app/node_modules/*/tests* /app/node_modules/*/example* /app/node_modules/*/docs* /app/node_modules/*/*.md 2>/dev/null || true && \
     npm cache clean --force
 
 FROM node:24-alpine AS runner
@@ -45,8 +51,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy complete node_modules from builder (includes all dependencies)
-COPY --from=builder /app/node_modules ./node_modules
+# Copy only production node_modules from production-deps stage
+COPY --from=production-deps /app/node_modules ./node_modules
 
 COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
