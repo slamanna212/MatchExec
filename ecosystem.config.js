@@ -15,7 +15,8 @@ module.exports = {
       script: 'npx',
       args: 'tsx ./processes/discord-bot/index.ts',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     },
     {
@@ -23,7 +24,8 @@ module.exports = {
       script: 'npx',
       args: 'tsx ./processes/scheduler/index.ts',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     },
     {
@@ -31,7 +33,8 @@ module.exports = {
       script: 'npx',
       args: 'tsx ./processes/worker/index.ts',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     }
   ]
