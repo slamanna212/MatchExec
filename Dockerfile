@@ -4,7 +4,7 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS base
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apk add --no-cache python3 py3-setuptools make g++
+RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 COPY package*.json ./
 RUN npm ci --omit=dev --production
@@ -30,7 +30,7 @@ FROM node:24-alpine AS production-deps
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apk add --no-cache python3 py3-setuptools make g++
+RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 # Copy and install only production dependencies
 COPY production.package.json ./package.json
@@ -41,8 +41,9 @@ RUN npm install && \
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# Only install pm2 - no build tools needed in runner
-RUN npm install -g pm2 && npm cache clean --force
+# Install pm2 and git for version info
+RUN apk add --no-cache git && \
+    npm install -g pm2 && npm cache clean --force
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
