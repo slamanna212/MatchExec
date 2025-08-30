@@ -57,7 +57,6 @@ export async function PUT(request: NextRequest) {
        SET match_check_cron = ?, 
            cleanup_check_cron = ?, 
            channel_refresh_cron = ?,
-           enabled = 1,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
       [

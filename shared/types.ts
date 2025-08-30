@@ -248,7 +248,6 @@ export interface SchedulerSettings {
   match_check_cron: string;
   cleanup_check_cron: string;
   channel_refresh_cron: string;
-  enabled: boolean;
   created_at: Date;
   updated_at: Date;
 }

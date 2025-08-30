@@ -4,7 +4,6 @@
 -- Scheduler configuration
 CREATE TABLE IF NOT EXISTS scheduler_settings (
   id INTEGER PRIMARY KEY,
-  enabled BOOLEAN DEFAULT 1,
   match_cleanup_cron TEXT NOT NULL DEFAULT '0 2 * * *',
   match_check_cron TEXT NOT NULL DEFAULT '*/5 * * * *',
   reminder_check_cron TEXT NOT NULL DEFAULT '*/5 * * * *',
