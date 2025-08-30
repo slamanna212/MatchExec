@@ -30,7 +30,7 @@ body:
   - type: input
     id: matchexec-version
     attributes:
-      label: Dispatcharr Version
+      label: MatchExec Version
       description: What version of MatchExec are you running?
       placeholder: Located bottom left of main screen
     validations:
