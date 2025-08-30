@@ -25,13 +25,15 @@ COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
 
+# Install process dependencies in builder stage
+RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --only=production
+RUN npm cache clean --force
+
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# Install build dependencies for native modules in runner stage
-RUN apk add --no-cache python3 py3-setuptools make g++ git
-
-RUN npm install -g pm2
+# Only install pm2 - no build tools needed in runner
+RUN npm install -g pm2 && npm cache clean --force
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -40,9 +42,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Install additional process dependencies without overwriting standalone package.json
-COPY --from=builder /app/processes-package.json ./processes-package.json
-RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --only=production
+# Copy complete node_modules from builder (includes all dependencies)
+COPY --from=builder /app/node_modules ./node_modules
 
 COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
