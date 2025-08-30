@@ -72,7 +72,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Need Help? Want to add more games?
 
-[Open an issue](https://github.com/slamanna212/MatchExec/issues)
+[Open an issue](https://github.com/slamanna212/MatchExec/issues/new/choose)
 
 [Join our Discord](https://discord.gg/nPKp95Cc6k)
 
