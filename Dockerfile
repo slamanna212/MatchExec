@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-setuptools make g++
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev --production
 
 FROM base AS builder
 RUN npm ci
@@ -25,9 +25,17 @@ COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
 
-# Install process dependencies in builder stage
-RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --only=production
-RUN npm cache clean --force
+# Install only process dependencies (production only)
+RUN npm install discord.js@^14.16.3 @discordjs/voice@^0.18.0 node-cron@^3.0.3 sqlite3@^5.1.7 tsx@^4.20.4 --omit=dev --production
+
+# Clean up unnecessary files from node_modules
+RUN find /app/node_modules -name "*.md" -delete && \
+    find /app/node_modules -type d -name "test*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/node_modules -type d -name "spec*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/node_modules -type d -name "example*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/node_modules -type d -name "doc*" -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/node_modules -name "*.map" -delete && \
+    npm cache clean --force
 
 FROM node:24-alpine AS runner
 WORKDIR /app
