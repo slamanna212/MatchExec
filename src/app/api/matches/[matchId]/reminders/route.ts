@@ -87,7 +87,7 @@ export async function GET(
             let errorMessage = null;
             
             if (queuedAnnouncement) {
-              status = queuedAnnouncement.status === 'posted' ? 'sent' : queuedAnnouncement.status;
+              status = queuedAnnouncement.status === 'completed' ? 'sent' : queuedAnnouncement.status;
               sentAt = queuedAnnouncement.posted_at;
               errorMessage = queuedAnnouncement.error_message;
             } else if (announcementTime <= new Date()) {

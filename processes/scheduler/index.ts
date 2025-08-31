@@ -238,7 +238,7 @@ class MatchExecScheduler {
           if (success) {
             await this.db.run(`
               UPDATE discord_reminder_queue 
-              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [reminder.id]);
             
