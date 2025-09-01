@@ -12,8 +12,9 @@ module.exports = {
     },
     {
       name: 'discord-bot',
-      script: 'npx',
-      args: 'tsx ./processes/discord-bot/index.ts',
+      script: './processes/discord-bot/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'production',
         DATABASE_PATH: '/app/app_data/data/matchexec.db'
@@ -21,8 +22,9 @@ module.exports = {
     },
     {
       name: 'scheduler',
-      script: 'npx',
-      args: 'tsx ./processes/scheduler/index.ts',
+      script: './processes/scheduler/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'production',
         DATABASE_PATH: '/app/app_data/data/matchexec.db'
@@ -30,8 +32,9 @@ module.exports = {
     },
     {
       name: 'worker',
-      script: 'npx',
-      args: 'tsx ./processes/worker/index.ts',
+      script: './processes/worker/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'production',
         DATABASE_PATH: '/app/app_data/data/matchexec.db'
