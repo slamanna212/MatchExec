@@ -19,7 +19,7 @@ Create a Match, and MatchExec handles the rest!
 ✅ **Modern, Responsive Web UI** — No matter the device or size, a beautiful, fast web interface awaits you \
 ✅ **No Timezone Issues** — MatchExec shows you all times in your local timezone, and stores them in UTC. No need to worry about missing matches due to conversion errors \
 ✅ **Keep Score** — Keep score of who wins each map and declare an overall winner \
-✅ **Flexible** — Support for different scoring types, custom modes, custom maps, whatever you want, its playable \
+✅ **Flexible** — Support for different scoring types, custom modes, custom maps, whatever you want, it's playable \
 ✅ **Voice Announcers** — 4 different personas to choose from: A evil queen, a British football announcer, a London radio DJ, and an American Wrestling Announcer 
 
 ---
