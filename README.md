@@ -26,10 +26,12 @@ Create a Match, and MatchExec handles the rest!
 
 ## 📷 Screenshots
 
-
-
-
-
+![Matches Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Matches.png?raw=true "Matches Screen")
+![Games Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Games.png?raw=true "Games Screen")
+![Channels Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Channels.png?raw=true "Channels Screen")
+![Settings Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Settings.png?raw=true "Settings Screen")
+![Discord Match Embed](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/FlJmJP.png?raw=true "Discord Match Embed")
+![Discord Sign Up Form](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/O4CAe4.png?raw=true "Discord Sign Up Form")
 
 ---
 
