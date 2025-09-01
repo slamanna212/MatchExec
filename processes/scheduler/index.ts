@@ -1,4 +1,3 @@
-// @ts-nocheck - Disable TypeScript checks for database method calls
 import { waitForDatabaseReady } from '../../lib/database';
 import * as cron from 'node-cron';
 import { SchedulerSettings } from '../../shared/types';
@@ -33,7 +32,7 @@ class MatchExecScheduler {
 
   private async loadSchedulerSettings() {
     try {
-      // @ts-ignore - Database get method typed as unknown
+      // @ts-expect-error - Database get method typed as unknown
       const settings = (await this.db.get(
         'SELECT * FROM scheduler_settings WHERE id = 1'
       )) as SchedulerSettings | null;
@@ -99,7 +98,7 @@ class MatchExecScheduler {
   private async checkMatchStartTimes() {
     // Check for matches that should transition from 'assign' to 'battle' at their scheduled start time
     const now = new Date();
-    // @ts-ignore - Database all method typed as unknown
+    // @ts-expect-error - Database all method typed as unknown
     const matchesToStart = await this.db.all(
       `SELECT * FROM matches 
        WHERE status = 'assign' 
@@ -110,8 +109,8 @@ class MatchExecScheduler {
 
     for (const match of matchesToStart) {
       console.log(`🏆 Starting battle phase for match: ${match.name}`);
-      // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['battle', match.id]
@@ -138,7 +137,7 @@ class MatchExecScheduler {
     const thresholdTime = new Date();
     thresholdTime.setHours(thresholdTime.getHours() - autoCompleteThresholdHours);
 
-    // @ts-ignore - Database all method typed as unknown
+    // @ts-expect-error - Database all method typed as unknown
     const matchesToComplete = await this.db.all(
       `SELECT * FROM matches 
        WHERE status = 'battle' 
@@ -148,8 +147,8 @@ class MatchExecScheduler {
 
     for (const match of matchesToComplete) {
       console.log(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
-      // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['complete', match.id]
@@ -181,7 +180,7 @@ class MatchExecScheduler {
   private async queueMatchReminders() {
     try {
       // Get Discord settings to know the reminder minutes
-      // @ts-ignore - Database get method typed as unknown
+      // @ts-expect-error - Database get method typed as unknown
       const discordSettings = await this.db.get(
         'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
       );
@@ -215,8 +214,8 @@ class MatchExecScheduler {
         if (reminderTime > new Date()) {
           const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
-          // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+          // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
             INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
@@ -247,8 +246,8 @@ class MatchExecScheduler {
           const success = await this.queueDiscordReminder(reminder.match_id);
           
           if (success) {
-            // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+            // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
               UPDATE discord_reminder_queue 
               SET status = 'completed', sent_at = CURRENT_TIMESTAMP
@@ -257,8 +256,8 @@ class MatchExecScheduler {
             
             console.log(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
           } else {
-            // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+            // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
               UPDATE discord_reminder_queue 
               SET status = 'failed', error_message = 'Failed to queue Discord reminder'
@@ -268,8 +267,8 @@ class MatchExecScheduler {
         } catch (error) {
           console.error(`❌ Error processing reminder ${reminder.id}:`, error);
           
-          // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+          // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
             UPDATE discord_reminder_queue 
             SET status = 'failed', error_message = ?
@@ -285,7 +284,7 @@ class MatchExecScheduler {
   private async queuePlayerReminders() {
     try {
       // Get Discord settings to know the player reminder minutes
-      // @ts-ignore - Database get method typed as unknown
+      // @ts-expect-error - Database get method typed as unknown
       const discordSettings = await this.db.get(
         'SELECT player_reminder_minutes FROM discord_settings WHERE id = 1'
       );
@@ -328,8 +327,8 @@ class MatchExecScheduler {
           for (const participant of participants) {
             const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             
-            // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+            // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
               INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
               VALUES (?, ?, ?, 'player_reminder', ?, ?, 'pending')
@@ -350,8 +349,8 @@ class MatchExecScheduler {
       const reminderId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       // Add to Discord reminder queue that the bot will process
-      // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_match_reminder_queue (id, match_id, reminder_type, scheduled_for, status)
         VALUES (?, ?, 'general_reminder', datetime('now'), 'pending')
@@ -371,8 +370,8 @@ class MatchExecScheduler {
       const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       // Add to Discord match start notification queue that the bot will process
-      // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_match_start_queue (id, match_id, status)
         VALUES (?, ?, 'pending')
@@ -457,8 +456,8 @@ class MatchExecScheduler {
       // Generate unique ID for the announcement queue entry
       const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // @ts-ignore - Database run method typed as unknown
-      // @ts-ignore - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
+      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_announcement_queue (
           id, match_id, status, announcement_type, announcement_data

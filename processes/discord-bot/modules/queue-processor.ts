@@ -181,11 +181,11 @@ export class QueueProcessor {
           // Post the announcement
           let result;
           if (announcement.announcement_type === 'timed') {
-            result = await this.announcementHandler.postTimedReminder(eventData as any);
+            result = await this.announcementHandler.postTimedReminder(eventData as unknown);
           } else if (announcement.announcement_type === 'match_start') {
-            result = await this.announcementHandler.postMatchStartAnnouncement(eventData as any);
+            result = await this.announcementHandler.postMatchStartAnnouncement(eventData as unknown);
           } else {
-            result = await this.announcementHandler.postEventAnnouncement(eventData as any);
+            result = await this.announcementHandler.postEventAnnouncement(eventData as unknown);
           }
           
           if (result && typeof result === 'object' && result.success) {
@@ -201,7 +201,7 @@ export class QueueProcessor {
                 const maps = eventData.maps as string[];
                 if (maps && maps.length > 0) {
                   const thread = await this.announcementHandler.createMapsThread(
-                    (result as Record<string, unknown>).mainMessage as any, 
+                    (result as Record<string, unknown>).mainMessage as unknown, 
                     eventData.name as string, 
                     eventData.game_id as string, 
                     maps, 
@@ -214,8 +214,8 @@ export class QueueProcessor {
                 if (eventData.start_date && typeof eventData.start_date === 'string' && this.eventHandler) {
                   const rounds = maps?.length || 1;
                   discordEventId = await this.eventHandler.createDiscordEvent(
-                    eventData as any,
-                    (result as Record<string, unknown>).mainMessage as any, 
+                    eventData as unknown,
+                    (result as Record<string, unknown>).mainMessage as unknown, 
                     rounds
                   );
                 }
@@ -223,7 +223,7 @@ export class QueueProcessor {
                 await this.db.run(`
                   INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [messageRecordId, eventData.id as string, ((result as Record<string, unknown>).mainMessage as any).id, ((result as Record<string, unknown>).mainMessage as any).channelId, threadId, discordEventId, 'announcement']);
+                `, [messageRecordId, eventData.id as string, ((result as Record<string, unknown>).mainMessage as unknown as { id: string }).id, ((result as Record<string, unknown>).mainMessage as unknown as { channelId: string }).channelId, threadId, discordEventId, 'announcement']);
                 
               } catch (error) {
                 console.error('❌ Error storing Discord message tracking:', error);
