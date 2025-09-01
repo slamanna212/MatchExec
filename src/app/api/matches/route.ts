@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       query += ` WHERE m.status != 'complete'`;
     }
     
-    query += ` ORDER BY m.created_at DESC`;
+    query += ` ORDER BY m.start_time ASC`;
     
     const matches = await db.all<MatchDbRow>(query, params);
     

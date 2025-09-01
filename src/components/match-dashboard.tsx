@@ -160,8 +160,8 @@ const MatchCard = memo(({
           <Text size="sm">{match.max_participants}</Text>
         </Group>
         <Group justify="space-between">
-          <Text size="sm" c="dimmed">Created:</Text>
-          <Text size="sm">{parseDbTimestamp(match.created_at)?.toLocaleDateString('en-US') || 'N/A'}</Text>
+          <Text size="sm" c="dimmed">Starts:</Text>
+          <Text size="sm">{parseDbTimestamp(match.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
         </Group>
       </Stack>
       
