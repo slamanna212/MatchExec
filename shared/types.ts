@@ -233,7 +233,7 @@ export interface ReminderData {
   id: string;
   match_id: string;
   reminder_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
+  status: 'pending' | 'sent' | 'failed' | 'processed' | 'completed' | 'scheduled';
   error_message?: string;
   created_at: string;
   sent_at?: string;
@@ -248,7 +248,6 @@ export interface SchedulerSettings {
   match_check_cron: string;
   cleanup_check_cron: string;
   channel_refresh_cron: string;
-  enabled: boolean;
   created_at: Date;
   updated_at: Date;
 }

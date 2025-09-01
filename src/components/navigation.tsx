@@ -21,7 +21,7 @@ import {
   IconMoon,
   IconHistory,
   IconHash,
-  IconApps,
+  IconAdjustments,
   IconClock,
   IconBrandDiscord,
   IconPaint,
@@ -66,15 +66,15 @@ export function Navigation({ children }: NavigationProps) {
       href: '/settings', 
       icon: IconSettings,
       links: [
-        { label: 'Application', href: '/settings#application', icon: IconApps },
-        { label: 'Announcer', href: '/settings#announcer', icon: IconVolume },
-        { label: 'Scheduler', href: '/settings#scheduler', icon: IconClock },
-        { label: 'Discord', href: '/settings#discord', icon: IconBrandDiscord },
-        { label: 'UI', href: '/settings#ui', icon: IconPaint }
+        { label: 'Application', href: '/settings/application', icon: IconAdjustments },
+        { label: 'Announcer', href: '/settings/announcer', icon: IconVolume },
+        { label: 'Scheduler', href: '/settings/scheduler', icon: IconClock },
+        { label: 'Discord', href: '/settings/discord', icon: IconBrandDiscord },
+        { label: 'UI', href: '/settings/ui', icon: IconPaint }
       ]
     },
     { label: 'Info', href: '/info', icon: IconInfoCircle },
-    { label: 'Dev', href: '/dev', icon: IconCode },
+    ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', icon: IconCode }] : []),
   ]
 
   // Prevent hydration mismatch by not rendering until mounted
@@ -89,7 +89,7 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
+        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
           <Group h="100%" px="md">
             <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
             <Image
@@ -101,7 +101,7 @@ export function Navigation({ children }: NavigationProps) {
             />
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+        <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
           <AppShell.Section>
             <Group mb="md" justify="center" hiddenFrom="base" visibleFrom="md">
               <Image
@@ -137,7 +137,7 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
+      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
         <Group h="100%" px="md">
           <Burger 
             opened={opened} 
@@ -156,7 +156,7 @@ export function Navigation({ children }: NavigationProps) {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+      <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center" hiddenFrom="base" visibleFrom="md">
             <Image
@@ -181,7 +181,7 @@ export function Navigation({ children }: NavigationProps) {
                   href={item.href}
                   label={item.label}
                   leftSection={<item.icon size="1rem" />}
-                  active={mounted && pathname === item.href}
+                  active={mounted && (pathname === item.href || (item.href === '/settings' && pathname?.startsWith('/settings')))}
                   childrenOffset={0}
                   c="#F5F5F5"
                   styles={{
@@ -222,22 +222,7 @@ export function Navigation({ children }: NavigationProps) {
                     }}
                     onClick={(event) => {
                       event.preventDefault()
-                      if (link.href.includes('#')) {
-                        // Handle hash links for same-page navigation
-                        const [path, hash] = link.href.split('#')
-                        if (pathname === path) {
-                          // Already on the correct page, just scroll to section
-                          const element = document.getElementById(hash)
-                          if (element) {
-                            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          }
-                        } else {
-                          // Navigate to page with hash
-                          router.push(link.href)
-                        }
-                      } else {
-                        router.push(link.href)
-                      }
+                      router.push(link.href)
                       if (opened) toggle() // Close mobile menu after navigation only if open
                     }}
                   />

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       query += ` WHERE m.status != 'complete'`;
     }
     
-    query += ` ORDER BY m.created_at DESC`;
+    query += ` ORDER BY m.start_time ASC`;
     
     const matches = await db.all<MatchDbRow>(query, params);
     
@@ -82,11 +82,13 @@ export async function POST(request: NextRequest) {
     const guildId = 'placeholder_guild';
     const channelId = 'placeholder_channel';
     
+    const startDateTime = startDate ? new Date(startDate).toISOString() : null;
+    
     await db.run(`
       INSERT INTO matches (
-        id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date,
+        id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date, start_time,
         rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcement_voice_channel, announcements, match_format
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       matchId,
       name,
@@ -96,7 +98,8 @@ export async function POST(request: NextRequest) {
       channelId,
       maxParticipants,
       'created',
-      startDate ? new Date(startDate).toISOString() : null,
+      startDateTime,
+      startDateTime,  // Using the same value for both start_date and start_time
       rules || null,
       rounds || null,
       maps && maps.length > 0 ? JSON.stringify(maps) : null,

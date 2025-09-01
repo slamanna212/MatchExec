@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { Database, getDatabase } from '../lib/database/connection';
+import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
 

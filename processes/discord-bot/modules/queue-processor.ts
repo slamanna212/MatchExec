@@ -151,7 +151,7 @@ export class QueueProcessor {
           }
 
           // Build event data object
-          let eventData: any = {
+          const eventData: any = {
             id: announcement.match_id,
             name: announcement.name,
             description: announcement.description || 'No description provided',
@@ -229,10 +229,10 @@ export class QueueProcessor {
               }
             }
 
-            // Mark as posted using CURRENT_TIMESTAMP like the original
+            // Mark as completed using CURRENT_TIMESTAMP like the original
             await this.db.run(`
               UPDATE discord_announcement_queue 
-              SET status = 'posted', posted_at = CURRENT_TIMESTAMP
+              SET status = 'completed', posted_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [announcement.id]);
 
@@ -333,7 +333,7 @@ export class QueueProcessor {
           // Mark deletion as completed
           await this.db.run(`
             UPDATE discord_deletion_queue 
-            SET status = 'processed', processed_at = datetime('now')
+            SET status = 'completed', processed_at = datetime('now')
             WHERE id = ?
           `, [deletion.id]);
 
@@ -392,7 +392,7 @@ export class QueueProcessor {
           }
           
           // Mark as completed or failed based on result
-          const finalStatus = success ? 'processed' : 'failed';
+          const finalStatus = success ? 'completed' : 'failed';
           const errorMessage = success ? null : 'Failed to update Discord messages';
           
           await this.db.run(`
@@ -482,7 +482,7 @@ export class QueueProcessor {
           });
           
           // Mark as completed or failed based on result
-          const status = success ? 'sent' : 'failed';
+          const status = success ? 'completed' : 'failed';
           await this.db.run(`
             UPDATE discord_reminder_queue 
             SET status = ?, sent_at = datetime('now')
@@ -553,7 +553,7 @@ export class QueueProcessor {
             // Mark as completed since this is expected behavior
             await this.db.run(`
               UPDATE discord_player_reminder_queue 
-              SET status = 'skipped', sent_at = datetime('now')
+              SET status = 'completed', sent_at = datetime('now')
               WHERE id = ?
             `, [reminder.id]);
             continue;
@@ -563,7 +563,7 @@ export class QueueProcessor {
           const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
           
           // Mark as completed or failed based on result
-          const status = success ? 'sent' : 'failed';
+          const status = success ? 'completed' : 'failed';
           await this.db.run(`
             UPDATE discord_player_reminder_queue 
             SET status = ?, sent_at = datetime('now')
@@ -777,10 +777,10 @@ export class QueueProcessor {
           const result = await this.announcementHandler.postMapScoreNotification(scoreData);
           
           if (result && typeof result === 'object' && result.success) {
-            // Mark as sent
+            // Mark as completed
             await this.db.run(`
               UPDATE discord_score_notification_queue 
-              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [notification.id]);
 
@@ -943,7 +943,7 @@ export class QueueProcessor {
             // Mark as completed
             await this.db.run(`
               UPDATE discord_map_code_queue 
-              SET status = 'processed', processed_at = datetime('now')
+              SET status = 'completed', processed_at = datetime('now')
               WHERE id = ?
             `, [mapCodeRequest.id]);
 
@@ -1039,10 +1039,10 @@ export class QueueProcessor {
           const result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
           
           if (result && typeof result === 'object' && result.success) {
-            // Mark as sent
+            // Mark as completed
             await this.db.run(`
               UPDATE discord_match_winner_queue 
-              SET status = 'sent', sent_at = CURRENT_TIMESTAMP
+              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
               WHERE id = ?
             `, [notification.id]);
 

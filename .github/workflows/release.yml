@@ -9,12 +9,24 @@ on:
       - 'docs/**'
 
 jobs:
-  release:
+  build:
     if: "!contains(github.event.head_commit.message, '[skip release]')"
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
-      contents: write
+      contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    outputs:
+      version: ${{ steps.package_version.outputs.version }}
+      tag_exists: ${{ steps.check_tag.outputs.exists }}
     
     steps:
     - name: Checkout code
@@ -50,24 +62,71 @@ jobs:
 
           ## 🎮 Game Data
           
-          **Docker Image:** `ghcr.io/${{ github.repository_owner }}/matchexec:v${{ steps.package_version.outputs.version }}`
+          **Docker Image:** `ghcr.io/${{ github.actor }}/matchexec:v${{ steps.package_version.outputs.version }}`
         draft: true
         prerelease: false
-        
+    
+    - name: Set up Docker Buildx
+      if: steps.check_tag.outputs.exists == 'false'
+      uses: docker/setup-buildx-action@v3
+      
     - name: Log in to GitHub Container Registry
       if: steps.check_tag.outputs.exists == 'false'
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.repository_owner }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        
+      run: |
+        echo ${{ secrets.GHCR_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+
     - name: Build and push production Docker image
       if: steps.check_tag.outputs.exists == 'false'
       uses: docker/build-push-action@v6
       with:
         context: .
+        platforms: linux/${{ matrix.platform }}
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/matchexec:v${{ steps.package_version.outputs.version }}
-          ghcr.io/${{ github.repository_owner }}/matchexec:latest
+          ghcr.io/${{ github.actor }}/matchexec:v${{ steps.package_version.outputs.version }}-${{ matrix.platform }}
+          ghcr.io/${{ github.actor }}/matchexec:latest-${{ matrix.platform }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  release:
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+      packages: write
+      
+    steps:
+    - name: Log in to GitHub Container Registry
+      if: needs.build.outputs.tag_exists == 'false'
+      run: |
+        echo ${{ secrets.GHCR_TOKEN }} | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+        
+    - name: Create and push manifest
+      if: needs.build.outputs.tag_exists == 'false'
+      run: |
+        docker buildx imagetools create -t ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }} \
+          ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}-amd64 \
+          ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}-arm64
+        docker buildx imagetools create -t ghcr.io/${{ github.actor }}/matchexec:latest \
+          ghcr.io/${{ github.actor }}/matchexec:latest-amd64 \
+          ghcr.io/${{ github.actor }}/matchexec:latest-arm64
+          
+    - name: Create Release
+      if: needs.build.outputs.tag_exists == 'false'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.build.outputs.version }}
+        release_name: Release v${{ needs.build.outputs.version }}
+        body: |
+          ## 🐛 Bug Fixes
+          
+          ## ✨ New Features
+
+          ## 🎮 Game Data
+          
+          **Docker Image:** `ghcr.io/${{ github.actor }}/matchexec:v${{ needs.build.outputs.version }}`
+        draft: true
+        prerelease: false

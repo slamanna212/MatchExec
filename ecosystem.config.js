@@ -6,31 +6,38 @@ module.exports = {
       args: 'server.js',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        HOSTNAME: '0.0.0.0'
       }
     },
     {
       name: 'discord-bot',
-      script: 'npx',
-      args: 'tsx ./processes/discord-bot/index.ts',
+      script: './processes/discord-bot/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     },
     {
       name: 'scheduler',
-      script: 'npx',
-      args: 'tsx ./processes/scheduler/index.ts',
+      script: './processes/scheduler/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     },
     {
       name: 'worker',
-      script: 'npx',
-      args: 'tsx ./processes/worker/index.ts',
+      script: './processes/worker/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
     }
   ]

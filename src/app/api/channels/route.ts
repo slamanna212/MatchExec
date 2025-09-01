@@ -96,23 +96,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get guild_id from discord_settings
+    const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1') as { guild_id?: string } | undefined;
+    
+    if (!discordSettings?.guild_id) {
+      return NextResponse.json(
+        { error: 'Discord guild not configured' },
+        { status: 400 }
+      );
+    }
+
     // Generate unique ID
     const channelId = `discord_channel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+    // Map channel_type to Discord integer type
+    const discordType = channel_type === 'text' ? 0 : 2; // 0=text, 2=voice
 
     await db.run(`
       INSERT INTO discord_channels (
         id, 
+        guild_id,
         discord_channel_id, 
+        name,
+        type,
         channel_type,
         send_announcements,
         send_reminders,
         send_match_start,
         send_signup_updates
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       channelId,
+      discordSettings.guild_id,
       discord_channel_id,
+      `Channel ${discord_channel_id}`, // Default name, will be updated when names are refreshed
+      discordType,
       channel_type,
       channel_type === 'text' ? (send_announcements ? 1 : 0) : 0,
       channel_type === 'text' ? (send_reminders ? 1 : 0) : 0,

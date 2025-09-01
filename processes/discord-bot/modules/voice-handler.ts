@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import {
   joinVoiceChannel,
   createAudioPlayer,
@@ -136,7 +137,6 @@ export class VoiceHandler {
       const fullPath = path.join(voiceDir, filename);
       
       // Check if file exists using fs
-      const fs = require('fs');
       if (!fs.existsSync(fullPath)) {
         console.warn(`⚠️ Audio file not found: ${fullPath}`);
         return null;
@@ -154,7 +154,6 @@ export class VoiceHandler {
    */
   private async getAvailableAudioFiles(voiceDir: string, audioType: string): Promise<string[]> {
     try {
-      const fs = require('fs');
       
       if (!fs.existsSync(voiceDir)) {
         return [];

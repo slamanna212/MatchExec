@@ -392,11 +392,14 @@ export function CreateMatchPage() {
     };
 
     const newSelectedMaps = [...selectedMaps, selectedMap];
-    const newMapIds = [...(formData.maps || []), timestampedId];
+    const newMapIds = newSelectedMaps.map(m => m.id);
     
     setSelectedMaps(newSelectedMaps);
-    updateFormData('maps', newMapIds);
-    updateFormData('rounds', newMapIds.length);
+    setFormData(prev => ({ 
+      ...prev, 
+      maps: newMapIds,
+      rounds: newMapIds.length 
+    }));
     setShowMapSelector(false);
     setSelectedMode('');
     setMapsForMode([]);
@@ -434,11 +437,14 @@ export function CreateMatchPage() {
     };
 
     const newSelectedMaps = [...selectedMaps, selectedMap];
-    const newMapIds = [...(formData.maps || []), combinedId];
+    const newMapIds = newSelectedMaps.map(m => m.id);
     
     setSelectedMaps(newSelectedMaps);
-    updateFormData('maps', newMapIds);
-    updateFormData('rounds', newMapIds.length);
+    setFormData(prev => ({ 
+      ...prev, 
+      maps: newMapIds,
+      rounds: newMapIds.length 
+    }));
     setShowMapSelector(false);
     setSelectedMode('');
     setMapsForMode([]);
@@ -447,11 +453,14 @@ export function CreateMatchPage() {
 
   const handleRemoveMap = (mapId: string) => {
     const newSelectedMaps = selectedMaps.filter(map => map.id !== mapId);
-    const newMapIds = (formData.maps || []).filter(id => id !== mapId);
+    const newMapIds = newSelectedMaps.map(m => m.id);
     
     setSelectedMaps(newSelectedMaps);
-    updateFormData('maps', newMapIds);
-    updateFormData('rounds', newMapIds.length);
+    setFormData(prev => ({ 
+      ...prev, 
+      maps: newMapIds,
+      rounds: newMapIds.length 
+    }));
   };
 
   const handleAddMapClick = () => {

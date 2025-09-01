@@ -27,7 +27,7 @@ interface ReminderData {
   id: string;
   match_id: string;
   reminder_time: string;
-  status: 'pending' | 'sent' | 'failed' | 'processed' | 'posted' | 'scheduled';
+  status: 'pending' | 'sent' | 'failed' | 'processed' | 'completed' | 'scheduled';
   error_message?: string;
   created_at: string;
   sent_at?: string;
@@ -544,14 +544,14 @@ export function MatchDetailsModal({
                                 size="xs" 
                                 variant="light"
                                 color={
-                                  reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'posted' ? 'green' :
+                                  reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'completed' ? 'green' :
                                   reminder.status === 'failed' ? 'red' :
                                   reminder.status === 'scheduled' ? 'blue' :
                                   'yellow'
                                 }
                                 style={{ textTransform: 'none' }}
                               >
-                                {reminder.status === 'processed' || reminder.status === 'posted' ? 'Sent' : 
+                                {reminder.status === 'processed' || reminder.status === 'completed' ? 'Sent' : 
                                  reminder.status === 'scheduled' ? 'Scheduled' :
                                  reminder.status === 'pending' ? 'Pending' :
                                  reminder.status === 'failed' ? 'Failed' :
@@ -745,12 +745,12 @@ export function MatchDetailsModal({
                                   size="xs" 
                                   variant="light"
                                   color={
-                                    reminder.status === 'sent' || reminder.status === 'processed' ? 'green' :
+                                    reminder.status === 'sent' || reminder.status === 'processed' || reminder.status === 'completed' ? 'green' :
                                     reminder.status === 'failed' ? 'red' :
                                     'yellow'
                                   }
                                 >
-                                  {reminder.status === 'processed' ? 'Sent' : reminder.status}
+                                  {reminder.status === 'processed' || reminder.status === 'completed' ? 'Sent' : reminder.status}
                                 </Badge>
                               </Group>
                               

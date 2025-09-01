@@ -76,7 +76,7 @@ export default function DiscordSetupPage() {
     <Stack gap="lg">
       <div>
         <Title order={1} ta="center" mb="xs">
-          Discord Bot Setup
+          Discord Bot Setup 🤖
         </Title>
         <Text ta="center" c="dimmed">
           Configure your Discord bot to start managing matches
@@ -88,7 +88,7 @@ export default function DiscordSetupPage() {
           Need help setting up your Discord bot?
         </Text>
         <Anchor 
-          href="https://github.com/slamanna212/MatchExec/wiki/Running-MatchExec#discord-setup" 
+          href="https://github.com/slamanna212/MatchExec/wiki/Setting-Up-MatchExec#discord-setup" 
           size="sm" 
           target="_blank" 
           rel="noopener noreferrer"

@@ -79,7 +79,16 @@ const MatchCard = memo(({
       bg={colorScheme === 'light' ? 'white' : undefined}
       style={{ 
         cursor: 'pointer',
+        transition: 'all 0.2s ease',
         borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(match)}
     >
@@ -151,8 +160,8 @@ const MatchCard = memo(({
           <Text size="sm">{match.max_participants}</Text>
         </Group>
         <Group justify="space-between">
-          <Text size="sm" c="dimmed">Created:</Text>
-          <Text size="sm">{parseDbTimestamp(match.created_at)?.toLocaleDateString('en-US') || 'N/A'}</Text>
+          <Text size="sm" c="dimmed">Starts:</Text>
+          <Text size="sm">{parseDbTimestamp(match.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
         </Group>
       </Stack>
       

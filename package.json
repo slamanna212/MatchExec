@@ -1,12 +1,12 @@
 {
   "name": "match-bot",
-  "version": "0.2.0",
+  "version": "0.2.5",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "migrate": "npx tsx scripts/migrate.ts",
     "dev:all": "npm run migrate && npx pm2 start ecosystem.dev.config.js",
     "dev:stop": "npx pm2 stop ecosystem.dev.config.js",
