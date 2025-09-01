@@ -187,7 +187,7 @@ export class VoiceHandler {
       // Stop any existing audio player for this channel
       const existingPlayer = this.activeAudioPlayers.get(channelId);
       if (existingPlayer) {
-        existingPlayer.stop();
+        (existingPlayer as any).stop();
         this.activeAudioPlayers.delete(channelId);
       }
 
@@ -239,7 +239,7 @@ export class VoiceHandler {
             setTimeout(() => {
               try {
                 if (connection.state.status !== 'destroyed') {
-                  connection.destroy();
+                  (connection as any).destroy();
                 }
                 this.voiceConnections.delete(channelId);
               } catch (error) {
@@ -254,7 +254,7 @@ export class VoiceHandler {
         // Set a timeout to ensure we don't hang indefinitely
         const timeout = setTimeout(() => {
           if (!isResolved) {
-            player.stop();
+            (player as any).stop();
             cleanup();
             resolve(false);
           }
@@ -291,7 +291,7 @@ export class VoiceHandler {
       // Stop any active audio player
       const player = this.activeAudioPlayers.get(channelId);
       if (player) {
-        player.stop();
+        (player as any).stop();
         this.activeAudioPlayers.delete(channelId);
       }
 
@@ -301,7 +301,7 @@ export class VoiceHandler {
       // Disconnect from voice channel
       const connection = this.voiceConnections.get(channelId);
       if (connection) {
-        connection.destroy();
+        (connection as any).destroy();
         this.voiceConnections.delete(channelId);
         return true;
       }
@@ -316,7 +316,7 @@ export class VoiceHandler {
     // Stop all active audio players
     for (const [channelId, player] of this.activeAudioPlayers) {
       try {
-        player.stop();
+        (player as any).stop();
       } catch (error) {
         console.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
       }
@@ -329,7 +329,7 @@ export class VoiceHandler {
     // Disconnect from all voice channels
     for (const [channelId, connection] of this.voiceConnections) {
       try {
-        connection.destroy();
+        (connection as any).destroy();
       } catch (error) {
         console.error(`❌ Error disconnecting from voice channel ${channelId}:`, error);
       }

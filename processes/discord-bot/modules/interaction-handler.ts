@@ -23,7 +23,12 @@ export class InteractionHandler {
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null,
-    private sendSignupNotification: (eventId: string, signupInfo: Record<string, unknown>) => Promise<void>
+    private sendSignupNotification: (eventId: string, signupInfo: {
+      username: string;
+      discordUserId: string;
+      signupData: {[key: string]: string};
+      participantCount: number;
+    }) => Promise<void>
   ) {}
 
   async registerSlashCommands() {

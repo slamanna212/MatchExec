@@ -97,8 +97,8 @@ export class ReminderHandler {
           successCount++;
 
         } catch (_error) {
-          failureCount++;
-          console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, error);
+          // failureCount++; // Commented out unused variable
+          console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, _error);
         }
       }
 
@@ -107,7 +107,7 @@ export class ReminderHandler {
       return successCount > 0; // Success if at least one DM was sent
 
     } catch (_error) {
-      console.error('❌ Error sending player reminders:', error);
+      console.error('❌ Error sending player reminders:', _error);
       return false;
     }
   }
@@ -240,7 +240,7 @@ export class ReminderHandler {
             successCount++;
           }
         } catch (_error) {
-          console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
+          console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, _error);
         }
       }
 
@@ -252,7 +252,7 @@ export class ReminderHandler {
       return true;
 
     } catch (_error) {
-      console.error('❌ Error sending signup notification:', error);
+      console.error('❌ Error sending signup notification:', _error);
       return false;
     }
   }
@@ -284,7 +284,7 @@ export class ReminderHandler {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
       } catch (_error) {
-        console.error('Error parsing game color:', error);
+        console.error('Error parsing game color:', _error);
       }
     }
 
@@ -422,16 +422,16 @@ export class ReminderHandler {
           successCount++;
 
         } catch (_error) {
-          failureCount++;
-          console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, error);
+          // failureCount++; // Commented out unused variable
+          console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, _error);
         }
       }
 
-      console.log(`📱 Map code PMs sent: ${successCount} successful, ${failureCount} failed`);
+      console.log(`📱 Map code PMs sent: ${successCount} successful`);
       return successCount > 0; // Success if at least one DM was sent
 
     } catch (_error) {
-      console.error('❌ Error sending map code PMs:', error);
+      console.error('❌ Error sending map code PMs:', _error);
       return false;
     }
   }
@@ -455,7 +455,7 @@ export class ReminderHandler {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
       } catch (_error) {
-        console.error('Error parsing game color:', error);
+        console.error('Error parsing game color:', _error);
       }
     }
 
@@ -551,7 +551,7 @@ export class ReminderHandler {
       }));
 
     } catch (_error) {
-      console.error(`Error fetching channels for ${notificationType}:`, error);
+      console.error(`Error fetching channels for ${notificationType}:`, _error);
       return [];
     }
   }
