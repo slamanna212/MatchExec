@@ -89,7 +89,7 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
+        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
           <Group h="100%" px="md">
             <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
             <Image
@@ -101,7 +101,7 @@ export function Navigation({ children }: NavigationProps) {
             />
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+        <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
           <AppShell.Section>
             <Group mb="md" justify="center" hiddenFrom="base" visibleFrom="md">
               <Image
@@ -137,7 +137,7 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md" style={{ backgroundColor: '#241459' }}>
+      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
         <Group h="100%" px="md">
           <Burger 
             opened={opened} 
@@ -156,7 +156,7 @@ export function Navigation({ children }: NavigationProps) {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md" style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+      <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center" hiddenFrom="base" visibleFrom="md">
             <Image
