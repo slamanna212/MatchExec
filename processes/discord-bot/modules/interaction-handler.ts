@@ -23,7 +23,7 @@ export class InteractionHandler {
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null,
-    private sendSignupNotification: (eventId: string, signupInfo: any) => Promise<void>
+    private sendSignupNotification: (eventId: string, signupInfo: Record<string, unknown>) => Promise<void>
   ) {}
 
   async registerSlashCommands() {
@@ -42,10 +42,10 @@ export class InteractionHandler {
       const rest = new REST().setToken(this.settings.bot_token);
       
 
-      const data = await rest.put(
+      await rest.put(
         Routes.applicationGuildCommands(this.client.user!.id, this.settings.guild_id),
         { body: commands }
-      ) as any[];
+      );
 
     } catch (error) {
       console.error('❌ Error registering slash commands:', error);
@@ -224,7 +224,7 @@ export class InteractionHandler {
             if (field.id === 'username' || field.id === 'battlenet_name') {
               displayUsername = value;
             }
-          } catch (e) {
+          } catch (_e) {
             // Field might not exist in modal if we hit the 5-field limit
             if (field.required) {
               throw new Error(`Required field ${field.id} is missing`);

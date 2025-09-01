@@ -14,8 +14,8 @@ import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
 
 export class VoiceHandler {
-  private voiceConnections = new Map<string, any>(); // channelId -> connection
-  private activeAudioPlayers = new Map<string, any>(); // channelId -> player
+  private voiceConnections = new Map<string, unknown>(); // channelId -> connection
+  private activeAudioPlayers = new Map<string, unknown>(); // channelId -> player
   private playbackStatus = new Map<string, boolean>(); // channelId -> isPlaying
 
   constructor(
@@ -24,7 +24,7 @@ export class VoiceHandler {
     private settings: DiscordSettings | null
   ) {}
 
-  async testVoiceLineForUser(userId: string, voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
+  async testVoiceLineForUser(userId: string, _voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
     try {
       if (!this.client.isReady()) {
         return { success: false, message: 'Discord bot is not ready' };

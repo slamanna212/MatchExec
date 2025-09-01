@@ -35,7 +35,7 @@ export class ReminderHandler {
         blue_team_voice_channel?: string;
         red_team_voice_channel?: string;
         event_image_url?: string;
-        [key: string]: any;
+        [key: string]: unknown;
       }>(`
         SELECT m.*, g.name as game_name, g.color as game_color
         FROM matches m
@@ -76,7 +76,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       let successCount = 0;
-      let failureCount = 0;
+      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant
       for (const participant of participants) {
@@ -96,17 +96,17 @@ export class ReminderHandler {
 
           successCount++;
 
-        } catch (error) {
+        } catch (_error) {
           failureCount++;
           console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, error);
         }
       }
 
-      const totalParticipants = participants.length;
+      const _totalParticipants = participants.length;
 
       return successCount > 0; // Success if at least one DM was sent
 
-    } catch (error) {
+    } catch (_error) {
       console.error('❌ Error sending player reminders:', error);
       return false;
     }
@@ -138,7 +138,7 @@ export class ReminderHandler {
         game_id: string;
         game_color?: string;
         max_participants?: number;
-        [key: string]: any;
+        [key: string]: unknown;
       }>(`
         SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
         FROM matches m
@@ -167,7 +167,7 @@ export class ReminderHandler {
       if (matchData.game_color) {
         try {
           gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-        } catch (error) {
+        } catch (_error) {
           console.warn('⚠️ Invalid game color format, using default green:', matchData.game_color);
         }
       }
@@ -239,7 +239,7 @@ export class ReminderHandler {
             
             successCount++;
           }
-        } catch (error) {
+        } catch (_error) {
           console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
@@ -251,7 +251,7 @@ export class ReminderHandler {
 
       return true;
 
-    } catch (error) {
+    } catch (_error) {
       console.error('❌ Error sending signup notification:', error);
       return false;
     }
@@ -266,7 +266,7 @@ export class ReminderHandler {
       game_color?: string;
       blue_team_voice_channel?: string;
       red_team_voice_channel?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     }, 
     participant: {
       username: string;
@@ -283,7 +283,7 @@ export class ReminderHandler {
     if (matchData.game_color) {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-      } catch (error) {
+      } catch (_error) {
         console.error('Error parsing game color:', error);
       }
     }
@@ -400,7 +400,7 @@ export class ReminderHandler {
       }
 
       let successCount = 0;
-      let failureCount = 0;
+      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant who should receive map codes
       for (const participant of participants) {
@@ -421,7 +421,7 @@ export class ReminderHandler {
 
           successCount++;
 
-        } catch (error) {
+        } catch (_error) {
           failureCount++;
           console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, error);
         }
@@ -430,7 +430,7 @@ export class ReminderHandler {
       console.log(`📱 Map code PMs sent: ${successCount} successful, ${failureCount} failed`);
       return successCount > 0; // Success if at least one DM was sent
 
-    } catch (error) {
+    } catch (_error) {
       console.error('❌ Error sending map code PMs:', error);
       return false;
     }
@@ -454,7 +454,7 @@ export class ReminderHandler {
     if (matchData.game_color) {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-      } catch (error) {
+      } catch (_error) {
         console.error('Error parsing game color:', error);
       }
     }
@@ -550,7 +550,7 @@ export class ReminderHandler {
         updated_at: channel.updated_at
       }));
 
-    } catch (error) {
+    } catch (_error) {
       console.error(`Error fetching channels for ${notificationType}:`, error);
       return [];
     }

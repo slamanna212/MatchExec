@@ -4,7 +4,7 @@ import { SchedulerSettings } from '../../shared/types';
 
 class MatchExecScheduler {
   private isRunning = false;
-  private db: any;
+  private db: unknown;
   private cronJobs: cron.ScheduledTask[] = [];
 
   async start() {
@@ -428,7 +428,7 @@ class MatchExecScheduler {
     }
   }
 
-  private async queueTimedAnnouncement(matchId: string, announcement: any): Promise<boolean> {
+  private async queueTimedAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
       const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

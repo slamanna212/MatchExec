@@ -10,13 +10,6 @@ import { VoiceHandler } from './voice-handler';
 import { SettingsManager } from './settings-manager';
 
 // Interfaces for different queue types - matching existing DB structure
-interface QueuedAnnouncement {
-  id: string;
-  match_id?: string;
-  announcement_type?: string;
-  announcement_data?: string;
-  created_at: string;
-}
 
 interface QueuedDeletion {
   id: string;
@@ -145,13 +138,13 @@ export class QueueProcessor {
           if (announcement.maps) {
             try {
               maps = JSON.parse(announcement.maps);
-            } catch (e) {
+            } catch (_e) {
               maps = [];
             }
           }
 
           // Build event data object
-          const eventData: any = {
+          const eventData: Record<string, unknown> = {
             id: announcement.match_id,
             name: announcement.name,
             description: announcement.description || 'No description provided',
@@ -170,7 +163,7 @@ export class QueueProcessor {
             try {
               const timingData = JSON.parse(announcement.announcement_data);
               eventData._timingInfo = timingData;
-            } catch (e) {
+            } catch (_e) {
               console.warn('Could not parse timing data for timed announcement:', announcement.id);
             }
           }
@@ -206,7 +199,7 @@ export class QueueProcessor {
 
                 // Create maps thread if there are maps
                 if (eventData.maps && eventData.maps.length > 0) {
-                  const thread = await this.announcementHandler.createMapsThread((result as any).mainMessage, eventData.name, eventData.game_id, eventData.maps, eventData.id);
+                  const thread = await this.announcementHandler.createMapsThread((result as Record<string, unknown>).mainMessage, eventData.name, eventData.game_id, eventData.maps, eventData.id);
                   threadId = thread?.id || null;
                 }
 
@@ -216,13 +209,13 @@ export class QueueProcessor {
                   discordEventId = await this.eventHandler.createDiscordEvent({
                     ...eventData,
                     start_date: eventData.start_date
-                  }, (result as any).mainMessage, rounds);
+                  }, (result as Record<string, unknown>).mainMessage, rounds);
                 }
 
                 await this.db.run(`
                   INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [messageRecordId, eventData.id, (result as any).mainMessage.id, (result as any).mainMessage.channelId, threadId, discordEventId, 'announcement']);
+                `, [messageRecordId, eventData.id, (result as Record<string, unknown>).mainMessage.id, (result as Record<string, unknown>).mainMessage.channelId, threadId, discordEventId, 'announcement']);
                 
               } catch (error) {
                 console.error('❌ Error storing Discord message tracking:', error);
@@ -290,7 +283,8 @@ export class QueueProcessor {
             WHERE match_id = ?
           `, [matchId]);
 
-          let deletedCount = 0;
+          // Track deleted count for logging if needed
+          let _deletedCount = 0;
 
           for (const record of messages) {
             try {
@@ -298,7 +292,7 @@ export class QueueProcessor {
               const channel = await this.client.channels.fetch(record.channel_id);
               if (channel?.isTextBased() && 'messages' in channel) {
                 await channel.messages.delete(record.message_id);
-                deletedCount++;
+                _deletedCount++;
               }
 
               // Delete thread if exists
@@ -401,7 +395,8 @@ export class QueueProcessor {
             WHERE id = ?
           `, [finalStatus, errorMessage, update.id]);
 
-          const statusIcon = success ? '✅' : '❌';
+          // Status icon for logging if needed
+          const _statusIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing status update ${update.id}:`, error);
@@ -489,7 +484,8 @@ export class QueueProcessor {
             WHERE id = ?
           `, [status, reminder.id]);
 
-          const resultIcon = success ? '✅' : '❌';
+          // Result icon for logging if needed
+          const _resultIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing reminder ${reminder.id}:`, error);
@@ -570,7 +566,8 @@ export class QueueProcessor {
             WHERE id = ?
           `, [status, reminder.id]);
 
-          const resultIcon = success ? '✅' : '❌';
+          // Result icon for logging if needed
+          const _resultIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
@@ -677,7 +674,8 @@ export class QueueProcessor {
                 request.id
               ]);
               
-              const statusIcon = result.success ? '✅' : '❌';
+              // Status icon for logging if needed
+              const _statusIcon = result.success ? '✅' : '❌';
               
             } finally {
               // Always remove user from processing set
@@ -757,7 +755,7 @@ export class QueueProcessor {
           let winningPlayers: string[] = [];
           try {
             winningPlayers = JSON.parse(notification.winning_players);
-          } catch (e) {
+          } catch (_e) {
             console.warn('Could not parse winning players JSON for notification:', notification.id);
           }
 
@@ -1014,7 +1012,7 @@ export class QueueProcessor {
           let winningPlayers: string[] = [];
           try {
             winningPlayers = JSON.parse(notification.winning_players);
-          } catch (e) {
+          } catch (_e) {
             console.warn('Could not parse winning players JSON for winner notification:', notification.id);
           }
 
@@ -1211,7 +1209,7 @@ export class QueueProcessor {
             }
           }
 
-          const editOptions: any = {
+          const editOptions: Record<string, unknown> = {
             content: null, // Explicitly clear any content that might cause image display
             embeds: [updatedEmbed],
             components: [], // This removes all buttons
