@@ -11,6 +11,12 @@ const compat = new FlatCompat({
 
 const eslintConfig = [{
   ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts"]
-}, ...compat.extends("next/core-web-vitals", "next/typescript")];
+}, ...compat.extends("next/core-web-vitals", "next/typescript"), {
+  files: ["processes/**/*.ts"],
+  rules: {
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-ts-comment": "off"
+  }
+}];
 
 export default eslintConfig;
