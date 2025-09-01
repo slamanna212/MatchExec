@@ -1,6 +1,6 @@
 {
   "name": "match-bot",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
@@ -12,7 +12,7 @@
     "dev:stop": "npx pm2 stop ecosystem.dev.config.js",
     "dev:restart": "npx pm2 restart ecosystem.dev.config.js",
     "dev:logs": "npx pm2 logs",
-    "build:processes": "npx tsx --tsconfig tsconfig.json processes/discord-bot/index.ts && npx tsx --tsconfig tsconfig.json processes/scheduler/index.ts && npx tsx --tsconfig tsconfig.json processes/worker/index.ts",
+    "build:processes": "npx tsc --noEmit --project tsconfig.json",
     "prod:start": "npm run migrate && npx pm2 start ecosystem.config.js",
     "prod:stop": "npx pm2 stop ecosystem.config.js",
     "version:patch": "npm version patch --no-git-tag-version",

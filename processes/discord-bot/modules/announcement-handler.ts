@@ -7,7 +7,8 @@ import {
   AttachmentBuilder,
   ButtonBuilder,
   ActionRowBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ThreadChannel
 } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings, DiscordChannel } from '../../../shared/types';
@@ -78,7 +79,12 @@ export class AnnouncementHandler {
       }
 
       // Prepare message options
-      const messageOptions: any = {
+      const messageOptions: {
+        content: string;
+        embeds: EmbedBuilder[];
+        components: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
         content: mentionText, // Add the mention above the embed
         embeds: [embed],
         components: [row]
@@ -125,7 +131,7 @@ export class AnnouncementHandler {
     }
   }
 
-  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<any> {
+  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<ThreadChannel | null> {
     try {
       // Create thread - using public thread for better visibility
       const thread = await message.startThread({
@@ -170,7 +176,10 @@ export class AnnouncementHandler {
         
         const mapEmbedData = await this.createMapEmbed(gameId, mapIdentifier, mapNumber, mapNote);
         if (mapEmbedData) {
-          const messageOptions: any = { embeds: [mapEmbedData.embed] };
+          const messageOptions: {
+            embeds: EmbedBuilder[];
+            files?: AttachmentBuilder[];
+          } = { embeds: [mapEmbedData.embed] };
           if (mapEmbedData.attachment) {
             messageOptions.files = [mapEmbedData.attachment];
           }
@@ -195,7 +204,7 @@ export class AnnouncementHandler {
     livestreamLink?: string,
     eventImageUrl?: string,
     startDate?: string,
-    matchId?: string
+    _matchId?: string
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     // Get game data from database for nice name and color
     let gameName = gameId;
@@ -282,6 +291,12 @@ export class AnnouncementHandler {
         mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
       }
       
+      // Add maps to embed
+      embed.addFields({
+        name: '🗺️ Maps',
+        value: mapDisplay || 'Maps will be announced',
+        inline: false
+      });
     }
 
     // Add livestream link if provided
@@ -534,7 +549,12 @@ export class AnnouncementHandler {
       const { embed, attachment } = await this.createTimedReminderEmbed(eventData);
 
       // No mention text for reminders - they're just notifications
-      const messageOptions: any = {
+      const messageOptions: {
+        content?: string;
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
         embeds: [embed]
       };
 
@@ -708,7 +728,12 @@ export class AnnouncementHandler {
       const { embed, attachment } = await this.createMatchStartEmbed(eventData);
 
       // Build message options
-      const messageOptions: any = {
+      const messageOptions: {
+        content?: string;
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
         embeds: [embed]
       };
 
@@ -1002,7 +1027,12 @@ export class AnnouncementHandler {
       const { embed, attachment } = await this.createMapScoreEmbed(scoreData);
 
       // Build message options
-      const messageOptions: any = {
+      const messageOptions: {
+        content?: string;
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
         embeds: [embed]
       };
 
@@ -1203,7 +1233,12 @@ export class AnnouncementHandler {
       const { embed, attachment } = await this.createMatchWinnerEmbed(winnerData);
 
       // Build message options
-      const messageOptions: any = {
+      const messageOptions: {
+        content?: string;
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
         embeds: [embed]
       };
 

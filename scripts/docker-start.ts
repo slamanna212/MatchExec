@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 
 import { spawn, exec } from 'child_process';
-import { promisify } from 'util';
+// import { promisify } from 'util'; // Currently unused
 
-const execAsync = promisify(exec);
+// const execAsync = promisify(exec); // Currently unused
 
 console.log('🚀 Starting MatchExec application...');
 

@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, SelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
+import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
 import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';

@@ -14,8 +14,8 @@ import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
 
 export class VoiceHandler {
-  private voiceConnections = new Map<string, any>(); // channelId -> connection
-  private activeAudioPlayers = new Map<string, any>(); // channelId -> player
+  private voiceConnections = new Map<string, unknown>(); // channelId -> connection
+  private activeAudioPlayers = new Map<string, unknown>(); // channelId -> player
   private playbackStatus = new Map<string, boolean>(); // channelId -> isPlaying
 
   constructor(
@@ -24,7 +24,7 @@ export class VoiceHandler {
     private settings: DiscordSettings | null
   ) {}
 
-  async testVoiceLineForUser(userId: string, voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
+  async testVoiceLineForUser(userId: string, _voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
     try {
       if (!this.client.isReady()) {
         return { success: false, message: 'Discord bot is not ready' };
@@ -187,7 +187,7 @@ export class VoiceHandler {
       // Stop any existing audio player for this channel
       const existingPlayer = this.activeAudioPlayers.get(channelId);
       if (existingPlayer) {
-        existingPlayer.stop();
+        (existingPlayer as unknown as { stop: () => void }).stop();
         this.activeAudioPlayers.delete(channelId);
       }
 
@@ -239,7 +239,7 @@ export class VoiceHandler {
             setTimeout(() => {
               try {
                 if (connection.state.status !== 'destroyed') {
-                  connection.destroy();
+                  (connection as unknown as { destroy: () => void }).destroy();
                 }
                 this.voiceConnections.delete(channelId);
               } catch (error) {
@@ -254,7 +254,7 @@ export class VoiceHandler {
         // Set a timeout to ensure we don't hang indefinitely
         const timeout = setTimeout(() => {
           if (!isResolved) {
-            player.stop();
+            (player as unknown as { stop: () => void }).stop();
             cleanup();
             resolve(false);
           }
@@ -291,7 +291,7 @@ export class VoiceHandler {
       // Stop any active audio player
       const player = this.activeAudioPlayers.get(channelId);
       if (player) {
-        player.stop();
+        (player as unknown as { stop: () => void }).stop();
         this.activeAudioPlayers.delete(channelId);
       }
 
@@ -301,7 +301,7 @@ export class VoiceHandler {
       // Disconnect from voice channel
       const connection = this.voiceConnections.get(channelId);
       if (connection) {
-        connection.destroy();
+        (connection as unknown as { destroy: () => void }).destroy();
         this.voiceConnections.delete(channelId);
         return true;
       }
@@ -316,7 +316,7 @@ export class VoiceHandler {
     // Stop all active audio players
     for (const [channelId, player] of this.activeAudioPlayers) {
       try {
-        player.stop();
+        (player as unknown as { stop: () => void }).stop();
       } catch (error) {
         console.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
       }
@@ -329,7 +329,7 @@ export class VoiceHandler {
     // Disconnect from all voice channels
     for (const [channelId, connection] of this.voiceConnections) {
       try {
-        connection.destroy();
+        (connection as unknown as { destroy: () => void }).destroy();
       } catch (error) {
         console.error(`❌ Error disconnecting from voice channel ${channelId}:`, error);
       }
