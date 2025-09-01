@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const http = require('http');
-const { execSync } = require('child_process');
+import http from 'http';
+import { execSync } from 'child_process';
 
 async function checkWebApp() {
   return new Promise((resolve) => {

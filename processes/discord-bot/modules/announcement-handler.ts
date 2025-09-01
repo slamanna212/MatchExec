@@ -135,7 +135,7 @@ export class AnnouncementHandler {
       });
 
       // Get map notes if matchId is provided
-      let mapNotes: Record<string, string> = {};
+      const mapNotes: Record<string, string> = {};
       if (matchId && this.db) {
         try {
           const notesResult = await this.db.all<{map_id: string, notes: string}>(`

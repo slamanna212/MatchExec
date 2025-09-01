@@ -151,7 +151,7 @@ export class QueueProcessor {
           }
 
           // Build event data object
-          let eventData: any = {
+          const eventData: any = {
             id: announcement.match_id,
             name: announcement.name,
             description: announcement.description || 'No description provided',

@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, SelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
 import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';
@@ -213,26 +213,31 @@ class MatchExecBot {
   }
 
   // Interaction handlers - delegate to InteractionHandler module
-  private async handleSlashCommand(interaction: any) {
+  private async handleSlashCommand(interaction: ChatInputCommandInteraction) {
     if (this.interactionHandler) {
       await this.interactionHandler.handleSlashCommand(interaction);
     }
   }
 
-  private async handleButtonInteraction(interaction: any) {
+  private async handleButtonInteraction(interaction: ButtonInteraction) {
     if (this.interactionHandler) {
       await this.interactionHandler.handleButtonInteraction(interaction);
     }
   }
 
-  private async handleModalSubmit(interaction: any) {
+  private async handleModalSubmit(interaction: ModalSubmitInteraction) {
     if (this.interactionHandler) {
       await this.interactionHandler.handleModalSubmit(interaction);
     }
   }
 
   // Signup notification method for InteractionHandler
-  private async sendSignupNotification(eventId: string, signupInfo: any) {
+  private async sendSignupNotification(eventId: string, signupInfo: {
+    username: string;
+    discordUserId: string;
+    signupData: {[key: string]: string};
+    participantCount: number;
+  }) {
     try {
       if (this.reminderHandler) {
         // Use reminder handler to send signup notifications
@@ -251,7 +256,19 @@ class MatchExecBot {
     return await this.voiceHandler.testVoiceLineForUser(userId, voiceId);
   }
 
-  async postEventAnnouncement(eventData: any) {
+  async postEventAnnouncement(eventData: {
+    id: string;
+    name: string;
+    description: string;
+    game_id: string;
+    type: 'competitive' | 'casual';
+    maps?: string[];
+    max_participants: number;
+    guild_id: string;
+    livestream_link?: string;
+    event_image_url?: string;
+    start_date?: string;
+  }) {
     if (!this.announcementHandler) {
       return false;
     }
@@ -340,6 +357,18 @@ export const testVoiceLineForUser = async (userId: string, voiceId?: string) => 
   return await bot.testVoiceLineForUser(userId, voiceId);
 };
 
-export const postEventAnnouncement = async (eventData: any) => {
+export const postEventAnnouncement = async (eventData: {
+  id: string;
+  name: string;
+  description: string;
+  game_id: string;
+  type: 'competitive' | 'casual';
+  maps?: string[];
+  max_participants: number;
+  guild_id: string;
+  livestream_link?: string;
+  event_image_url?: string;
+  start_date?: string;
+}) => {
   return await bot.postEventAnnouncement(eventData);
 };
