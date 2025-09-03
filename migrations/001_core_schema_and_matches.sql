@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS match_participants (
 CREATE TABLE IF NOT EXISTS match_games (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
-  game_number INTEGER NOT NULL,
+  round INTEGER NOT NULL DEFAULT 1,
   map_id TEXT,
   team_a TEXT,
   team_b TEXT,
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS match_games (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
-  UNIQUE(match_id, game_number)
+  UNIQUE(match_id, round)
 );
 
 -- Performance indexes
