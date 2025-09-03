@@ -117,24 +117,25 @@ CREATE TABLE IF NOT EXISTS match_participants (
 CREATE TABLE IF NOT EXISTS match_games (
   id TEXT PRIMARY KEY,
   match_id TEXT NOT NULL,
-  game_number INTEGER NOT NULL,
+  round INTEGER NOT NULL DEFAULT 1,
   map_id TEXT,
   team_a TEXT,
   team_b TEXT,
-  winner_team TEXT,
+  winner_id TEXT,
   participant_winner_id TEXT,
   participant1_id TEXT,
   participant2_id TEXT,
   is_ffa_mode BOOLEAN DEFAULT 0,
   score_a INTEGER DEFAULT 0,
   score_b INTEGER DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'not_started' CHECK (status IN ('not_started', 'in_progress', 'completed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ongoing', 'completed')),
   started_at DATETIME,
   completed_at DATETIME,
   notes TEXT DEFAULT '',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
-  UNIQUE(match_id, game_number)
+  UNIQUE(match_id, round)
 );
 
 -- Performance indexes
