@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS match_games (
   completed_at DATETIME,
   notes TEXT DEFAULT '',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
   UNIQUE(match_id, game_number)
 );
