@@ -32,6 +32,9 @@ const theme = createTheme({
       '#343a40',
       '#212529'
     ]
+  },
+  other: {
+    bodyColor: '#e8ebec'
   }
 })
 
