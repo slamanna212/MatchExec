@@ -96,13 +96,12 @@ export class ReminderHandler {
 
           successCount++;
 
-        } catch (_error) {
+        } catch {
           // failureCount++; // Commented out unused variable
           console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, _error);
         }
       }
 
-      const _totalParticipants = participants.length;
 
       return successCount > 0; // Success if at least one DM was sent
 
@@ -167,7 +166,7 @@ export class ReminderHandler {
       if (matchData.game_color) {
         try {
           gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-        } catch (_error) {
+        } catch {
           console.warn('⚠️ Invalid game color format, using default green:', matchData.game_color);
         }
       }
@@ -239,7 +238,7 @@ export class ReminderHandler {
             
             successCount++;
           }
-        } catch (_error) {
+        } catch {
           console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, _error);
         }
       }
@@ -421,7 +420,7 @@ export class ReminderHandler {
 
           successCount++;
 
-        } catch (_error) {
+        } catch {
           // failureCount++; // Commented out unused variable
           console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, _error);
         }

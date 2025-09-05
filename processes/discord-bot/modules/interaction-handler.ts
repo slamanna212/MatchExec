@@ -229,7 +229,7 @@ export class InteractionHandler {
             if (field.id === 'username' || field.id === 'battlenet_name') {
               displayUsername = value;
             }
-          } catch (_e) {
+          } catch {
             // Field might not exist in modal if we hit the 5-field limit
             if (field.required) {
               throw new Error(`Required field ${field.id} is missing`);

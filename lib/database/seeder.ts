@@ -223,12 +223,12 @@ export class DatabaseSeeder {
     await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
 
     // Check if any map has supportedModes array
-    const hasSupportedModes = mapsData.some(map => Array.isArray((map as any).supportedModes));
+    const hasSupportedModes = mapsData.some(map => Array.isArray((map as MapData & { supportedModes?: string[] }).supportedModes));
     
     if (hasSupportedModes) {
       // New approach: maps define their supported modes via supportedModes array
       for (const map of mapsData) {
-        const mapWithModes = map as any;
+        const mapWithModes = map as MapData & { supportedModes?: string[] };
         // Fix image URL by removing /public prefix for Next.js static assets
         let imageUrl = map.thumbnailUrl || null;
         if (imageUrl && imageUrl.startsWith('/public/')) {
