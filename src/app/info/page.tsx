@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, Text, Stack, Button, Group, Anchor } from '@mantine/core';
-import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord } from '@tabler/icons-react';
+import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly } from '@tabler/icons-react';
 
 export default function InfoPage() {
   return (
@@ -92,6 +92,15 @@ export default function InfoPage() {
                   rel="noopener noreferrer"
                 >
                   Discord
+                </Button>
+                <Button
+                  leftSection={<IconButterfly size="1rem" />}
+                  component="a"
+                  href="https://bsky.app/profile/matchexec.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Bluesky
                 </Button>
               </Group>
             </Stack>
