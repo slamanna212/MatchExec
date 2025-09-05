@@ -19,7 +19,21 @@
   background-color: #4c1d95 !important;
 }
 
-/* Override Mantine's light mode body background - must come after Mantine styles */
-:root[data-mantine-color-scheme='light'] {
-  --mantine-color-body: #f1f3f4;
+/* Override Mantine's body background - must come after Mantine styles */
+
+:root[data-mantine-color-scheme='dark'] {
+  --mantine-color-body: #101019;
+  --mantine-color-dark-6: #292933;
+  --mantine-color-dark-4: #3a3a44;
+  --paper-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
 }
+
+/* Override modal content and header backgrounds */
+[data-mantine-color-scheme='dark'] .m_54c44539,
+[data-mantine-color-scheme='dark'] .m_d0e2b9cd,
+[data-mantine-color-scheme='dark'] .m_9df02822 {
+  background-color: #131314;
+}
+
+
+
