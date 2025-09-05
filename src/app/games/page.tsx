@@ -28,6 +28,7 @@ interface GameMap {
   location?: string;
   modeName: string;
   modeDescription?: string;
+  supportedModes?: string;
 }
 
 interface GameMode {
@@ -272,9 +273,21 @@ export default function GamesPage() {
                   <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 'var(--mantine-spacing-xs)' }}>
                       <Text fw={500}>{map.name}</Text>
-                      <Badge variant="light" size="sm">
-                        {map.modeName}
-                      </Badge>
+                      <Group gap="xs">
+                        {map.supportedModes ? 
+                          map.supportedModes.split(',').map((mode: string, index: number) => (
+                            <Badge key={index} variant="light" size="sm">
+                              {mode.trim()}
+                            </Badge>
+                          )) : (
+                            map.modeName ? (
+                              <Badge variant="light" size="sm">
+                                {map.modeName}
+                              </Badge>
+                            ) : null
+                          )
+                        }
+                      </Group>
                       {map.location && (
                         <Text size="sm" c="dimmed">
                           {map.location}

@@ -222,7 +222,37 @@ export class DatabaseSeeder {
     // Clear existing maps for this game
     await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
 
-    if (supportsAllModes) {
+    // Check if any map has supportedModes array
+    const hasSupportedModes = mapsData.some(map => Array.isArray((map as any).supportedModes));
+    
+    if (hasSupportedModes) {
+      // New approach: maps define their supported modes via supportedModes array
+      for (const map of mapsData) {
+        const mapWithModes = map as any;
+        // Fix image URL by removing /public prefix for Next.js static assets
+        let imageUrl = map.thumbnailUrl || null;
+        if (imageUrl && imageUrl.startsWith('/public/')) {
+          imageUrl = imageUrl.replace('/public/', '/');
+        }
+
+        if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
+          // Create an entry for each supported mode
+          for (const modeId of mapWithModes.supportedModes) {
+            const mapIdWithMode = `${map.id}-${modeId}`;
+            await this.db.run(`
+              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `, [mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null]);
+          }
+        } else {
+          // Fallback: create with null mode_id
+          await this.db.run(`
+            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
+        }
+      }
+    } else if (supportsAllModes) {
       // For games that support all modes on all maps (like Valorant)
       // Get all modes for this game first
       const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
