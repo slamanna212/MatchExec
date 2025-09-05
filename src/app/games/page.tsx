@@ -317,7 +317,7 @@ export default function GamesPage() {
         opened={modesOpened}
         onClose={closeModes}
         title={selectedGame ? `${selectedGame.name} - Modes` : 'Modes'}
-        size="md"
+        size="lg"
         centered
       >
         {modalLoading ? (
