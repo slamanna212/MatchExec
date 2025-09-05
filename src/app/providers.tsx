@@ -22,7 +22,7 @@ const theme = createTheme({
     ],
     gray: [
       '#f8f9fa',
-      '#f1f3f4', // slightly darker for our background
+      '#e8ebec', // slightly darker for our background
       '#e9ecef',
       '#dee2e6',
       '#ced4da',
@@ -32,6 +32,9 @@ const theme = createTheme({
       '#343a40',
       '#212529'
     ]
+  },
+  other: {
+    bodyColor: '#e8ebec'
   }
 })
 

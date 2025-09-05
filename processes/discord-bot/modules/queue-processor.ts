@@ -138,7 +138,7 @@ export class QueueProcessor {
           if (announcement.maps) {
             try {
               maps = JSON.parse(announcement.maps);
-            } catch (_e) {
+            } catch {
               maps = [];
             }
           }
@@ -163,7 +163,7 @@ export class QueueProcessor {
             try {
               const timingData = JSON.parse(announcement.announcement_data);
               eventData._timingInfo = timingData;
-            } catch (_e) {
+            } catch {
               console.warn('Could not parse timing data for timed announcement:', announcement.id);
             }
           }
@@ -291,8 +291,6 @@ export class QueueProcessor {
             WHERE match_id = ?
           `, [matchId]);
 
-          // Track deleted count for logging if needed
-          let _deletedCount = 0;
 
           for (const record of messages) {
             try {
@@ -300,7 +298,6 @@ export class QueueProcessor {
               const channel = await this.client.channels.fetch(record.channel_id);
               if (channel?.isTextBased() && 'messages' in channel) {
                 await channel.messages.delete(record.message_id);
-                _deletedCount++;
               }
 
               // Delete thread if exists
@@ -403,8 +400,6 @@ export class QueueProcessor {
             WHERE id = ?
           `, [finalStatus, errorMessage, update.id]);
 
-          // Status icon for logging if needed
-          const _statusIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing status update ${update.id}:`, error);
@@ -492,8 +487,6 @@ export class QueueProcessor {
             WHERE id = ?
           `, [status, reminder.id]);
 
-          // Result icon for logging if needed
-          const _resultIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing reminder ${reminder.id}:`, error);
@@ -574,8 +567,6 @@ export class QueueProcessor {
             WHERE id = ?
           `, [status, reminder.id]);
 
-          // Result icon for logging if needed
-          const _resultIcon = success ? '✅' : '❌';
 
         } catch (error) {
           console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
@@ -682,8 +673,6 @@ export class QueueProcessor {
                 request.id
               ]);
               
-              // Status icon for logging if needed
-              const _statusIcon = result.success ? '✅' : '❌';
               
             } finally {
               // Always remove user from processing set
@@ -763,7 +752,7 @@ export class QueueProcessor {
           let winningPlayers: string[] = [];
           try {
             winningPlayers = JSON.parse(notification.winning_players);
-          } catch (_e) {
+          } catch {
             console.warn('Could not parse winning players JSON for notification:', notification.id);
           }
 
@@ -1020,7 +1009,7 @@ export class QueueProcessor {
           let winningPlayers: string[] = [];
           try {
             winningPlayers = JSON.parse(notification.winning_players);
-          } catch (_e) {
+          } catch {
             console.warn('Could not parse winning players JSON for winner notification:', notification.id);
           }
 

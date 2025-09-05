@@ -1,0 +1,142 @@
+[
+  {
+    "id": "ancient",
+    "name": "Ancient",
+    "supportedModes": ["premier", "normal", "deathmatch"],
+    "location": "Peru",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/ancient.jpg"
+  },
+  {
+    "id": "anubis",
+    "name": "Anubis",
+    "supportedModes": ["premier", "normal", "deathmatch"],
+    "location": "Egypt",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/anubis.jpg"
+  },
+  {
+    "id": "dust2",
+    "name": "Dust II",
+    "supportedModes": ["premier", "normal", "deathmatch"],
+    "location": "Morocco",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/dust2.jpg"
+  },
+  {
+    "id": "inferno",
+    "name": "Inferno",
+    "supportedModes": ["premier", "normal", "deathmatch", "wingman"],
+    "location": "Italy",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/inferno.jpeg"
+  },
+  {
+    "id": "mirage",
+    "name": "Mirage",
+    "supportedModes": ["premier", "normal", "deathmatch"],
+    "location": "Morocco",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/mirage.jpg"
+  },
+  {
+    "id": "nuke",
+    "name": "Nuke",
+    "supportedModes": ["premier", "normal", "deathmatch", "wingman"],
+    "location": "Germany",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/nuke.jpeg"
+  },
+  {
+    "id": "train",
+    "name": "Train",
+    "supportedModes": ["premier", "normal", "deathmatch"],
+    "location": "Russia",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/train.png"
+  },
+  {
+    "id": "overpass",
+    "name": "Overpass",
+    "supportedModes": ["normal", "deathmatch", "wingman"],
+    "location": "Germany",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/overpass.jpg"
+  },
+  {
+    "id": "vertigo",
+    "name": "Vertigo",
+    "supportedModes": ["normal", "deathmatch", "wingman"],
+    "location": "France",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/vertigo.jpeg"
+  },
+  {
+    "id": "grail",
+    "name": "Grail",
+    "supportedModes": ["normal", "deathmatch"],
+    "location": "Castle",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/grail.webp"
+  },
+  {
+    "id": "jura",
+    "name": "Jura",
+    "supportedModes": ["normal", "deathmatch"],
+    "location": "Switzerland",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/jura.webp"
+  },
+  {
+    "id": "office",
+    "name": "Office",
+    "supportedModes": ["normal", "deathmatch"],
+    "location": "Office Building",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/office.webp"
+  },
+  {
+    "id": "italy",
+    "name": "Italy",
+    "supportedModes": ["normal", "deathmatch"],
+    "location": "Italy",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/italy.webp"
+  },
+  {
+    "id": "agency",
+    "name": "Agency",
+    "supportedModes": ["normal", "deathmatch"],
+    "location": "Office Building",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/agency.webp"
+  },
+  {
+    "id": "brewery",
+    "name": "Brewery",
+    "supportedModes": ["wingman"],
+    "location": "Germany",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/brewery.webp"
+  },
+  {
+    "id": "dogtown",
+    "name": "Dogtown",
+    "supportedModes": ["wingman"],
+    "location": "Urban",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/dogtown.webp"
+  },
+  {
+    "id": "baggage",
+    "name": "Baggage",
+    "supportedModes": ["arms-race"],
+    "location": "Airport",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/baggage.webp"
+  },
+  {
+    "id": "shoots",
+    "name": "Shoots",
+    "supportedModes": ["arms-race"],
+    "location": "Western USA",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/shoots.webp"
+  },
+  {
+    "id": "pool-day",
+    "name": "Pool Day",
+    "supportedModes": ["arms-race"],
+    "location": "Resort",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/pool-day.webp"
+  },
+  {
+    "id": "custom-map",
+    "name": "Custom Map",
+    "supportedModes": ["premier", "normal", "deathmatch", "wingman", "arms-race", "hostage-rescue"],
+    "location": "Custom",
+    "thumbnailUrl": "/public/assets/games/cs2/maps/custom-map.jpg"
+  }
+]
