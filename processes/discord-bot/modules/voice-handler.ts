@@ -75,8 +75,34 @@ export class VoiceHandler {
       }
 
       if (!this.settings.announcer_voice) {
-        console.error('❌ No announcer voice selected');
-        return false;
+        console.error('❌ No announcer voice selected in settings:', {
+          voice_announcements_enabled: this.settings.voice_announcements_enabled,
+          announcer_voice: this.settings.announcer_voice,
+          guild_id: this.settings.guild_id
+        });
+        
+        // Try to get the first available voice as fallback
+        if (this.db) {
+          try {
+            const fallbackVoice = await this.db.get<{ id: string, name: string }>(`
+              SELECT id, name FROM voices LIMIT 1
+            `);
+            
+            if (fallbackVoice) {
+              console.log(`🔧 Using fallback voice: ${fallbackVoice.name} (${fallbackVoice.id})`);
+              // Temporarily use this voice for this announcement
+              this.settings.announcer_voice = fallbackVoice.id;
+            } else {
+              console.error('❌ No voices available in database');
+              return false;
+            }
+          } catch (error) {
+            console.error('❌ Error getting fallback voice:', error);
+            return false;
+          }
+        } else {
+          return false;
+        }
       }
 
       // Check if audio is already playing in this channel
@@ -355,7 +381,13 @@ export class VoiceHandler {
         return { success: false, message: 'Discord bot is not ready' };
       }
 
-      if (!this.settings?.voice_announcements_enabled) {
+      if (!this.settings) {
+        console.error('❌ Discord settings not loaded for team announcements');
+        return { success: false, message: 'Discord settings not loaded' };
+      }
+
+      if (!this.settings.voice_announcements_enabled) {
+        console.log('ℹ️ Voice announcements are disabled in settings');
         return { success: false, message: 'Voice announcements are disabled' };
       }
 
@@ -427,8 +459,8 @@ export class VoiceHandler {
       if (!this.db) return;
 
       await this.db.run(`
-        INSERT OR REPLACE INTO match_voice_alternation (match_id, last_first_team, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
+        INSERT OR REPLACE INTO match_voice_alternation (match_id, last_first_team, last_updated_at, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [matchId, firstTeam]);
 
       console.log(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
