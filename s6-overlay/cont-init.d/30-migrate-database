@@ -1,13 +1,13 @@
 #!/command/with-contenv bash
 
+echo "📊 Running database migrations and seeding..."
+
 # Ensure database directory exists and has correct permissions
 mkdir -p /app/app_data/data
 chown -R abc:abc /app/app_data
 
-echo "📊 Running database migrations and seeding..."
-
 # Run migrations as the abc user
 cd /app
-s6-setuidgid abc npx tsx scripts/migrate.ts
+s6-setuidgid abc tsx scripts/migrate.ts
 
 echo "✅ Database initialization completed"

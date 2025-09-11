@@ -1,10 +1,15 @@
 # MatchExec Match Bot
 
-A Discord match management bot built with Next.js, React, Mantine, and PM2 multi-process architecture.
+A Discord match management bot built with Next.js, React, Mantine, and multi-process architecture managed by PM2 (development) or s6-overlay (production/Docker).
 
 ## Architecture
 
-This project uses a multi-process architecture managed by PM2:
+This project uses a multi-process architecture with different process managers for different environments:
+
+**Development**: PM2 manages all processes with hot reload
+**Production/Docker**: s6-overlay manages processes in containerized environments
+
+### Core Processes
 
 1. **Web App** (`src/app/`): Next.js application with Mantine UI components
 2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for match commands
@@ -39,10 +44,30 @@ npm run dev:restart
 ```
 
 ## Production Using Docker
+
+The production Docker container uses s6-overlay as the init system to manage all processes.
+
+### Building and Running
 ```bash
+# Build the container
 docker build -t matchexec .
+
+# Run with environment file
 docker run -p 3000:3000 --env-file .env matchexec
+
+# Run for testing (no data persistence)
+docker run --rm -p 3000:3000 matchexec
 ```
+
+### s6-overlay Process Management
+
+The container uses s6-overlay v3 to manage processes:
+
+- **Automatic service startup**: All processes start automatically via s6 supervision
+- **Process dependencies**: Services wait for database migration to complete
+- **Graceful shutdown**: Proper signal handling for clean container stops
+- **Process restart**: Failed processes are automatically restarted
+- **User management**: Processes run as non-root user for security
 
 ## Project Structure
 
@@ -70,9 +95,20 @@ docker run -p 3000:3000 --env-file .env matchexec
 ├── shared/                 # Shared code between processes
 │   └── types.ts            # TypeScript type definitions
 ├── lib/                    # Utility libraries
+├── s6-overlay/             # s6-overlay configuration for Docker
+│   ├── s6-rc.d/           # Service definitions
+│   │   ├── user/          # User bundle (defines which services to start)
+│   │   ├── matchexec-web/ # Web application service
+│   │   ├── discord-bot/   # Discord bot service
+│   │   ├── scheduler/     # Scheduler service
+│   │   └── worker/        # Worker service
+│   └── cont-init.d/       # Container initialization scripts
+│       ├── 10-adduser     # User setup
+│       ├── 20-setup-environment # Environment configuration
+│       └── 30-migrate-database  # Database migration
 ├── ecosystem.config.js     # PM2 production configuration
 ├── ecosystem.dev.config.js # PM2 development configuration
-└── Dockerfile             # Production container
+└── Dockerfile             # Production container with s6-overlay
 
 ## Database
 
@@ -111,17 +147,20 @@ The seeder checks `dataVersion` in each game.json and only re-seeds when the ver
 
 ### Migration and Seeding
 
-Database migrations and seeding are handled at application startup, not during runtime:
+Database migrations and seeding are handled at application startup:
 
 ```bash
 # Run migrations and seeding manually
 npm run migrate
 
-# Start development (automatically runs migrations first)
+# Development (automatically runs migrations via PM2)
 npm run dev:all
 
-# Start production (automatically runs migrations first)  
+# Production with PM2 (automatically runs migrations first)  
 npm run prod:start
+
+# Docker (automatically runs migrations via s6-overlay init script)
+docker run matchexec
 ```
 
 ### Usage
@@ -137,6 +176,12 @@ const games = await db.all('SELECT * FROM games');
 ```
 
 Individual processes only connect to the database - migrations run once at startup for performance and reliability.
+
+### Environment-Specific Migration Handling
+
+- **Development**: PM2 runs migrations before starting processes
+- **Production (PM2)**: Manual or PM2-managed migration execution
+- **Docker**: s6-overlay runs migrations via init script before starting services
 
 ## Discord Bot Architecture
 
@@ -172,10 +217,11 @@ The Discord bot uses a modular architecture for maintainability and scalability:
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **UI Library**: Mantine
 - **Discord**: Discord.js
-- **Process Management**: PM2
+- **Process Management**: PM2 (development), s6-overlay (production/Docker)
 - **Database**: SQLite
 - **Scheduling**: node-cron
 - **Development**: tsx for TypeScript execution
+- **Container Init**: s6-overlay v3
 
 ## Scripts
 

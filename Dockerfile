@@ -49,7 +49,7 @@ RUN apk add --no-cache \
     tzdata \
     git \
     curl \
-    && npm install -g pm2 \
+    && npm install -g pm2 tsx \
     && npm cache clean --force
 
 # Install s6-overlay
@@ -63,6 +63,8 @@ RUN curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 ENV S6_SYNC_DISKS=1
+ENV S6_RC_STARTUP_TIMEOUT=30000
+ENV S6_VERBOSITY=2
 
 # Create abc user (standard for s6-overlay containers)
 RUN addgroup -g 1001 abc && \
@@ -85,12 +87,12 @@ COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
 # Copy s6-overlay configuration
-COPY s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
-COPY s6-overlay/cont-init.d /etc/cont-init.d/
+COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
+COPY --chmod=755 s6-overlay/cont-init.d /etc/cont-init.d/
 
 # Create app_data directory and set ownership
 RUN mkdir -p /app/app_data/data /app/logs && \
-    chown -R abc:abc /app
+    chown -R abc:abc /app/app_data /app/logs
 
 # Set default PUID/PGID for Unraid compatibility
 ENV PUID=99

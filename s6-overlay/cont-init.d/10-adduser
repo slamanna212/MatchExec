@@ -6,14 +6,7 @@ PGID=${PGID:-1001}
 
 echo "
 -------------------------------------
-          _     _____ _                  
-  _      | |   /  ___| |                 
- (_)     | |   \ `--.| |__   __ _ _ __   
-  _____  | |    `--. \ '_ \ / _\` | '__|   
- (_____) | |   /\__/ / | | | (_| | |      
-  _____  |_|   \____/|_| |_|\__,_|_|      
- (_____) 
- Brought to you by linuxserver.io
+MatchExec Docker Container
 -------------------------------------
 
 User uid:    ${PUID}
@@ -47,6 +40,7 @@ chown -R abc:abc /app/logs
 mkdir -p /home/abc/.npm
 chown -R abc:abc /home/abc/.npm 2>/dev/null || true
 
-# Set correct permissions on application files
-chown -R abc:abc /app
-chmod -R 755 /app
+# Set permissions only on data directories (not the entire app)
+chown -R abc:abc /app/app_data /app/logs
+# Only make run scripts executable
+find /app -name "*.sh" -type f -exec chmod +x {} \;
