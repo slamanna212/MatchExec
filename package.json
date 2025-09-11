@@ -23,7 +23,7 @@
     "@discordjs/voice": "^0.19.0",
     "@mantine/core": "^8.2.8",
     "@mantine/dates": "^8.2.7",
-    "@mantine/form": "^8.2.7",
+    "@mantine/form": "^8.2.8",
     "@mantine/hooks": "^8.2.7",
     "@mantine/modals": "^8.2.7",
     "@mantine/notifications": "^8.2.7",
