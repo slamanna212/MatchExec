@@ -1,0 +1,6 @@
+#!/command/with-contenv bash
+
+echo "🚀 Starting MatchExec web server..."
+
+cd /app
+exec s6-setuidgid abc node server.js

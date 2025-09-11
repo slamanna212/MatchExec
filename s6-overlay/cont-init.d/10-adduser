@@ -1,0 +1,46 @@
+#!/command/with-contenv bash
+
+# Set default values if environment variables are not provided
+PUID=${PUID:-1001}
+PGID=${PGID:-1001}
+
+echo "
+-------------------------------------
+MatchExec Docker Container
+-------------------------------------
+
+User uid:    ${PUID}
+User gid:    ${PGID}
+-------------------------------------"
+
+# Create group with specified GID
+groupmod -o -g "${PGID}" abc 2>/dev/null || groupadd -g "${PGID}" abc
+
+# Create/modify user with specified UID and GID
+usermod -o -u "${PUID}" abc 2>/dev/null || useradd -u "${PUID}" -g "${PGID}" -d /config -s /bin/bash abc
+
+echo "
+-------------------------------------
+GID/UID
+-------------------------------------"
+echo "User uid:    $(id -u abc)"
+echo "User gid:    $(id -g abc)"
+echo "
+-------------------------------------"
+
+# Ensure app data directory has correct ownership
+mkdir -p /app/app_data/data
+chown -R abc:abc /app/app_data
+
+# Ensure log directory exists with correct permissions
+mkdir -p /app/logs
+chown -R abc:abc /app/logs
+
+# Ensure npm cache directory has correct permissions
+mkdir -p /home/abc/.npm
+chown -R abc:abc /home/abc/.npm 2>/dev/null || true
+
+# Set permissions only on data directories (not the entire app)
+chown -R abc:abc /app/app_data /app/logs
+# Only make run scripts executable
+find /app -name "*.sh" -type f -exec chmod +x {} \;
