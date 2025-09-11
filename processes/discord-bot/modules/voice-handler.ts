@@ -459,9 +459,9 @@ export class VoiceHandler {
       if (!this.db) return;
 
       await this.db.run(`
-        INSERT OR REPLACE INTO match_voice_alternation (match_id, last_first_team, last_updated_at, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [matchId, firstTeam]);
+        INSERT OR REPLACE INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [matchId, firstTeam, firstTeam]);
 
       console.log(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
     } catch (error) {
