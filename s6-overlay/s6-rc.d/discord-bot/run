@@ -1,0 +1,7 @@
+#!/command/with-contenv bash
+
+echo "🤖 Starting Discord bot..."
+
+cd /app
+export DATABASE_PATH=/app/app_data/data/matchexec.db
+exec s6-setuidgid abc npx tsx processes/discord-bot/index.ts

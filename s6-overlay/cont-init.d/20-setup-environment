@@ -1,0 +1,21 @@
+#!/command/with-contenv bash
+
+echo "Setting up MatchExec environment..."
+
+# Ensure environment variables are set correctly
+export NODE_ENV=${NODE_ENV:-production}
+export PORT=${PORT:-3000}
+export HOSTNAME=${HOSTNAME:-0.0.0.0}
+export DATABASE_PATH=${DATABASE_PATH:-/app/app_data/data/matchexec.db}
+
+# Create necessary directories with correct permissions
+mkdir -p /app/app_data/data
+mkdir -p /app/logs
+mkdir -p /tmp/matchexec
+
+# Set ownership for all directories
+chown -R abc:abc /app/app_data
+chown -R abc:abc /app/logs
+chown -R abc:abc /tmp/matchexec
+
+echo "Environment setup completed"

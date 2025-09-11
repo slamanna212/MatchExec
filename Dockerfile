@@ -41,16 +41,37 @@ RUN npm install && \
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# Install pm2 and git for version info
-RUN apk add --no-cache git && \
-    npm install -g pm2 && npm cache clean --force
+# Install required packages for s6-overlay and runtime
+RUN apk add --no-cache \
+    bash \
+    coreutils \
+    shadow \
+    tzdata \
+    git \
+    curl \
+    && npm install -g pm2 \
+    && npm cache clean --force
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Install s6-overlay
+ARG S6_OVERLAY_VERSION=3.2.0.0
+ARG S6_OVERLAY_ARCH=x86_64
 
+RUN curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" | tar -C / -Jxpf - && \
+    curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_OVERLAY_ARCH}.tar.xz" | tar -C / -Jxpf -
+
+# Set s6-overlay environment variables
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
+ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
+ENV S6_SYNC_DISKS=1
+
+# Create abc user (standard for s6-overlay containers)
+RUN addgroup -g 1001 abc && \
+    adduser -u 1001 -G abc -h /config -s /bin/bash -D abc
+
+# Copy built application
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=abc:abc /app/.next/standalone ./
+COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
 
 # Copy only production node_modules from production-deps stage
 COPY --from=production-deps /app/node_modules ./node_modules
@@ -61,13 +82,19 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/ecosystem.config.js ./
 COPY --from=builder /app/scripts ./scripts
 
-# Create app_data directory and set ownership
-RUN mkdir -p /app/app_data/data && chown -R nextjs:nodejs /app/app_data
+# Copy s6-overlay configuration
+COPY s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
+COPY s6-overlay/cont-init.d /etc/cont-init.d/
 
-USER nextjs
+# Create app_data directory and set ownership
+RUN mkdir -p /app/app_data/data /app/logs && \
+    chown -R abc:abc /app
+
+# Set default PUID/PGID for Unraid compatibility
+ENV PUID=99
+ENV PGID=100
 
 EXPOSE 3000
 
@@ -77,6 +104,7 @@ ENV HOSTNAME=0.0.0.0
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD node scripts/health-check.js
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
-CMD ["npx", "tsx", "scripts/docker-start.ts"]
+# Use s6-overlay init system
+ENTRYPOINT ["/init"]
