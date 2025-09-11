@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@discordjs/voice": "0.19.0",
+    "@snazzah/davey": "0.1.6",
     "bufferutil": "4.0.9",
     "discord.js": "14.22.1",
     "express": "5.1.0",
