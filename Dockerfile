@@ -7,10 +7,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 COPY package*.json ./
-RUN npm ci --omit=dev --production --legacy-peer-deps
+RUN npm ci --omit=dev --production
 
 FROM base AS builder
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 # Copy source code files in order of change frequency (least to most likely to change)
 COPY shared ./shared
 COPY lib ./lib
@@ -34,7 +34,7 @@ RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 # Copy and install only production dependencies
 COPY production.package.json ./package.json
-RUN npm install --legacy-peer-deps && \
+RUN npm install && \
     rm -rf /app/node_modules/*/test* /app/node_modules/*/tests* /app/node_modules/*/example* /app/node_modules/*/docs* /app/node_modules/*/*.md 2>/dev/null || true && \
     npm cache clean --force
 
