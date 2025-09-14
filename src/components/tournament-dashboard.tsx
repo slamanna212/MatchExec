@@ -155,6 +155,7 @@ TournamentCard.displayName = 'TournamentCard';
 
 export function TournamentDashboard() {
   const router = useRouter();
+  const { colorScheme } = useMantineColorScheme();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -491,14 +492,25 @@ export function TournamentDashboard() {
           </Button>
         </Group>
       </div>
-
+      <Divider mb="xl" />
       {tournaments.length === 0 ? (
-        <div className="text-center py-12">
-          <Text size="lg" c="dimmed" mb="md">No tournaments yet</Text>
-          <Button size="lg" onClick={handleCreateTournament}>
-            Create Your First Tournament
-          </Button>
-        </div>
+        <Card 
+          shadow="sm" 
+          padding="xl" 
+          radius="md" 
+          withBorder
+          className="text-center py-12"
+          style={{ 
+            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+          }}
+        >
+          <Stack align="center">
+            <Text size="xl" fw={600}>No tournaments yet</Text>
+            <Text c="dimmed">
+              Create a tournament to get started
+            </Text>
+          </Stack>
+        </Card>
       ) : filteredTournaments.length === 0 ? (
         <div className="text-center py-12">
           <Text size="lg" c="dimmed">No tournaments match your search</Text>
