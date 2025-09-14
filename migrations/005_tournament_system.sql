@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
 );
 
 -- Add tournament-related columns to existing matches table
+-- Note: winner_team already exists in the original schema
 ALTER TABLE matches ADD COLUMN tournament_id TEXT REFERENCES tournaments(id);
 ALTER TABLE matches ADD COLUMN bracket_type TEXT CHECK (bracket_type IN ('winners', 'losers', 'final'));
 ALTER TABLE matches ADD COLUMN bracket_round INTEGER;
@@ -68,7 +69,6 @@ ALTER TABLE matches ADD COLUMN tournament_round INTEGER;
 ALTER TABLE matches ADD COLUMN tournament_bracket_type TEXT;
 ALTER TABLE matches ADD COLUMN team1_name TEXT;
 ALTER TABLE matches ADD COLUMN team2_name TEXT;
-ALTER TABLE matches ADD COLUMN winner_team TEXT;
 
 -- Performance indexes for tournaments
 CREATE INDEX IF NOT EXISTS idx_tournaments_game_id ON tournaments(game_id);

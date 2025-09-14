@@ -10,18 +10,17 @@ interface GameMap {
   mode_id?: string;
 }
 
-interface TeamInfo {
-  id: string;
+interface TeamRecord {
   team_name: string;
 }
 
-interface TournamentInfo {
+interface TournamentRecord {
   id: string;
   game_id: string;
   rounds_per_match: number;
 }
 
-interface MatchInfo {
+interface MatchResult {
   id: string;
   winner_team: string;
   team1_id: string;
@@ -30,21 +29,21 @@ interface MatchInfo {
   match_order: number;
 }
 
-interface RoundCountInfo {
+interface TeamMatchInfo {
+  team1_id: string | null;
+  team2_id: string | null;
+  match_order: number;
+}
+
+interface RoundCompletionInfo {
   total_matches: number;
   completed_matches: number;
 }
 
-interface RoundInfo {
+interface RoundStatsInfo {
   max_round: number;
   completed: number;
   total: number;
-}
-
-interface ExistingTeamMatch {
-  team1_id: string | null;
-  team2_id: string | null;
-  match_order: number;
 }
 
 export interface BracketAssignment {
@@ -135,8 +134,8 @@ export async function generateSingleEliminationMatches(
   const db = await getDbInstance();
   
   // Get game modes and maps for the game
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
   
   if (gameModes.length === 0 || gameMaps.length === 0) {
     throw new Error('No game modes or maps found for this game');
@@ -162,8 +161,8 @@ export async function generateSingleEliminationMatches(
     const matchOrder = Math.floor(i / 2) + 1;
     
     // Get team names
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]);
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]);
+    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
+    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
     
     // Randomly select game mode and map
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
@@ -226,7 +225,7 @@ export async function generateNextRoundMatches(
     FROM tournaments t 
     JOIN games g ON t.game_id = g.id 
     WHERE t.id = ?
-  `, [tournamentId]);
+  `, [tournamentId]) as TournamentRecord | undefined;
   
   if (!tournament) {
     throw new Error('Tournament not found');
@@ -243,7 +242,7 @@ export async function generateNextRoundMatches(
       AND m.status = 'completed'
       AND m.winner_team IS NOT NULL
     ORDER BY tm.match_order
-  `, [tournamentId, currentRound, bracketType]);
+  `, [tournamentId, currentRound, bracketType]) as MatchResult[];
   
   if (previousRoundMatches.length === 0) {
     throw new Error('No completed matches found for previous round');
@@ -256,8 +255,8 @@ export async function generateNextRoundMatches(
   }
   
   // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
   
   const matches: GeneratedMatch[] = [];
   const tournamentMatches: TournamentMatchInfo[] = [];
@@ -281,8 +280,8 @@ export async function generateNextRoundMatches(
     const winner2TeamId = match2.winner_team;
     
     // Get team names
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]);
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]);
+    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
+    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
     
     // Randomly select game mode and map
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
@@ -341,8 +340,8 @@ export async function generateDoubleEliminationMatches(
   const db = await getDbInstance();
   
   // Get game modes and maps for the game
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
   
   if (gameModes.length === 0 || gameMaps.length === 0) {
     throw new Error('No game modes or maps found for this game');
@@ -368,8 +367,8 @@ export async function generateDoubleEliminationMatches(
     const matchOrder = Math.floor(i / 2) + 1;
     
     // Get team names
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]);
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]);
+    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
+    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
     
     // Randomly select game mode and map
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
@@ -434,15 +433,15 @@ export async function generateLosersBracketMatches(
     FROM tournaments t 
     JOIN games g ON t.game_id = g.id 
     WHERE t.id = ?
-  `, [tournamentId]);
+  `, [tournamentId]) as TournamentRecord | undefined;
   
   if (!tournament) {
     throw new Error('Tournament not found');
   }
   
   // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
   
   const matches: GeneratedMatch[] = [];
   const tournamentMatches: TournamentMatchInfo[] = [];
@@ -458,7 +457,7 @@ export async function generateLosersBracketMatches(
     JOIN matches m ON tm.match_id = m.id
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'losers' AND tm.round = ?
     ORDER BY tm.match_order
-  `, [tournamentId, losersBracketRound]);
+  `, [tournamentId, losersBracketRound]) as TeamMatchInfo[];
   
   // Merge eliminated teams with existing teams in this round
   const allTeamsInRound = [...eliminatedTeamIds];
@@ -485,8 +484,8 @@ export async function generateLosersBracketMatches(
     const matchOrder = Math.floor(i / 2) + 1;
     
     // Get team names
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]);
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]);
+    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
+    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
     
     // Randomly select game mode and map
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
@@ -546,19 +545,19 @@ export async function generateGrandFinalsMatch(
     FROM tournaments t 
     JOIN games g ON t.game_id = g.id 
     WHERE t.id = ?
-  `, [tournamentId]);
+  `, [tournamentId]) as TournamentRecord | undefined;
   
   if (!tournament) {
     throw new Error('Tournament not found');
   }
   
   // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
   
   // Get team names
-  const wbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winnersBracketWinnerId]);
-  const lbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [losersBracketWinnerId]);
+  const wbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winnersBracketWinnerId]) as TeamRecord | undefined;
+  const lbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [losersBracketWinnerId]) as TeamRecord | undefined;
   
   const matchId = uuidv4();
   
@@ -618,19 +617,19 @@ export async function generateGrandFinalsResetMatch(
     FROM tournaments t 
     JOIN games g ON t.game_id = g.id 
     WHERE t.id = ?
-  `, [tournamentId]);
+  `, [tournamentId]) as TournamentRecord | undefined;
   
   if (!tournament) {
     throw new Error('Tournament not found');
   }
   
   // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]);
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]);
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
+  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
   
   // Get team names
-  const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]);
-  const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]);
+  const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
+  const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
   
   const matchId = uuidv4();
   
@@ -728,7 +727,7 @@ export async function isRoundComplete(
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.round = ? AND tm.bracket_type = ?
-  `, [tournamentId, round, bracketType]);
+  `, [tournamentId, round, bracketType]) as RoundCompletionInfo;
   
   return result.total_matches > 0 && result.total_matches === result.completed_matches;
 }
@@ -752,7 +751,7 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'winners'
-  `, [tournamentId]);
+  `, [tournamentId]) as RoundStatsInfo;
   
   const losersInfo = await db.get(`
     SELECT 
@@ -762,7 +761,7 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'losers'
-  `, [tournamentId]);
+  `, [tournamentId]) as RoundStatsInfo;
   
   return {
     maxWinnersRound: winnersInfo.max_round || 0,

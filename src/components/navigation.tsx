@@ -14,6 +14,7 @@ import {
 import { useDisclosure } from '@mantine/hooks'
 import {
   IconTournament,
+  IconTrophy,
   IconDeviceGamepad2,
   IconSettings,
   IconCode,
@@ -62,7 +63,7 @@ export function Navigation({ children }: NavigationProps) {
     { 
       label: 'Tournaments', 
       href: '/tournaments', 
-      icon: IconTournament,
+      icon: IconTrophy,
       links: [
         { label: 'History', href: '/tournaments/history', icon: IconHistory }
       ]
