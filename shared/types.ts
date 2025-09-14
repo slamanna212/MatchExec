@@ -47,8 +47,44 @@ export interface Match {
   status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   start_date?: Date;
   end_date?: Date;
+  tournament_id?: string;
+  bracket_type?: 'winners' | 'losers' | 'final';
+  bracket_round?: number;
+  red_team_id?: string;
+  blue_team_id?: string;
   created_at: Date;
   updated_at: Date;
+}
+
+// Tournament-related types
+export interface Tournament {
+  id: string;
+  name: string;
+  description?: string;
+  format: 'single-elimination' | 'double-elimination';
+  status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
+  game_id: string;
+  rounds_per_match: number;
+  max_participants?: number;
+  start_date?: Date;
+  start_time?: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface TournamentTeam {
+  id: string;
+  tournament_id: string;
+  team_name: string;
+  created_at: Date;
+}
+
+export interface TournamentTeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  username: string;
+  joined_at: Date;
 }
 
 // Database row types (includes fields not in the base interface)
@@ -132,6 +168,22 @@ export const MATCH_FLOW_STEPS = {
   complete: { name: 'Complete', progress: 100 },
   cancelled: { name: 'Cancelled', progress: 0 }
 } as const;
+
+// Tournament progress constants
+export const TOURNAMENT_FLOW_STEPS = {
+  created: { name: 'Setup', progress: 20 },
+  gather: { name: 'Signups', progress: 40 },
+  assign: { name: 'Bracket', progress: 60 },
+  battle: { name: 'Matches', progress: 80 },
+  complete: { name: 'Complete', progress: 100 },
+  cancelled: { name: 'Cancelled', progress: 0 }
+} as const;
+
+// Tournament format types
+export type TournamentFormat = 'single-elimination' | 'double-elimination';
+
+// Tournament status types  
+export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
 
 export interface MatchParticipant {
   id: string;

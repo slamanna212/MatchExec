@@ -1,0 +1,343 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react';
+import { 
+  Modal, 
+  Text, 
+  Button, 
+  Card, 
+  Group, 
+  Stack, 
+  Grid,
+  Badge,
+  Avatar,
+  Loader,
+  Divider,
+  ActionIcon,
+  TextInput
+} from '@mantine/core';
+import { IconPlus, IconX } from '@tabler/icons-react';
+import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
+
+interface TournamentParticipant {
+  id: string;
+  user_id: string;
+  username: string;
+  joined_at: string;
+  team_assignment?: string; // team ID or 'reserve'
+}
+
+interface TeamWithMembers extends TournamentTeam {
+  members: TournamentTeamMember[];
+}
+
+interface AssignTournamentTeamsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  tournamentId: string;
+  tournamentName: string;
+}
+
+export function AssignTournamentTeamsModal({ 
+  isOpen, 
+  onClose, 
+  tournamentId, 
+  tournamentName 
+}: AssignTournamentTeamsModalProps) {
+  const [participants, setParticipants] = useState<TournamentParticipant[]>([]);
+  const [teams, setTeams] = useState<TeamWithMembers[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
+  const [newTeamName, setNewTeamName] = useState('');
+
+  const fetchData = useCallback(async () => {
+    if (!tournamentId) return;
+    
+    setLoading(true);
+    try {
+      // For now, we'll fetch tournament participants (which don't exist yet)
+      // and teams. In a real implementation, participants would come from signups
+      const [teamsResponse] = await Promise.all([
+        fetch(`/api/tournaments/${tournamentId}/teams`)
+      ]);
+      
+      if (teamsResponse.ok) {
+        const teamsData = await teamsResponse.json();
+        setTeams(teamsData);
+        
+        // Extract all members as participants
+        const allMembers: TournamentParticipant[] = [];
+        teamsData.forEach((team: TeamWithMembers) => {
+          team.members.forEach((member: TournamentTeamMember) => {
+            allMembers.push({
+              id: member.id,
+              user_id: member.user_id,
+              username: member.username,
+              joined_at: member.joined_at.toString(),
+              team_assignment: team.id
+            });
+          });
+        });
+        
+        setParticipants(allMembers);
+      }
+    } catch (error) {
+      console.error('Error fetching tournament data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+    }
+  }, [isOpen, fetchData]);
+
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) return;
+    
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamName: newTeamName.trim() })
+      });
+      
+      if (response.ok) {
+        const newTeam = await response.json();
+        setTeams(prev => [...prev, { ...newTeam, members: [] }]);
+        setNewTeamName('');
+      }
+    } catch (error) {
+      console.error('Error creating team:', error);
+    }
+  };
+
+  const handleDeleteTeam = async (teamId: string) => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/teams?teamId=${teamId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setTeams(prev => prev.filter(team => team.id !== teamId));
+        // Move team members back to reserve
+        setParticipants(prev => prev.map(p => 
+          p.team_assignment === teamId ? { ...p, team_assignment: 'reserve' } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error deleting team:', error);
+    }
+  };
+
+  const handleTeamChange = (participantId: string, newTeamId: string) => {
+    setParticipants(prev => prev.map(p => 
+      p.id === participantId ? { ...p, team_assignment: newTeamId } : p
+    ));
+  };
+
+  const handleSaveAssignments = async () => {
+    setSaving(true);
+    try {
+      // Group participants by team
+      const teamAssignments = teams.map(team => ({
+        teamId: team.id,
+        members: participants
+          .filter(p => p.team_assignment === team.id)
+          .map(p => ({ userId: p.user_id, username: p.username }))
+      }));
+
+      const response = await fetch(`/api/tournaments/${tournamentId}/teams`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teams: teamAssignments })
+      });
+
+      if (response.ok) {
+        onClose();
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to save team assignments');
+      }
+    } catch (error) {
+      console.error('Error saving team assignments:', error);
+      alert('Failed to save team assignments');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getParticipantsByTeam = (teamId: string) => {
+    return participants.filter(p => p.team_assignment === teamId);
+  };
+
+  const getReserveParticipants = () => {
+    return participants.filter(p => !p.team_assignment || p.team_assignment === 'reserve');
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, participantId: string) => {
+    setDraggedParticipant(participantId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetTeamId: string) => {
+    e.preventDefault();
+    if (draggedParticipant) {
+      handleTeamChange(draggedParticipant, targetTeamId);
+      setDraggedParticipant(null);
+    }
+  };
+
+  return (
+    <Modal
+      opened={isOpen}
+      onClose={onClose}
+      title={`Assign Teams - ${tournamentName}`}
+      size="xl"
+      centered
+    >
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <Loader size="lg" />
+        </div>
+      ) : (
+        <Stack gap="md">
+          {/* Create new team section */}
+          <Card withBorder p="md">
+            <Group>
+              <TextInput
+                placeholder="Enter team name"
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                leftSection={<IconPlus size="1rem" />}
+                onClick={handleCreateTeam}
+                disabled={!newTeamName.trim()}
+              >
+                Create Team
+              </Button>
+            </Group>
+          </Card>
+
+          <Grid>
+            {/* Reserve column */}
+            <Grid.Col span={{ base: 12, md: 4 }}>
+              <Card
+                withBorder
+                p="md"
+                style={{ minHeight: '300px' }}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, 'reserve')}
+              >
+                <Group justify="space-between" mb="sm">
+                  <Text fw={500}>Reserve</Text>
+                  <Badge size="sm" variant="light">
+                    {getReserveParticipants().length}
+                  </Badge>
+                </Group>
+                <Divider mb="sm" />
+                <Stack gap="xs">
+                  {getReserveParticipants().map((participant) => (
+                    <Card
+                      key={participant.id}
+                      withBorder
+                      p="xs"
+                      style={{ cursor: 'grab' }}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, participant.id)}
+                    >
+                      <Group gap="sm">
+                        <Avatar size="sm" color="gray">
+                          {participant.username.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <Text size="sm">{participant.username}</Text>
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              </Card>
+            </Grid.Col>
+
+            {/* Team columns */}
+            {teams.map((team) => (
+              <Grid.Col key={team.id} span={{ base: 12, md: 4 }}>
+                <Card
+                  withBorder
+                  p="md"
+                  style={{ minHeight: '300px' }}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, team.id)}
+                >
+                  <Group justify="space-between" mb="sm">
+                    <Text fw={500} truncate style={{ flex: 1 }}>
+                      {team.team_name}
+                    </Text>
+                    <Badge size="sm" variant="light">
+                      {getParticipantsByTeam(team.id).length}
+                    </Badge>
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      size="sm"
+                      onClick={() => handleDeleteTeam(team.id)}
+                    >
+                      <IconX size="0.75rem" />
+                    </ActionIcon>
+                  </Group>
+                  <Divider mb="sm" />
+                  <Stack gap="xs">
+                    {getParticipantsByTeam(team.id).map((participant) => (
+                      <Card
+                        key={participant.id}
+                        withBorder
+                        p="xs"
+                        style={{ cursor: 'grab' }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, participant.id)}
+                      >
+                        <Group gap="sm">
+                          <Avatar size="sm" color="blue">
+                            {participant.username.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Text size="sm">{participant.username}</Text>
+                        </Group>
+                      </Card>
+                    ))}
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
+
+          <Text size="sm" c="dimmed" ta="center">
+            Drag players between teams or use the dropdown selectors below each player card
+          </Text>
+
+          <Divider />
+
+          <Group justify="end">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveAssignments}
+              loading={saving}
+            >
+              Save Assignments
+            </Button>
+          </Group>
+        </Stack>
+      )}
+    </Modal>
+  );
+}

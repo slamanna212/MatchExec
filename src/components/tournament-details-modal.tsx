@@ -1,0 +1,296 @@
+'use client'
+
+import { useState, useEffect } from 'react';
+import { 
+  Modal,
+  Stack,
+  Group,
+  Avatar,
+  Text,
+  RingProgress,
+  Divider,
+  Button,
+  Badge,
+  Card,
+  Grid,
+  Loader,
+  SegmentedControl
+} from '@mantine/core';
+import { IconTrophy, IconTrash } from '@tabler/icons-react';
+import { Tournament, TOURNAMENT_FLOW_STEPS, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { TournamentBracket } from './tournament-bracket';
+
+interface TournamentWithGame extends Tournament {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  participant_count?: number;
+}
+
+interface TournamentWithDetails extends TournamentWithGame {
+  teams?: (TournamentTeam & { members?: TournamentTeamMember[] })[];
+}
+
+interface TournamentDetailsModalProps {
+  opened: boolean;
+  onClose: () => void;
+  tournament: TournamentWithGame | null;
+  onDelete?: (tournament: TournamentWithGame) => void;
+}
+
+export function TournamentDetailsModal({ 
+  opened, 
+  onClose, 
+  tournament,
+  onDelete 
+}: TournamentDetailsModalProps) {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [tournamentDetails, setTournamentDetails] = useState<TournamentWithDetails | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch tournament details when modal opens
+  useEffect(() => {
+    if (opened && tournament) {
+      const fetchTournamentDetails = async () => {
+        setLoading(true);
+        try {
+          const response = await fetch(`/api/tournaments/${tournament.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setTournamentDetails(data);
+          }
+        } catch (error) {
+          console.error('Error fetching tournament details:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchTournamentDetails();
+    }
+  }, [opened, tournament]);
+
+  if (!tournament) return null;
+
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete(tournament);
+    }
+  };
+
+  const renderOverviewTab = () => (
+    <Stack gap="md">
+      <Card withBorder p="md">
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Text fw={500}>Tournament Details</Text>
+            <Badge color={tournament.game_color || 'blue'}>
+              {TOURNAMENT_FLOW_STEPS[tournament.status]?.name || tournament.status}
+            </Badge>
+          </Group>
+          
+          <Divider />
+          
+          <Group>
+            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Format:</Text>
+            <Badge variant="light">
+              {tournament.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
+            </Badge>
+          </Group>
+          
+          <Group>
+            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Rounds/Match:</Text>
+            <Text size="sm">{tournament.rounds_per_match}</Text>
+          </Group>
+          
+          <Group>
+            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Participants:</Text>
+            <Text size="sm">
+              {tournament.participant_count || 0}
+              {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
+            </Text>
+          </Group>
+          
+          {tournament.start_time && (
+            <Group>
+              <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Start Time:</Text>
+              <Text size="sm">{new Date(tournament.start_time).toLocaleString()}</Text>
+            </Group>
+          )}
+          
+          {tournament.description && (
+            <>
+              <Group>
+                <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Description:</Text>
+              </Group>
+              <Text size="sm" pl="md">{tournament.description}</Text>
+            </>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  const renderTeamsTab = () => (
+    <Stack gap="md">
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <Loader size="md" />
+        </div>
+      ) : tournamentDetails?.teams && tournamentDetails.teams.length > 0 ? (
+        <Grid>
+          {tournamentDetails.teams.map((team) => (
+            <Grid.Col key={team.id} span={{ base: 12, sm: 6 }}>
+              <Card withBorder p="md">
+                <Group mb="sm">
+                  <IconTrophy size="1.2rem" />
+                  <Text fw={500}>{team.team_name}</Text>
+                  <Badge size="sm" variant="light">
+                    {team.members?.length || 0} members
+                  </Badge>
+                </Group>
+                
+                {team.members && team.members.length > 0 ? (
+                  <Stack gap="xs">
+                    {team.members.map((member) => (
+                      <Group key={member.id} gap="sm">
+                        <Avatar size="sm" color="blue">
+                          {member.username.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <Text size="sm">{member.username}</Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
+                )}
+              </Card>
+            </Grid.Col>
+          ))}
+        </Grid>
+      ) : (
+        <Card withBorder p="xl">
+          <Text size="sm" c="dimmed" ta="center">No teams registered yet</Text>
+        </Card>
+      )}
+    </Stack>
+  );
+
+  const renderBracketTab = () => (
+    <Stack gap="md">
+      {tournamentDetails ? (
+        <TournamentBracket
+          tournamentId={tournament.id}
+          format={tournament.format}
+          teams={(tournamentDetails.teams || []).map(team => ({
+            id: team.id,
+            name: team.team_name,
+            members: team.members || []
+          }))}
+          matches={[]} // TODO: Fetch tournament matches
+          isAssignMode={tournament.status === 'assign'}
+          onGenerateMatches={async () => {
+            try {
+              const response = await fetch(`/api/tournaments/${tournament.id}/generate-matches`, {
+                method: 'POST'
+              });
+              if (response.ok) {
+                // Refresh tournament details to show generated matches
+                window.location.reload();
+              } else {
+                console.error('Failed to generate matches');
+              }
+            } catch (error) {
+              console.error('Error generating matches:', error);
+            }
+          }}
+          onBracketAssignment={async (assignments) => {
+            try {
+              const response = await fetch(`/api/tournaments/${tournament.id}/bracket-assignments`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ assignments })
+              });
+              if (!response.ok) {
+                console.error('Failed to save bracket assignments');
+              }
+            } catch (error) {
+              console.error('Error saving bracket assignments:', error);
+            }
+          }}
+        />
+      ) : (
+        <Card withBorder p="xl">
+          <Text size="sm" c="dimmed" ta="center">Loading bracket...</Text>
+        </Card>
+      )}
+    </Stack>
+  );
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={
+        <Group>
+          <Avatar src={tournament.game_icon} size="sm" />
+          <div>
+            <Text fw={600}>{tournament.name}</Text>
+            <Text size="sm" c="dimmed">{tournament.game_name}</Text>
+          </div>
+          <RingProgress
+            size={40}
+            thickness={4}
+            sections={[
+              { 
+                value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0, 
+                color: tournament.game_color || '#95a5a6'
+              }
+            ]}
+          />
+        </Group>
+      }
+      size="xl"
+      centered
+    >
+      <Stack gap="md">
+        <SegmentedControl
+          value={activeTab}
+          onChange={setActiveTab}
+          data={[
+            { label: 'Overview', value: 'overview' },
+            { label: 'Teams', value: 'teams' },
+            { label: 'Bracket', value: 'bracket' }
+          ]}
+          fullWidth
+        />
+
+        {activeTab === 'overview' && renderOverviewTab()}
+        {activeTab === 'teams' && renderTeamsTab()}
+        {activeTab === 'bracket' && renderBracketTab()}
+
+        <Divider />
+
+        <Group justify="space-between">
+          <div>
+            {onDelete && tournament.status === 'created' && (
+              <Button
+                variant="outline"
+                color="red"
+                leftSection={<IconTrash size="1rem" />}
+                onClick={handleDelete}
+              >
+                Delete Tournament
+              </Button>
+            )}
+          </div>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
