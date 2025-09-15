@@ -37,7 +37,7 @@
     "ffmpeg-static": "5.2.0",
     "framer-motion": "12.23.12",
     "lucide-react": "0.542.0",
-    "next": "15.5.0",
+    "next": "15.5.3",
     "node-cron": "4.2.1",
     "node-fetch": "2.7.0",
     "pm2": "6.0.8",
