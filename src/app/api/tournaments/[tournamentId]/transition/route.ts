@@ -2,6 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { TOURNAMENT_FLOW_STEPS, Tournament } from '@/shared/types';
 
+// Queue a Discord tournament announcement request that the Discord bot will process
+async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+    
+    // Check if already exists first to prevent duplicates
+    const existing = await db.get(`
+      SELECT id FROM discord_announcement_queue 
+      WHERE match_id = ? AND announcement_type = 'tournament' AND status IN ('pending', 'posted')
+    `, [tournamentId]);
+    
+    if (existing) {
+      console.log('📢 Discord tournament announcement already exists for tournament:', tournamentId);
+      return true;
+    }
+    
+    // Generate unique ID for the announcement queue entry
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Add to announcement queue with 'tournament' type
+    await db.run(`
+      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
+      VALUES (?, ?, 'tournament', 'pending')
+    `, [announcementId, tournamentId]);
+    
+    console.log('📢 Discord tournament announcement queued for tournament:', tournamentId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord tournament announcement:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
@@ -83,6 +116,12 @@ export async function POST(
     switch (newStatus) {
       case 'gather':
         console.log(`📝 Tournament ${tournamentId} is now open for team signups`);
+        
+        // Queue Discord announcement for tournament signup
+        const discordSuccess = await queueDiscordTournamentAnnouncement(tournamentId);
+        if (!discordSuccess) {
+          console.warn('⚠️ Failed to queue Discord announcement for tournament:', tournamentId);
+        }
         break;
         
       case 'assign':

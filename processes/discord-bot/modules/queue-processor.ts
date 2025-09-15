@@ -111,11 +111,19 @@ export class QueueProcessor {
         announcement_data?: string;
       }>(`
         SELECT daq.id, daq.match_id, daq.announcement_type, daq.announcement_data,
-               m.name, m.description, m.game_id, m.max_participants, m.guild_id, 
-               m.maps, m.livestream_link, m.event_image_url, m.start_date, m.rules
+               COALESCE(m.name, t.name) as name, 
+               COALESCE(m.description, t.description) as description, 
+               COALESCE(m.game_id, t.game_id) as game_id, 
+               COALESCE(m.max_participants, t.max_participants) as max_participants, 
+               COALESCE(m.guild_id, ds.guild_id) as guild_id, 
+               m.maps, m.livestream_link, m.event_image_url, 
+               COALESCE(m.start_date, t.start_time) as start_date, 
+               COALESCE(m.rules, 'casual') as rules
         FROM discord_announcement_queue daq
-        JOIN matches m ON daq.match_id = m.id
-        WHERE daq.status = 'pending'
+        LEFT JOIN matches m ON daq.match_id = m.id AND daq.announcement_type != 'tournament'
+        LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
+        LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
+        WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
         ORDER BY daq.created_at ASC
         LIMIT 5
       `);

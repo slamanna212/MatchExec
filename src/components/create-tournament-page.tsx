@@ -214,8 +214,14 @@ export function CreateTournamentPage() {
                     padding="md"
                     radius="md"
                     withBorder
-                    className={formData.gameId === game.id ? 'border-blue-500' : 'cursor-pointer hover:shadow-md transition-shadow'}
-                    onClick={() => updateFormData('gameId', game.id)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => {
+                      updateFormData('gameId', game.id);
+                      handleNext();
+                    }}
                   >
                     <Group align="center">
                       <Avatar src={game.iconUrl} alt={game.name} size="lg" />
