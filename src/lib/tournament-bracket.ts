@@ -674,18 +674,21 @@ export async function saveGeneratedMatches(
   try {
     // Insert matches
     for (const match of matches) {
+      const scheduledDateTime = match.scheduled_time?.toISOString() || new Date().toISOString();
+      const scheduledDate = scheduledDateTime.split('T')[0]; // Extract date part (YYYY-MM-DD)
+
       await db.run(`
         INSERT INTO matches (
-          id, name, game_id, game_mode_id, map_id, rounds_per_match,
-          max_participants, status, match_type, tournament_id,
-          tournament_round, tournament_bracket_type, scheduled_time,
+          id, name, game_id, mode_id, rounds,
+          max_participants, status, tournament_id,
+          tournament_round, tournament_bracket_type, start_date, start_time,
           team1_name, team2_name, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [
-        match.id, match.name, match.game_id, match.game_mode_id, match.map_id,
-        match.rounds_per_match, match.max_participants, match.status, match.match_type,
+        match.id, match.name, match.game_id, match.game_mode_id,
+        match.rounds_per_match, match.max_participants, match.status,
         match.tournament_id, match.tournament_round, match.tournament_bracket_type,
-        match.scheduled_time?.toISOString(), match.team1_name, match.team2_name
+        scheduledDate, scheduledDateTime, match.team1_name, match.team2_name
       ]);
     }
     
