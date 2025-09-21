@@ -236,12 +236,17 @@ export class AnnouncementHandler {
       .setTitle(name)
       .setDescription(description)
       .setColor(gameColor)
-      .addFields(
-        { name: '🎯 Game', value: gameName, inline: true },
-        { name: '🏆 Ruleset', value: type === 'competitive' ? 'Competitive' : 'Casual', inline: true }
-      )
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
+
+    // Add game field
+    embed.addFields({ name: '🎯 Game', value: gameName, inline: true });
+
+    // Only add ruleset for matches, not tournaments
+    const isTournament = _matchId?.startsWith('tournament_');
+    if (!isTournament) {
+      embed.addFields({ name: '🏆 Ruleset', value: type === 'competitive' ? 'Competitive' : 'Casual', inline: true });
+    }
 
     // Add match time and countdown if start date is provided
     if (startDate) {

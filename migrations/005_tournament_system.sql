@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   max_participants INTEGER,
   start_date DATETIME,
   start_time DATETIME,
+  event_image_url TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE

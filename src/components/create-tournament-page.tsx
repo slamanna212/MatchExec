@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box } from '@mantine/core';
+import { IconArrowLeft, IconUpload, IconTrash } from '@tabler/icons-react';
 import { TournamentFormat } from '@/shared/types';
 
 interface GameWithIcon {
@@ -29,6 +29,7 @@ interface TournamentFormData {
   format: TournamentFormat;
   roundsPerMatch: number;
   maxParticipants?: number;
+  eventImageUrl?: string;
 }
 
 export function CreateTournamentPage() {
@@ -41,6 +42,8 @@ export function CreateTournamentPage() {
     format: 'single-elimination',
     roundsPerMatch: 3
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -64,6 +67,11 @@ export function CreateTournamentPage() {
       try {
         const parsedData = JSON.parse(savedFormData);
         setFormData(parsedData);
+
+        // Restore image preview if it exists
+        if (parsedData.eventImageUrl) {
+          setImagePreview(parsedData.eventImageUrl);
+        }
       } catch (error) {
         console.error('Error parsing saved form data:', error);
       }
@@ -125,7 +133,8 @@ export function CreateTournamentPage() {
         startDate: startDateTime?.toISOString(),
         startTime: startDateTime?.toISOString(),
         roundsPerMatch: formData.roundsPerMatch,
-        maxParticipants: formData.maxParticipants
+        maxParticipants: formData.maxParticipants,
+        eventImageUrl: formData.eventImageUrl || null
       };
 
       const response = await fetch('/api/tournaments', {
@@ -162,6 +171,55 @@ export function CreateTournamentPage() {
       console.error('Error creating tournament:', error);
       alert('Failed to create tournament');
     }
+  };
+
+  const handleImageUpload = async (file: File | null) => {
+    if (!file) return;
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('image', file);
+
+      const response = await fetch('/api/upload/event-image', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        updateFormData('eventImageUrl', result.imageUrl);
+        setImagePreview(result.imageUrl);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    if (formData.eventImageUrl) {
+      try {
+        await fetch(`/api/upload/event-image?imageUrl=${encodeURIComponent(formData.eventImageUrl)}`, {
+          method: 'DELETE',
+        });
+      } catch (error) {
+        console.error('Error deleting image:', error);
+      }
+    }
+    updateFormData('eventImageUrl', undefined);
+    setImagePreview(null);
   };
 
   const getProgressValue = () => {
@@ -302,6 +360,64 @@ export function CreateTournamentPage() {
               value={formData.roundsPerMatch || 3}
               onChange={(value) => updateFormData('roundsPerMatch', value || 3)}
             />
+
+            <Box>
+              <Text size="sm" fw={500} mb="xs">Tournament Image (Optional)</Text>
+              {imagePreview ? (
+                <Card withBorder padding="md">
+                  <Group justify="space-between" mb="md">
+                    <Text size="sm" c="dimmed">Current Image:</Text>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={handleRemoveImage}
+                      disabled={uploadingImage}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Group>
+                  <Image
+                    src={imagePreview}
+                    alt="Tournament preview"
+                    height={200}
+                    radius="md"
+                    fit="cover"
+                  />
+                </Card>
+              ) : (
+                <FileButton
+                  onChange={handleImageUpload}
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  disabled={uploadingImage}
+                >
+                  {(props) => (
+                    <Card
+                      {...props}
+                      withBorder
+                      padding="md"
+                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      style={{
+                        borderStyle: 'dashed',
+                        borderColor: 'var(--mantine-color-default-border)',
+                        backgroundColor: 'var(--mantine-color-body)'
+                      }}
+                    >
+                      <Stack align="center" justify="center" style={{ minHeight: 100 }}>
+                        <ActionIcon size="xl" variant="light" disabled={uploadingImage}>
+                          <IconUpload />
+                        </ActionIcon>
+                        <Text size="sm" c="dimmed" ta="center">
+                          {uploadingImage ? 'Uploading...' : 'Click to upload tournament image'}
+                        </Text>
+                        <Text size="xs" c="dimmed" ta="center">
+                          PNG, JPEG, WebP, GIF up to 5MB
+                        </Text>
+                      </Stack>
+                    </Card>
+                  )}
+                </FileButton>
+              )}
+            </Box>
 
             <Group justify="space-between" mt="md">
               <Button variant="outline" onClick={handleBack}>

@@ -130,7 +130,10 @@ export class ReminderHandler {
     }
 
     try {
-      // Get match data
+      // Check if this is a tournament or match
+      const isTournament = matchId.startsWith('tournament_');
+
+      // Get event data (match or tournament)
       const matchData = await this.db?.get<{
         id: string;
         name: string;
@@ -138,7 +141,12 @@ export class ReminderHandler {
         game_color?: string;
         max_participants?: number;
         [key: string]: unknown;
-      }>(`
+      }>(isTournament ? `
+        SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
+        FROM tournaments t
+        LEFT JOIN games g ON t.game_id = g.id
+        WHERE t.id = ?
+      ` : `
         SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
         FROM matches m
         LEFT JOIN games g ON m.game_id = g.id
@@ -157,7 +165,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!matchData) {
-        console.error('❌ Match not found for signup notification:', matchId);
+        console.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
         return false;
       }
 
@@ -172,25 +180,26 @@ export class ReminderHandler {
       }
 
       // Create signup embed
+      const eventType = isTournament ? 'Tournament' : 'Match';
       const embed = new EmbedBuilder()
         .setTitle('🎮 New Player Signed Up!')
         .setDescription(`**${signupInfo.username}** joined **${matchData.name}**`)
         .setColor(gameColor)
         .addFields(
-          { 
-            name: '👤 Player', 
-            value: `<@${signupInfo.discordUserId}>`, 
-            inline: true 
+          {
+            name: '👤 Player',
+            value: `<@${signupInfo.discordUserId}>`,
+            inline: true
           },
-          { 
-            name: '🎯 Match', 
-            value: matchData.name, 
-            inline: true 
+          {
+            name: `🎯 ${eventType}`,
+            value: matchData.name,
+            inline: true
           },
-          { 
-            name: '👥 Total Players', 
-            value: `${signupInfo.participantCount}${matchData.max_signups ? `/${matchData.max_signups}` : ''}`, 
-            inline: true 
+          {
+            name: '👥 Total Players',
+            value: `${signupInfo.participantCount}${matchData.max_signups ? `/${matchData.max_signups}` : ''}`,
+            inline: true
           }
         )
         .setTimestamp();

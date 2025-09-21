@@ -106,12 +106,12 @@ export async function DELETE(
     const db = await getDbInstance();
     const { tournamentId } = await params;
     
-    // Check if tournament exists
-    const existingTournament = await db.get<Tournament>(
-      'SELECT id FROM tournaments WHERE id = ?',
+    // Check if tournament exists and get event image for cleanup
+    const existingTournament = await db.get<Tournament & { event_image_url?: string }>(
+      'SELECT id, event_image_url FROM tournaments WHERE id = ?',
       [tournamentId]
     );
-    
+
     if (!existingTournament) {
       return NextResponse.json(
         { error: 'Tournament not found' },
@@ -132,7 +132,34 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    
+
+    // Queue Discord message deletion before deleting the tournament
+    try {
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await db.run(`
+        INSERT INTO discord_deletion_queue (id, match_id, status)
+        VALUES (?, ?, 'pending')
+      `, [deletionId, tournamentId]);
+
+      console.log('🗑️ Discord deletion queued for tournament:', tournamentId);
+    } catch (error) {
+      console.error('❌ Error queuing Discord deletion:', error);
+    }
+
+    // Clean up event image if it exists
+    if (existingTournament.event_image_url) {
+      try {
+        const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/upload/event-image?imageUrl=${encodeURIComponent(existingTournament.event_image_url)}`, {
+          method: 'DELETE',
+        });
+        if (response.ok) {
+          console.log(`✅ Cleaned up event image for tournament: ${tournamentId}`);
+        }
+      } catch (error) {
+        console.error('Error cleaning up event image:', error);
+      }
+    }
+
     // Delete the tournament (CASCADE will handle related records)
     await db.run('DELETE FROM tournaments WHERE id = ?', [tournamentId]);
     

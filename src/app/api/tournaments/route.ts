@@ -17,14 +17,18 @@ export async function GET(request: NextRequest) {
     const db = await getDbInstance();
     
     let query = `
-      SELECT 
+      SELECT
         t.*,
         g.name as game_name,
         g.icon_url as game_icon,
         g.color as game_color,
-        COUNT(DISTINCT ttm.user_id) as participant_count
+        CASE
+          WHEN t.status IN ('created', 'gather') THEN COUNT(DISTINCT tp.user_id)
+          ELSE COUNT(DISTINCT ttm.user_id)
+        END as participant_count
       FROM tournaments t
       LEFT JOIN games g ON t.game_id = g.id
+      LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
       LEFT JOIN tournament_teams tt ON t.id = tt.tournament_id
       LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
     `;
@@ -55,15 +59,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      name, 
-      description, 
-      gameId, 
+    const {
+      name,
+      description,
+      gameId,
       format,
       startDate,
       startTime,
       roundsPerMatch,
-      maxParticipants
+      maxParticipants,
+      eventImageUrl
     } = body;
     
     if (!name || !gameId || !format || !roundsPerMatch) {
@@ -89,8 +94,8 @@ export async function POST(request: NextRequest) {
     await db.run(`
       INSERT INTO tournaments (
         id, name, description, game_id, format, status, rounds_per_match,
-        max_participants, start_date, start_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        max_participants, start_date, start_time, event_image_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tournamentId,
       name,
@@ -101,7 +106,8 @@ export async function POST(request: NextRequest) {
       roundsPerMatch,
       maxParticipants || null,
       startDateTime,
-      startTimeOnly
+      startTimeOnly,
+      eventImageUrl || null
     ]);
     
     const tournament = await db.get<TournamentDbRow>(`

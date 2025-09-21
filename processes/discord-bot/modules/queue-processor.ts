@@ -111,13 +111,13 @@ export class QueueProcessor {
         announcement_data?: string;
       }>(`
         SELECT daq.id, daq.match_id, daq.announcement_type, daq.announcement_data,
-               COALESCE(m.name, t.name) as name, 
-               COALESCE(m.description, t.description) as description, 
-               COALESCE(m.game_id, t.game_id) as game_id, 
-               COALESCE(m.max_participants, t.max_participants) as max_participants, 
-               COALESCE(m.guild_id, ds.guild_id) as guild_id, 
-               m.maps, m.livestream_link, m.event_image_url, 
-               COALESCE(m.start_date, t.start_time) as start_date, 
+               COALESCE(m.name, t.name) as name,
+               COALESCE(m.description, t.description) as description,
+               COALESCE(m.game_id, t.game_id) as game_id,
+               COALESCE(m.max_participants, t.max_participants) as max_participants,
+               COALESCE(m.guild_id, ds.guild_id) as guild_id,
+               m.maps, m.livestream_link, COALESCE(m.event_image_url, t.event_image_url) as event_image_url,
+               COALESCE(m.start_date, t.start_time) as start_date,
                COALESCE(m.rules, 'casual') as rules
         FROM discord_announcement_queue daq
         LEFT JOIN matches m ON daq.match_id = m.id AND daq.announcement_type != 'tournament'

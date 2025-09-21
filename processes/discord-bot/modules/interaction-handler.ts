@@ -278,9 +278,7 @@ export class InteractionHandler {
         const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Add participant to database with signup data and Discord user ID
-        const isTournamentSubmit = eventId.startsWith('tournament_');
-
-        if (isTournamentSubmit) {
+        if (isTournament) {
           await this.db.run(`
             INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -294,7 +292,7 @@ export class InteractionHandler {
 
         // Get current participant count
         let participantCount = null;
-        if (isTournamentSubmit) {
+        if (isTournament) {
           participantCount = await this.db.get<{count: number}>(`
             SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
           `, [eventId]);

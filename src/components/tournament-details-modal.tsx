@@ -37,13 +37,15 @@ interface TournamentDetailsModalProps {
   onClose: () => void;
   tournament: TournamentWithGame | null;
   onDelete?: (tournament: TournamentWithGame) => void;
+  onAssign?: (tournament: TournamentWithGame) => void;
 }
 
-export function TournamentDetailsModal({ 
-  opened, 
-  onClose, 
+export function TournamentDetailsModal({
+  opened,
+  onClose,
   tournament,
-  onDelete 
+  onDelete,
+  onAssign
 }: TournamentDetailsModalProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [tournamentDetails, setTournamentDetails] = useState<TournamentWithDetails | null>(null);
@@ -303,7 +305,7 @@ export function TournamentDetailsModal({
         <Divider />
 
         <Group justify="space-between">
-          <div>
+          <Group gap="xs">
             {onDelete && tournament.status !== 'complete' && (
               <Button
                 variant="outline"
@@ -314,7 +316,18 @@ export function TournamentDetailsModal({
                 Delete Tournament
               </Button>
             )}
-          </div>
+            {(tournament.status === 'gather' || tournament.status === 'assign') && (
+              <Button
+                variant="light"
+                onClick={() => {
+                  onClose();
+                  onAssign?.(tournament);
+                }}
+              >
+                Assign
+              </Button>
+            )}
+          </Group>
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>

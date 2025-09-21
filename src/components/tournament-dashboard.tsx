@@ -274,6 +274,11 @@ export function TournamentDashboard() {
     }
   };
 
+  const handleAssignTeamsFromModal = (tournament: TournamentWithGame) => {
+    setSelectedTournamentForAssignment(tournament);
+    setAssignTeamsModalOpen(true);
+  };
+
   const handleProgressTournament = useCallback(async (tournamentId: string) => {
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/progress`, {
@@ -316,27 +321,40 @@ export function TournamentDashboard() {
         );
       case 'gather':
         return (
-          <Button 
-            size="sm" 
-            color="orange"
-            onClick={(e) => {
-              e.stopPropagation();
-              modals.openConfirmModal({
-                title: 'Close Signups',
-                children: (
-                  <Text size="sm">
-                    Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
-                  </Text>
-                ),
-                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
-                confirmProps: { color: 'orange' },
-                onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
-              });
-            }}
-            style={{ flex: 1 }}
-          >
-            Close Signups
-          </Button>
+          <Group gap="xs" style={{ flex: 1 }}>
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedTournamentForAssignment(tournament);
+                setAssignTeamsModalOpen(true);
+              }}
+              style={{ flex: 1 }}
+            >
+              Assign
+            </Button>
+            <Button
+              size="sm"
+              color="orange"
+              onClick={(e) => {
+                e.stopPropagation();
+                modals.openConfirmModal({
+                  title: 'Close Signups',
+                  children: (
+                    <Text size="sm">
+                      Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
+                    </Text>
+                  ),
+                  labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+                  confirmProps: { color: 'orange' },
+                  onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
+                });
+              }}
+              style={{ flex: 1 }}
+            >
+              Close Signups
+            </Button>
+          </Group>
         );
       case 'assign':
         return (
@@ -350,7 +368,7 @@ export function TournamentDashboard() {
               }}
               style={{ flex: 1 }}
             >
-              Assign Teams
+              Assign
             </Button>
             <Button 
               size="sm" 
@@ -521,6 +539,7 @@ export function TournamentDashboard() {
         onClose={() => setDetailsModalOpen(false)}
         tournament={selectedTournament}
         onDelete={handleDeleteTournament}
+        onAssign={handleAssignTeamsFromModal}
       />
 
       <AssignTournamentTeamsModal

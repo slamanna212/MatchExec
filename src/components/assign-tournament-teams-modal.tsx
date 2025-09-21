@@ -56,31 +56,30 @@ export function AssignTournamentTeamsModal({
     
     setLoading(true);
     try {
-      // For now, we'll fetch tournament participants (which don't exist yet)
-      // and teams. In a real implementation, participants would come from signups
-      const [teamsResponse] = await Promise.all([
+      // Fetch both tournament participants and teams
+      const [participantsResponse, teamsResponse] = await Promise.all([
+        fetch(`/api/tournaments/${tournamentId}/participants`),
         fetch(`/api/tournaments/${tournamentId}/teams`)
       ]);
-      
+
       if (teamsResponse.ok) {
         const teamsData = await teamsResponse.json();
         setTeams(teamsData);
-        
-        // Extract all members as participants
-        const allMembers: TournamentParticipant[] = [];
-        teamsData.forEach((team: TeamWithMembers) => {
-          team.members.forEach((member: TournamentTeamMember) => {
-            allMembers.push({
-              id: member.id,
-              user_id: member.user_id,
-              username: member.username,
-              joined_at: member.joined_at.toString(),
-              team_assignment: team.id
-            });
-          });
-        });
-        
-        setParticipants(allMembers);
+      }
+
+      if (participantsResponse.ok) {
+        const participantsData = await participantsResponse.json();
+
+        // Convert participants to the expected format
+        const allParticipants: TournamentParticipant[] = participantsData.map((p: any) => ({
+          id: p.id,
+          user_id: p.user_id,
+          username: p.username,
+          joined_at: p.joined_at,
+          team_assignment: p.team_assignment || 'reserve'
+        }));
+
+        setParticipants(allParticipants);
       }
     } catch (error) {
       console.error('Error fetching tournament data:', error);
