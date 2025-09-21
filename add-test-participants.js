@@ -23,20 +23,20 @@ async function addTestParticipants() {
   const db = new sqlite3.Database(dbPath);
 
   try {
-    // Get the first tournament
+    // Get the tournament in gather stage
     const tournament = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM tournaments LIMIT 1', (err, row) => {
+      db.get('SELECT id, name FROM tournaments WHERE status = "gather" LIMIT 1', (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
 
     if (!tournament) {
-      console.log('No tournament found in database');
+      console.log('No tournament in gather stage found in database');
       return;
     }
 
-    console.log(`Adding test participants to tournament: ${tournament.id}`);
+    console.log(`Adding test participants to tournament: ${tournament.name} (${tournament.id})`);
 
     // Generate 39 test participants
     const participants = [];
