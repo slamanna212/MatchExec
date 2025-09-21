@@ -7,6 +7,7 @@ interface GameMode {
 
 interface GameMap {
   id: string;
+  name: string;
   mode_id?: string;
 }
 
@@ -82,6 +83,8 @@ export interface GeneratedMatch {
   scheduled_time?: Date;
   team1_name?: string;
   team2_name?: string;
+  team1_id?: string; // Tournament team ID for red team
+  team2_id?: string; // Tournament team ID for blue team
 }
 
 /**
@@ -170,10 +173,19 @@ export async function generateSingleEliminationMatches(
     // Get team names
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
-    
+
     // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-    const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+    const availableMaps = gameMaps.filter(m => {
+      // Filter by mode compatibility
+      const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+      // Exclude custom and workshop maps from tournaments
+      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                                 !m.id.toLowerCase().includes('workshop') &&
+                                 !m.name.toLowerCase().includes('custom') &&
+                                 !m.name.toLowerCase().includes('workshop');
+      return modeCompatible && notCustomOrWorkshop;
+    });
 
     // Select multiple maps for the number of rounds
     const selectedMaps: string[] = [];
@@ -203,7 +215,9 @@ export async function generateSingleEliminationMatches(
       rules: tournamentRuleset,
       scheduled_time: startTime,
       team1_name: team1?.team_name,
-      team2_name: team2?.team_name
+      team2_name: team2?.team_name,
+      team1_id: team1Assignment.teamId, // Red team
+      team2_id: team2Assignment.teamId  // Blue team
     };
     
     matches.push(generatedMatch);
@@ -300,10 +314,19 @@ export async function generateNextRoundMatches(
     // Get team names
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
-    
+
     // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-    const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+    const availableMaps = gameMaps.filter(m => {
+      // Filter by mode compatibility
+      const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+      // Exclude custom and workshop maps from tournaments
+      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                                 !m.id.toLowerCase().includes('workshop') &&
+                                 !m.name.toLowerCase().includes('custom') &&
+                                 !m.name.toLowerCase().includes('workshop');
+      return modeCompatible && notCustomOrWorkshop;
+    });
 
     // Select multiple maps for the number of rounds
     const selectedMaps: string[] = [];
@@ -332,7 +355,9 @@ export async function generateNextRoundMatches(
       tournament_bracket_type: bracketType,
       rules: tournament.ruleset,
       team1_name: team1?.team_name,
-      team2_name: team2?.team_name
+      team2_name: team2?.team_name,
+      team1_id: winner1TeamId, // Red team
+      team2_id: winner2TeamId  // Blue team
     };
     
     matches.push(generatedMatch);
@@ -401,7 +426,16 @@ export async function generateDoubleEliminationMatches(
 
     // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-    const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+    const availableMaps = gameMaps.filter(m => {
+      // Filter by mode compatibility
+      const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+      // Exclude custom and workshop maps from tournaments
+      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                                 !m.id.toLowerCase().includes('workshop') &&
+                                 !m.name.toLowerCase().includes('custom') &&
+                                 !m.name.toLowerCase().includes('workshop');
+      return modeCompatible && notCustomOrWorkshop;
+    });
 
     // Select multiple maps for the number of rounds
     const selectedMaps: string[] = [];
@@ -430,7 +464,9 @@ export async function generateDoubleEliminationMatches(
       tournament_bracket_type: 'winners',
       scheduled_time: startTime,
       team1_name: team1?.team_name,
-      team2_name: team2?.team_name
+      team2_name: team2?.team_name,
+      team1_id: team1Assignment.teamId, // Red team
+      team2_id: team2Assignment.teamId  // Blue team
     };
     
     matches.push(generatedMatch);
@@ -528,7 +564,16 @@ export async function generateLosersBracketMatches(
 
     // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-    const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+    const availableMaps = gameMaps.filter(m => {
+      // Filter by mode compatibility
+      const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+      // Exclude custom and workshop maps from tournaments
+      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                                 !m.id.toLowerCase().includes('workshop') &&
+                                 !m.name.toLowerCase().includes('custom') &&
+                                 !m.name.toLowerCase().includes('workshop');
+      return modeCompatible && notCustomOrWorkshop;
+    });
 
     // Select multiple maps for the number of rounds
     const selectedMaps: string[] = [];
@@ -556,7 +601,9 @@ export async function generateLosersBracketMatches(
       tournament_round: losersBracketRound,
       tournament_bracket_type: 'losers',
       team1_name: team1?.team_name,
-      team2_name: team2?.team_name
+      team2_name: team2?.team_name,
+      team1_id: team1Id, // Red team
+      team2_id: team2Id  // Blue team
     };
     
     matches.push(generatedMatch);
@@ -607,12 +654,21 @@ export async function generateGrandFinalsMatch(
   // Get team names
   const wbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winnersBracketWinnerId]) as TeamRecord | undefined;
   const lbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [losersBracketWinnerId]) as TeamRecord | undefined;
-  
+
   const matchId = uuidv4();
-  
+
   // Randomly select game mode and maps for all rounds
   const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-  const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+  const availableMaps = gameMaps.filter(m => {
+    // Filter by mode compatibility
+    const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+    // Exclude custom and workshop maps from tournaments
+    const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                               !m.id.toLowerCase().includes('workshop') &&
+                               !m.name.toLowerCase().includes('custom') &&
+                               !m.name.toLowerCase().includes('workshop');
+    return modeCompatible && notCustomOrWorkshop;
+  });
 
   // Select multiple maps for the number of rounds
   const selectedMaps: string[] = [];
@@ -640,7 +696,9 @@ export async function generateGrandFinalsMatch(
     tournament_round: 1,
     tournament_bracket_type: 'final',
     team1_name: wbTeam?.team_name,
-    team2_name: lbTeam?.team_name
+    team2_name: lbTeam?.team_name,
+    team1_id: winnersBracketWinnerId, // Red team
+    team2_id: losersBracketWinnerId   // Blue team
   };
   
   // Note: tournament match info would be created separately when saving
@@ -689,12 +747,21 @@ export async function generateGrandFinalsResetMatch(
   // Get team names
   const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
   const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
-  
+
   const matchId = uuidv4();
-  
+
   // Randomly select game mode and maps for all rounds
   const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-  const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
+  const availableMaps = gameMaps.filter(m => {
+    // Filter by mode compatibility
+    const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
+    // Exclude custom and workshop maps from tournaments
+    const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                               !m.id.toLowerCase().includes('workshop') &&
+                               !m.name.toLowerCase().includes('custom') &&
+                               !m.name.toLowerCase().includes('workshop');
+    return modeCompatible && notCustomOrWorkshop;
+  });
 
   // Select multiple maps for the number of rounds
   const selectedMaps: string[] = [];
@@ -722,7 +789,9 @@ export async function generateGrandFinalsResetMatch(
     tournament_round: 2,
     tournament_bracket_type: 'final',
     team1_name: team1?.team_name,
-    team2_name: team2?.team_name
+    team2_name: team2?.team_name,
+    team1_id: team1Id, // Red team
+    team2_id: team2Id  // Blue team
   };
   
   // Note: tournament match info would be created separately when saving
@@ -751,15 +820,15 @@ export async function saveGeneratedMatches(
           id, name, game_id, mode_id, map_id, maps, rounds,
           max_participants, status, tournament_id,
           tournament_round, tournament_bracket_type, start_date, start_time,
-          team1_name, team2_name, announcements, rules, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          team1_name, team2_name, red_team_id, blue_team_id, announcements, rules, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [
         match.id, match.name, match.game_id, match.game_mode_id, match.map_id,
         match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
         match.max_participants, match.status, match.tournament_id,
         match.tournament_round, match.tournament_bracket_type, scheduledDate,
-        scheduledDateTime, match.team1_name, match.team2_name, 1,
-        match.rules || 'casual'
+        scheduledDateTime, match.team1_name, match.team2_name,
+        match.team1_id, match.team2_id, 1, match.rules || 'casual'
       ]);
     }
 
@@ -788,9 +857,9 @@ export async function saveGeneratedMatches(
           const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           await db.run(`
             INSERT INTO match_participants (
-              id, match_id, user_id, username, team, joined_at
-            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'team1']);
+              id, match_id, user_id, username, team, team_assignment, joined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'red', 'red']);
         }
       }
 
@@ -805,9 +874,9 @@ export async function saveGeneratedMatches(
           const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           await db.run(`
             INSERT INTO match_participants (
-              id, match_id, user_id, username, team, joined_at
-            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'team2']);
+              id, match_id, user_id, username, team, team_assignment, joined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'blue', 'blue']);
         }
       }
     }

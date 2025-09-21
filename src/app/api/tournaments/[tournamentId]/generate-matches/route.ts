@@ -113,17 +113,17 @@ export async function POST(
         tournament.rounds_per_match,
         tournament.start_time ? new Date(tournament.start_time) : undefined
       );
-      
+
       generatedMatches = matches;
-      
-      // Create tournament match relationships
+
+      // Create tournament match relationships from generated matches
       tournamentMatches = matches.map((match, index) => ({
         id: match.id,
         tournament_id: tournamentId,
-        round: 1,
-        bracket_type: 'winners' as const,
-        team1_id: bracketAssignments[index * 2]?.teamId,
-        team2_id: bracketAssignments[index * 2 + 1]?.teamId,
+        round: match.tournament_round,
+        bracket_type: match.tournament_bracket_type as 'winners' | 'losers' | 'final',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
         match_order: index + 1
       }));
     } else if (tournament.format === 'double-elimination') {
@@ -134,17 +134,17 @@ export async function POST(
         tournament.rounds_per_match,
         tournament.start_time ? new Date(tournament.start_time) : undefined
       );
-      
+
       generatedMatches = matches;
-      
-      // Create tournament match relationships for winner's bracket
+
+      // Create tournament match relationships from generated matches
       tournamentMatches = matches.map((match, index) => ({
         id: match.id,
         tournament_id: tournamentId,
-        round: 1,
-        bracket_type: 'winners' as const,
-        team1_id: bracketAssignments[index * 2]?.teamId,
-        team2_id: bracketAssignments[index * 2 + 1]?.teamId,
+        round: match.tournament_round,
+        bracket_type: match.tournament_bracket_type as 'winners' | 'losers' | 'final',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
         match_order: index + 1
       }));
     } else {
