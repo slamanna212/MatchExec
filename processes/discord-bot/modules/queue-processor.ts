@@ -388,7 +388,13 @@ export class QueueProcessor {
           try {
             if (newStatus === 'assign') {
               // When transitioning to 'assign' (signups closed), remove signup buttons
-              success = await this.updateMatchMessagesForSignupClosure(matchId);
+              // Check if this is a tournament or match
+              const isTournament = matchId.startsWith('tournament_');
+              if (isTournament) {
+                success = await this.updateTournamentMessagesForSignupClosure(matchId);
+              } else {
+                success = await this.updateMatchMessagesForSignupClosure(matchId);
+              }
             } else {
               // For other status changes, just log for now
               success = true;
@@ -1242,6 +1248,176 @@ export class QueueProcessor {
 
     } catch (error) {
       console.error(`❌ Error updating Discord messages for signup closure:`, error);
+      return false;
+    }
+  }
+
+  private async updateTournamentMessagesForSignupClosure(tournamentId: string): Promise<boolean> {
+    if (!this.client.isReady() || !this.db) {
+      return false;
+    }
+
+    try {
+      console.log(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
+
+      // Get tournament data with image info for recreating attachments
+      const tournamentData = await this.db.get<{
+        event_image_url?: string;
+      }>(`
+        SELECT event_image_url
+        FROM tournaments
+        WHERE id = ?
+      `, [tournamentId]);
+
+      // Get all announcement messages for this tournament
+      const messages = await this.db.all<{
+        message_id: string;
+        channel_id: string;
+        message_type: string;
+      }>(`
+        SELECT message_id, channel_id, message_type
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+      `, [tournamentId]);
+
+      console.log(`📝 Found ${messages.length} tournament messages to update`);
+
+      if (messages.length === 0) {
+        // Let's check if there are ANY messages for this tournament
+        const allMessages = await this.db.all<{
+          message_id: string;
+          channel_id: string;
+          message_type: string;
+        }>(`
+          SELECT message_id, channel_id, message_type
+          FROM discord_match_messages
+          WHERE match_id = ?
+        `, [tournamentId]);
+
+        if (allMessages.length > 0) {
+          console.log(`ℹ️ Found ${allMessages.length} total messages for tournament ${tournamentId}, but none are announcements`);
+        }
+
+        return true; // Not an error if no messages exist
+      }
+
+      let successCount = 0;
+
+      for (const messageRecord of messages) {
+        try {
+          // Fetch the Discord channel
+          const channel = await this.client.channels.fetch(messageRecord.channel_id);
+
+          if (!channel?.isTextBased() || !('messages' in channel)) {
+            console.warn(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            continue;
+          }
+
+          // Fetch the Discord message
+          const message = await channel.messages.fetch(messageRecord.message_id);
+
+          if (!message) {
+            console.warn(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            continue;
+          }
+
+          console.log(`🔄 Updating tournament message ${messageRecord.message_id} in channel ${messageRecord.channel_id}`);
+
+          if (message.embeds[0]) {
+            console.log(`📋 Existing embed title: ${message.embeds[0].title}`);
+          }
+
+          if (message.attachments.size > 0) {
+            console.log(`📎 Message has ${message.attachments.size} attachments`);
+          }
+
+          // Create updated embed - copy the existing embed exactly but add signups closed message
+          const updatedEmbed = message.embeds[0] ?
+            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+
+          console.log(`🔄 Processing embed update for tournament message`);
+
+          // Keep the image in the embed - don't remove it
+          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
+          if (updatedEmbed.data.image?.url) {
+            console.log(`🖼️ Keeping existing image in embed: ${updatedEmbed.data.image.url}`);
+          } else {
+            console.log(`📷 No existing image in embed`);
+          }
+
+          // Just add a simple signups closed message at the bottom, don't change anything else
+          const existingFields = updatedEmbed.data.fields || [];
+          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+
+          if (signupStatusFieldIndex === -1) {
+            // Add new field at the bottom
+            updatedEmbed.addFields([{
+              name: '📋 Signup Status',
+              value: '🔒 **Team signups are now closed**',
+              inline: false
+            }]);
+          } else {
+            console.log(`📋 Signup status field already exists, not adding duplicate`);
+          }
+
+          console.log(`📝 Added signup closure field to tournament embed`);
+
+          // Recreate attachment if there's an event image to prevent Discord from stripping it
+          let attachment: AttachmentBuilder | undefined;
+          if (tournamentData?.event_image_url && tournamentData.event_image_url.trim()) {
+            try {
+              // Convert URL path to file system path for local files
+              const imagePath = path.join(process.cwd(), 'public', tournamentData.event_image_url.replace(/^\//, ''));
+
+              if (fs.existsSync(imagePath)) {
+                // Create attachment for the event image
+                attachment = new AttachmentBuilder(imagePath, {
+                  name: `tournament_image.${path.extname(imagePath).slice(1)}`
+                });
+
+                // Update embed to use attachment://filename to reference the reattached image
+                updatedEmbed.setImage(`attachment://tournament_image.${path.extname(imagePath).slice(1)}`);
+
+                console.log(`📎 Recreated attachment for tournament image: ${imagePath}`);
+              } else {
+                console.warn(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
+              }
+            } catch (error) {
+              console.error(`❌ Error recreating attachment for ${tournamentData.event_image_url}:`, error);
+            }
+          }
+
+          const editOptions: Record<string, unknown> = {
+            content: null, // Explicitly clear any content that might cause image display
+            embeds: [updatedEmbed],
+            components: [], // This removes all buttons
+            files: attachment ? [attachment] : [] // Include recreated attachment if available
+          };
+
+          console.log(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
+
+          // Remove all action rows (signup buttons) but keep everything else the same
+          await message.edit(editOptions);
+
+          console.log(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
+
+          successCount++;
+
+        } catch (error) {
+          console.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        console.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
+        return false;
+      }
+
+      console.log(`✅ Successfully updated ${successCount}/${messages.length} tournament messages for ${tournamentId}`);
+      return true;
+
+    } catch (error) {
+      console.error(`❌ Error updating Discord tournament messages for signup closure:`, error);
       return false;
     }
   }

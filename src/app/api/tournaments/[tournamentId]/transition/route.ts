@@ -6,31 +6,53 @@ import { TOURNAMENT_FLOW_STEPS, Tournament } from '@/shared/types';
 async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise<boolean> {
   try {
     const db = await getDbInstance();
-    
+
     // Check if already exists first to prevent duplicates
     const existing = await db.get(`
-      SELECT id FROM discord_announcement_queue 
+      SELECT id FROM discord_announcement_queue
       WHERE match_id = ? AND announcement_type = 'tournament' AND status IN ('pending', 'posted')
     `, [tournamentId]);
-    
+
     if (existing) {
       console.log('📢 Discord tournament announcement already exists for tournament:', tournamentId);
       return true;
     }
-    
+
     // Generate unique ID for the announcement queue entry
     const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Add to announcement queue with 'tournament' type
     await db.run(`
       INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
       VALUES (?, ?, 'tournament', 'pending')
     `, [announcementId, tournamentId]);
-    
+
     console.log('📢 Discord tournament announcement queued for tournament:', tournamentId);
     return true;
   } catch (error) {
     console.error('❌ Error queuing Discord tournament announcement:', error);
+    return false;
+  }
+}
+
+// Queue a Discord status update request that the Discord bot will process
+async function queueDiscordTournamentStatusUpdate(tournamentId: string, newStatus: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+
+    // Generate unique ID for the queue entry
+    const updateId = `discord_tournament_update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Add to status update queue
+    await db.run(`
+      INSERT INTO discord_status_update_queue (id, match_id, new_status, status)
+      VALUES (?, ?, ?, 'pending')
+    `, [updateId, tournamentId, newStatus]);
+
+    console.log('🔄 Discord tournament status update queued for tournament:', tournamentId, '-> status:', newStatus);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord tournament status update:', error);
     return false;
   }
 }
@@ -126,6 +148,20 @@ export async function POST(
         
       case 'assign':
         console.log(`🎯 Tournament ${tournamentId} signups closed, ready for bracket assignment`);
+
+        // Queue Discord status update when entering "assign" stage (close signups)
+        try {
+          const discordUpdateSuccess = await queueDiscordTournamentStatusUpdate(tournamentId, newStatus);
+
+          if (discordUpdateSuccess) {
+            console.log(`🔄 Discord tournament status update queued for tournament entering assign stage: ${tournamentId}`);
+          } else {
+            console.warn(`⚠️ Failed to queue Discord tournament status update for tournament: ${tournamentId}`);
+          }
+        } catch (discordError) {
+          console.error('❌ Error queuing Discord tournament status update:', discordError);
+          // Don't fail the API request if Discord queueing fails
+        }
         break;
         
       case 'battle':
