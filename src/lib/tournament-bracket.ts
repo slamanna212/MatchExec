@@ -70,6 +70,7 @@ export interface GeneratedMatch {
   game_id: string;
   game_mode_id: string;
   map_id: string;
+  maps?: string[]; // Array of map IDs for multiple rounds
   rounds_per_match: number;
   max_participants: number;
   status: string;
@@ -170,18 +171,28 @@ export async function generateSingleEliminationMatches(
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
     
-    // Randomly select game mode and map
+    // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
     const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-    const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-    
+
+    // Select multiple maps for the number of rounds
+    const selectedMaps: string[] = [];
+    for (let round = 0; round < roundsPerMatch; round++) {
+      // Ensure we don't pick the same map twice if possible
+      const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+      const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+      selectedMaps.push(randomMap.id);
+    }
+
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - Round 1`,
       game_id: gameId,
       game_mode_id: randomMode.id,
-      map_id: randomMap.id,
+      map_id: selectedMaps[0], // First map for compatibility
+      maps: selectedMaps, // All maps for the match
       rounds_per_match: roundsPerMatch,
       max_participants: 12, // Default for team matches
       status: 'assign',
@@ -290,18 +301,28 @@ export async function generateNextRoundMatches(
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
     
-    // Randomly select game mode and map
+    // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
     const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-    const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-    
+
+    // Select multiple maps for the number of rounds
+    const selectedMaps: string[] = [];
+    for (let round = 0; round < tournament.rounds_per_match; round++) {
+      // Ensure we don't pick the same map twice if possible
+      const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+      const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+      selectedMaps.push(randomMap.id);
+    }
+
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'} - Round ${nextRound}`,
       game_id: tournament.game_id,
       game_mode_id: randomMode.id,
-      map_id: randomMap.id,
+      map_id: selectedMaps[0], // First map for compatibility
+      maps: selectedMaps, // All maps for the match
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
       status: 'assign',
@@ -377,19 +398,29 @@ export async function generateDoubleEliminationMatches(
     // Get team names
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
-    
-    // Randomly select game mode and map
+
+    // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
     const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-    const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-    
+
+    // Select multiple maps for the number of rounds
+    const selectedMaps: string[] = [];
+    for (let round = 0; round < roundsPerMatch; round++) {
+      // Ensure we don't pick the same map twice if possible
+      const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+      const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+      selectedMaps.push(randomMap.id);
+    }
+
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - WB Round 1`,
       game_id: gameId,
       game_mode_id: randomMode.id,
-      map_id: randomMap.id,
+      map_id: selectedMaps[0], // First map for compatibility
+      maps: selectedMaps, // All maps for the match
       rounds_per_match: roundsPerMatch,
       max_participants: 12,
       status: 'assign',
@@ -494,19 +525,29 @@ export async function generateLosersBracketMatches(
     // Get team names
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
-    
-    // Randomly select game mode and map
+
+    // Randomly select game mode and maps for all rounds
     const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
     const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-    const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-    
+
+    // Select multiple maps for the number of rounds
+    const selectedMaps: string[] = [];
+    for (let round = 0; round < tournament.rounds_per_match; round++) {
+      // Ensure we don't pick the same map twice if possible
+      const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+      const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+      selectedMaps.push(randomMap.id);
+    }
+
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - LB Round ${losersBracketRound}`,
       game_id: tournament.game_id,
       game_mode_id: randomMode.id,
-      map_id: randomMap.id,
+      map_id: selectedMaps[0], // First map for compatibility
+      maps: selectedMaps, // All maps for the match
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
       status: 'assign',
@@ -569,18 +610,28 @@ export async function generateGrandFinalsMatch(
   
   const matchId = uuidv4();
   
-  // Randomly select game mode and map
+  // Randomly select game mode and maps for all rounds
   const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
   const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-  const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-  
+
+  // Select multiple maps for the number of rounds
+  const selectedMaps: string[] = [];
+  for (let round = 0; round < tournament.rounds_per_match; round++) {
+    // Ensure we don't pick the same map twice if possible
+    const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+    const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+    const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+    selectedMaps.push(randomMap.id);
+  }
+
   // Create grand finals match
   const grandFinalsMatch: GeneratedMatch = {
     id: matchId,
     name: `Grand Finals: ${wbTeam?.team_name || 'WB Winner'} vs ${lbTeam?.team_name || 'LB Winner'}`,
     game_id: tournament.game_id,
     game_mode_id: randomMode.id,
-    map_id: randomMap.id,
+    map_id: selectedMaps[0], // First map for compatibility
+    maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,
     max_participants: 12,
     status: 'created',
@@ -641,18 +692,28 @@ export async function generateGrandFinalsResetMatch(
   
   const matchId = uuidv4();
   
-  // Randomly select game mode and map
+  // Randomly select game mode and maps for all rounds
   const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
   const availableMaps = gameMaps.filter(m => !m.mode_id || m.mode_id === randomMode.id);
-  const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-  
+
+  // Select multiple maps for the number of rounds
+  const selectedMaps: string[] = [];
+  for (let round = 0; round < tournament.rounds_per_match; round++) {
+    // Ensure we don't pick the same map twice if possible
+    const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
+    const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+    const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
+    selectedMaps.push(randomMap.id);
+  }
+
   // Create grand finals reset match
   const resetMatch: GeneratedMatch = {
     id: matchId,
     name: `Grand Finals Reset: ${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
     game_id: tournament.game_id,
     game_mode_id: randomMode.id,
-    map_id: randomMap.id,
+    map_id: selectedMaps[0], // First map for compatibility
+    maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,
     max_participants: 12,
     status: 'created',
@@ -687,16 +748,17 @@ export async function saveGeneratedMatches(
 
       await db.run(`
         INSERT INTO matches (
-          id, name, game_id, mode_id, map_id, rounds,
+          id, name, game_id, mode_id, map_id, maps, rounds,
           max_participants, status, tournament_id,
           tournament_round, tournament_bracket_type, start_date, start_time,
           team1_name, team2_name, announcements, rules, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [
         match.id, match.name, match.game_id, match.game_mode_id, match.map_id,
-        match.rounds_per_match, match.max_participants, match.status,
-        match.tournament_id, match.tournament_round, match.tournament_bracket_type,
-        scheduledDate, scheduledDateTime, match.team1_name, match.team2_name, 1,
+        match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
+        match.max_participants, match.status, match.tournament_id,
+        match.tournament_round, match.tournament_bracket_type, scheduledDate,
+        scheduledDateTime, match.team1_name, match.team2_name, 1,
         match.rules || 'casual'
       ]);
     }
@@ -747,6 +809,14 @@ export async function saveGeneratedMatches(
             ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
           `, [participantId, tournamentMatch.id, member.user_id, member.username, 'team2']);
         }
+      }
+    }
+
+    // Initialize match games for each match
+    const { initializeMatchGames } = await import('./scoring-functions');
+    for (const match of matches) {
+      if (match.maps && match.maps.length > 0) {
+        await initializeMatchGames(match.id);
       }
     }
 
