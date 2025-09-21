@@ -12,11 +12,13 @@ export async function GET(request: NextRequest) {
     
     let query = `
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
-             t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type
+             t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
+             gm.name as map_name
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       LEFT JOIN tournament_matches tm ON m.id = tm.match_id
       LEFT JOIN tournaments t ON tm.tournament_id = t.id
+      LEFT JOIN game_maps gm ON m.map_id = gm.id AND m.game_id = gm.game_id
     `;
     
     const params: string[] = [];
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Parse maps and map codes JSON for each match
     const parsedMatches = matches.map(match => ({
       ...match,
-      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
+      maps: match.map_id ? [match.map_id] : (match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []),
       map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
     }));
     

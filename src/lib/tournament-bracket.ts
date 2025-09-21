@@ -676,9 +676,9 @@ export async function saveGeneratedMatches(
   tournamentMatches: TournamentMatchInfo[]
 ): Promise<void> {
   const db = await getDbInstance();
-  
+
   await db.run('BEGIN TRANSACTION');
-  
+
   try {
     // Insert matches
     for (const match of matches) {
@@ -700,7 +700,7 @@ export async function saveGeneratedMatches(
         match.rules || 'casual'
       ]);
     }
-    
+
     // Insert tournament match relationships
     for (const tournamentMatch of tournamentMatches) {
       await db.run(`
@@ -713,8 +713,43 @@ export async function saveGeneratedMatches(
         tournamentMatch.bracket_type, tournamentMatch.team1_id, tournamentMatch.team2_id,
         tournamentMatch.match_order, tournamentMatch.parent_match1_id, tournamentMatch.parent_match2_id
       ]);
+
+      // Add team members as match participants
+      if (tournamentMatch.team1_id) {
+        const team1Members = await db.all(`
+          SELECT user_id, username
+          FROM tournament_team_members
+          WHERE team_id = ?
+        `, [tournamentMatch.team1_id]) as { user_id: string; username: string }[];
+
+        for (const member of team1Members) {
+          const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await db.run(`
+            INSERT INTO match_participants (
+              id, match_id, user_id, username, team, joined_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'team1']);
+        }
+      }
+
+      if (tournamentMatch.team2_id) {
+        const team2Members = await db.all(`
+          SELECT user_id, username
+          FROM tournament_team_members
+          WHERE team_id = ?
+        `, [tournamentMatch.team2_id]) as { user_id: string; username: string }[];
+
+        for (const member of team2Members) {
+          const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await db.run(`
+            INSERT INTO match_participants (
+              id, match_id, user_id, username, team, joined_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'team2']);
+        }
+      }
     }
-    
+
     await db.run('COMMIT');
   } catch (error) {
     await db.run('ROLLBACK');

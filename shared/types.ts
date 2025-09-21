@@ -91,6 +91,7 @@ export interface TournamentTeamMember {
 export interface MatchDbRow extends Match {
   maps?: string; // JSON string in database
   map_codes?: string; // JSON string storing map codes
+  map_id?: string; // Single map ID for tournament matches
   event_image_url?: string;
   rules?: string;
   rounds?: number;
