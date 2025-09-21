@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS tournaments (
   start_date DATETIME,
   start_time DATETIME,
   event_image_url TEXT,
+  signup_config_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+  FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+  FOREIGN KEY (signup_config_id) REFERENCES signup_configs(id) ON DELETE SET NULL
 );
 
 -- Tournament teams table

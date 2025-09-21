@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Badge, Grid, Stack, Group, Button, Alert } from '@mantine/core';
+import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import { redirect } from 'next/navigation';
 
@@ -90,6 +90,132 @@ export default function DevPage() {
               </Button>
             </div>
           </Stack>
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Player Card Color Testing</Text>
+          <Text size="sm" c="dimmed" mb="lg">
+            Test all available color combinations for tournament player cards to ensure readability
+          </Text>
+
+          <Grid>
+            {/* Reserve Color */}
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Card
+                shadow="md"
+                padding="md"
+                radius="md"
+                withBorder
+                style={{
+                  backgroundColor: '#FFD54F',
+                  borderColor: '#FFC107'
+                }}
+              >
+                <Group justify="space-between" align="center" mb="xs">
+                  <Group align="center">
+                    <Avatar size="sm" color="violet" variant="filled">
+                      1
+                    </Avatar>
+                    <div>
+                      <Text fw={500} size="sm" c="dark">TestPlayer</Text>
+                      <Text size="xs" c="gray.7">
+                        Joined: {new Date().toLocaleDateString('en-US')}
+                      </Text>
+                    </div>
+                  </Group>
+                </Group>
+
+                <Select
+                  size="xs"
+                  value="reserve"
+                  data={[{ value: 'reserve', label: 'Reserve' }]}
+                  w={120}
+                  mb="xs"
+                  styles={{
+                    input: {
+                      backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+                      border: '1px solid var(--mantine-color-gray-5)',
+                      backdropFilter: 'blur(2px)',
+                      color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+                    }
+                  }}
+                />
+
+                <Group mt="xs" gap="xs">
+                  <Badge size="xs" variant="filled" color="violet">
+                    Role: Tank
+                  </Badge>
+                  <Badge size="xs" variant="filled" color="violet">
+                    Rank: Diamond
+                  </Badge>
+                </Group>
+                <Text size="xs" fw={500} mt="xs" c="dark">Reserve (Yellow)</Text>
+              </Card>
+            </Grid.Col>
+
+            {/* Team Colors */}
+            {[
+              { name: 'Team 1 (Blue)', bg: 'var(--mantine-color-blue-2)', border: 'var(--mantine-color-blue-4)', badge: 'orange' },
+              { name: 'Team 2 (Red)', bg: 'var(--mantine-color-red-2)', border: 'var(--mantine-color-red-4)', badge: 'cyan' },
+              { name: 'Team 3 (Green)', bg: 'var(--mantine-color-green-2)', border: 'var(--mantine-color-green-4)', badge: 'yellow' },
+              { name: 'Team 4 (Purple)', bg: 'var(--mantine-color-purple-2)', border: 'var(--mantine-color-purple-4)', badge: 'grape' },
+              { name: 'Team 5 (Orange)', bg: 'var(--mantine-color-orange-2)', border: 'var(--mantine-color-orange-4)', badge: 'lime' },
+              { name: 'Team 6 (Teal)', bg: 'var(--mantine-color-teal-2)', border: 'var(--mantine-color-teal-4)', badge: 'indigo' }
+            ].map((team, index) => (
+              <Grid.Col key={team.name} span={{ base: 12, sm: 6, md: 4 }}>
+                <Card
+                  shadow="md"
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{
+                    backgroundColor: team.bg,
+                    borderColor: team.border
+                  }}
+                >
+                  <Group justify="space-between" align="center" mb="xs">
+                    <Group align="center">
+                      <Avatar size="sm" color={team.badge} variant="filled">
+                        {index + 2}
+                      </Avatar>
+                      <div>
+                        <Text fw={500} size="sm" c="dark">TestPlayer</Text>
+                        <Text size="xs" c="gray.7">
+                          Joined: {new Date().toLocaleDateString('en-US')}
+                        </Text>
+                      </div>
+                    </Group>
+                  </Group>
+
+                  <Select
+                    size="xs"
+                    value={`team${index + 1}`}
+                    data={[{ value: `team${index + 1}`, label: team.name.split(' (')[0] }]}
+                    w={120}
+                    mb="xs"
+                    styles={{
+                      input: {
+                        backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+                        border: '1px solid var(--mantine-color-gray-5)',
+                        backdropFilter: 'blur(2px)',
+                        color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+                      }
+                    }}
+                  />
+
+                  <Group mt="xs" gap="xs">
+                    <Badge size="xs" variant="filled" color={team.badge}>
+                      Role: Tank
+                    </Badge>
+                    <Badge size="xs" variant="filled" color={team.badge}>
+                      Rank: Diamond
+                    </Badge>
+                  </Group>
+                  <Text size="xs" fw={500} mt="xs" c="dark">{team.name}</Text>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
         </Card>
       </Stack>
     </div>

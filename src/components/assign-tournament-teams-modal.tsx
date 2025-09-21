@@ -1,23 +1,42 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Modal, 
-  Text, 
-  Button, 
-  Card, 
-  Group, 
-  Stack, 
+import { useMediaQuery } from '@mantine/hooks';
+import {
+  Modal,
+  Text,
+  Button,
+  Card,
+  Group,
+  Stack,
   Grid,
   Badge,
   Avatar,
   Loader,
   Divider,
   ActionIcon,
-  TextInput
+  TextInput,
+  Select
 } from '@mantine/core';
 import { IconPlus, IconX } from '@tabler/icons-react';
 import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
+
+interface SignupField {
+  id: string;
+  label: string;
+  type: 'text' | 'select' | 'number';
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+interface SignupConfig {
+  id: string;
+  name: string;
+  fields: SignupField[];
+  created_at: string;
+  updated_at: string;
+}
 
 interface TournamentParticipant {
   id: string;
@@ -25,6 +44,7 @@ interface TournamentParticipant {
   username: string;
   joined_at: string;
   team_assignment?: string; // team ID or 'reserve'
+  signup_data?: Record<string, unknown>;
 }
 
 interface TeamWithMembers extends TournamentTeam {
@@ -50,6 +70,8 @@ export function AssignTournamentTeamsModal({
   const [saving, setSaving] = useState(false);
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
+  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const fetchData = useCallback(async () => {
     if (!tournamentId) return;
@@ -71,15 +93,21 @@ export function AssignTournamentTeamsModal({
         const participantsData = await participantsResponse.json();
 
         // Convert participants to the expected format
-        const allParticipants: TournamentParticipant[] = participantsData.map((p: any) => ({
+        const allParticipants: TournamentParticipant[] = participantsData.participants.map((p: any) => ({
           id: p.id,
           user_id: p.user_id,
           username: p.username,
           joined_at: p.joined_at,
-          team_assignment: p.team_assignment || 'reserve'
+          team_assignment: p.team_assignment || 'reserve',
+          signup_data: p.signup_data
         }));
 
         setParticipants(allParticipants);
+
+        // Set signup config if available
+        if (participantsData.signupConfig) {
+          setSignupConfig(participantsData.signupConfig);
+        }
       }
     } catch (error) {
       console.error('Error fetching tournament data:', error);
@@ -178,21 +206,62 @@ export function AssignTournamentTeamsModal({
   };
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, participantId: string) => {
+    if (isMobile) {
+      e.preventDefault();
+      return;
+    }
     setDraggedParticipant(participantId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isMobile) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetTeamId: string) => {
+    if (isMobile) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     if (draggedParticipant) {
       handleTeamChange(draggedParticipant, targetTeamId);
       setDraggedParticipant(null);
     }
+  };
+
+  const getPlayerCardStyles = (teamId: string | undefined) => {
+    if (teamId === 'reserve' || !teamId) {
+      return {
+        backgroundColor: '#FFD54F',
+        borderColor: '#FFC107'
+      };
+    }
+    // For team assignments, use different colors for each team
+    const teamIndex = teams.findIndex(t => t.id === teamId);
+    const colors = [
+      { backgroundColor: 'var(--mantine-color-blue-2)', borderColor: 'var(--mantine-color-blue-4)' },
+      { backgroundColor: 'var(--mantine-color-red-2)', borderColor: 'var(--mantine-color-red-4)' },
+      { backgroundColor: 'var(--mantine-color-green-2)', borderColor: 'var(--mantine-color-green-4)' },
+      { backgroundColor: 'var(--mantine-color-purple-2)', borderColor: 'var(--mantine-color-purple-4)' },
+      { backgroundColor: 'var(--mantine-color-orange-2)', borderColor: 'var(--mantine-color-orange-4)' },
+      { backgroundColor: 'var(--mantine-color-teal-2)', borderColor: 'var(--mantine-color-teal-4)' }
+    ];
+    return colors[teamIndex % colors.length] || { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)' };
+  };
+
+  const getBadgeColor = (teamId: string | undefined) => {
+    if (teamId === 'reserve' || !teamId) {
+      return 'violet'; // Primary site color
+    }
+    const teamIndex = teams.findIndex(t => t.id === teamId);
+    const colors = ['orange', 'cyan', 'yellow', 'grape', 'lime', 'indigo'];
+    return colors[teamIndex % colors.length] || 'dark';
   };
 
   return (
@@ -246,21 +315,80 @@ export function AssignTournamentTeamsModal({
                 </Group>
                 <Divider mb="sm" />
                 <Stack gap="xs">
-                  {getReserveParticipants().map((participant) => (
+                  {getReserveParticipants().map((participant, index) => (
                     <Card
                       key={participant.id}
+                      shadow="md"
+                      padding="md"
+                      radius="md"
                       withBorder
-                      p="xs"
-                      style={{ cursor: 'grab' }}
-                      draggable
+                      style={{
+                        ...getPlayerCardStyles(participant.team_assignment),
+                        cursor: isMobile ? 'default' : 'grab'
+                      }}
+                      draggable={!isMobile}
                       onDragStart={(e) => handleDragStart(e, participant.id)}
                     >
-                      <Group gap="sm">
-                        <Avatar size="sm" color="gray">
-                          {participant.username.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Text size="sm">{participant.username}</Text>
+                      <Group justify="space-between" align="center" mb="xs">
+                        <Group align="center">
+                          <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
+                            {index + 1}
+                          </Avatar>
+                          <div>
+                            <Text fw={500} size="sm" c="dark">{participant.username}</Text>
+                            <Text size="xs" c="gray.7">
+                              Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
+                            </Text>
+                          </div>
+                        </Group>
                       </Group>
+
+                      <Select
+                        size="xs"
+                        value={participant.team_assignment || 'reserve'}
+                        onChange={(value) => handleTeamChange(participant.id, value || 'reserve')}
+                        data={[
+                          { value: 'reserve', label: 'Reserve' },
+                          ...teams.map(team => ({
+                            value: team.id,
+                            label: team.team_name
+                          }))
+                        ]}
+                        w={120}
+                        mb="xs"
+                        styles={{
+                          input: {
+                            backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+                            border: '1px solid var(--mantine-color-gray-5)',
+                            backdropFilter: 'blur(2px)',
+                            color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+                          }
+                        }}
+                      />
+
+                      {participant.signup_data && Object.keys(participant.signup_data).length > 0 && (
+                        <Group mt="xs" gap="xs">
+                          {Object.entries(participant.signup_data).map(([key, value]) => {
+                            const field = signupConfig?.fields.find(f => f.id === key);
+                            let displayLabel = field?.label;
+
+                            if (!displayLabel) {
+                              // Convert various naming conventions to readable format
+                              displayLabel = key
+                                .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+                                .replace(/[-_]/g, ' ') // kebab-case and snake_case to spaces
+                                .replace(/\b\w/g, l => l.toUpperCase()) // capitalize first letter of each word
+                                .trim();
+                            }
+
+                            return (
+                              <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment)}>
+                                {displayLabel}: {String(value)}
+                              </Badge>
+                            );
+                          })}
+                        </Group>
+                      )}
                     </Card>
                   ))}
                 </Stack>
@@ -295,21 +423,80 @@ export function AssignTournamentTeamsModal({
                   </Group>
                   <Divider mb="sm" />
                   <Stack gap="xs">
-                    {getParticipantsByTeam(team.id).map((participant) => (
+                    {getParticipantsByTeam(team.id).map((participant, index) => (
                       <Card
                         key={participant.id}
+                        shadow="md"
+                        padding="md"
+                        radius="md"
                         withBorder
-                        p="xs"
-                        style={{ cursor: 'grab' }}
-                        draggable
+                        style={{
+                          ...getPlayerCardStyles(participant.team_assignment),
+                          cursor: isMobile ? 'default' : 'grab'
+                        }}
+                        draggable={!isMobile}
                         onDragStart={(e) => handleDragStart(e, participant.id)}
                       >
-                        <Group gap="sm">
-                          <Avatar size="sm" color="blue">
-                            {participant.username.charAt(0).toUpperCase()}
-                          </Avatar>
-                          <Text size="sm">{participant.username}</Text>
+                        <Group justify="space-between" align="center" mb="xs">
+                          <Group align="center">
+                            <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
+                              {index + 1}
+                            </Avatar>
+                            <div>
+                              <Text fw={500} size="sm" c="dark">{participant.username}</Text>
+                              <Text size="xs" c="gray.7">
+                                Joined: {new Date(participant.joined_at).toLocaleDateString('en-US')}
+                              </Text>
+                            </div>
+                          </Group>
                         </Group>
+
+                        <Select
+                          size="xs"
+                          value={participant.team_assignment || 'reserve'}
+                          onChange={(value) => handleTeamChange(participant.id, value || 'reserve')}
+                          data={[
+                            { value: 'reserve', label: 'Reserve' },
+                            ...teams.map(team => ({
+                              value: team.id,
+                              label: team.team_name
+                            }))
+                          ]}
+                          w={120}
+                          mb="xs"
+                          styles={{
+                            input: {
+                              backgroundColor: 'light-dark(rgba(255,255,255,0.8), rgba(37, 38, 43, 0.8))',
+                              border: '1px solid var(--mantine-color-gray-5)',
+                              backdropFilter: 'blur(2px)',
+                              color: 'light-dark(var(--mantine-color-black), var(--mantine-color-white))'
+                            }
+                          }}
+                        />
+
+                        {participant.signup_data && Object.keys(participant.signup_data).length > 0 && (
+                          <Group mt="xs" gap="xs">
+                            {Object.entries(participant.signup_data).map(([key, value]) => {
+                              const field = signupConfig?.fields.find(f => f.id === key);
+                              let displayLabel = field?.label;
+
+                              if (!displayLabel) {
+                                // Convert various naming conventions to readable format
+                                displayLabel = key
+                                  .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+                                  .replace(/[-_]/g, ' ') // kebab-case and snake_case to spaces
+                                  .replace(/\b\w/g, l => l.toUpperCase()) // capitalize first letter of each word
+                                  .trim();
+                              }
+
+                              return (
+                                <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment)}>
+                                  {displayLabel}: {String(value)}
+                                </Badge>
+                              );
+                            })}
+                          </Group>
+                        )}
                       </Card>
                     ))}
                   </Stack>
@@ -319,7 +506,10 @@ export function AssignTournamentTeamsModal({
           </Grid>
 
           <Text size="sm" c="dimmed" ta="center">
-            Drag players between teams or use the dropdown selectors below each player card
+            {isMobile
+              ? "Use the dropdown selectors on each player card to assign teams"
+              : "Drag players between teams or use the dropdown selectors on each player card"
+            }
           </Text>
 
           <Divider />
