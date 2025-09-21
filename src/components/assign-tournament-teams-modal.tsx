@@ -451,6 +451,14 @@ export function AssignTournamentTeamsModal({
                       }))}
                       style={{ flex: 1, maxWidth: '70%' }}
                       size="sm"
+                      renderOption={({ option }) => (
+                        <Group justify="space-between" w="100%">
+                          <span>{option.label}</span>
+                          <Badge size="xs" color="violet" variant="filled">
+                            {getParticipantsByTeam(option.value).length}
+                          </Badge>
+                        </Group>
+                      )}
                     />
                   ) : (
                     <Text fw={500} c="dimmed">No teams created</Text>
