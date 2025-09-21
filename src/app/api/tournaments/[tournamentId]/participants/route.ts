@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 
+interface TournamentParticipant {
+  id: string;
+  user_id: string;
+  username: string;
+  joined_at: string;
+  team_assignment: string | null;
+  signup_data: string | null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
@@ -24,7 +33,7 @@ export async function GET(
     `, [tournamentId]);
 
     // Parse signup_data JSON for each participant if it exists
-    const parsedParticipants = participants.map((participant: any) => ({
+    const parsedParticipants = participants.map((participant: TournamentParticipant) => ({
       ...participant,
       signup_data: participant.signup_data ? JSON.parse(participant.signup_data) : null
     }));

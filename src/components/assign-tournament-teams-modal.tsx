@@ -47,6 +47,15 @@ interface TournamentParticipant {
   signup_data?: Record<string, unknown>;
 }
 
+interface ParticipantApiResponse {
+  id: string;
+  user_id: string;
+  username: string;
+  joined_at: string;
+  team_assignment: string | null;
+  signup_data: Record<string, unknown> | null;
+}
+
 interface TeamWithMembers extends TournamentTeam {
   members: TournamentTeamMember[];
 }
@@ -93,7 +102,7 @@ export function AssignTournamentTeamsModal({
         const participantsData = await participantsResponse.json();
 
         // Convert participants to the expected format
-        const allParticipants: TournamentParticipant[] = participantsData.participants.map((p: any) => ({
+        const allParticipants: TournamentParticipant[] = participantsData.participants.map((p: ParticipantApiResponse) => ({
           id: p.id,
           user_id: p.user_id,
           username: p.username,

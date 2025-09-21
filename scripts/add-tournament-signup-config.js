@@ -4,14 +4,17 @@
  * Run this script manually to update the dev database without recreating it
  */
 
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+import sqlite3 from 'sqlite3';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
-const dbPath = path.join(__dirname, '..', 'app_data', 'data', 'matchexec.db');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const dbPath = join(__dirname, '..', 'app_data', 'data', 'matchexec.db');
 
 console.log(`Connecting to database at: ${dbPath}`);
 
-const db = new sqlite3.Database(dbPath, (err) => {
+const db = new sqlite3.verbose().Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database:', err.message);
     process.exit(1);
