@@ -87,6 +87,7 @@ ALTER TABLE matches ADD COLUMN tournament_round INTEGER;
 ALTER TABLE matches ADD COLUMN tournament_bracket_type TEXT;
 ALTER TABLE matches ADD COLUMN team1_name TEXT;
 ALTER TABLE matches ADD COLUMN team2_name TEXT;
+ALTER TABLE matches ADD COLUMN map_id TEXT REFERENCES game_maps(id);
 
 -- Performance indexes for tournaments
 CREATE INDEX IF NOT EXISTS idx_tournaments_game_id ON tournaments(game_id);
@@ -117,3 +118,4 @@ CREATE INDEX IF NOT EXISTS idx_matches_blue_team_id ON matches(blue_team_id);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament_round ON matches(tournament_round);
 CREATE INDEX IF NOT EXISTS idx_matches_tournament_bracket_type ON matches(tournament_bracket_type);
 CREATE INDEX IF NOT EXISTS idx_matches_winner_team ON matches(winner_team);
+CREATE INDEX IF NOT EXISTS idx_matches_map_id ON matches(map_id);
