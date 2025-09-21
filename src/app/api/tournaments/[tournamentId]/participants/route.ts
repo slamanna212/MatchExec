@@ -10,6 +10,14 @@ interface TournamentParticipant {
   signup_data: string | null;
 }
 
+interface SignupConfig {
+  id: string;
+  name: string;
+  fields: string | object;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
@@ -30,10 +38,10 @@ export async function GET(
       FROM tournament_participants tp
       WHERE tp.tournament_id = ?
       ORDER BY tp.joined_at ASC
-    `, [tournamentId]);
+    `, [tournamentId]) as TournamentParticipant[];
 
     // Parse signup_data JSON for each participant if it exists
-    const parsedParticipants = participants.map((participant: TournamentParticipant) => ({
+    const parsedParticipants = participants.map((participant) => ({
       ...participant,
       signup_data: participant.signup_data ? JSON.parse(participant.signup_data) : null
     }));
@@ -43,19 +51,26 @@ export async function GET(
     try {
       const tournament = await db.get(`
         SELECT signup_config_id FROM tournaments WHERE id = ?
-      `, [tournamentId]);
+      `, [tournamentId]) as { signup_config_id: string | null } | undefined;
 
       if (tournament?.signup_config_id) {
-        signupConfig = await db.get(`
+        const rawSignupConfig = await db.get(`
           SELECT * FROM signup_configs WHERE id = ?
-        `, [tournament.signup_config_id]);
+        `, [tournament.signup_config_id]) as SignupConfig | undefined;
 
-        if (signupConfig?.fields) {
-          signupConfig.fields = JSON.parse(signupConfig.fields);
+        if (rawSignupConfig?.fields) {
+          signupConfig = {
+            ...rawSignupConfig,
+            fields: typeof rawSignupConfig.fields === 'string'
+              ? JSON.parse(rawSignupConfig.fields)
+              : rawSignupConfig.fields
+          };
+        } else {
+          signupConfig = rawSignupConfig;
         }
       }
     } catch (error) {
-      console.warn('Could not fetch signup config for tournament:', error.message);
+      console.warn('Could not fetch signup config for tournament:', error instanceof Error ? error.message : String(error));
       // Continue without signup config - this is non-critical
     }
 

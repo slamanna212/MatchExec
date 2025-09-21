@@ -153,14 +153,14 @@ export class InteractionHandler {
             SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups
             FROM tournaments t
             WHERE t.id = ?
-          `, [eventId]);
+          `, [eventId]) || null;
         } else {
           eventData = await this.db.get<{max_signups: number, game_id: string}>(`
             SELECT m.game_id, g.max_signups
             FROM matches m
             JOIN games g ON m.game_id = g.id
             WHERE m.id = ?
-          `, [eventId]);
+          `, [eventId]) || null;
         }
 
         if ((participantCount?.count ?? 0) >= (eventData?.max_signups || 16)) {
@@ -236,11 +236,11 @@ export class InteractionHandler {
         if (isTournament) {
           eventData = await this.db.get<{game_id: string}>(`
             SELECT game_id FROM tournaments WHERE id = ?
-          `, [eventId]);
+          `, [eventId]) || null;
         } else {
           eventData = await this.db.get<{game_id: string}>(`
             SELECT game_id FROM matches WHERE id = ?
-          `, [eventId]);
+          `, [eventId]) || null;
         }
 
         if (!eventData) {
