@@ -209,29 +209,31 @@ export function TournamentDetailsModal({
         <Grid>
           {tournamentDetails.teams.map((team) => (
             <Grid.Col key={team.id} span={{ base: 12, sm: 6 }}>
-              <Card withBorder p="md">
+              <Card withBorder p="md" style={{ height: '100%', minHeight: '200px', display: 'flex', flexDirection: 'column' }}>
                 <Group mb="sm">
                   <IconTrophy size="1.2rem" />
-                  <Text fw={500}>{team.team_name}</Text>
+                  <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
                   <Badge size="sm" variant="light">
                     {team.members?.length || 0} members
                   </Badge>
                 </Group>
-                
-                {team.members && team.members.length > 0 ? (
-                  <Stack gap="xs">
-                    {team.members.map((member) => (
-                      <Group key={member.id} gap="sm">
-                        <Avatar size="sm" color="blue">
-                          {member.username.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Text size="sm">{member.username}</Text>
-                      </Group>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
-                )}
+
+                <div style={{ flex: 1, overflow: 'auto' }}>
+                  {team.members && team.members.length > 0 ? (
+                    <Stack gap="xs">
+                      {team.members.map((member) => (
+                        <Group key={member.id} gap="sm">
+                          <Avatar size="sm" color="blue">
+                            {member.username.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <Text size="sm">{member.username}</Text>
+                        </Group>
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
+                  )}
+                </div>
               </Card>
             </Grid.Col>
           ))}
