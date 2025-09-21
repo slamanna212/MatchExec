@@ -400,9 +400,31 @@ class MatchExecScheduler {
 
       for (const match of matchesWithAnnouncements) {
         try {
-          const announcements = JSON.parse(match.announcements);
+          // Handle different announcement field formats
+          let announcements;
+
+          if (typeof match.announcements === 'string') {
+            try {
+              announcements = JSON.parse(match.announcements);
+            } catch (e) {
+              // If it's not valid JSON, skip this match
+              console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
+              continue;
+            }
+          } else {
+            // If announcements is a boolean or number, skip announcement processing
+            console.log(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
+            continue;
+          }
+
+          // Ensure announcements is an array
+          if (!Array.isArray(announcements)) {
+            console.log(`⚠️ Skipping match ${match.name} - announcements is not an array`);
+            continue;
+          }
+
           const matchStartTime = new Date(match.start_date);
-          
+
           for (const announcement of announcements) {
             // Calculate when this announcement should be sent
             const { value, unit } = announcement;
