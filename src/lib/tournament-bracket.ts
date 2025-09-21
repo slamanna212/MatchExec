@@ -143,8 +143,8 @@ export async function generateSingleEliminationMatches(
   const tournament = await db.get('SELECT ruleset FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string } | undefined;
   const tournamentRuleset = tournament?.ruleset || 'casual';
 
-  // Get game modes and maps for the game
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
+  // Get game modes and maps for the game (exclude workshop/custom modes for tournaments)
+  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"', [gameId]) as GameMode[];
   const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
   
   if (gameModes.length === 0 || gameMaps.length === 0) {
@@ -174,35 +174,52 @@ export async function generateSingleEliminationMatches(
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
 
-    // Randomly select game mode and maps for all rounds
-    const randomMode = gameModes[Math.floor(Math.random() * gameModes.length)];
-    const availableMaps = gameMaps.filter(m => {
-      // Filter by mode compatibility
-      const modeCompatible = !m.mode_id || m.mode_id === randomMode.id;
-      // Exclude custom and workshop maps from tournaments
+    // Filter out custom and workshop maps from all maps
+    const tournamentMaps = gameMaps.filter(m => {
       const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
                                  !m.id.toLowerCase().includes('workshop') &&
                                  !m.name.toLowerCase().includes('custom') &&
                                  !m.name.toLowerCase().includes('workshop');
-      return modeCompatible && notCustomOrWorkshop;
+      return notCustomOrWorkshop;
     });
 
-    // Select multiple maps for the number of rounds
+    // Select different modes for each round
     const selectedMaps: string[] = [];
+    const selectedModes: string[] = [];
+
     for (let round = 0; round < roundsPerMatch; round++) {
-      // Ensure we don't pick the same map twice if possible
-      const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
-      const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      // Get available modes that haven't been used yet
+      const availableModes = gameModes.filter(mode => !selectedModes.includes(mode.id));
+
+      // If we've used all modes, start over (for matches with more rounds than modes)
+      const modePool = availableModes.length > 0 ? availableModes : gameModes;
+      const selectedMode = modePool[Math.floor(Math.random() * modePool.length)];
+
+      // Get maps for this specific mode
+      const mapsForMode = tournamentMaps.filter(m => m.mode_id === selectedMode.id);
+
+      if (mapsForMode.length === 0) {
+        throw new Error(`No maps available for mode ${selectedMode.id} in round ${round + 1}`);
+      }
+
+      // Pick a random map from this mode that hasn't been used
+      const availableMapPool = mapsForMode.filter(m => !selectedMaps.includes(m.id));
+      const mapPool = availableMapPool.length > 0 ? availableMapPool : mapsForMode;
+
       const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
       selectedMaps.push(randomMap.id);
+      selectedModes.push(selectedMode.id);
     }
+
+    // Use the first selected mode for compatibility (legacy field)
+    const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
 
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - Round 1`,
       game_id: gameId,
-      game_mode_id: randomMode.id,
+      game_mode_id: primaryMode.id,
       map_id: selectedMaps[0], // First map for compatibility
       maps: selectedMaps, // All maps for the match
       rounds_per_match: roundsPerMatch,
@@ -334,6 +351,9 @@ export async function generateNextRoundMatches(
       // Ensure we don't pick the same map twice if possible
       const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
       const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      if (mapPool.length === 0) {
+        throw new Error(`No maps available in map pool for round ${round + 1}`);
+      }
       const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
       selectedMaps.push(randomMap.id);
     }
@@ -443,6 +463,9 @@ export async function generateDoubleEliminationMatches(
       // Ensure we don't pick the same map twice if possible
       const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
       const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      if (mapPool.length === 0) {
+        throw new Error(`No maps available in map pool for round ${round + 1}`);
+      }
       const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
       selectedMaps.push(randomMap.id);
     }
@@ -581,6 +604,9 @@ export async function generateLosersBracketMatches(
       // Ensure we don't pick the same map twice if possible
       const availableMapPool = availableMaps.filter(m => !selectedMaps.includes(m.id));
       const mapPool = availableMapPool.length > 0 ? availableMapPool : availableMaps;
+      if (mapPool.length === 0) {
+        throw new Error(`No maps available in map pool for round ${round + 1}`);
+      }
       const randomMap = mapPool[Math.floor(Math.random() * mapPool.length)];
       selectedMaps.push(randomMap.id);
     }
