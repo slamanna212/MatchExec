@@ -307,6 +307,11 @@ export function AssignTournamentTeamsModal({
                 placeholder="Enter team name"
                 value={newTeamName}
                 onChange={(e) => setNewTeamName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTeamName.trim()) {
+                    handleCreateTeam();
+                  }
+                }}
                 style={{ flex: 1 }}
               />
               <Button
