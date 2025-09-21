@@ -176,12 +176,19 @@ export async function PUT(
     
     // Clear all existing team member assignments for this tournament
     await db.run(`
-      DELETE FROM tournament_team_members 
+      DELETE FROM tournament_team_members
       WHERE team_id IN (
         SELECT id FROM tournament_teams WHERE tournament_id = ?
       )
     `, [tournamentId]);
-    
+
+    // Reset all participants in this tournament to reserve status
+    await db.run(`
+      UPDATE tournament_participants
+      SET team_assignment = NULL
+      WHERE tournament_id = ?
+    `, [tournamentId]);
+
     // Add new team member assignments
     for (const team of teams) {
       if (team.members && team.members.length > 0) {
@@ -191,6 +198,13 @@ export async function PUT(
             INSERT INTO tournament_team_members (id, team_id, user_id, username)
             VALUES (?, ?, ?, ?)
           `, [memberId, team.teamId, member.userId, member.username]);
+
+          // Update the participant's team assignment
+          await db.run(`
+            UPDATE tournament_participants
+            SET team_assignment = ?
+            WHERE tournament_id = ? AND user_id = ?
+          `, [team.teamId, tournamentId, member.userId]);
         }
       }
     }

@@ -456,7 +456,7 @@ export function TournamentBracket({
         </Group>
 
         <Group>
-          {matches.length === 0 && onGenerateMatches && !isAssignMode && (
+          {matches.length === 0 && onGenerateMatches && isAssignMode && (
             <Button
               onClick={onGenerateMatches}
               disabled={teams.length < 2}
