@@ -11,9 +11,12 @@ export async function GET(request: NextRequest) {
     const db = await getDbInstance();
     
     let query = `
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
+             t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
+      LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+      LEFT JOIN tournaments t ON tm.tournament_id = t.id
     `;
     
     const params: string[] = [];

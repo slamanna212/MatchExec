@@ -18,6 +18,7 @@ interface TournamentRecord {
   id: string;
   game_id: string;
   rounds_per_match: number;
+  ruleset: string;
 }
 
 interface MatchResult {
@@ -76,6 +77,7 @@ export interface GeneratedMatch {
   tournament_id: string;
   tournament_round: number;
   tournament_bracket_type: string;
+  rules?: string;
   scheduled_time?: Date;
   team1_name?: string;
   team2_name?: string;
@@ -132,7 +134,11 @@ export async function generateSingleEliminationMatches(
   startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
+  // Get tournament info for ruleset
+  const tournament = await db.get('SELECT ruleset FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string } | undefined;
+  const tournamentRuleset = tournament?.ruleset || 'casual';
+
   // Get game modes and maps for the game
   const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
   const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
@@ -178,11 +184,12 @@ export async function generateSingleEliminationMatches(
       map_id: randomMap.id,
       rounds_per_match: roundsPerMatch,
       max_participants: 12, // Default for team matches
-      status: 'created',
+      status: 'assign',
       match_type: 'tournament',
       tournament_id: tournamentId,
       tournament_round: 1,
       tournament_bracket_type: 'winners',
+      rules: tournamentRuleset,
       scheduled_time: startTime,
       team1_name: team1?.team_name,
       team2_name: team2?.team_name
@@ -297,11 +304,12 @@ export async function generateNextRoundMatches(
       map_id: randomMap.id,
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
-      status: 'created',
+      status: 'assign',
       match_type: 'tournament',
       tournament_id: tournamentId,
       tournament_round: nextRound,
       tournament_bracket_type: bracketType,
+      rules: tournament.ruleset,
       team1_name: team1?.team_name,
       team2_name: team2?.team_name
     };
@@ -384,7 +392,7 @@ export async function generateDoubleEliminationMatches(
       map_id: randomMap.id,
       rounds_per_match: roundsPerMatch,
       max_participants: 12,
-      status: 'created',
+      status: 'assign',
       match_type: 'tournament',
       tournament_id: tournamentId,
       tournament_round: 1,
@@ -501,7 +509,7 @@ export async function generateLosersBracketMatches(
       map_id: randomMap.id,
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
-      status: 'created',
+      status: 'assign',
       match_type: 'tournament',
       tournament_id: tournamentId,
       tournament_round: losersBracketRound,
@@ -679,16 +687,17 @@ export async function saveGeneratedMatches(
 
       await db.run(`
         INSERT INTO matches (
-          id, name, game_id, mode_id, rounds,
+          id, name, game_id, mode_id, map_id, rounds,
           max_participants, status, tournament_id,
           tournament_round, tournament_bracket_type, start_date, start_time,
-          team1_name, team2_name, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          team1_name, team2_name, announcements, rules, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [
-        match.id, match.name, match.game_id, match.game_mode_id,
+        match.id, match.name, match.game_id, match.game_mode_id, match.map_id,
         match.rounds_per_match, match.max_participants, match.status,
         match.tournament_id, match.tournament_round, match.tournament_bracket_type,
-        scheduledDate, scheduledDateTime, match.team1_name, match.team2_name
+        scheduledDate, scheduledDateTime, match.team1_name, match.team2_name, 1,
+        match.rules || 'casual'
       ]);
     }
     

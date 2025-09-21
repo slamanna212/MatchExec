@@ -28,6 +28,7 @@ interface TournamentFormData {
   time: string;
   format: TournamentFormat;
   roundsPerMatch: number;
+  ruleset: string;
   maxParticipants?: number;
   eventImageUrl?: string;
 }
@@ -40,7 +41,8 @@ export function CreateTournamentPage() {
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [formData, setFormData] = useState<Partial<TournamentFormData>>({
     format: 'single-elimination',
-    roundsPerMatch: 3
+    roundsPerMatch: 3,
+    ruleset: 'casual'
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -93,7 +95,8 @@ export function CreateTournamentPage() {
   const clearFormData = () => {
     setFormData({
       format: 'single-elimination',
-      roundsPerMatch: 3
+      roundsPerMatch: 3,
+      ruleset: 'casual'
     });
     sessionStorage.removeItem('tournamentFormData');
   };
@@ -133,6 +136,7 @@ export function CreateTournamentPage() {
         startDate: startDateTime?.toISOString(),
         startTime: startDateTime?.toISOString(),
         roundsPerMatch: formData.roundsPerMatch,
+        ruleset: formData.ruleset,
         maxParticipants: formData.maxParticipants,
         eventImageUrl: formData.eventImageUrl || null
       };
@@ -361,6 +365,18 @@ export function CreateTournamentPage() {
               onChange={(value) => updateFormData('roundsPerMatch', value || 3)}
             />
 
+            <Select
+              label="Ruleset"
+              description="Tournament ruleset that will apply to all matches"
+              required
+              data={[
+                { value: 'casual', label: 'Casual' },
+                { value: 'competitive', label: 'Competitive' }
+              ]}
+              value={formData.ruleset || 'casual'}
+              onChange={(value) => updateFormData('ruleset', value || 'casual')}
+            />
+
             <Box>
               <Text size="sm" fw={500} mb="xs">Tournament Image (Optional)</Text>
               {imagePreview ? (
@@ -494,6 +510,11 @@ export function CreateTournamentPage() {
                 <Group>
                   <Text fw={500}>Rounds per Match:</Text>
                   <Text>{formData.roundsPerMatch}</Text>
+                </Group>
+
+                <Group>
+                  <Text fw={500}>Ruleset:</Text>
+                  <Badge variant="light" tt="capitalize">{formData.ruleset}</Badge>
                 </Group>
 
                 {formData.maxParticipants && (

@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       startDate,
       startTime,
       roundsPerMatch,
+      ruleset,
       maxParticipants,
       eventImageUrl
     } = body;
@@ -94,8 +95,8 @@ export async function POST(request: NextRequest) {
     await db.run(`
       INSERT INTO tournaments (
         id, name, description, game_id, format, status, rounds_per_match,
-        max_participants, start_date, start_time, event_image_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ruleset, max_participants, start_date, start_time, event_image_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tournamentId,
       name,
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
       format,
       'created',
       roundsPerMatch,
+      ruleset || 'casual',
       maxParticipants || null,
       startDateTime,
       startTimeOnly,

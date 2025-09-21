@@ -47,6 +47,9 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  tournament_name?: string;
+  tournament_round?: number;
+  tournament_bracket_type?: string;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -101,6 +104,11 @@ const MatchCard = memo(({
         <Stack gap="xs" style={{ flex: 1 }}>
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
+          {match.tournament_name && (
+            <Text size="xs" c="violet" fw={500}>
+              {match.tournament_name} - Round {match.tournament_round} ({match.tournament_bracket_type})
+            </Text>
+          )}
         </Stack>
         <RingProgress
           size={50}

@@ -411,8 +411,20 @@ class MatchExecScheduler {
               console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
               continue;
             }
+          } else if (typeof match.announcements === 'number' || typeof match.announcements === 'boolean') {
+            // For tournament matches, announcements is a boolean/number flag
+            // Use default announcement schedule for tournament matches
+            if (match.announcements) {
+              announcements = [
+                { id: 'default_1hour', value: 1, unit: 'hours' },
+                { id: 'default_30min', value: 30, unit: 'minutes' }
+              ];
+            } else {
+              // announcements disabled for this tournament match
+              continue;
+            }
           } else {
-            // If announcements is a boolean or number, skip announcement processing
+            // If announcements is some other type, skip announcement processing
             console.log(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
             continue;
           }

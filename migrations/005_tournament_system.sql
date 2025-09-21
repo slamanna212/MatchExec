@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'gather', 'assign', 'battle', 'complete', 'cancelled')),
   game_id TEXT NOT NULL,
   rounds_per_match INTEGER NOT NULL,
+  ruleset TEXT NOT NULL DEFAULT 'casual' CHECK (ruleset IN ('casual', 'competitive')),
   max_participants INTEGER,
   start_date DATETIME,
   start_time DATETIME,
