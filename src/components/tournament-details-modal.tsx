@@ -28,8 +28,26 @@ interface TournamentWithGame extends Tournament {
   participant_count?: number;
 }
 
+interface BracketMatch {
+  id: string;
+  round: number;
+  bracket_type: 'winners' | 'losers' | 'final';
+  team1?: {
+    id: string;
+    name: string;
+  };
+  team2?: {
+    id: string;
+    name: string;
+  };
+  winner?: string;
+  status: 'pending' | 'ongoing' | 'completed';
+  match_order: number;
+}
+
 interface TournamentWithDetails extends TournamentWithGame {
   teams?: (TournamentTeam & { members?: TournamentTeamMember[] })[];
+  matches?: BracketMatch[];
 }
 
 interface TournamentDetailsModalProps {
@@ -57,10 +75,25 @@ export function TournamentDetailsModal({
       const fetchTournamentDetails = async () => {
         setLoading(true);
         try {
-          const response = await fetch(`/api/tournaments/${tournament.id}`);
-          if (response.ok) {
-            const data = await response.json();
-            setTournamentDetails(data);
+          // Fetch tournament details and matches in parallel
+          const [tournamentResponse, matchesResponse] = await Promise.all([
+            fetch(`/api/tournaments/${tournament.id}`),
+            fetch(`/api/tournaments/${tournament.id}/matches`)
+          ]);
+
+          if (tournamentResponse.ok) {
+            const tournamentData = await tournamentResponse.json();
+            let matches: BracketMatch[] = [];
+
+            if (matchesResponse.ok) {
+              const matchesData = await matchesResponse.json();
+              matches = matchesData.matches || [];
+            }
+
+            setTournamentDetails({
+              ...tournamentData,
+              matches
+            });
           }
         } catch (error) {
           console.error('Error fetching tournament details:', error);
@@ -218,7 +251,7 @@ export function TournamentDetailsModal({
             name: team.team_name,
             members: team.members || []
           }))}
-          matches={[]} // TODO: Fetch tournament matches
+          matches={tournamentDetails.matches || []}
           isAssignMode={tournament.status === 'assign'}
           onGenerateMatches={async () => {
             try {
@@ -227,7 +260,25 @@ export function TournamentDetailsModal({
               });
               if (response.ok) {
                 // Refresh tournament details to show generated matches
-                window.location.reload();
+                const [tournamentResponse, matchesResponse] = await Promise.all([
+                  fetch(`/api/tournaments/${tournament.id}`),
+                  fetch(`/api/tournaments/${tournament.id}/matches`)
+                ]);
+
+                if (tournamentResponse.ok) {
+                  const tournamentData = await tournamentResponse.json();
+                  let matches: BracketMatch[] = [];
+
+                  if (matchesResponse.ok) {
+                    const matchesData = await matchesResponse.json();
+                    matches = matchesData.matches || [];
+                  }
+
+                  setTournamentDetails({
+                    ...tournamentData,
+                    matches
+                  });
+                }
               } else {
                 console.error('Failed to generate matches');
               }
