@@ -95,7 +95,7 @@ export class QueueProcessor {
     try {
       // Use the original approach - JOIN with matches table to get all needed data
       const announcements = await this.db.all<{
-        id: string;
+        announcement_id: string;
         match_id: string;
         name: string;
         description: string;
@@ -110,7 +110,7 @@ export class QueueProcessor {
         announcement_type?: string;
         announcement_data?: string;
       }>(`
-        SELECT daq.id, daq.match_id, daq.announcement_type, daq.announcement_data,
+        SELECT daq.id as announcement_id, daq.match_id, daq.announcement_type, daq.announcement_data,
                COALESCE(m.name, t.name) as name,
                COALESCE(m.description, t.description) as description,
                COALESCE(m.game_id, t.game_id) as game_id,
@@ -135,7 +135,7 @@ export class QueueProcessor {
             UPDATE discord_announcement_queue 
             SET status = 'processing', posted_at = datetime('now')
             WHERE id = ? AND status = 'pending'
-          `, [announcement.id]);
+          `, [announcement.announcement_id]);
           
           if (updateResult.changes === 0) {
             continue;
@@ -172,7 +172,7 @@ export class QueueProcessor {
               const timingData = JSON.parse(announcement.announcement_data);
               eventData._timingInfo = timingData;
             } catch {
-              console.warn('Could not parse timing data for timed announcement:', announcement.id);
+              console.warn('Could not parse timing data for timed announcement:', announcement.announcement_id);
             }
           }
           
@@ -182,7 +182,7 @@ export class QueueProcessor {
               UPDATE discord_announcement_queue 
               SET status = 'failed', posted_at = datetime('now'), error_message = ?
               WHERE id = ?
-            `, ['AnnouncementHandler not available', announcement.id]);
+            `, ['AnnouncementHandler not available', announcement.announcement_id]);
             continue;
           }
 
@@ -243,7 +243,7 @@ export class QueueProcessor {
               UPDATE discord_announcement_queue 
               SET status = 'completed', posted_at = CURRENT_TIMESTAMP
               WHERE id = ?
-            `, [announcement.id]);
+            `, [announcement.announcement_id]);
 
           } else {
             // Mark as failed
@@ -251,18 +251,18 @@ export class QueueProcessor {
               UPDATE discord_announcement_queue 
               SET status = 'failed', error_message = 'Failed to post announcement'
               WHERE id = ?
-            `, [announcement.id]);
+            `, [announcement.announcement_id]);
 
           }
         } catch (error) {
-          console.error(`❌ Error processing announcement ${announcement.id}:`, error);
+          console.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
           
           // Mark as failed
           await this.db.run(`
             UPDATE discord_announcement_queue 
             SET status = 'failed', posted_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.announcement_id]);
         }
       }
     } catch (error) {
@@ -840,7 +840,7 @@ export class QueueProcessor {
             UPDATE discord_voice_announcement_queue 
             SET status = 'processing', updated_at = datetime('now')
             WHERE id = ? AND status = 'pending'
-          `, [announcement.id]);
+          `, [announcement.announcement_id]);
           
           if (updateResult.changes === 0) {
             continue;
@@ -875,7 +875,7 @@ export class QueueProcessor {
               UPDATE discord_voice_announcement_queue 
               SET status = 'completed', completed_at = datetime('now')
               WHERE id = ?
-            `, [announcement.id]);
+            `, [announcement.announcement_id]);
 
             console.log(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
           } else {
@@ -896,7 +896,7 @@ export class QueueProcessor {
             UPDATE discord_voice_announcement_queue 
             SET status = 'failed', completed_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.announcement_id]);
         }
       }
     } catch (error) {

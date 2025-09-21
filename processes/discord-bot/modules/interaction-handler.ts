@@ -107,11 +107,11 @@ export class InteractionHandler {
     if (!interaction.customId.startsWith('signup_')) return;
 
     const eventId = interaction.customId.replace('signup_', '');
+    const isTournament = eventId.startsWith('tournament_');
 
     try {
       // Check if user is already signed up
       if (this.db) {
-        const isTournament = eventId.startsWith('tournament_');
 
         let existingParticipant = null;
         if (isTournament) {
@@ -229,7 +229,6 @@ export class InteractionHandler {
     try {
       if (this.db) {
         // Get game ID to load the signup form structure
-        const isTournament = eventId.startsWith('tournament_');
 
         let eventData: {game_id: string} | null = null;
 
