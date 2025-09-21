@@ -143,55 +143,59 @@ export function TournamentDetailsModal({
   };
 
   const renderOverviewTab = () => (
-    <Stack gap="md">
-      <Card withBorder p="md">
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text fw={500}>Tournament Details</Text>
-            <Badge color={tournament.game_color || 'blue'}>
-              {TOURNAMENT_FLOW_STEPS[tournament.status]?.name || tournament.status}
-            </Badge>
-          </Group>
-          
-          <Divider />
-          
-          <Group>
-            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Format:</Text>
-            <Badge variant="light">
-              {tournament.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
-            </Badge>
-          </Group>
-          
-          <Group>
-            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Rounds/Match:</Text>
-            <Text size="sm">{tournament.rounds_per_match}</Text>
-          </Group>
-          
-          <Group>
-            <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Participants:</Text>
-            <Text size="sm">
-              {tournament.participant_count || 0}
-              {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
-            </Text>
-          </Group>
-          
-          {tournament.start_time && (
-            <Group>
-              <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Start Time:</Text>
-              <Text size="sm">{new Date(tournament.start_time).toLocaleString()}</Text>
-            </Group>
-          )}
-          
-          {tournament.description && (
-            <>
-              <Group>
-                <Text size="sm" c="dimmed" style={{ minWidth: '120px' }}>Description:</Text>
-              </Group>
-              <Text size="sm" pl="md">{tournament.description}</Text>
-            </>
-          )}
-        </Stack>
-      </Card>
+    <Stack gap="sm">
+      {tournament.description && (
+        <div>
+          <Text size="sm" fw={500} c="dimmed">Description:</Text>
+          <Text size="sm">{tournament.description}</Text>
+        </div>
+      )}
+
+      <Group justify="space-between">
+        <Text size="sm" fw={500} c="dimmed">Format:</Text>
+        <Badge variant="light">
+          {tournament.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
+        </Badge>
+      </Group>
+
+      <Group justify="space-between">
+        <Text size="sm" fw={500} c="dimmed">Rounds/Match:</Text>
+        <Text size="sm">{tournament.rounds_per_match}</Text>
+      </Group>
+
+      <Group justify="space-between">
+        <Text size="sm" fw={500} c="dimmed">Participants:</Text>
+        <Text size="sm">
+          {tournament.participant_count || 0}
+          {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
+        </Text>
+      </Group>
+
+      {tournament.start_time && (
+        <Group justify="space-between">
+          <Text size="sm" fw={500} c="dimmed">Start Time:</Text>
+          <Text size="sm">{new Date(tournament.start_time).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          })}</Text>
+        </Group>
+      )}
+
+      <Group justify="space-between">
+        <Text size="sm" fw={500} c="dimmed">Created:</Text>
+        <Text size="sm">{new Date(tournament.created_at).toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })}</Text>
+      </Group>
     </Stack>
   );
 
@@ -315,29 +319,34 @@ export function TournamentDetailsModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={
+      title="Tournament Details"
+      size="lg"
+    >
+      <Stack gap="md">
         <Group>
-          <Avatar src={tournament.game_icon} size="sm" />
-          <div>
-            <Text fw={600}>{tournament.name}</Text>
-            <Text size="sm" c="dimmed">{tournament.game_name}</Text>
-          </div>
+          <Avatar
+            src={tournament.game_icon}
+            alt={tournament.game_name}
+            size="lg"
+          />
+          <Stack gap="xs" style={{ flex: 1 }}>
+            <Text size="xl" fw={600}>{tournament.name}</Text>
+            <Text size="md" c="dimmed">{tournament.game_name}</Text>
+          </Stack>
           <RingProgress
-            size={40}
-            thickness={4}
+            size={60}
+            thickness={6}
             sections={[
-              { 
-                value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0, 
+              {
+                value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
                 color: tournament.game_color || '#95a5a6'
               }
             ]}
           />
         </Group>
-      }
-      size="xl"
-      centered
-    >
-      <Stack gap="md">
+
+        <Divider />
+
         <SegmentedControl
           value={activeTab}
           onChange={setActiveTab}

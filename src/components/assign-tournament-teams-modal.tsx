@@ -18,7 +18,7 @@ import {
   TextInput,
   Select
 } from '@mantine/core';
-import { IconPlus, IconX } from '@tabler/icons-react';
+import { IconPlus, IconX, IconSearch } from '@tabler/icons-react';
 import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 
 interface SignupField {
@@ -67,11 +67,11 @@ interface AssignTournamentTeamsModalProps {
   tournamentName: string;
 }
 
-export function AssignTournamentTeamsModal({ 
-  isOpen, 
-  onClose, 
-  tournamentId, 
-  tournamentName 
+export function AssignTournamentTeamsModal({
+  isOpen,
+  onClose,
+  tournamentId,
+  tournamentName
 }: AssignTournamentTeamsModalProps) {
   const [participants, setParticipants] = useState<TournamentParticipant[]>([]);
   const [teams, setTeams] = useState<TeamWithMembers[]>([]);
@@ -80,7 +80,9 @@ export function AssignTournamentTeamsModal({
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const isMobile = useMediaQuery('(max-width: 768px');
 
   const fetchData = useCallback(async () => {
     if (!tournamentId) return;
@@ -211,7 +213,18 @@ export function AssignTournamentTeamsModal({
   };
 
   const getReserveParticipants = () => {
-    return participants.filter(p => !p.team_assignment || p.team_assignment === 'reserve');
+    const reserveParticipants = participants.filter(p => !p.team_assignment || p.team_assignment === 'reserve');
+
+    if (!searchTerm.trim()) {
+      return reserveParticipants;
+    }
+
+    return reserveParticipants.filter(participant =>
+      participant.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (participant.signup_data && Object.values(participant.signup_data).some(value =>
+        String(value).toLowerCase().includes(searchTerm.toLowerCase())
+      ))
+    );
   };
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, participantId: string) => {
@@ -307,21 +320,34 @@ export function AssignTournamentTeamsModal({
           </Card>
 
           <Grid>
-            {/* Reserve column */}
-            <Grid.Col span={{ base: 12, md: 4 }}>
+            {/* Reserve column - Left side */}
+            <Grid.Col span={{ base: 12, md: 6 }}>
               <Card
                 withBorder
                 p="md"
-                style={{ minHeight: '300px' }}
+                style={{ height: '600px', overflow: 'auto' }}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, 'reserve')}
               >
                 <Group justify="space-between" mb="sm">
-                  <Text fw={500}>Reserve</Text>
+                  <Text fw={500}>Reserve Players</Text>
                   <Badge size="sm" variant="light">
                     {getReserveParticipants().length}
                   </Badge>
                 </Group>
+                <TextInput
+                  placeholder="Search players..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.currentTarget.value)}
+                  leftSection={<IconSearch size="0.9rem" />}
+                  size="sm"
+                  mb="sm"
+                  styles={{
+                    input: {
+                      fontSize: '0.875rem'
+                    }
+                  }}
+                />
                 <Divider mb="sm" />
                 <Stack gap="xs">
                   {getReserveParticipants().map((participant, index) => (
@@ -404,35 +430,55 @@ export function AssignTournamentTeamsModal({
               </Card>
             </Grid.Col>
 
-            {/* Team columns */}
-            {teams.map((team) => (
-              <Grid.Col key={team.id} span={{ base: 12, md: 4 }}>
-                <Card
-                  withBorder
-                  p="md"
-                  style={{ minHeight: '300px' }}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, team.id)}
-                >
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={500} truncate style={{ flex: 1 }}>
-                      {team.team_name}
-                    </Text>
-                    <Badge size="sm" variant="light">
-                      {getParticipantsByTeam(team.id).length}
-                    </Badge>
-                    <ActionIcon
-                      variant="light"
-                      color="red"
+            {/* Team selection and display - Right side */}
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Card
+                withBorder
+                p={0}
+                style={{ height: '600px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                onDragOver={handleDragOver}
+                onDrop={(e) => selectedTeamId && handleDrop(e, selectedTeamId)}
+              >
+                <Group justify="space-between" p="md" pb="sm">
+                  {teams.length > 0 ? (
+                    <Select
+                      placeholder="Choose a team"
+                      value={selectedTeamId}
+                      onChange={(value) => setSelectedTeamId(value || '')}
+                      data={teams.map(team => ({
+                        value: team.id,
+                        label: team.team_name
+                      }))}
+                      style={{ flex: 1, maxWidth: '70%' }}
                       size="sm"
-                      onClick={() => handleDeleteTeam(team.id)}
-                    >
-                      <IconX size="0.75rem" />
-                    </ActionIcon>
-                  </Group>
-                  <Divider mb="sm" />
-                  <Stack gap="xs">
-                    {getParticipantsByTeam(team.id).map((participant, index) => (
+                    />
+                  ) : (
+                    <Text fw={500} c="dimmed">No teams created</Text>
+                  )}
+                  {selectedTeamId && (
+                    <Group gap="xs">
+                      <Badge size="sm" variant="light">
+                        {getParticipantsByTeam(selectedTeamId).length}
+                      </Badge>
+                      <ActionIcon
+                        variant="light"
+                        color="red"
+                        size="sm"
+                        onClick={() => {
+                          handleDeleteTeam(selectedTeamId);
+                          setSelectedTeamId('');
+                        }}
+                      >
+                        <IconX size="0.75rem" />
+                      </ActionIcon>
+                    </Group>
+                  )}
+                </Group>
+                <Divider />
+                <div style={{ flex: 1, overflow: 'auto', padding: 'var(--mantine-spacing-md)' }}>
+                  {selectedTeamId ? (
+                    <Stack gap="xs">
+                      {getParticipantsByTeam(selectedTeamId).map((participant, index) => (
                       <Card
                         key={participant.id}
                         shadow="md"
@@ -507,17 +553,32 @@ export function AssignTournamentTeamsModal({
                           </Group>
                         )}
                       </Card>
-                    ))}
-                  </Stack>
-                </Card>
-              </Grid.Col>
-            ))}
+                        ))}
+                    </Stack>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                      <Stack align="center" gap="md">
+                        <Text size="lg" c="dimmed">
+                          {teams.length === 0 ? 'No teams created yet' : 'Select a team to view and edit'}
+                        </Text>
+                        <Text size="sm" c="dimmed" ta="center">
+                          {teams.length === 0
+                            ? 'Create your first team using the form above'
+                            : 'Choose a team from the dropdown above to view its members'
+                          }
+                        </Text>
+                      </Stack>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </Grid.Col>
           </Grid>
 
           <Text size="sm" c="dimmed" ta="center">
             {isMobile
-              ? "Use the dropdown selectors on each player card to assign teams"
-              : "Drag players between teams or use the dropdown selectors on each player card"
+              ? "Use the dropdown selectors on each player card to assign teams. Select a team on the right to view its members."
+              : "Drag players from reserve to the selected team, or use the dropdown selectors. Select a team on the right to view its members."
             }
           </Text>
 
