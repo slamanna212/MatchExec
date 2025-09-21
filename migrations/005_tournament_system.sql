@@ -38,6 +38,20 @@ CREATE TABLE IF NOT EXISTS tournament_team_members (
   UNIQUE(team_id, user_id)
 );
 
+-- Tournament participants table (individual signups before team assignment)
+CREATE TABLE IF NOT EXISTS tournament_participants (
+  id TEXT PRIMARY KEY,
+  tournament_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  signup_data TEXT, -- JSON string storing signup form data
+  team_assignment TEXT, -- NULL until assigned to a team, then team_id
+  FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+  UNIQUE(tournament_id, user_id)
+);
+
 -- Tournament matches relationship table
 CREATE TABLE IF NOT EXISTS tournament_matches (
   match_id TEXT PRIMARY KEY,
@@ -79,6 +93,10 @@ CREATE INDEX IF NOT EXISTS idx_tournament_teams_tournament_id ON tournament_team
 
 CREATE INDEX IF NOT EXISTS idx_tournament_team_members_team_id ON tournament_team_members(team_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_team_members_user_id ON tournament_team_members(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_participants_tournament_id ON tournament_participants(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_participants_user_id ON tournament_participants(user_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_participants_team_assignment ON tournament_participants(team_assignment);
 
 -- Indexes for tournament matches table
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament_id ON tournament_matches(tournament_id);

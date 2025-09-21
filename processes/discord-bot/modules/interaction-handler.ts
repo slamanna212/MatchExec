@@ -111,10 +111,20 @@ export class InteractionHandler {
     try {
       // Check if user is already signed up
       if (this.db) {
-        const existingParticipant = await this.db.get(`
-          SELECT id FROM match_participants 
-          WHERE match_id = ? AND user_id = ?
-        `, [eventId, interaction.user.id]);
+        const isTournament = eventId.startsWith('tournament_');
+
+        let existingParticipant = null;
+        if (isTournament) {
+          existingParticipant = await this.db.get(`
+            SELECT id FROM tournament_participants
+            WHERE tournament_id = ? AND user_id = ?
+          `, [eventId, interaction.user.id]);
+        } else {
+          existingParticipant = await this.db.get(`
+            SELECT id FROM match_participants
+            WHERE match_id = ? AND user_id = ?
+          `, [eventId, interaction.user.id]);
+        }
 
         if (existingParticipant) {
           await interaction.reply({
@@ -125,16 +135,33 @@ export class InteractionHandler {
         }
 
         // Check if event is full
-        const participantCount = await this.db.get<{count: number}>(`
-          SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-        `, [eventId]);
+        let participantCount = null;
+        if (isTournament) {
+          participantCount = await this.db.get<{count: number}>(`
+            SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
+          `, [eventId]);
+        } else {
+          participantCount = await this.db.get<{count: number}>(`
+            SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
+          `, [eventId]);
+        }
 
-        const eventData = await this.db.get<{max_signups: number, game_id: string}>(`
-          SELECT m.game_id, g.max_signups 
-          FROM matches m 
-          JOIN games g ON m.game_id = g.id 
-          WHERE m.id = ?
-        `, [eventId]);
+        let eventData: {max_signups: number, game_id: string} | null = null;
+
+        if (isTournament) {
+          eventData = await this.db.get<{max_signups: number, game_id: string}>(`
+            SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups
+            FROM tournaments t
+            WHERE t.id = ?
+          `, [eventId]);
+        } else {
+          eventData = await this.db.get<{max_signups: number, game_id: string}>(`
+            SELECT m.game_id, g.max_signups
+            FROM matches m
+            JOIN games g ON m.game_id = g.id
+            WHERE m.id = ?
+          `, [eventId]);
+        }
 
         if ((participantCount?.count ?? 0) >= (eventData?.max_signups || 16)) {
           await interaction.reply({
@@ -202,9 +229,19 @@ export class InteractionHandler {
     try {
       if (this.db) {
         // Get game ID to load the signup form structure
-        const eventData = await this.db.get<{game_id: string}>(`
-          SELECT game_id FROM matches WHERE id = ?
-        `, [eventId]);
+        const isTournament = eventId.startsWith('tournament_');
+
+        let eventData: {game_id: string} | null = null;
+
+        if (isTournament) {
+          eventData = await this.db.get<{game_id: string}>(`
+            SELECT game_id FROM tournaments WHERE id = ?
+          `, [eventId]);
+        } else {
+          eventData = await this.db.get<{game_id: string}>(`
+            SELECT game_id FROM matches WHERE id = ?
+          `, [eventId]);
+        }
 
         if (!eventData) {
           throw new Error('Event not found');
@@ -241,15 +278,31 @@ export class InteractionHandler {
         const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Add participant to database with signup data and Discord user ID
-        await this.db.run(`
-          INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
+        const isTournamentSubmit = eventId.startsWith('tournament_');
+
+        if (isTournamentSubmit) {
+          await this.db.run(`
+            INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
+        } else {
+          await this.db.run(`
+            INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
+        }
 
         // Get current participant count
-        const participantCount = await this.db.get<{count: number}>(`
-          SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-        `, [eventId]);
+        let participantCount = null;
+        if (isTournamentSubmit) {
+          participantCount = await this.db.get<{count: number}>(`
+            SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
+          `, [eventId]);
+        } else {
+          participantCount = await this.db.get<{count: number}>(`
+            SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
+          `, [eventId]);
+        }
 
         // Create confirmation message with submitted data
         let confirmationMessage = `✅ Successfully signed up for the event!\n`;

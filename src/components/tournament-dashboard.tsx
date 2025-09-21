@@ -134,11 +134,6 @@ const TournamentCard = memo(({
             <Text size="sm">{parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()}</Text>
           </Group>
         )}
-        
-        <Group justify="space-between" align="center" style={{ minHeight: '36px' }}>
-          <Text size="sm" c="dimmed">Status:</Text>
-          <Text size="sm" fw={500} tt="capitalize">{TOURNAMENT_FLOW_STEPS[tournament.status]?.name || tournament.status}</Text>
-        </Group>
       </Stack>
       
       <Divider mt="md" mb="md" />

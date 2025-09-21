@@ -41,7 +41,6 @@ export function CreateTournamentPage() {
     format: 'single-elimination',
     roundsPerMatch: 3
   });
-  const [startSignups, setStartSignups] = useState(true);
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -111,10 +110,10 @@ export function CreateTournamentPage() {
     }
   };
 
-  const handleCreateTournament = async () => {
+  const handleCreateTournament = async (shouldStartSignups = false) => {
     try {
       // Combine date and time into proper datetime format
-      const startDateTime = formData.date && formData.time 
+      const startDateTime = formData.date && formData.time
         ? new Date(`${formData.date}T${formData.time}`)
         : null;
 
@@ -139,12 +138,12 @@ export function CreateTournamentPage() {
 
       if (response.ok) {
         const tournament = await response.json();
-        
+
         // Clear form data on successful creation
         clearFormData();
-        
-        // Transition to gather stage if startSignups is checked
-        if (startSignups) {
+
+        // Transition to gather stage if signups should be started
+        if (shouldStartSignups) {
           await fetch(`/api/tournaments/${tournament.id}/transition`, {
             method: 'POST',
             headers: {
@@ -153,7 +152,7 @@ export function CreateTournamentPage() {
             body: JSON.stringify({ newStatus: 'gather' }),
           });
         }
-        
+
         router.push('/tournaments');
       } else {
         const error = await response.json();
@@ -402,17 +401,18 @@ export function CreateTournamentPage() {
                 Back
               </Button>
               <Group align="center" gap="md">
-                <Button 
-                  variant={startSignups ? "filled" : "outline"}
-                  onClick={() => setStartSignups(!startSignups)}
-                >
-                  {startSignups ? "Open Signups" : "Keep Closed"}
-                </Button>
-                <Button 
-                  onClick={handleCreateTournament}
+                <Button
+                  variant="outline"
+                  onClick={() => handleCreateTournament(false)}
                   disabled={!canProceedFromStep(4)}
                 >
                   Create Tournament
+                </Button>
+                <Button
+                  onClick={() => handleCreateTournament(true)}
+                  disabled={!canProceedFromStep(4)}
+                >
+                  Create & Open Signups
                 </Button>
               </Group>
             </Group>
