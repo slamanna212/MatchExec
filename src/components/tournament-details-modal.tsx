@@ -247,6 +247,7 @@ export function TournamentDetailsModal({
                       {team.members?.length || 0} members
                     </Badge>
                   </Group>
+                  <Divider mb="sm" opacity={0.7} />
 
                   <div style={{ flex: 1, overflow: 'auto' }}>
                     {team.members && team.members.length > 0 ? (
