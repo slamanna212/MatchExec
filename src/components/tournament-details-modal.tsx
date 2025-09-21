@@ -199,6 +199,23 @@ export function TournamentDetailsModal({
     </Stack>
   );
 
+  const getTeamCardStyles = (teamIndex: number) => {
+    const colors = [
+      { backgroundColor: 'var(--mantine-color-blue-2)', borderColor: 'var(--mantine-color-blue-4)' },
+      { backgroundColor: 'var(--mantine-color-red-2)', borderColor: 'var(--mantine-color-red-4)' },
+      { backgroundColor: 'var(--mantine-color-green-2)', borderColor: 'var(--mantine-color-green-4)' },
+      { backgroundColor: 'var(--mantine-color-purple-2)', borderColor: 'var(--mantine-color-purple-4)' },
+      { backgroundColor: 'var(--mantine-color-orange-2)', borderColor: 'var(--mantine-color-orange-4)' },
+      { backgroundColor: 'var(--mantine-color-teal-2)', borderColor: 'var(--mantine-color-teal-4)' }
+    ];
+    return colors[teamIndex % colors.length] || { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)' };
+  };
+
+  const getTeamBadgeColor = (teamIndex: number) => {
+    const colors = ['orange', 'cyan', 'yellow', 'grape', 'lime', 'indigo'];
+    return colors[teamIndex % colors.length] || 'dark';
+  };
+
   const renderTeamsTab = () => (
     <Stack gap="md">
       {loading ? (
@@ -207,36 +224,50 @@ export function TournamentDetailsModal({
         </div>
       ) : tournamentDetails?.teams && tournamentDetails.teams.length > 0 ? (
         <Grid>
-          {tournamentDetails.teams.map((team) => (
-            <Grid.Col key={team.id} span={{ base: 12, sm: 6 }}>
-              <Card withBorder p="md" style={{ height: '100%', minHeight: '200px', display: 'flex', flexDirection: 'column' }}>
-                <Group mb="sm">
-                  <IconTrophy size="1.2rem" />
-                  <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
-                  <Badge size="sm" variant="light">
-                    {team.members?.length || 0} members
-                  </Badge>
-                </Group>
+          {tournamentDetails.teams.map((team, teamIndex) => {
+            const teamStyles = getTeamCardStyles(teamIndex);
+            const badgeColor = getTeamBadgeColor(teamIndex);
 
-                <div style={{ flex: 1, overflow: 'auto' }}>
-                  {team.members && team.members.length > 0 ? (
-                    <Stack gap="xs">
-                      {team.members.map((member) => (
-                        <Group key={member.id} gap="sm">
-                          <Avatar size="sm" color="blue">
-                            {member.username.charAt(0).toUpperCase()}
-                          </Avatar>
-                          <Text size="sm">{member.username}</Text>
-                        </Group>
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
-                  )}
-                </div>
-              </Card>
-            </Grid.Col>
-          ))}
+            return (
+              <Grid.Col key={team.id} span={{ base: 12, sm: 6 }}>
+                <Card
+                  withBorder
+                  p="md"
+                  style={{
+                    height: '100%',
+                    minHeight: '200px',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  <Group mb="sm">
+                    <IconTrophy size="1.2rem" color={teamStyles.borderColor} />
+                    <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
+                    <Badge size="sm" variant="filled" color={badgeColor}>
+                      {team.members?.length || 0} members
+                    </Badge>
+                  </Group>
+
+                  <div style={{ flex: 1, overflow: 'auto' }}>
+                    {team.members && team.members.length > 0 ? (
+                      <Stack gap="xs">
+                        {team.members.map((member, memberIndex) => (
+                          <Group key={member.id} gap="sm">
+                            <Avatar size="sm" color={badgeColor} variant="filled">
+                              {memberIndex + 1}
+                            </Avatar>
+                            <Text size="sm">{member.username}</Text>
+                          </Group>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
+                    )}
+                  </div>
+                </Card>
+              </Grid.Col>
+            );
+          })}
         </Grid>
       ) : (
         <Card withBorder p="xl">
