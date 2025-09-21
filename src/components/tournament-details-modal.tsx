@@ -16,7 +16,7 @@ import {
   Loader,
   SegmentedControl
 } from '@mantine/core';
-import { IconTrophy, IconTrash } from '@tabler/icons-react';
+import { IconTrophy } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { Tournament, TOURNAMENT_FLOW_STEPS, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from './tournament-bracket';
@@ -401,9 +401,8 @@ export function TournamentDetailsModal({
           <Group gap="xs">
             {onDelete && tournament.status !== 'complete' && (
               <Button
-                variant="outline"
                 color="red"
-                leftSection={<IconTrash size="1rem" />}
+                variant="light"
                 onClick={handleDelete}
               >
                 Delete Tournament
