@@ -17,6 +17,7 @@ import {
   SegmentedControl
 } from '@mantine/core';
 import { IconTrophy, IconTrash } from '@tabler/icons-react';
+import { modals } from '@mantine/modals';
 import { Tournament, TOURNAMENT_FLOW_STEPS, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from './tournament-bracket';
 
@@ -73,9 +74,37 @@ export function TournamentDetailsModal({
   if (!tournament) return null;
 
   const handleDelete = () => {
-    if (onDelete) {
-      onDelete(tournament);
-    }
+    if (!onDelete) return;
+
+    const hasActiveMatches = tournament.status === 'battle';
+    const hasParticipants = (tournament.participant_count || 0) > 0;
+
+    modals.openConfirmModal({
+      title: 'Delete Tournament',
+      children: (
+        <Stack gap="sm">
+          <Text size="sm">
+            Are you sure you want to delete the tournament &quot;{tournament.name}&quot;?
+          </Text>
+          {hasActiveMatches && (
+            <Text size="sm" c="orange" fw={500}>
+              ⚠️ This tournament has active matches that will also be deleted.
+            </Text>
+          )}
+          {hasParticipants && (
+            <Text size="sm" c="orange" fw={500}>
+              ⚠️ This tournament has {tournament.participant_count} registered participants.
+            </Text>
+          )}
+          <Text size="sm" c="red" fw={500}>
+            This action cannot be undone.
+          </Text>
+        </Stack>
+      ),
+      labels: { confirm: 'Delete Tournament', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => onDelete(tournament),
+    });
   };
 
   const renderOverviewTab = () => (
@@ -275,7 +304,7 @@ export function TournamentDetailsModal({
 
         <Group justify="space-between">
           <div>
-            {onDelete && tournament.status === 'created' && (
+            {onDelete && tournament.status !== 'complete' && (
               <Button
                 variant="outline"
                 color="red"
