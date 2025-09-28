@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Parse maps and map codes JSON for each match
     const parsedMatches = matches.map(match => ({
       ...match,
-      maps: match.map_id ? [match.map_id] : (match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : []),
+      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : (match.map_id ? [match.map_id] : []),
       map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
     }));
     
