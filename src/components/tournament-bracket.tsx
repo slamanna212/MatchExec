@@ -172,13 +172,13 @@ export function TournamentBracket({
       p="md"
       style={{
         height: '100%',
-        minHeight: '140px',
+        minHeight: '120px',
         display: 'flex',
         flexDirection: 'column'
       }}
     >
-      <Stack gap="sm" style={{ flex: 1 }}>
-        <Group justify="space-between" align="center">
+      <Stack gap="md" style={{ flex: 1 }}>
+        <Group justify="flex-start" align="center">
           <Badge
             size="sm"
             color={getStatusColor(match.status)}
@@ -186,44 +186,33 @@ export function TournamentBracket({
           >
             {getStatusLabel(match.status)}
           </Badge>
-          <Text size="xs" c="dimmed" fw={500}>
-            Round {match.round}
-          </Text>
         </Group>
 
-        <Stack gap="sm" style={{ flex: 1, justifyContent: 'center' }}>
-          <Group justify="space-between" align="center">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+          <div style={{ flex: 1, textAlign: 'center' }}>
             <Text
               size="sm"
-              fw={match.winner === match.team1?.id ? 700 : 500}
+              fw={match.winner === match.team1?.id ? 700 : 400}
               c={match.winner === match.team1?.id ? 'green' : undefined}
-              style={{ flex: 1 }}
               lineClamp={1}
             >
               {match.team1?.name || 'TBD'}
             </Text>
-            {match.winner === match.team1?.id && (
-              <IconTrophy size="1.1rem" color="var(--mantine-color-yellow-6)" />
-            )}
-          </Group>
+          </div>
 
-          <Text size="xs" c="dimmed" ta="center" fw={500}>VS</Text>
+          <Text size="xs" c="dimmed" fw={500}>vs</Text>
 
-          <Group justify="space-between" align="center">
+          <div style={{ flex: 1, textAlign: 'center' }}>
             <Text
               size="sm"
-              fw={match.winner === match.team2?.id ? 700 : 500}
+              fw={match.winner === match.team2?.id ? 700 : 400}
               c={match.winner === match.team2?.id ? 'green' : undefined}
-              style={{ flex: 1 }}
               lineClamp={1}
             >
               {match.team2?.name || 'TBD'}
             </Text>
-            {match.winner === match.team2?.id && (
-              <IconTrophy size="1.1rem" color="var(--mantine-color-yellow-6)" />
-            )}
-          </Group>
-        </Stack>
+          </div>
+        </div>
       </Stack>
     </Card>
   );

@@ -285,10 +285,10 @@ export async function generateNextRoundMatches(
     SELECT m.*, tm.team1_id, tm.team2_id, tm.bracket_type, tm.match_order
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ? 
-      AND tm.round = ? 
+    WHERE tm.tournament_id = ?
+      AND tm.round = ?
       AND tm.bracket_type = ?
-      AND m.status = 'completed'
+      AND m.status = 'complete'
       AND m.winner_team IS NOT NULL
     ORDER BY tm.match_order
   `, [tournamentId, currentRound, bracketType]) as MatchResult[];
@@ -933,16 +933,16 @@ export async function isRoundComplete(
   bracketType: 'winners' | 'losers' | 'final'
 ): Promise<boolean> {
   const db = await getDbInstance();
-  
+
   const result = await db.get(`
-    SELECT 
+    SELECT
       COUNT(*) as total_matches,
-      COUNT(CASE WHEN m.status = 'completed' THEN 1 END) as completed_matches
+      COUNT(CASE WHEN m.status = 'complete' THEN 1 END) as completed_matches
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.round = ? AND tm.bracket_type = ?
   `, [tournamentId, round, bracketType]) as RoundCompletionInfo;
-  
+
   return result.total_matches > 0 && result.total_matches === result.completed_matches;
 }
 
@@ -958,19 +958,19 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
   const db = await getDbInstance();
   
   const winnersInfo = await db.get(`
-    SELECT 
+    SELECT
       COALESCE(MAX(tm.round), 0) as max_round,
-      COUNT(CASE WHEN m.status = 'completed' THEN 1 END) as completed,
+      COUNT(CASE WHEN m.status = 'complete' THEN 1 END) as completed,
       COUNT(*) as total
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'winners'
   `, [tournamentId]) as RoundStatsInfo;
-  
+
   const losersInfo = await db.get(`
-    SELECT 
+    SELECT
       COALESCE(MAX(tm.round), 0) as max_round,
-      COUNT(CASE WHEN m.status = 'completed' THEN 1 END) as completed,
+      COUNT(CASE WHEN m.status = 'complete' THEN 1 END) as completed,
       COUNT(*) as total
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id

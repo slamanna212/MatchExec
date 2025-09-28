@@ -112,10 +112,10 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
     SELECT m.*, tm.team1_id, tm.team2_id, tm.bracket_type, tm.match_order
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ? 
-      AND tm.round = ? 
+    WHERE tm.tournament_id = ?
+      AND tm.round = ?
       AND tm.bracket_type = 'winners'
-      AND m.status = 'completed'
+      AND m.status = 'complete'
       AND m.winner_team IS NOT NULL
     ORDER BY tm.match_order
   `, [tournamentId, roundInfo.maxWinnersRound]) as TournamentMatch[];
@@ -199,15 +199,15 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
   if (grandFinalsMatches.length > 0) {
     const latestFinal = grandFinalsMatches[0];
     
-    if (latestFinal.status === 'completed' && latestFinal.winner_team) {
+    if (latestFinal.status === 'complete' && latestFinal.winner_team) {
       // Get loser's bracket winner
       const losersBracketWinner = await db.get(`
         SELECT m.winner_team
         FROM matches m
         JOIN tournament_matches tm ON m.id = tm.match_id
-        WHERE tm.tournament_id = ? 
+        WHERE tm.tournament_id = ?
           AND tm.bracket_type = 'losers'
-          AND m.status = 'completed'
+          AND m.status = 'complete'
         ORDER BY tm.round DESC, tm.match_order DESC
         LIMIT 1
       `, [tournamentId]) as WinnerResult | undefined;
@@ -273,9 +273,9 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
     SELECT m.winner_team
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ? 
+    WHERE tm.tournament_id = ?
       AND tm.bracket_type = 'winners'
-      AND m.status = 'completed'
+      AND m.status = 'complete'
     ORDER BY tm.round DESC, tm.match_order DESC
     LIMIT 1
   `, [tournamentId]) as WinnerResult | undefined;
@@ -284,9 +284,9 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
     SELECT m.winner_team
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ? 
+    WHERE tm.tournament_id = ?
       AND tm.bracket_type = 'losers'
-      AND m.status = 'completed'
+      AND m.status = 'complete'
     ORDER BY tm.round DESC, tm.match_order DESC
     LIMIT 1
   `, [tournamentId]) as WinnerResult | undefined;
@@ -332,10 +332,10 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
         SELECT m.*, tm.team1_id, tm.team2_id, tm.bracket_type, tm.match_order
         FROM matches m
         JOIN tournament_matches tm ON m.id = tm.match_id
-        WHERE tm.tournament_id = ? 
-          AND tm.round = ? 
+        WHERE tm.tournament_id = ?
+          AND tm.round = ?
           AND tm.bracket_type = 'winners'
-          AND m.status = 'completed'
+          AND m.status = 'complete'
         ORDER BY tm.match_order
       `, [tournamentId, roundInfo.maxWinnersRound]) as TournamentMatch[];
 
