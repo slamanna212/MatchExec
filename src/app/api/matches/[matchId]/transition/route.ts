@@ -62,11 +62,14 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
   try {
     const db = await getDbInstance();
     
+    // Generate unique ID for the announcement queue entry
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     // Add to main announcement queue with match_start type
     await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, announcement_type, status)
-      VALUES (?, 'match_start', 'pending')
-    `, [matchId]);
+      INSERT OR IGNORE INTO discord_announcement_queue (id, match_id, announcement_type, status)
+      VALUES (?, ?, 'match_start', 'pending')
+    `, [announcementId, matchId]);
     
     console.log('🚀 Discord match start announcement queued for match:', matchId);
     return true;
@@ -120,8 +123,40 @@ async function queueVoiceAnnouncement(
       return false;
     }
 
-    // Skip if no voice channels are configured
-    if (!match.blue_team_voice_channel && !match.red_team_voice_channel) {
+    // If no match-specific voice channels, try to get global voice channels
+    let blueChannelId = match.blue_team_voice_channel;
+    let redChannelId = match.red_team_voice_channel;
+
+    if (!blueChannelId && !redChannelId) {
+      // Try to get global voice channels from discord_channels table
+      const blueChannel = await db.get<{ discord_channel_id: string }>(`
+        SELECT discord_channel_id FROM discord_channels
+        WHERE type = 2 AND (
+          LOWER(name) LIKE '%blue%' OR
+          LOWER(channel_name) LIKE '%blue%' OR
+          LOWER(name) LIKE '%team%1%' OR
+          LOWER(channel_name) LIKE '%team%1%'
+        )
+        LIMIT 1
+      `);
+
+      const redChannel = await db.get<{ discord_channel_id: string }>(`
+        SELECT discord_channel_id FROM discord_channels
+        WHERE type = 2 AND (
+          LOWER(name) LIKE '%red%' OR
+          LOWER(channel_name) LIKE '%red%' OR
+          LOWER(name) LIKE '%team%2%' OR
+          LOWER(channel_name) LIKE '%team%2%'
+        )
+        LIMIT 1
+      `);
+
+      blueChannelId = blueChannel?.discord_channel_id;
+      redChannelId = redChannel?.discord_channel_id;
+    }
+
+    // Skip if still no voice channels are configured
+    if (!blueChannelId && !redChannelId) {
       console.log('📢 No voice channels configured for match:', matchId);
       return true; // Not an error, just nothing to do
     }

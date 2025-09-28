@@ -225,7 +225,6 @@ export class InteractionHandler {
     if (!interaction.customId.startsWith('signup_form_')) return;
 
     const eventId = interaction.customId.replace('signup_form_', '');
-    const isTournament = eventId.startsWith('tournament_');
 
     try {
       if (this.db) {

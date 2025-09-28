@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { TOURNAMENT_FLOW_STEPS, Tournament } from '@/shared/types';
 
+// Queue a Discord match start announcement request that the Discord bot will process
+async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+
+    // Generate unique ID for the announcement queue entry
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Add to main announcement queue with match_start type
+    await db.run(`
+      INSERT OR IGNORE INTO discord_announcement_queue (id, match_id, announcement_type, status)
+      VALUES (?, ?, 'match_start', 'pending')
+    `, [announcementId, matchId]);
+
+    console.log('🚀 Discord match start announcement queued for match:', matchId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord match start announcement:', error);
+    return false;
+  }
+}
+
 // Queue a Discord tournament announcement request that the Discord bot will process
 async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise<boolean> {
   try {
@@ -177,30 +199,24 @@ export async function POST(
           `, [tournamentId]);
 
           for (const match of firstRoundMatches) {
-            // Use the match transition API to properly handle Discord notifications
             try {
-              const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/matches/${match.id}/transition`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ newStatus: 'battle' }),
-              });
-
-              if (response.ok) {
-                console.log(`🚀 Started match with notifications: ${match.name}`);
-              } else {
-                console.error(`❌ Failed to transition match ${match.id}:`, await response.text());
-              }
-            } catch (fetchError) {
-              console.error(`❌ Error calling match transition API for ${match.id}:`, fetchError);
-              // Fallback to direct database update if API call fails
+              // Update match status to battle
               await db.run(`
                 UPDATE matches
                 SET status = 'battle', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
               `, [match.id]);
-              console.log(`🔄 Fallback: Updated match status directly for ${match.name}`);
+
+              // Queue Discord match start notification
+              await queueDiscordMatchStart(match.id);
+
+              // Initialize match games for scoring
+              const { initializeMatchGames } = await import('../../../../../lib/scoring-functions');
+              await initializeMatchGames(match.id);
+
+              console.log(`🚀 Started match with notifications: ${match.name}`);
+            } catch (matchError) {
+              console.error(`❌ Error starting match ${match.id}:`, matchError);
             }
           }
 

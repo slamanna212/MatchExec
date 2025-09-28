@@ -92,6 +92,8 @@ export class QueueProcessor {
   async processAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
 
+    console.log('🔄 Processing announcement queue...');
+
     try {
       // Use the original approach - JOIN with matches table to get all needed data
       const announcements = await this.db.all<{
@@ -120,7 +122,7 @@ export class QueueProcessor {
                COALESCE(m.start_date, t.start_time) as start_date,
                COALESCE(m.rules, 'casual') as rules
         FROM discord_announcement_queue daq
-        LEFT JOIN matches m ON daq.match_id = m.id AND daq.announcement_type != 'tournament'
+        LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start'))
         LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
         LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
         WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
@@ -128,8 +130,12 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
+      console.log(`📋 Found ${announcements.length} pending announcements to process`);
+
       for (const announcement of announcements) {
         try {
+          console.log(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
+
           // Immediately mark as processing to prevent duplicate processing by concurrent queue cycles
           const updateResult = await this.db.run(`
             UPDATE discord_announcement_queue 
