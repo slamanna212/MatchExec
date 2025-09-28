@@ -1033,25 +1033,47 @@ export class QueueProcessor {
             console.warn('Could not parse winning players JSON for winner notification:', notification.id);
           }
 
-          // Build winner notification data
-          const winnerData = {
-            matchId: notification.match_id,
-            matchName: notification.match_name,
-            gameId: notification.game_id,
-            winner: notification.winner,
-            winningTeamName: notification.winning_team_name,
-            winningPlayers: winningPlayers,
-            team1Score: notification.team1_score,
-            team2Score: notification.team2_score,
-            totalMaps: notification.total_maps
-          };
+          let result;
 
-          // Wait 15 seconds to ensure last map winner embed goes out first
-          console.log(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
-          await new Promise(resolve => setTimeout(resolve, 15000));
-          
-          // Post the match winner notification
-          const result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
+          // Check if this is a tournament winner notification (winner field = 'tournament')
+          if (notification.winner === 'tournament') {
+            // Build tournament winner notification data
+            const tournamentData = {
+              tournamentId: notification.match_id, // We stored tournament ID in match_id
+              tournamentName: notification.match_name.replace('🏆 ', ''), // Remove trophy emoji
+              gameId: notification.game_id,
+              winner: notification.match_id, // Tournament ID
+              winningTeamName: notification.winning_team_name,
+              winningPlayers: winningPlayers,
+              format: notification.team2_score === 1 ? 'double-elimination' : 'single-elimination', // Decoded from team2_score
+              totalParticipants: notification.team1_score // Stored in team1_score
+            };
+
+            console.log(`🏆 Sending tournament winner notification for ${tournamentData.tournamentName}`);
+
+            // Post the tournament winner notification (no delay needed for tournaments)
+            result = await this.announcementHandler.postTournamentWinnerNotification(tournamentData);
+          } else {
+            // Build regular match winner notification data
+            const winnerData = {
+              matchId: notification.match_id,
+              matchName: notification.match_name,
+              gameId: notification.game_id,
+              winner: notification.winner,
+              winningTeamName: notification.winning_team_name,
+              winningPlayers: winningPlayers,
+              team1Score: notification.team1_score,
+              team2Score: notification.team2_score,
+              totalMaps: notification.total_maps
+            };
+
+            // Wait 15 seconds to ensure last map winner embed goes out first
+            console.log(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
+            await new Promise(resolve => setTimeout(resolve, 15000));
+
+            // Post the match winner notification
+            result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
+          }
           
           if (result && typeof result === 'object' && result.success) {
             // Mark as completed

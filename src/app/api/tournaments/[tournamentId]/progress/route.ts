@@ -134,6 +134,15 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
       ['complete', tournamentId]
     );
 
+    // Queue tournament winner notification
+    try {
+      const { queueTournamentWinnerNotification } = await import('../../../../../lib/tournament-notifications');
+      await queueTournamentWinnerNotification(tournamentId, completedMatches[0].winner_team);
+    } catch (error) {
+      console.error('Failed to queue tournament winner notification:', error);
+      // Don't fail the tournament completion if notification fails
+    }
+
     return NextResponse.json({
       message: 'Tournament completed!',
       winner: completedMatches[0].winner_team,
@@ -249,6 +258,15 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
           'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           ['complete', tournamentId]
         );
+
+        // Queue tournament winner notification
+        try {
+          const { queueTournamentWinnerNotification } = await import('../../../../../lib/tournament-notifications');
+          await queueTournamentWinnerNotification(tournamentId, latestFinal.winner_team);
+        } catch (error) {
+          console.error('Failed to queue tournament winner notification:', error);
+          // Don't fail the tournament completion if notification fails
+        }
 
         return NextResponse.json({
           message: 'Tournament completed!',

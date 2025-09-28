@@ -1382,6 +1382,152 @@ export class AnnouncementHandler {
     return { embed, attachment };
   }
 
+  async postTournamentWinnerNotification(tournamentData: {
+    tournamentId: string;
+    tournamentName: string;
+    gameId: string;
+    winner: string; // team ID
+    winningTeamName: string;
+    winningPlayers: string[];
+    format: 'single-elimination' | 'double-elimination';
+    totalParticipants: number;
+  }) {
+    if (!this.client.isReady()) {
+      console.warn('⚠️ Bot not ready');
+      return false;
+    }
+
+    // Get channels configured for live updates (match_start)
+    const liveUpdateChannels = await this.getChannelsForNotificationType('match_start');
+
+    if (liveUpdateChannels.length === 0) {
+      console.warn('⚠️ No channels configured for tournament winner notifications');
+      return false;
+    }
+
+    try {
+      // Create tournament winner embed
+      const { embed, attachment } = await this.createTournamentWinnerEmbed(tournamentData);
+
+      // Build message options
+      const messageOptions: {
+        content?: string;
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+        files?: AttachmentBuilder[];
+      } = {
+        embeds: [embed]
+      };
+
+      // Add attachment if image exists
+      if (attachment) {
+        messageOptions.files = [attachment];
+      }
+
+      let successCount = 0;
+
+      // Send to all configured live update channels
+      for (const channelConfig of liveUpdateChannels) {
+        try {
+          const liveUpdateChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+          if (liveUpdateChannel?.isTextBased() && 'send' in liveUpdateChannel) {
+            // Send tournament winner notification
+            await liveUpdateChannel.send(messageOptions);
+            successCount++;
+          }
+        } catch (error) {
+          console.error(`❌ Error sending tournament winner notification to channel ${channelConfig.discord_channel_id}:`, error);
+        }
+      }
+
+      console.log(`🏆 Tournament winner notification sent to ${successCount}/${liveUpdateChannels.length} channels`);
+      return successCount > 0 ? { success: true } : false;
+
+    } catch (error) {
+      console.error('❌ Error posting tournament winner notification:', error);
+      return false;
+    }
+  }
+
+  private async createTournamentWinnerEmbed(tournamentData: {
+    tournamentId: string;
+    tournamentName: string;
+    gameId: string;
+    winner: string;
+    winningTeamName: string;
+    winningPlayers: string[];
+    format: 'single-elimination' | 'double-elimination';
+    totalParticipants: number;
+  }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
+    // Get game data for color and name
+    let gameName = tournamentData.gameId;
+    let gameColor = 0xffd700; // Gold color for tournament winners
+    let attachment: AttachmentBuilder | undefined;
+
+    if (this.db) {
+      try {
+        const gameData = await this.db.get<{name: string, color: string, icon_url: string}>(`
+          SELECT name, color, icon_url FROM games WHERE id = ?
+        `, [tournamentData.gameId]);
+
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching game data for tournament winner:', error);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🏆 Tournament Complete!`)
+      .setDescription(`**${tournamentData.tournamentName}** has concluded!`)
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Tournament Results' });
+
+    // Add winner info
+    embed.addFields({
+      name: '👑 Champion',
+      value: `**${tournamentData.winningTeamName}**`,
+      inline: false
+    });
+
+    // Add winning players
+    if (tournamentData.winningPlayers.length > 0) {
+      const playersList = tournamentData.winningPlayers.map(player => `• ${player}`).join('\n');
+      embed.addFields({
+        name: '🎮 Players',
+        value: playersList,
+        inline: true
+      });
+    }
+
+    // Add tournament details
+    embed.addFields({
+      name: '🎯 Game',
+      value: gameName,
+      inline: true
+    });
+
+    embed.addFields({
+      name: '🏟️ Format',
+      value: tournamentData.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination',
+      inline: true
+    });
+
+    embed.addFields({
+      name: '👥 Participants',
+      value: `${tournamentData.totalParticipants} players`,
+      inline: true
+    });
+
+    return { embed, attachment };
+  }
+
   updateSettings(settings: DiscordSettings | null) {
     this.settings = settings;
   }
