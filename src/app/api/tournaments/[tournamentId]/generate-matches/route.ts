@@ -157,14 +157,14 @@ export async function POST(
     // Save matches to database
     await saveGeneratedMatches(generatedMatches, tournamentMatches);
 
-    // Update tournament status to 'battle'
+    // Keep tournament in 'assign' status - bracket is generated but tournament not started yet
     await db.run(
-      'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      ['battle', tournamentId]
+      'UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [tournamentId]
     );
 
     return NextResponse.json({
-      message: 'Tournament matches generated successfully',
+      message: 'Tournament bracket generated successfully',
       matchCount: generatedMatches.length,
       format: tournament.format,
       tournamentId

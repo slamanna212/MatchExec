@@ -40,6 +40,7 @@ interface TournamentWithGame extends Tournament {
   game_icon?: string;
   game_color?: string;
   participant_count?: number;
+  has_bracket?: boolean;
 }
 
 interface TournamentCardProps {
@@ -288,10 +289,10 @@ export function TournamentDashboard() {
       if (response.ok) {
         const result = await response.json();
         console.log('Tournament progressed:', result.message);
-        
+
         // Show success notification
         alert(result.message);
-        
+
         // Refresh tournaments to show updated status
         fetchTournaments(true);
       } else {
@@ -301,6 +302,31 @@ export function TournamentDashboard() {
     } catch (error) {
       console.error('Error progressing tournament:', error);
       alert('Failed to progress tournament');
+    }
+  }, [fetchTournaments]);
+
+  const handleGenerateBracket = useCallback(async (tournamentId: string) => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/generate-matches`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Bracket generated:', result.message);
+
+        // Show success notification
+        alert(result.message);
+
+        // Refresh tournaments to show updated bracket status
+        fetchTournaments(true);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to generate bracket');
+      }
+    } catch (error) {
+      console.error('Error generating bracket:', error);
+      alert('Failed to generate bracket');
     }
   }, [fetchTournaments]);
 
@@ -359,8 +385,8 @@ export function TournamentDashboard() {
       case 'assign':
         return (
           <Group gap="xs" style={{ flex: 1 }}>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedTournamentForAssignment(tournament);
@@ -370,17 +396,31 @@ export function TournamentDashboard() {
             >
               Assign
             </Button>
-            <Button 
-              size="sm" 
-              color="green"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleStatusTransition(tournament.id, 'battle');
-              }}
-              style={{ flex: 1 }}
-            >
-              Start Tournament
-            </Button>
+            {tournament.has_bracket ? (
+              <Button
+                size="sm"
+                color="green"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStatusTransition(tournament.id, 'battle');
+                }}
+                style={{ flex: 1 }}
+              >
+                Start Tournament
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                color="blue"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleGenerateBracket(tournament.id);
+                }}
+                style={{ flex: 1 }}
+              >
+                Bracket
+              </Button>
+            )}
           </Group>
         );
       case 'battle':

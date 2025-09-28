@@ -7,6 +7,7 @@ interface TournamentDbRow extends Tournament {
   game_icon?: string;
   game_color?: string;
   participant_count?: number;
+  has_bracket?: boolean;
 }
 
 export async function GET(request: NextRequest) {
@@ -25,7 +26,13 @@ export async function GET(request: NextRequest) {
         CASE
           WHEN t.status IN ('created', 'gather') THEN COUNT(DISTINCT tp.user_id)
           ELSE COUNT(DISTINCT ttm.user_id)
-        END as participant_count
+        END as participant_count,
+        CASE
+          WHEN EXISTS (
+            SELECT 1 FROM tournament_matches tm WHERE tm.tournament_id = t.id
+          ) THEN 1
+          ELSE 0
+        END as has_bracket
       FROM tournaments t
       LEFT JOIN games g ON t.game_id = g.id
       LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
@@ -113,12 +120,13 @@ export async function POST(request: NextRequest) {
     ]);
     
     const tournament = await db.get<TournamentDbRow>(`
-      SELECT 
-        t.*, 
-        g.name as game_name, 
-        g.icon_url as game_icon, 
+      SELECT
+        t.*,
+        g.name as game_name,
+        g.icon_url as game_icon,
         g.color as game_color,
-        0 as participant_count
+        0 as participant_count,
+        0 as has_bracket
       FROM tournaments t
       LEFT JOIN games g ON t.game_id = g.id
       WHERE t.id = ?
