@@ -7,7 +7,6 @@ import {
   ActionIcon, Modal, Checkbox, Alert, TextInput, Radio, Progress
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
 
 interface DiscordChannel {
@@ -43,12 +42,26 @@ export default function ChannelsSetupPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Create channel modal
-  const [createModalOpened, { open: openCreateModal, close: closeCreateModal }] = useDisclosure(false);
+  const [createModalOpened, setCreateModalOpened] = useState(false);
+
+  // Debug function to test modal opening
+  const handleOpenCreateModal = () => {
+    console.log('Add Channel button clicked');
+    console.log('Current modal state:', createModalOpened);
+    setCreateModalOpened(true);
+    console.log('Modal should now be open');
+  };
+
+  const closeCreateModal = () => {
+    setCreateModalOpened(false);
+    setCurrentStep(0);
+    createForm.reset();
+  };
   const [currentStep, setCurrentStep] = useState(0);
   const [createLoading, setCreateLoading] = useState(false);
 
   // Edit channel modal
-  const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
+  const [editModalOpened, setEditModalOpened] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
   const [editData, setEditData] = useState<ChannelEditData>({
     send_announcements: false,
@@ -90,6 +103,10 @@ export default function ChannelsSetupPage() {
   useEffect(() => {
     fetchChannels();
   }, []);
+
+  useEffect(() => {
+    console.log('Modal state changed:', createModalOpened);
+  }, [createModalOpened]);
 
   const fetchChannels = async () => {
     try {
@@ -158,7 +175,12 @@ export default function ChannelsSetupPage() {
       send_match_start: channel.send_match_start || false,
       send_signup_updates: channel.send_signup_updates || false
     });
-    openEditModal();
+    setEditModalOpened(true);
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpened(false);
+    setSelectedChannel(null);
   };
 
   const handleSaveNotifications = async () => {
@@ -384,7 +406,7 @@ export default function ChannelsSetupPage() {
           <Text size="lg" fw={600}>Your Channels</Text>
           <Button
             leftSection={<IconPlus size="1rem" />}
-            onClick={openCreateModal}
+            onClick={handleOpenCreateModal}
           >
             Add Channel
           </Button>
@@ -507,6 +529,7 @@ export default function ChannelsSetupPage() {
         onClose={closeCreateModal}
         title="Add Discord Channel"
         size="lg"
+        zIndex={1001}
       >
         <Stack gap="lg">
           <div>
@@ -563,6 +586,7 @@ export default function ChannelsSetupPage() {
         onClose={closeEditModal}
         title="Channel Notification Settings"
         size="md"
+        zIndex={1001}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
