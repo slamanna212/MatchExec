@@ -217,7 +217,7 @@ export async function generateSingleEliminationMatches(
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - Round 1`,
+      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: gameId,
       game_mode_id: primaryMode.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -361,7 +361,7 @@ export async function generateNextRoundMatches(
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
-      name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'} - Round ${nextRound}`,
+      name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'}`,
       game_id: tournament.game_id,
       game_mode_id: randomMode.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -473,7 +473,7 @@ export async function generateDoubleEliminationMatches(
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - WB Round 1`,
+      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: gameId,
       game_mode_id: randomMode.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -614,7 +614,7 @@ export async function generateLosersBracketMatches(
     // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'} - LB Round ${losersBracketRound}`,
+      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: tournament.game_id,
       game_mode_id: randomMode.id,
       map_id: selectedMaps[0], // First map for compatibility
