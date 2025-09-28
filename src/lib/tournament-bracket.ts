@@ -838,8 +838,10 @@ export async function saveGeneratedMatches(
   try {
     // Insert matches
     for (const match of matches) {
-      const scheduledDateTime = match.scheduled_time?.toISOString() || null;
-      const scheduledDate = scheduledDateTime ? scheduledDateTime.split('T')[0] : null;
+      // Tournament matches should not auto-start, so use far future date
+      const farFutureDate = new Date('2099-12-31T23:59:59.999Z');
+      const scheduledDateTime = match.scheduled_time?.toISOString() || farFutureDate.toISOString();
+      const scheduledDate = scheduledDateTime.split('T')[0];
 
       await db.run(`
         INSERT INTO matches (
