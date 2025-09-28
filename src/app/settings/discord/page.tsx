@@ -153,16 +153,25 @@ export default function DiscordSettingsPage() {
                         });
 
                         if (response.ok) {
-                          setMessage({ type: 'success', text: 'Application ID saved! Opening Discord authorization...' });
+                          notificationHelper.success({
+                            title: 'Application ID Saved',
+                            message: 'Application ID saved! Opening Discord authorization...'
+                          });
                           // Open Discord authorization URL
                           const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=17929378196480&scope=bot%20applications.commands`;
                           window.open(url, '_blank');
                         } else {
-                          setMessage({ type: 'error', text: 'Failed to save application ID.' });
+                          notificationHelper.error({
+                            title: 'Save Failed',
+                            message: 'Failed to save application ID.'
+                          });
                         }
                       } catch (error) {
                         console.error('Error saving application ID:', error);
-                        setMessage({ type: 'error', text: 'An error occurred while saving application ID.' });
+                        notificationHelper.error({
+                          title: 'Connection Error',
+                          message: 'An error occurred while saving application ID.'
+                        });
                       } finally {
                         setSaving(false);
                       }

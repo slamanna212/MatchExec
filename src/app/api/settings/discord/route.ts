@@ -151,14 +151,14 @@ export async function PUT(request: NextRequest) {
       await db.run(updateQuery, updateValues);
     }
 
-    // If bot token was updated, trigger bot restart
-    if (bot_token && bot_token !== '••••••••') {
+    // Trigger bot restart when any Discord settings are saved
+    if (updateFields.length > 1) { // More than just the timestamp was updated
       try {
         // Attempt to restart the Discord bot process via PM2
         const { exec } = await import('child_process');
         const isDev = process.env.NODE_ENV === 'development';
         const processName = isDev ? 'discord-bot-dev' : 'discord-bot';
-        
+
         // First check if the process exists
         exec(`npx pm2 describe ${processName}`, (error) => {
           if (error) {
@@ -173,7 +173,7 @@ export async function PUT(request: NextRequest) {
             });
           } else {
             // Process exists, restart it
-            console.log(`🔄 Restarting ${processName} process`);
+            console.log(`🔄 Restarting ${processName} process due to Discord settings change`);
             exec(`npx pm2 restart ${processName}`, (restartError) => {
               if (restartError) {
                 console.error(`❌ Error restarting ${processName}:`, restartError.message);
@@ -183,7 +183,7 @@ export async function PUT(request: NextRequest) {
             });
           }
         });
-        
+
       } catch (error) {
         console.error('❌ Error managing Discord bot process:', error);
       }
