@@ -2,6 +2,7 @@
 
 import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
 import { useState, useEffect } from 'react';
+import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
 
 export default function DevPage() {
@@ -215,6 +216,201 @@ export default function DevPage() {
                 </Card>
               </Grid.Col>
             ))}
+          </Grid>
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Notification Testing</Text>
+          <Text size="sm" c="dimmed" mb="lg">
+            Test toast notifications with different types, themes, and behaviors
+          </Text>
+
+          <Grid>
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>Basic Types</Text>
+                <Button
+                  size="sm"
+                  color="green"
+                  onClick={() => showSuccess('Operation completed successfully!')}
+                >
+                  Success Toast
+                </Button>
+                <Button
+                  size="sm"
+                  color="red"
+                  onClick={() => showError('Something went wrong!')}
+                >
+                  Error Toast
+                </Button>
+                <Button
+                  size="sm"
+                  color="orange"
+                  onClick={() => showWarning('Please review this action')}
+                >
+                  Warning Toast
+                </Button>
+                <Button
+                  size="sm"
+                  color="blue"
+                  onClick={() => showInfo('Here is some helpful information')}
+                >
+                  Info Toast
+                </Button>
+              </Stack>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>Custom Titles</Text>
+                <Button
+                  size="sm"
+                  color="green"
+                  onClick={() => notificationHelper.success({
+                    title: 'Tournament Created',
+                    message: 'Your tournament has been successfully created and is ready for signups!'
+                  })}
+                >
+                  Tournament Success
+                </Button>
+                <Button
+                  size="sm"
+                  color="red"
+                  onClick={() => notificationHelper.error({
+                    title: 'Save Failed',
+                    message: 'Unable to save settings. Please check your connection and try again.'
+                  })}
+                >
+                  Settings Error
+                </Button>
+                <Button
+                  size="sm"
+                  color="orange"
+                  onClick={() => notificationHelper.warning({
+                    title: 'Match Starting Soon',
+                    message: 'Your match will begin in 5 minutes. Please join the voice channel.'
+                  })}
+                >
+                  Match Warning
+                </Button>
+                <Button
+                  size="sm"
+                  color="blue"
+                  onClick={() => notificationHelper.info({
+                    title: 'New Feature',
+                    message: 'Voice announcements are now available in tournament settings!'
+                  })}
+                >
+                  Feature Info
+                </Button>
+              </Stack>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>Persistent & Loading</Text>
+                <Button
+                  size="sm"
+                  color="violet"
+                  onClick={() => notificationHelper.success({
+                    message: 'This notification stays until dismissed',
+                    autoClose: false
+                  })}
+                >
+                  Persistent Toast
+                </Button>
+                <Button
+                  size="sm"
+                  color="gray"
+                  onClick={() => {
+                    notificationHelper.loading({
+                      id: 'loading-test',
+                      message: 'Processing tournament bracket...'
+                    });
+                    setTimeout(() => {
+                      notificationHelper.update('loading-test', {
+                        type: 'success',
+                        message: 'Tournament bracket generated successfully!'
+                      });
+                    }, 3000);
+                  }}
+                >
+                  Loading → Success
+                </Button>
+                <Button
+                  size="sm"
+                  color="gray"
+                  onClick={() => {
+                    notificationHelper.loading({
+                      id: 'loading-error-test',
+                      message: 'Saving settings...'
+                    });
+                    setTimeout(() => {
+                      notificationHelper.update('loading-error-test', {
+                        type: 'error',
+                        message: 'Failed to save settings. Please try again.'
+                      });
+                    }, 2500);
+                  }}
+                >
+                  Loading → Error
+                </Button>
+                <Button
+                  size="sm"
+                  color="red"
+                  variant="outline"
+                  onClick={() => notificationHelper.clean()}
+                >
+                  Clear All
+                </Button>
+              </Stack>
+            </Grid.Col>
+
+            <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>Real-world Examples</Text>
+                <Button
+                  size="sm"
+                  color="green"
+                  onClick={() => notificationHelper.success({
+                    title: 'Round Advanced',
+                    message: 'Tournament has progressed to the next round. New matches are ready!'
+                  })}
+                >
+                  Round Progress
+                </Button>
+                <Button
+                  size="sm"
+                  color="blue"
+                  onClick={() => notificationHelper.info({
+                    title: 'Player Joined',
+                    message: 'TestPlayer has joined the tournament. 7/8 slots filled.'
+                  })}
+                >
+                  Player Update
+                </Button>
+                <Button
+                  size="sm"
+                  color="orange"
+                  onClick={() => notificationHelper.warning({
+                    title: 'Discord Bot Offline',
+                    message: 'The Discord bot is currently offline. Some features may be unavailable.'
+                  })}
+                >
+                  System Warning
+                </Button>
+                <Button
+                  size="sm"
+                  color="violet"
+                  onClick={() => notificationHelper.success({
+                    title: 'Voice Test Complete',
+                    message: 'Voice announcements are working correctly!'
+                  })}
+                >
+                  Voice Success
+                </Button>
+              </Stack>
+            </Grid.Col>
           </Grid>
         </Card>
       </Stack>

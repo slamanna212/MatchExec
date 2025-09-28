@@ -1,9 +1,10 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Alert, Checkbox, Box, Grid } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, Checkbox, Box, Grid } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2 } from '@tabler/icons-react';
+import { notificationHelper } from '@/lib/notifications';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -19,7 +20,6 @@ interface Voice {
 export default function AnnouncerSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
 
   // Helper function to get icon for voice type
@@ -76,8 +76,7 @@ export default function AnnouncerSettingsPage() {
 
   const handleSubmit = async (values: AnnouncerSettings) => {
     setSaving(true);
-    setMessage(null);
-    
+
     try {
       const response = await fetch('/api/settings/announcer', {
         method: 'PUT',
@@ -86,7 +85,10 @@ export default function AnnouncerSettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Announcer settings saved successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Announcer settings saved successfully!'
+        });
         // Refresh the form to get the latest data
         const refreshResponse = await fetch('/api/settings/announcer');
         if (refreshResponse.ok) {
@@ -95,11 +97,17 @@ export default function AnnouncerSettingsPage() {
         }
       } else {
         const errorData = await response.json();
-        setMessage({ type: 'error', text: errorData.error || 'Failed to save announcer settings.' });
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: errorData.error || 'Failed to save announcer settings.'
+        });
       }
     } catch (error) {
       console.error('Error saving announcer settings:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving announcer settings.' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving announcer settings.'
+      });
     } finally {
       setSaving(false);
     }
@@ -119,12 +127,6 @@ export default function AnnouncerSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {message && (
-            <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
-              {message.text}
-            </Alert>
-          )}
-
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <Checkbox

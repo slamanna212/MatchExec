@@ -1,8 +1,9 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Alert, NumberInput, Select } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, NumberInput, Select } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
+import { notificationHelper } from '@/lib/notifications';
 
 interface ApplicationSettings {
   event_duration_minutes?: number;
@@ -13,7 +14,6 @@ interface ApplicationSettings {
 export default function ApplicationSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
 
@@ -78,8 +78,7 @@ export default function ApplicationSettingsPage() {
 
   const handleSubmit = async (values: ApplicationSettings) => {
     setSaving(true);
-    setMessage(null);
-    
+
     try {
       // Convert player reminder display values to minutes
       const playerReminderMinutes = valueUnitToMinutes(playerReminderValue, playerReminderUnit);
@@ -95,13 +94,22 @@ export default function ApplicationSettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Application settings saved successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Application settings saved successfully!'
+        });
       } else {
-        setMessage({ type: 'error', text: 'Failed to save application settings.' });
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: 'Failed to save application settings.'
+        });
       }
     } catch (error) {
       console.error('Error saving application settings:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving application settings.' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving application settings.'
+      });
     } finally {
       setSaving(false);
     }
@@ -116,12 +124,6 @@ export default function ApplicationSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {message && (
-            <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
-              {message.text}
-            </Alert>
-          )}
-
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <NumberInput

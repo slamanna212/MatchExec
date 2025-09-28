@@ -21,6 +21,7 @@ import { modals } from '@mantine/modals';
 import { Tournament, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
+import { notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -248,11 +249,17 @@ export function TournamentDashboard() {
       } else {
         const error = await response.json();
         console.error('Failed to transition tournament status:', error);
-        alert(error.error || 'Failed to update tournament status');
+        notificationHelper.error({
+          title: 'Status Update Failed',
+          message: error.error || 'Failed to update tournament status'
+        });
       }
     } catch (error) {
       console.error('Error transitioning tournament status:', error);
-      alert('Failed to update tournament status');
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'Failed to update tournament status'
+      });
     }
   };
 
@@ -267,11 +274,17 @@ export function TournamentDashboard() {
         setDetailsModalOpen(false);
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to delete tournament');
+        notificationHelper.error({
+          title: 'Delete Failed',
+          message: error.error || 'Failed to delete tournament'
+        });
       }
     } catch (error) {
       console.error('Error deleting tournament:', error);
-      alert('Failed to delete tournament');
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'Failed to delete tournament'
+      });
     }
   };
 
@@ -290,18 +303,26 @@ export function TournamentDashboard() {
         const result = await response.json();
         console.log('Tournament progressed:', result.message);
 
-        // Show success notification
-        alert(result.message);
+        notificationHelper.success({
+          title: 'Round Advanced',
+          message: result.message
+        });
 
         // Refresh tournaments to show updated status
         fetchTournaments(true);
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to progress tournament');
+        notificationHelper.error({
+          title: 'Progress Failed',
+          message: error.error || 'Failed to progress tournament'
+        });
       }
     } catch (error) {
       console.error('Error progressing tournament:', error);
-      alert('Failed to progress tournament');
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'Failed to progress tournament'
+      });
     }
   }, [fetchTournaments]);
 
@@ -315,18 +336,26 @@ export function TournamentDashboard() {
         const result = await response.json();
         console.log('Bracket generated:', result.message);
 
-        // Show success notification
-        alert(result.message);
+        notificationHelper.success({
+          title: 'Bracket Generated',
+          message: result.message
+        });
 
         // Refresh tournaments to show updated bracket status
         fetchTournaments(true);
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to generate bracket');
+        notificationHelper.error({
+          title: 'Bracket Generation Failed',
+          message: error.error || 'Failed to generate bracket'
+        });
       }
     } catch (error) {
       console.error('Error generating bracket:', error);
-      alert('Failed to generate bracket');
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'Failed to generate bracket'
+      });
     }
   }, [fetchTournaments]);
 

@@ -4,6 +4,7 @@ import { Text, Stack, Group } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
+import { notificationHelper } from '@/lib/notifications';
 
 interface SchedulerSettings {
   match_check_cron: string;
@@ -14,7 +15,6 @@ interface SchedulerSettings {
 export default function SchedulerSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
     match_check_cron: '0 */1 * * * *',
     cleanup_check_cron: '0 0 2 * * *',
@@ -45,8 +45,7 @@ export default function SchedulerSettingsPage() {
 
   const handleSchedulerSubmit = async (values: SchedulerSettings) => {
     setSaving(true);
-    setMessage(null);
-    
+
     try {
       const response = await fetch('/api/settings/scheduler', {
         method: 'PUT',
@@ -55,14 +54,23 @@ export default function SchedulerSettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Scheduler settings saved successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Scheduler settings saved successfully!'
+        });
       } else {
         const errorData = await response.json();
-        setMessage({ type: 'error', text: errorData.error || 'Failed to save scheduler settings.' });
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: errorData.error || 'Failed to save scheduler settings.'
+        });
       }
     } catch (error) {
       console.error('Error saving scheduler settings:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving scheduler settings.' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving scheduler settings.'
+      });
     } finally {
       setSaving(false);
     }
@@ -87,7 +95,6 @@ export default function SchedulerSettingsPage() {
           onSubmit={handleSchedulerSubmit}
           loading={loading}
           saving={saving}
-          message={message}
         />
       </Stack>
     </div>
