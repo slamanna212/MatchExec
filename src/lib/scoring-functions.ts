@@ -570,8 +570,8 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
     // If all games are completed, mark match as complete
     if (statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total) {
       const updateMatchQuery = `
-        UPDATE matches 
-        SET status = 'complete', end_date = CURRENT_TIMESTAMP 
+        UPDATE matches
+        SET status = 'complete', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
       
