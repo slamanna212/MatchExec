@@ -92,8 +92,6 @@ export class QueueProcessor {
   async processAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
 
-    console.log('🔄 Processing announcement queue...');
-
     try {
       // Use the original approach - JOIN with matches table to get all needed data
       const announcements = await this.db.all<{
