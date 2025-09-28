@@ -68,6 +68,31 @@ export async function GET(
       ORDER BY m.tournament_round, tm.match_order
     `, [tournamentId]) as TournamentMatch[];
 
+    // For completed matches without winner_team, calculate from match_games
+    for (const match of matches) {
+      if (match.status === 'complete' && !match.winner_team) {
+        const gameWinners = await db.all(`
+          SELECT winner_id, COUNT(*) as wins
+          FROM match_games
+          WHERE match_id = ? AND winner_id IS NOT NULL
+          GROUP BY winner_id
+          ORDER BY wins DESC
+        `, [match.id]) as { winner_id: string; wins: number }[];
+
+        if (gameWinners.length > 0) {
+          const topWinner = gameWinners[0];
+          // Convert team1/team2 to actual team IDs
+          if (topWinner.winner_id === 'team1') {
+            match.winner_team = match.team1_id;
+          } else if (topWinner.winner_id === 'team2') {
+            match.winner_team = match.team2_id;
+          } else {
+            match.winner_team = topWinner.winner_id;
+          }
+        }
+      }
+    }
+
     // Transform to bracket match format
     const bracketMatches: BracketMatch[] = matches.map(match => ({
       id: match.id,
@@ -82,8 +107,8 @@ export async function GET(
         name: match.team2_name || 'Team 2'
       } : undefined,
       winner: match.winner_team || undefined,
-      status: match.status === 'completed' ? 'completed' :
-              match.status === 'active' ? 'ongoing' : 'pending',
+      status: match.status === 'complete' ? 'completed' :
+              match.status === 'battle' ? 'ongoing' : 'pending',
       match_order: match.match_order
     }));
 

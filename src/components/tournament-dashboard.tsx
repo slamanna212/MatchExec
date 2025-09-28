@@ -426,8 +426,8 @@ export function TournamentDashboard() {
       case 'battle':
         return (
           <Group gap="xs" style={{ flex: 1 }}>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 handleProgressTournament(tournament.id);
@@ -437,19 +437,8 @@ export function TournamentDashboard() {
             >
               Next Round
             </Button>
-            <Button 
-              size="sm" 
-              onClick={(e) => {
-                e.stopPropagation();
-                // TODO: Open bracket management
-                console.log('Manage bracket for tournament:', tournament.id);
-              }}
-              style={{ flex: 1 }}
-            >
-              View Bracket
-            </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               color="red"
               onClick={(e) => {
                 e.stopPropagation();
