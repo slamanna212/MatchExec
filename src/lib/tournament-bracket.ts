@@ -135,7 +135,7 @@ export async function generateSingleEliminationMatches(
   bracketAssignments: BracketAssignment[],
   gameId: string,
   roundsPerMatch: number,
-  startTime?: Date
+  _startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
@@ -475,7 +475,7 @@ export async function generateDoubleEliminationMatches(
   bracketAssignments: BracketAssignment[],
   gameId: string,
   roundsPerMatch: number,
-  startTime?: Date
+  _startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
   

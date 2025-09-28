@@ -1,9 +1,9 @@
-const sqlite3 = require('sqlite3').verbose();
+import sqlite3 from 'sqlite3';
 
 const dbPath = './app_data/data/matchexec.db';
 
 async function checkTournaments() {
-  const db = new sqlite3.Database(dbPath);
+  const db = new sqlite3.verbose().Database(dbPath);
 
   try {
     // Get all tournaments

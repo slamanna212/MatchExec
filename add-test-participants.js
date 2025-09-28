@@ -1,5 +1,5 @@
-const sqlite3 = require('sqlite3').verbose();
-const { randomUUID } = require('crypto');
+import sqlite3 from 'sqlite3';
+import { randomUUID } from 'crypto';
 
 const dbPath = './app_data/data/matchexec.db';
 
@@ -20,7 +20,7 @@ function generateRandomDiscordId() {
 }
 
 async function addTestParticipants() {
-  const db = new sqlite3.Database(dbPath);
+  const db = new sqlite3.verbose().Database(dbPath);
 
   try {
     // Get the tournament in gather stage

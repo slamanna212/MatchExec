@@ -475,7 +475,7 @@ export function TournamentDashboard() {
       default:
         return null;
     }
-  }, [handleProgressTournament]);
+  }, [handleProgressTournament, handleGenerateBracket]);
 
   // Filter tournaments based on search query
   const filteredTournaments = useMemo(() => {

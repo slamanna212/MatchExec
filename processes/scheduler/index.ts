@@ -406,7 +406,7 @@ class MatchExecScheduler {
           if (typeof match.announcements === 'string') {
             try {
               announcements = JSON.parse(match.announcements);
-            } catch (e) {
+            } catch {
               // If it's not valid JSON, skip this match
               console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
               continue;

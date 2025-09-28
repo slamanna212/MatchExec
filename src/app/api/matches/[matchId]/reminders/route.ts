@@ -54,7 +54,7 @@ export async function GET(
           if (typeof matchWithAnnouncements.announcements === 'string') {
             try {
               announcements = JSON.parse(matchWithAnnouncements.announcements);
-            } catch (e) {
+            } catch {
               // If it's not valid JSON, skip this match
               console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
               return NextResponse.json({
