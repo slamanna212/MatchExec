@@ -567,16 +567,59 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
 
     const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
 
-    // If all games are completed, mark match as complete
+    // If all games are completed, mark match as complete and determine winner
     if (statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total) {
+      // Calculate overall match winner based on game wins
+      const winnerQuery = `
+        SELECT
+          COUNT(*) as total_normal_games,
+          SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
+          SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
+        FROM match_games mg
+        WHERE mg.match_id = ?
+          AND mg.status = 'completed'
+          AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL)
+          AND mg.winner_id IS NOT NULL
+      `;
+
+      const winResult = await db.get<{
+        total_normal_games: number;
+        team1_wins: number;
+        team2_wins: number;
+      }>(winnerQuery, [matchId]);
+
+      let winnerTeam: string | null = null;
+      if (winResult && winResult.total_normal_games > 0) {
+        if (winResult.team1_wins > winResult.team2_wins) {
+          // Get team1 ID from tournament_matches or match data
+          const team1Data = await db.get<{ red_team_id?: string; team1_id?: string }>(`
+            SELECT m.red_team_id, tm.team1_id
+            FROM matches m
+            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+            WHERE m.id = ?
+          `, [matchId]);
+          winnerTeam = team1Data?.team1_id || team1Data?.red_team_id || null;
+        } else if (winResult.team2_wins > winResult.team1_wins) {
+          // Get team2 ID from tournament_matches or match data
+          const team2Data = await db.get<{ blue_team_id?: string; team2_id?: string }>(`
+            SELECT m.blue_team_id, tm.team2_id
+            FROM matches m
+            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+            WHERE m.id = ?
+          `, [matchId]);
+          winnerTeam = team2Data?.team2_id || team2Data?.blue_team_id || null;
+        }
+        // If tied, leave winnerTeam as null
+      }
+
       const updateMatchQuery = `
         UPDATE matches
-        SET status = 'complete', updated_at = CURRENT_TIMESTAMP
+        SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      
-      await db.run(updateMatchQuery, [matchId]);
-      console.log(`Match ${matchId} marked as complete`);
+
+      await db.run(updateMatchQuery, [winnerTeam, matchId]);
+      console.log(`Match ${matchId} marked as complete with winner: ${winnerTeam || 'tie/none'}`);
       
       // Queue match winner notification
       await queueMatchWinnerNotification(matchId);
