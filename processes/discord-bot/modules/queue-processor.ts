@@ -130,7 +130,6 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
-      console.log(`📋 Found ${announcements.length} pending announcements to process`);
 
       for (const announcement of announcements) {
         try {
