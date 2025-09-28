@@ -230,7 +230,7 @@ export async function generateSingleEliminationMatches(
       tournament_round: 1,
       tournament_bracket_type: 'winners',
       rules: tournamentRuleset,
-      scheduled_time: startTime,
+      scheduled_time: undefined, // Tournament matches should not auto-start
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
       team1_id: team1Assignment.teamId, // Red team
@@ -485,7 +485,7 @@ export async function generateDoubleEliminationMatches(
       tournament_id: tournamentId,
       tournament_round: 1,
       tournament_bracket_type: 'winners',
-      scheduled_time: startTime,
+      scheduled_time: undefined, // Tournament matches should not auto-start
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
       team1_id: team1Assignment.teamId, // Red team
@@ -838,8 +838,8 @@ export async function saveGeneratedMatches(
   try {
     // Insert matches
     for (const match of matches) {
-      const scheduledDateTime = match.scheduled_time?.toISOString() || new Date().toISOString();
-      const scheduledDate = scheduledDateTime.split('T')[0]; // Extract date part (YYYY-MM-DD)
+      const scheduledDateTime = match.scheduled_time?.toISOString() || null;
+      const scheduledDate = scheduledDateTime ? scheduledDateTime.split('T')[0] : null;
 
       await db.run(`
         INSERT INTO matches (
