@@ -165,7 +165,52 @@ export async function POST(
         break;
         
       case 'battle':
-        console.log(`⚔️ Tournament ${tournamentId} matches can now be generated and played`);
+        console.log(`⚔️ Tournament ${tournamentId} started - transitioning first round matches to battle`);
+
+        // Transition all first round matches to battle status with proper notifications
+        try {
+          const firstRoundMatches = await db.all(`
+            SELECT m.id, m.name
+            FROM matches m
+            JOIN tournament_matches tm ON m.id = tm.match_id
+            WHERE tm.tournament_id = ? AND tm.round = 1 AND m.status = 'assign'
+          `, [tournamentId]);
+
+          for (const match of firstRoundMatches) {
+            // Use the match transition API to properly handle Discord notifications
+            try {
+              const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/matches/${match.id}/transition`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ newStatus: 'battle' }),
+              });
+
+              if (response.ok) {
+                console.log(`🚀 Started match with notifications: ${match.name}`);
+              } else {
+                console.error(`❌ Failed to transition match ${match.id}:`, await response.text());
+              }
+            } catch (fetchError) {
+              console.error(`❌ Error calling match transition API for ${match.id}:`, fetchError);
+              // Fallback to direct database update if API call fails
+              await db.run(`
+                UPDATE matches
+                SET status = 'battle', updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+              `, [match.id]);
+              console.log(`🔄 Fallback: Updated match status directly for ${match.name}`);
+            }
+          }
+
+          if (firstRoundMatches.length > 0) {
+            console.log(`✅ Started ${firstRoundMatches.length} first round matches`);
+          }
+        } catch (error) {
+          console.error('❌ Error starting first round matches:', error);
+          // Don't fail the tournament transition if match transitions fail
+        }
         break;
         
       case 'complete':
