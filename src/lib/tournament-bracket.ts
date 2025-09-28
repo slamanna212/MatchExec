@@ -245,7 +245,7 @@ export async function generateSingleEliminationMatches(
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: gameId,
-      game_mode_id: primaryMode.id,
+      game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
       maps: selectedMaps, // All maps for the match
       rounds_per_match: roundsPerMatch,
@@ -429,7 +429,7 @@ export async function generateNextRoundMatches(
       id: matchId,
       name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'}`,
       game_id: tournament.game_id,
-      game_mode_id: primaryMode.id,
+      game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
       maps: selectedMaps, // All maps for the match
       rounds_per_match: tournament.rounds_per_match,
@@ -581,7 +581,7 @@ export async function generateDoubleEliminationMatches(
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: gameId,
-      game_mode_id: primaryMode.id,
+      game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
       maps: selectedMaps, // All maps for the match
       rounds_per_match: roundsPerMatch,
@@ -762,7 +762,7 @@ export async function generateLosersBracketMatches(
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       game_id: tournament.game_id,
-      game_mode_id: primaryMode.id,
+      game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
       maps: selectedMaps, // All maps for the match
       rounds_per_match: tournament.rounds_per_match,
@@ -900,7 +900,7 @@ export async function generateGrandFinalsMatch(
     id: matchId,
     name: `Grand Finals: ${wbTeam?.team_name || 'WB Winner'} vs ${lbTeam?.team_name || 'LB Winner'}`,
     game_id: tournament.game_id,
-    game_mode_id: primaryMode.id,
+    game_mode_id: primaryMode!.id,
     map_id: selectedMaps[0], // First map for compatibility
     maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,
@@ -1036,7 +1036,7 @@ export async function generateGrandFinalsResetMatch(
     id: matchId,
     name: `Grand Finals Reset: ${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
     game_id: tournament.game_id,
-    game_mode_id: primaryMode.id,
+    game_mode_id: primaryMode!.id,
     map_id: selectedMaps[0], // First map for compatibility
     maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,

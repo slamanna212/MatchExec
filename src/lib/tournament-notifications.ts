@@ -11,7 +11,11 @@ export async function queueTournamentWinnerNotification(
     const db = await getDbInstance();
 
     // Get tournament and winner data
-    const tournamentData = await db.get(`
+    const tournamentData = await db.get<{
+      tournament_name: string;
+      game_id: string;
+      format: string;
+    }>(`
       SELECT
         t.name as tournament_name,
         t.game_id,
@@ -26,7 +30,7 @@ export async function queueTournamentWinnerNotification(
     }
 
     // Get winning team data
-    const winningTeam = await db.get(`
+    const winningTeam = await db.get<{ team_name: string }>(`
       SELECT team_name
       FROM tournament_teams
       WHERE id = ?
@@ -38,7 +42,7 @@ export async function queueTournamentWinnerNotification(
     }
 
     // Get winning team members
-    const winningPlayers = await db.all(`
+    const winningPlayers = await db.all<{ username: string }>(`
       SELECT username
       FROM tournament_team_members
       WHERE team_id = ?
@@ -46,7 +50,7 @@ export async function queueTournamentWinnerNotification(
     `, [winnerId]);
 
     // Get total participant count
-    const participantCount = await db.get(`
+    const participantCount = await db.get<{ total: number }>(`
       SELECT COUNT(DISTINCT ttm.user_id) as total
       FROM tournament_teams tt
       JOIN tournament_team_members ttm ON tt.id = ttm.team_id

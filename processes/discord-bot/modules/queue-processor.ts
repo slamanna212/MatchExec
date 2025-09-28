@@ -66,7 +66,7 @@ interface QueuedMatchWinner {
   match_id: string;
   match_name: string;
   game_id: string;
-  winner: 'team1' | 'team2' | 'tie';
+  winner: 'team1' | 'team2' | 'tie' | 'tournament';
   winning_team_name: string;
   winning_players: string;
   team1_score: number;
@@ -842,10 +842,10 @@ export class QueueProcessor {
         try {
           // Immediately mark as processing to prevent duplicate processing
           const updateResult = await this.db.run(`
-            UPDATE discord_voice_announcement_queue 
+            UPDATE discord_voice_announcement_queue
             SET status = 'processing', updated_at = datetime('now')
             WHERE id = ? AND status = 'pending'
-          `, [announcement.announcement_id]);
+          `, [announcement.id]);
           
           if (updateResult.changes === 0) {
             continue;
@@ -877,10 +877,10 @@ export class QueueProcessor {
 
             // Mark as completed
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'completed', completed_at = datetime('now')
               WHERE id = ?
-            `, [announcement.announcement_id]);
+            `, [announcement.id]);
 
             console.log(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
           } else {
@@ -898,10 +898,10 @@ export class QueueProcessor {
           
           // Mark as failed
           await this.db.run(`
-            UPDATE discord_voice_announcement_queue 
+            UPDATE discord_voice_announcement_queue
             SET status = 'failed', completed_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.announcement_id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
         }
       }
     } catch (error) {
@@ -1044,7 +1044,7 @@ export class QueueProcessor {
               winner: notification.match_id, // Tournament ID
               winningTeamName: notification.winning_team_name,
               winningPlayers: winningPlayers,
-              format: notification.team2_score === 1 ? 'double-elimination' : 'single-elimination', // Decoded from team2_score
+              format: (notification.team2_score === 1 ? 'double-elimination' : 'single-elimination') as 'double-elimination' | 'single-elimination', // Decoded from team2_score
               totalParticipants: notification.team1_score // Stored in team1_score
             };
 

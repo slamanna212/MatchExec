@@ -191,7 +191,7 @@ export async function POST(
 
         // Transition all first round matches to battle status with proper notifications
         try {
-          const firstRoundMatches = await db.all(`
+          const firstRoundMatches = await db.all<{id: string, name: string}>(`
             SELECT m.id, m.name
             FROM matches m
             JOIN tournament_matches tm ON m.id = tm.match_id
