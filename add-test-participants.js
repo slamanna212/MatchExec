@@ -20,7 +20,7 @@ function generateRandomDiscordId() {
 }
 
 async function addTestParticipants() {
-  const db = new sqlite3.verbose().Database(dbPath);
+  const db = new sqlite3.Database(dbPath);
 
   try {
     // Get the tournament in gather stage
