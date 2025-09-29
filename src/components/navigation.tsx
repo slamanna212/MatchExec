@@ -13,7 +13,6 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
-  IconTournament,
   IconTrophy,
   IconDeviceGamepad2,
   IconSettings,
@@ -28,7 +27,8 @@ import {
   IconPaint,
   IconVolume,
   IconInfoCircle,
-  IconHome
+  IconHome,
+  IconSwords
 } from '@tabler/icons-react'
 import { getVersionInfo, VersionInfo } from '@/lib/version-client'
 
@@ -61,7 +61,7 @@ export function Navigation({ children }: NavigationProps) {
     {
       label: 'Matches',
       href: '/matches',
-      icon: IconTournament,
+      icon: IconSwords,
       links: [
         { label: 'History', href: '/matches/history', icon: IconHistory }
       ]
