@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { Navigation } from "@/components/navigation";
 import { ColorSchemeScript } from '@mantine/core';
 import WelcomeFlowWrapper from '@/components/WelcomeFlowWrapper';
+import { DatabaseStatusWrapper } from '@/components/DatabaseStatusWrapper';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,11 +39,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <WelcomeFlowWrapper>
-            <Navigation>
-              {children}
-            </Navigation>
-          </WelcomeFlowWrapper>
+          <DatabaseStatusWrapper>
+            <WelcomeFlowWrapper>
+              <Navigation>
+                {children}
+              </Navigation>
+            </WelcomeFlowWrapper>
+          </DatabaseStatusWrapper>
         </Providers>
       </body>
     </html>

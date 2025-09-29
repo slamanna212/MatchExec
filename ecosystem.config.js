@@ -1,6 +1,17 @@
 module.exports = {
   apps: [
     {
+      name: 'db-migrator',
+      script: './scripts/migrate-background.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
+      autorestart: false,
+      env: {
+        NODE_ENV: 'production',
+        DATABASE_PATH: '/app/app_data/data/matchexec.db'
+      }
+    },
+    {
       name: 'matchexec-web',
       script: 'node',
       args: 'server.js',

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Database } from './connection';
+import { markDbNotReady, markDbReady } from './status';
 
 interface GameData {
   id: string;
@@ -59,19 +60,28 @@ export class DatabaseSeeder {
 
   async seedDatabase(): Promise<void> {
     console.log('🌱 Starting database seeding...');
-    
+    markDbNotReady('Starting database seeding...');
+
+    // TEMPORARY: 20 second delay to test loading screen
+    console.log('⏳ Waiting 20 seconds to allow loading screen to display...');
+    await new Promise(resolve => setTimeout(resolve, 20000));
+
     // Seed games first
     const gameDirectories = this.getGameDirectories();
     console.log(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
 
-    for (const gameDir of gameDirectories) {
+    for (let i = 0; i < gameDirectories.length; i++) {
+      const gameDir = gameDirectories[i];
+      markDbNotReady(`Seeding game data (${i + 1}/${gameDirectories.length})...`);
       await this.seedGame(gameDir);
     }
 
     // Seed voice data
+    markDbNotReady('Seeding voice data...');
     await this.seedVoices();
-    
+
     console.log('✅ Database seeding completed');
+    markDbReady();
   }
 
   private getGameDirectories(): string[] {
