@@ -42,8 +42,10 @@ next-env.d.ts
 
 # database
 /app/data/
+/app_data/
 matchexec.db
 *.db
+.db-status.json
 
 # uploaded files
 /public/uploads/
