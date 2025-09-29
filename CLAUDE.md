@@ -14,7 +14,6 @@ This project uses a multi-process architecture with different process managers f
 1. **Web App** (`src/app/`): Next.js application with Mantine UI components
 2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for match commands
 3. **Scheduler** (`processes/scheduler/`): Cron jobs for match management
-4. **Worker** (`processes/worker/`): Background job processing
 
 ## Development
 
@@ -88,10 +87,8 @@ The container uses s6-overlay v3 to manage processes:
 │   │       ├── interaction-handler.ts # Discord interactions
 │   │       ├── utils.ts              # Utility functions
 │   │       └── settings-manager.ts   # Settings management
-│   ├── scheduler/          # Cron scheduler process
-│   │   └── index.ts        # Scheduled tasks
-│   └── worker/             # Background worker process
-│       └── index.ts        # Job processing
+│   └── scheduler/          # Cron scheduler process
+│       └── index.ts        # Scheduled tasks
 ├── shared/                 # Shared code between processes
 │   └── types.ts            # TypeScript type definitions
 ├── lib/                    # Utility libraries
@@ -100,8 +97,7 @@ The container uses s6-overlay v3 to manage processes:
 │   │   ├── user/          # User bundle (defines which services to start)
 │   │   ├── matchexec-web/ # Web application service
 │   │   ├── discord-bot/   # Discord bot service
-│   │   ├── scheduler/     # Scheduler service
-│   │   └── worker/        # Worker service
+│   │   └── scheduler/     # Scheduler service
 │   └── cont-init.d/       # Container initialization scripts
 │       ├── 10-adduser     # User setup
 │       ├── 20-setup-environment # Environment configuration

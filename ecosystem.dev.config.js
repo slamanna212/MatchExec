@@ -28,16 +28,6 @@ module.exports = {
         NODE_ENV: 'development'
       },
       watch: ['./processes/scheduler', './shared', './lib']
-    },
-    {
-      name: 'worker-dev',
-      script: './processes/worker/index.ts',
-      interpreter: 'npx',
-      interpreter_args: 'tsx',
-      env: {
-        NODE_ENV: 'development'
-      },
-      watch: ['./processes/worker', './shared', './lib']
     }
   ]
 };

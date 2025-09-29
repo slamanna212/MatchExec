@@ -29,16 +29,6 @@ module.exports = {
         NODE_ENV: 'production',
         DATABASE_PATH: '/app/app_data/data/matchexec.db'
       }
-    },
-    {
-      name: 'worker',
-      script: './processes/worker/index.ts',
-      interpreter: 'npx',
-      interpreter_args: 'tsx',
-      env: {
-        NODE_ENV: 'production',
-        DATABASE_PATH: '/app/app_data/data/matchexec.db'
-      }
     }
   ]
 };
