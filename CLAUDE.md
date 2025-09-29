@@ -1,6 +1,8 @@
 # MatchExec Match Bot
 
-A Discord match management bot built with Next.js, React, Mantine, and multi-process architecture managed by PM2 (development) or s6-overlay (production/Docker).
+A Discord match and tournament management bot built with Next.js, React, Mantine, and multi-process architecture managed by PM2 (development) or s6-overlay (production/Docker).
+
+**Features**: Match scheduling, tournament brackets (single/double elimination), team management, scoring system, voice announcements, Discord integration, multi-game support (Overwatch 2, Valorant, Marvel Rivals, League of Legends, R6 Siege, Counter-Strike 2).
 
 ## Architecture
 
@@ -70,41 +72,32 @@ The container uses s6-overlay v3 to manage processes:
 
 ## Project Structure
 
-├── src/app/                 # Next.js application
-│   ├── layout.tsx          # Root layout with Mantine provider
-│   ├── page.tsx            # Home page
-│   ├── providers.tsx       # Mantine provider setup
-│   └── globals.css         # Global styles
+├── src/
+│   ├── app/                      # Next.js application
+│   │   ├── api/                  # REST API routes (47+ endpoints)
+│   │   │   ├── matches/          # Match management endpoints
+│   │   │   ├── tournaments/      # Tournament endpoints
+│   │   │   ├── games/            # Game data endpoints
+│   │   │   ├── channels/         # Discord channel endpoints
+│   │   │   └── settings/         # Settings endpoints
+│   │   ├── matches/              # Match pages (create, history, dashboard)
+│   │   ├── tournaments/          # Tournament pages
+│   │   ├── settings/             # Settings pages (Discord, Announcer, UI, Scheduler)
+│   │   ├── welcome/              # First-time setup wizard
+│   │   └── layout.tsx            # Root layout with Mantine provider
+│   ├── components/               # React components
+│   │   ├── scoring/              # Scoring system components
+│   │   └── ...                   # Match/tournament UI components
+│   └── lib/                      # Utilities (database-init, notifications, scoring, brackets)
 ├── processes/
-│   ├── discord-bot/        # Discord bot process
-│   │   ├── index.ts        # Modular bot implementation
-│   │   └── modules/        # Discord bot modules
-│   │       ├── voice-handler.ts      # Voice announcements and TTS
-│   │       ├── event-handler.ts      # Discord server events
-│   │       ├── announcement-handler.ts # Match announcements
-│   │       ├── reminder-handler.ts   # Player reminders and notifications
-│   │       ├── queue-processor.ts    # Queue processing
-│   │       ├── interaction-handler.ts # Discord interactions
-│   │       ├── utils.ts              # Utility functions
-│   │       └── settings-manager.ts   # Settings management
-│   └── scheduler/          # Cron scheduler process
-│       └── index.ts        # Scheduled tasks
-├── shared/                 # Shared code between processes
-│   └── types.ts            # TypeScript type definitions
-├── lib/                    # Utility libraries
-├── s6-overlay/             # s6-overlay configuration for Docker
-│   ├── s6-rc.d/           # Service definitions
-│   │   ├── user/          # User bundle (defines which services to start)
-│   │   ├── matchexec-web/ # Web application service
-│   │   ├── discord-bot/   # Discord bot service
-│   │   └── scheduler/     # Scheduler service
-│   └── cont-init.d/       # Container initialization scripts
-│       ├── 10-adduser     # User setup
-│       ├── 20-setup-environment # Environment configuration
-│       └── 30-migrate-database  # Database migration
-├── ecosystem.config.js     # PM2 production configuration
-├── ecosystem.dev.config.js # PM2 development configuration
-└── Dockerfile             # Production container with s6-overlay
+│   ├── discord-bot/              # Discord bot process
+│   │   ├── index.ts              # Main bot implementation
+│   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
+│   └── scheduler/                # Cron scheduler process
+├── migrations/                   # Database migrations (5 files)
+├── data/games/                   # Game data (6 games with modes/maps)
+├── s6-overlay/                   # Docker init system config
+└── ecosystem.*.config.js         # PM2 configurations
 
 ## Database
 
@@ -116,16 +109,14 @@ The project uses SQLite for data persistence with automated migrations and seedi
 
 ### Schema
 
-The database includes tables for:
+Core tables include:
 
-- **games**: Game information (Overwatch 2, Marvel Rivals, etc.)
-- **game_modes**: Game modes for each game (Control, Escort, etc.)
-- **game_maps**: Maps available for each game and mode
-- **matches**: Match records with status tracking
-- **match_participants**: Players registered for matches
-- **match_games**: Individual games within matches
-- **data_versions**: Tracks seeded data versions to avoid re-seeding
-- **migrations**: Migration execution tracking
+- **Matches**: `matches`, `match_participants`, `match_games` (with results/scoring)
+- **Tournaments**: `tournaments`, `tournament_participants`, `tournament_teams`, `tournament_matches`, `tournament_bracket_nodes`
+- **Games**: `games`, `game_modes`, `game_maps` (6 supported games with modes/maps)
+- **Discord**: `discord_queues`, `discord_voice_channels`, `channels` (text/voice management)
+- **Settings**: `settings`, `announcer_settings`, `ui_settings` (configuration)
+- **System**: `migrations`, `data_versions` (tracking)
 
 ### Migrations
 
@@ -133,13 +124,13 @@ Database migrations are executed once at application startup. Migration files ar
 
 ### Data Seeding
 
-Game data is automatically seeded from JSON files in `/data/games/`. Each game directory should contain:
+Game data is automatically seeded from JSON files in `/data/games/` (Overwatch 2, Valorant, Marvel Rivals, League of Legends, R6 Siege, Counter-Strike 2). Each game directory contains:
 
 - `game.json`: Game metadata with `dataVersion` field
-- `modes.json`: Available game modes (optional)
-- `maps.json`: Available maps (optional)
+- `modes.json`: Available game modes
+- `maps.json`: Maps per mode
 
-The seeder checks `dataVersion` in each game.json and only re-seeds when the version changes, preventing duplicate data insertion.
+The seeder checks `dataVersion` and only re-seeds when changed, preventing duplicates.
 
 ### Migration and Seeding
 
@@ -179,57 +170,72 @@ Individual processes only connect to the database - migrations run once at start
 - **Production (PM2)**: Manual or PM2-managed migration execution
 - **Docker**: s6-overlay runs migrations via init script before starting services
 
-## Discord Bot Architecture
+## Key Features
 
-The Discord bot uses a modular architecture for maintainability and scalability:
+### Match System
+- Match creation with customizable rounds, rulesets (casual/competitive), and team assignment
+- Real-time scoring system with per-map and overall match scores
+- Match state management (created → gather → assign → battle → complete/cancelled)
+- Player participant tracking and reminders
+- Voice channel integration and announcements
 
-### Bot Modules
+### Tournament System
+- Single and double elimination bracket formats
+- Automated bracket generation and progression
+- Team-based tournament management
+- Tournament-specific match scheduling
+- Bracket visualization and navigation
 
-- **voice-handler.ts**: Handles voice announcements, TTS, and voice channel management
-- **event-handler.ts**: Manages Discord server events creation and deletion
-- **announcement-handler.ts**: Creates and posts match announcements with embeds
-- **reminder-handler.ts**: Handles player reminders and notifications
-- **queue-processor.ts**: Processes various Discord queue operations
-- **interaction-handler.ts**: Manages Discord slash commands and interactions
-- **settings-manager.ts**: Loads and manages Discord bot settings from database
-- **utils.ts**: Common utility functions used across modules
+### Discord Integration
+- Modular bot architecture (`processes/discord-bot/modules/`):
+  - `voice-handler`: Voice announcements and TTS
+  - `event-handler`: Server events management
+  - `announcement-handler`: Match/tournament announcements with embeds
+  - `reminder-handler`: Player notifications
+  - `queue-processor`: Async Discord operations
+  - `interaction-handler`: Slash commands
+  - `settings-manager`: Bot configuration
+- Queue-based operations for reliability
 
-### File Structure
+### API Architecture
+47+ REST endpoints in `src/app/api/`:
+- Match management (CRUD, participants, games, scoring, transitions)
+- Tournament operations (brackets, teams, matches)
+- Game data (modes, maps)
+- Channel management
+- Settings configuration
+- Health/stats monitoring
 
-- `index.ts` - Main bot implementation with modular architecture
-- `modules/` - Individual bot modules
-
-### Benefits
-
-- **Maintainability**: Each module handles a specific responsibility
-- **Testability**: Modules can be tested independently  
-- **Readability**: Individual files are focused and manageable
-- **Reusability**: Modules can be imported and used across the codebase
-- **Scalability**: Easy to add new features by creating new modules
+### UI Features
+- Welcome flow for first-time setup
+- Settings pages (Discord, Announcer, UI, Application, Scheduler)
+- Match and tournament dashboards with history
+- Scoring interface with format-specific components
+- Map customization (codes, notes)
 
 
 ## Technology Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **UI Library**: Mantine
-- **Discord**: Discord.js
-- **Process Management**: PM2 (development), s6-overlay (production/Docker)
-- **Database**: SQLite
-- **Scheduling**: node-cron
-- **Development**: tsx for TypeScript execution
-- **Container Init**: s6-overlay v3
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 8
+- **Backend**: Express (API server), Discord.js 14, node-cron
+- **Process Management**: PM2 (dev), s6-overlay v3 (Docker)
+- **Database**: SQLite3 (callback-based API)
+- **Voice**: @discordjs/voice, ffmpeg-static
+- **Development**: tsx, ESLint
 
 ## Scripts
 
-- `npm run dev`: Start Next.js development server
-- `npm run build`: Build Next.js application
-- `npm run start`: Start Next.js production server
-- `npm run lint`: Run ESLint
-- `npm run dev:all`: Start all processes with PM2 (development)
-- `npm run dev:stop`: Stop all PM2 processes
-- `npm run dev:restart`: Restart all PM2 processes
-- `npm run dev:logs`: View PM2 logs
-- `npm run build:processes`: Compile TypeScript processes
-- `npm run prod:start`: Start all processes with PM2 (production)
-- `npm run prod:stop`: Stop production PM2 processes
-- `npm run migrate`: Run database migrations and seeding manually
+**Development**:
+- `npm run dev:all` - Start all processes (web + bot + scheduler) with PM2
+- `npm run dev:logs` - View logs from all processes
+- `npm run dev:stop/restart` - Control PM2 processes
+
+**Production**:
+- `npm run prod:start` - Start with PM2
+- `docker build -t matchexec .` - Build Docker container
+
+**Utilities**:
+- `npm run migrate` - Run migrations/seeding manually
+- `npm run build` - Build Next.js app
+- `npm run lint` - ESLint check
+- `npm run version:patch/minor/major` - Bump version
