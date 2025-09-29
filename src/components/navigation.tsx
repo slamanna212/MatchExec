@@ -27,7 +27,8 @@ import {
   IconBrandDiscord,
   IconPaint,
   IconVolume,
-  IconInfoCircle
+  IconInfoCircle,
+  IconHome
 } from '@tabler/icons-react'
 import { getVersionInfo, VersionInfo } from '@/lib/version-client'
 
@@ -52,17 +53,22 @@ export function Navigation({ children }: NavigationProps) {
   }, [])
 
   const navigationItems = [
-    { 
-      label: 'Matches', 
-      href: '/', 
+    {
+      label: 'Home',
+      href: '/',
+      icon: IconHome
+    },
+    {
+      label: 'Matches',
+      href: '/matches',
       icon: IconTournament,
       links: [
         { label: 'History', href: '/matches/history', icon: IconHistory }
       ]
     },
-    { 
-      label: 'Tournaments', 
-      href: '/tournaments', 
+    {
+      label: 'Tournaments',
+      href: '/tournaments',
       icon: IconTrophy,
       links: [
         { label: 'History', href: '/tournaments/history', icon: IconHistory }
@@ -70,9 +76,9 @@ export function Navigation({ children }: NavigationProps) {
     },
     { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
     { label: 'Channels', href: '/channels', icon: IconHash },
-    { 
-      label: 'Settings', 
-      href: '/settings', 
+    {
+      label: 'Settings',
+      href: '/settings',
       icon: IconSettings,
       links: [
         { label: 'Application', href: '/settings/application', icon: IconAdjustments },
@@ -184,7 +190,7 @@ export function Navigation({ children }: NavigationProps) {
             // const hasChildren = item.links && item.links.length > 0;
             const isSettingsPage = pathname?.startsWith('/settings');
             const isTournamentsPage = pathname?.startsWith('/tournaments');
-            const isMatchesPage = pathname === '/' || pathname?.startsWith('/matches');
+            const isMatchesPage = pathname?.startsWith('/matches');
             
             return (
               <div key={item.href}>
@@ -193,10 +199,10 @@ export function Navigation({ children }: NavigationProps) {
                   label={item.label}
                   leftSection={<item.icon size="1rem" />}
                   active={mounted && (
-                    pathname === item.href || 
+                    pathname === item.href ||
                     (item.href === '/settings' && pathname?.startsWith('/settings')) ||
                     (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
-                    (item.href === '/' && (pathname === '/' || pathname?.startsWith('/matches')))
+                    (item.href === '/matches' && pathname?.startsWith('/matches'))
                   )}
                   childrenOffset={0}
                   c="#F5F5F5"
@@ -220,7 +226,7 @@ export function Navigation({ children }: NavigationProps) {
                 {item.links && (
                   (item.href === '/settings' && isSettingsPage) ||
                   (item.href === '/tournaments' && isTournamentsPage) ||
-                  (item.href === '/' && isMatchesPage)
+                  (item.href === '/matches' && isMatchesPage)
                 ) && item.links.map((link) => (
                   <NavLink
                     key={link.href}
