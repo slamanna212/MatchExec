@@ -62,10 +62,6 @@ export class DatabaseSeeder {
     console.log('🌱 Starting database seeding...');
     markDbNotReady('Starting database seeding...');
 
-    // TEMPORARY: 20 second delay to test loading screen
-    console.log('⏳ Waiting 20 seconds to allow loading screen to display...');
-    await new Promise(resolve => setTimeout(resolve, 20000));
-
     // Seed games first
     const gameDirectories = this.getGameDirectories();
     console.log(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
