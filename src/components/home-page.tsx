@@ -142,7 +142,7 @@ export function HomePage() {
                 <Button
                   size="md"
                   variant="light"
-                  onClick={() => router.push('/matches/new')}
+                  onClick={() => router.push('/matches/create')}
                 >
                   Create
                 </Button>
@@ -203,7 +203,7 @@ export function HomePage() {
                 <Button
                   size="md"
                   variant="light"
-                  onClick={() => router.push('/tournaments/new')}
+                  onClick={() => router.push('/tournaments/create')}
                 >
                   Create
                 </Button>
