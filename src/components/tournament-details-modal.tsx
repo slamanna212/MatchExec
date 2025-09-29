@@ -41,7 +41,7 @@ interface BracketMatch {
     name: string;
   };
   winner?: string;
-  status: 'pending' | 'ongoing' | 'completed';
+  status: 'pending' | 'ongoing' | 'complete';
   match_order: number;
 }
 

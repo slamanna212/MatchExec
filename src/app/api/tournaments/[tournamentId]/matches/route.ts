@@ -32,7 +32,7 @@ interface BracketMatch {
     name: string;
   };
   winner?: string;
-  status: 'pending' | 'ongoing' | 'completed';
+  status: 'pending' | 'ongoing' | 'complete';
   match_order: number;
 }
 
@@ -107,8 +107,8 @@ export async function GET(
         name: match.team2_name || 'Team 2'
       } : undefined,
       winner: match.winner_team || undefined,
-      status: match.status === 'complete' ? 'completed' :
-              match.status === 'battle' ? 'ongoing' : 'pending',
+      status: match.status === 'battle' ? 'ongoing' :
+              match.status === 'complete' ? 'complete' : 'pending',
       match_order: match.match_order
     }));
 

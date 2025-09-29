@@ -28,7 +28,7 @@ interface BracketMatch {
     name: string;
   };
   winner?: string;
-  status: 'pending' | 'ongoing' | 'completed';
+  status: 'pending' | 'ongoing' | 'complete';
 }
 
 interface BracketTeam {
@@ -83,7 +83,7 @@ export function TournamentBracket({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'green';
+      case 'complete': return 'green';
       case 'ongoing': return 'blue';
       default: return 'gray';
     }
@@ -91,7 +91,7 @@ export function TournamentBracket({
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'completed': return 'Complete';
+      case 'complete': return 'Complete';
       case 'ongoing': return 'In Progress';
       default: return 'Pending';
     }
@@ -182,7 +182,7 @@ export function TournamentBracket({
           <Badge
             size="sm"
             color={getStatusColor(match.status)}
-            variant={match.status === 'completed' ? 'filled' : 'light'}
+            variant={match.status === 'complete' ? 'filled' : 'light'}
           >
             {getStatusLabel(match.status)}
           </Badge>
