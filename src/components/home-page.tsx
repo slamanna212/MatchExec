@@ -1,160 +1,222 @@
 'use client'
 
-import { Card, Text, Stack, Group, Button, useMantineColorScheme } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid } from '@mantine/core';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { IconTrophy, IconSwords, IconUsers } from '@tabler/icons-react';
+
+interface Stats {
+  totalMatches: number;
+  totalTournaments: number;
+  totalSignups: number;
+}
+
+interface StatItem {
+  title: string;
+  value: string;
+  icon: typeof IconSwords;
+  color: string;
+}
 
 export function HomePage() {
   const router = useRouter();
   const { colorScheme } = useMantineColorScheme();
+  const [stats, setStats] = useState<Stats>({ totalMatches: 0, totalTournaments: 0, totalSignups: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => {
+        setStats(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load stats:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const statItems = [
+    {
+      title: 'Total Matches',
+      value: loading ? '...' : stats.totalMatches.toLocaleString(),
+      icon: IconSwords,
+      color: '#06B6D4'
+    },
+    {
+      title: 'Total Tournaments',
+      value: loading ? '...' : stats.totalTournaments.toLocaleString(),
+      icon: IconTrophy,
+      color: '#4895EF'
+    },
+    {
+      title: 'Total Signups',
+      value: loading ? '...' : stats.totalSignups.toLocaleString(),
+      icon: IconUsers,
+      color: '#763c62'
+    }
+  ];
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-6xl">
       <Stack gap="xl">
-        <div className="text-center">
-          <Text size="2.5rem" fw={700} mb="md">
-            Welcome to MatchExec
-          </Text>
-          <Text size="lg" c="dimmed" maw={600} mx="auto">
-            Your comprehensive match management platform for organizing tournaments,
-            tracking matches, and managing competitive gaming events.
-          </Text>
-        </div>
+        {/* Stats Section */}
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+          {statItems.map((stat: StatItem) => {
+            const Icon = stat.icon;
+            return (
+              <Card
+                key={stat.title}
+                shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+                p="lg"
+                radius="md"
+                withBorder
+                bg={colorScheme === 'light' ? 'white' : undefined}
+                style={{
+                  borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+                }}
+              >
+                <Group justify="space-between">
+                  <div>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                      {stat.title}
+                    </Text>
+                    <Text fw={700} size="xl" mt="xs">
+                      {stat.value}
+                    </Text>
+                  </div>
+                  <Icon size={32} stroke={1.5} style={{ color: stat.color.startsWith('#') ? stat.color : `var(--mantine-color-${stat.color}-6)` }} />
+                </Group>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
 
-        <Group grow align="stretch">
+        {/* Main Cards Section */}
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+          {/* Matches Card */}
           <Card
             shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-            padding="lg"
+            padding="xl"
             radius="md"
             withBorder
             bg={colorScheme === 'light' ? 'white' : undefined}
             style={{
-              cursor: 'pointer',
               transition: 'all 0.2s ease',
-              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
+              minHeight: '400px'
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
               e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
             }}
-            onClick={() => router.push('/matches')}
           >
-            <Stack gap="md" h="100%">
-              <Text size="xl" fw={600}>Matches</Text>
-              <Text c="dimmed">
-                Create and manage individual matches. Track signups, assign players,
-                and monitor match progress in real-time.
-              </Text>
-              <Button mt="auto" size="sm">
-                View Matches
-              </Button>
+            <Stack gap="md" h="100%" justify="space-between">
+              <div>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '180px',
+                    background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 50%, #0E7490 100%)',
+                    borderRadius: 'var(--mantine-radius-md)',
+                    marginBottom: 'var(--mantine-spacing-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <IconSwords size={80} stroke={1.5} color="white" />
+                </div>
+                <Text size="xl" fw={700} mb="sm">Matches</Text>
+                <Text c="dimmed" size="sm">
+                  Perfect for smaller one-off events. Quick match creation, simple signup management,
+                  and real-time match tracking for casual or competitive play.
+                </Text>
+              </div>
+              <Group grow>
+                <Button
+                  size="md"
+                  variant="light"
+                  onClick={() => router.push('/matches/new')}
+                >
+                  Create
+                </Button>
+                <Button
+                  size="md"
+                  onClick={() => router.push('/matches')}
+                >
+                  View All
+                </Button>
+              </Group>
             </Stack>
           </Card>
 
+          {/* Tournaments Card */}
           <Card
             shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-            padding="lg"
+            padding="xl"
             radius="md"
             withBorder
             bg={colorScheme === 'light' ? 'white' : undefined}
             style={{
-              cursor: 'pointer',
               transition: 'all 0.2s ease',
-              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
+              minHeight: '400px'
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
               e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
             }}
-            onClick={() => router.push('/tournaments')}
           >
-            <Stack gap="md" h="100%">
-              <Text size="xl" fw={600}>Tournaments</Text>
-              <Text c="dimmed">
-                Organize full tournaments with bracket systems, multiple rounds,
-                and comprehensive tournament management tools.
-              </Text>
-              <Button mt="auto" size="sm">
-                View Tournaments
-              </Button>
+            <Stack gap="md" h="100%" justify="space-between">
+              <div>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '180px',
+                    background: 'linear-gradient(135deg, #4361EE 0%, #4895EF 50%, #4CC9F0 100%)',
+                    borderRadius: 'var(--mantine-radius-md)',
+                    marginBottom: 'var(--mantine-spacing-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <IconTrophy size={80} stroke={1.5} color="white" />
+                </div>
+                <Text size="xl" fw={700} mb="sm">Tournaments</Text>
+                <Text c="dimmed" size="sm">
+                  Designed for bigger events with more players. Full bracket systems, team management,
+                  multiple rounds, and comprehensive tournament organization tools.
+                </Text>
+              </div>
+              <Group grow>
+                <Button
+                  size="md"
+                  variant="light"
+                  onClick={() => router.push('/tournaments/new')}
+                >
+                  Create
+                </Button>
+                <Button
+                  size="md"
+                  onClick={() => router.push('/tournaments')}
+                >
+                  View All
+                </Button>
+              </Group>
             </Stack>
           </Card>
-        </Group>
-
-        <Group grow align="stretch">
-          <Card
-            shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-            padding="lg"
-            radius="md"
-            withBorder
-            bg={colorScheme === 'light' ? 'white' : undefined}
-            style={{
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
-            }}
-            onClick={() => router.push('/games')}
-          >
-            <Stack gap="md" h="100%">
-              <Text size="xl" fw={600}>Games</Text>
-              <Text c="dimmed">
-                Configure supported games, maps, and game modes for your
-                competitive events and tournaments.
-              </Text>
-              <Button mt="auto" size="sm">
-                Manage Games
-              </Button>
-            </Stack>
-          </Card>
-
-          <Card
-            shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-            padding="lg"
-            radius="md"
-            withBorder
-            bg={colorScheme === 'light' ? 'white' : undefined}
-            style={{
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
-            }}
-            onClick={() => router.push('/settings')}
-          >
-            <Stack gap="md" h="100%">
-              <Text size="xl" fw={600}>Settings</Text>
-              <Text c="dimmed">
-                Configure Discord integration, announcements, scheduling,
-                and customize your MatchExec experience.
-              </Text>
-              <Button mt="auto" size="sm">
-                Open Settings
-              </Button>
-            </Stack>
-          </Card>
-        </Group>
+        </SimpleGrid>
       </Stack>
     </div>
   );
