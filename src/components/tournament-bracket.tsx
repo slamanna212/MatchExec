@@ -298,19 +298,157 @@ export function TournamentBracket({
     if (isAssignMode) {
       return renderBracketAssignment();
     }
-    
+
+    if (matches.length === 0) {
+      return (
+        <Card withBorder p="xl">
+          <Text size="sm" c="dimmed" ta="center">No matches generated yet</Text>
+        </Card>
+      );
+    }
+
+    const winnersRounds = getMatchesByRound('winners');
+    const losersRounds = format === 'double-elimination' ? getMatchesByRound('losers') : [];
+    const finalMatches = getMatchesByRound('final');
+
     return (
-      <Card withBorder p="xl">
-        <Stack align="center">
-          <IconNetwork size="3rem" color="gray" />
-          <Text size="lg" c="dimmed">Tree View</Text>
-          <Text size="sm" c="dimmed" ta="center">
-            Visual bracket tree will be implemented in a future update.
-            <br />
-            Use List View to see all matches organized by rounds.
-          </Text>
-        </Stack>
-      </Card>
+      <Stack gap="xl">
+        {/* Winner's Bracket Tree */}
+        {winnersRounds.length > 0 && (
+          <div>
+            <Group mb="md">
+              <IconTrophy size="1.2rem" />
+              <Text size="lg" fw={600}>Winners Bracket</Text>
+            </Group>
+
+            <div style={{
+              display: 'flex',
+              gap: '2rem',
+              overflowX: 'auto',
+              paddingBottom: '1rem',
+              position: 'relative'
+            }}>
+              {winnersRounds.map(([round, roundMatches], roundIndex) => (
+                <div key={`winners-${round}`} style={{
+                  minWidth: '250px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem',
+                  position: 'relative'
+                }}>
+                  <Text size="sm" fw={600} ta="center" mb="xs">
+                    Round {round}
+                  </Text>
+                  <Stack gap="md" style={{ position: 'relative' }}>
+                    {roundMatches.map((match, matchIndex) => (
+                      <div key={match.id} style={{ position: 'relative' }}>
+                        {renderMatchCard(match)}
+                        {/* Connector line to next round */}
+                        {roundIndex < winnersRounds.length - 1 && (
+                          <div style={{
+                            position: 'absolute',
+                            left: '100%',
+                            top: '50%',
+                            width: '2rem',
+                            height: '2px',
+                            backgroundColor: 'var(--mantine-color-gray-4)',
+                            zIndex: 1
+                          }} />
+                        )}
+                      </div>
+                    ))}
+                  </Stack>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Loser's Bracket Tree (Double Elimination only) */}
+        {format === 'double-elimination' && losersRounds.length > 0 && (
+          <div>
+            <Divider />
+            <Group mb="md">
+              <Text size="lg" fw={600}>Losers Bracket</Text>
+            </Group>
+
+            <div style={{
+              display: 'flex',
+              gap: '2rem',
+              overflowX: 'auto',
+              paddingBottom: '1rem',
+              position: 'relative'
+            }}>
+              {losersRounds.map(([round, roundMatches], roundIndex) => (
+                <div key={`losers-${round}`} style={{
+                  minWidth: '250px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem',
+                  position: 'relative'
+                }}>
+                  <Text size="sm" fw={600} ta="center" mb="xs">
+                    Round {round}
+                  </Text>
+                  <Stack gap="md" style={{ position: 'relative' }}>
+                    {roundMatches.map((match) => (
+                      <div key={match.id} style={{ position: 'relative' }}>
+                        {renderMatchCard(match)}
+                        {/* Connector line to next round */}
+                        {roundIndex < losersRounds.length - 1 && (
+                          <div style={{
+                            position: 'absolute',
+                            left: '100%',
+                            top: '50%',
+                            width: '2rem',
+                            height: '2px',
+                            backgroundColor: 'var(--mantine-color-gray-4)',
+                            zIndex: 1
+                          }} />
+                        )}
+                      </div>
+                    ))}
+                  </Stack>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Finals */}
+        {finalMatches.length > 0 && (
+          <div>
+            <Divider />
+            <Group mb="md">
+              <IconTrophy size="1.2rem" color="gold" />
+              <Text size="lg" fw={600}>Finals</Text>
+            </Group>
+
+            <div style={{
+              display: 'flex',
+              gap: '2rem',
+              justifyContent: 'center',
+              paddingBottom: '1rem'
+            }}>
+              {finalMatches.map(([round, roundMatches]) => (
+                <div key={`final-${round}`} style={{
+                  minWidth: '250px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem'
+                }}>
+                  <Text size="sm" fw={600} ta="center" mb="xs">
+                    {roundMatches.length > 1 ? `Finals Round ${round}` : 'Grand Finals'}
+                  </Text>
+                  <Stack gap="md">
+                    {roundMatches.map((match) => renderMatchCard(match))}
+                  </Stack>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Stack>
     );
   };
 
@@ -477,19 +615,21 @@ export function TournamentBracket({
               Generate First Matches
             </Button>
           )}
-          
-          <SegmentedControl
-            value={viewMode}
-            onChange={(value) => setViewMode(value as 'tree' | 'list')}
-            data={[
-              { label: 'Cards', value: 'list' },
-              { label: isAssignMode ? 'Assignment' : 'Tree', value: 'tree' }
-            ]}
-          />
+
+          {isAssignMode && (
+            <SegmentedControl
+              value={viewMode}
+              onChange={(value) => setViewMode(value as 'tree' | 'list')}
+              data={[
+                { label: 'Cards', value: 'list' },
+                { label: 'Assignment', value: 'tree' }
+              ]}
+            />
+          )}
         </Group>
       </Group>
 
-      {viewMode === 'list' ? renderListView() : renderTreeView()}
+      {viewMode === 'list' || !isAssignMode ? renderListView() : renderTreeView()}
     </Stack>
   );
 }
