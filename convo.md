@@ -36,5 +36,5 @@
 
 
 Need to fix bug with grand finals reset match then we are done with tournaments. 
-Want to add support for Fortnite and give it the option of teams or 1v1
+Want to add support for Fortnite and give it the option of teams or 1v1 - should do standard, no build for modes? For maps there is just one
 Also need to check todo file for last bits
