@@ -4,11 +4,13 @@ import { logger } from '../src/lib/logger/server';
 
 export interface SignupField {
   id: string;
-  type: 'text' | 'largetext';
+  type: 'text' | 'largetext' | 'number';
   label: string;
   placeholder?: string;
   required: boolean;
   helpText?: string;
+  min?: number;
+  max?: number;
 }
 
 export interface SignupForm {
@@ -66,9 +68,9 @@ export class SignupFormLoader {
         if (!field || typeof field !== 'object') return false;
         const f = field as Record<string, unknown>;
         return !!(
-          f.id && 
-          f.type && 
-          ['text', 'largetext'].includes(f.type as string) &&
+          f.id &&
+          f.type &&
+          ['text', 'largetext', 'number'].includes(f.type as string) &&
           f.label &&
           typeof f.required === 'boolean'
         );

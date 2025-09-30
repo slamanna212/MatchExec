@@ -310,14 +310,20 @@ export function MatchDashboard() {
 
   const fetchMapNames = async (gameId: string) => {
     try {
+      // Fetch game info to check if it supports all modes
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      let supportsAllModes = false;
+
+      if (gameResponse.ok) {
+        const gameInfo = await gameResponse.json();
+        supportsAllModes = gameInfo.supportsAllModes || false;
+      }
+
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-        
-        // Check if this game supports all modes (flexible mode combinations)
-        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
         
         if (supportsAllModes) {
           // For flexible games, get all possible modes and create all combinations
