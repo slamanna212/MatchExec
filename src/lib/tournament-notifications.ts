@@ -42,8 +42,8 @@ export async function queueTournamentWinnerNotification(
     }
 
     // Get winning team members
-    const winningPlayers = await db.all<{ username: string }>(`
-      SELECT username
+    const winningPlayers = await db.all<{ username: string; discord_user_id?: string | null }>(`
+      SELECT username, discord_user_id
       FROM tournament_team_members
       WHERE team_id = ?
       ORDER BY username
@@ -74,7 +74,7 @@ export async function queueTournamentWinnerNotification(
       tournamentData.game_id,
       'tournament', // Special marker to identify this as a tournament winner
       winningTeam.team_name,
-      JSON.stringify(winningPlayers.map(p => p.username)),
+      JSON.stringify(winningPlayers.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)),
       participantCount?.total || 0, // Use team1_score for total participants
       tournamentData.format === 'double-elimination' ? 1 : 0, // Use team2_score to store format info
       1 // total_maps = 1 to indicate tournament (vs multiple maps in match)

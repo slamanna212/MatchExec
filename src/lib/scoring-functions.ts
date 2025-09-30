@@ -482,15 +482,15 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
     if (result.isFfaMode && result.participantWinnerId) {
       // FFA Mode: Get the individual winner's name
       const participantQuery = `
-        SELECT username
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND id = ?
       `;
-      const participant = await db.get<{ username: string }>(participantQuery, [gameData.match_id, result.participantWinnerId]);
-      
+      const participant = await db.get<{ username: string; discord_user_id?: string | null }>(participantQuery, [gameData.match_id, result.participantWinnerId]);
+
       if (participant) {
         winningTeamName = participant.username;
-        winningPlayers = [participant.username];
+        winningPlayers = [participant.discord_user_id ? `<@${participant.discord_user_id}>` : participant.username];
       } else {
         winningTeamName = 'Unknown Player';
         winningPlayers = ['Unknown Player'];
@@ -501,14 +501,14 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
       const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
       
       const playersQuery = `
-        SELECT username
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND team_assignment = ?
         ORDER BY username ASC
       `;
 
-      const players = await db.all<{ username: string }>(playersQuery, [gameData.match_id, teamAssignment]);
-      winningPlayers = players.map(p => p.username);
+      const players = await db.all<{ username: string; discord_user_id?: string | null }>(playersQuery, [gameData.match_id, teamAssignment]);
+      winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
     }
 
     // Generate unique notification ID
@@ -875,14 +875,14 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
       const teamAssignment = winner === 'team1' ? 'blue' : 'red';
       
       // Get winning team players
-      const players = await db.all<{ username: string }>(`
-        SELECT username
+      const players = await db.all<{ username: string; discord_user_id?: string | null }>(`
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND team_assignment = ?
         ORDER BY username ASC
       `, [matchId, teamAssignment]);
-      
-      winningPlayers = players.map(p => p.username);
+
+      winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
     }
 
     // Generate unique notification ID

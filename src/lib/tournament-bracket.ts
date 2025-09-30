@@ -68,6 +68,7 @@ export interface TournamentMatchInfo {
 export interface GeneratedMatch {
   id: string;
   name: string;
+  description?: string;
   game_id: string;
   game_mode_id: string;
   map_id: string;
@@ -139,9 +140,10 @@ export async function generateSingleEliminationMatches(
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
-  // Get tournament info for ruleset
-  const tournament = await db.get('SELECT ruleset FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string } | undefined;
+  // Get tournament info for ruleset and description
+  const tournament = await db.get('SELECT ruleset, description FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null } | undefined;
   const tournamentRuleset = tournament?.ruleset || 'casual';
+  const tournamentDescription = tournament?.description || null;
 
   // Get game modes and maps for the game (exclude workshop/custom modes for tournaments)
   const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"', [gameId]) as GameMode[];
@@ -244,6 +246,7 @@ export async function generateSingleEliminationMatches(
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+      description: tournamentDescription || undefined,
       game_id: gameId,
       game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -293,15 +296,15 @@ export async function generateNextRoundMatches(
   format: 'single-elimination' | 'double-elimination'
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
   // Get tournament info
   const tournament = await db.get(`
-    SELECT t.*, g.id as game_id 
-    FROM tournaments t 
-    JOIN games g ON t.game_id = g.id 
+    SELECT t.*, g.id as game_id
+    FROM tournaments t
+    JOIN games g ON t.game_id = g.id
     WHERE t.id = ?
-  `, [tournamentId]) as TournamentRecord | undefined;
-  
+  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
+
   if (!tournament) {
     throw new Error('Tournament not found');
   }
@@ -428,6 +431,7 @@ export async function generateNextRoundMatches(
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'}`,
+      description: tournament.description || undefined,
       game_id: tournament.game_id,
       game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -478,7 +482,11 @@ export async function generateDoubleEliminationMatches(
   _startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
+  // Get tournament info for description
+  const tournament = await db.get('SELECT description FROM tournaments WHERE id = ?', [tournamentId]) as { description: string | null } | undefined;
+  const tournamentDescription = tournament?.description || null;
+
   // Get game modes and maps for the game
   const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
   const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
@@ -580,6 +588,7 @@ export async function generateDoubleEliminationMatches(
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+      description: tournamentDescription || undefined,
       game_id: gameId,
       game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -626,19 +635,19 @@ export async function generateLosersBracketMatches(
   eliminatedTeamIds: string[]
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
   if (eliminatedTeamIds.length === 0) {
     return [];
   }
-  
+
   // Get tournament info
   const tournament = await db.get(`
-    SELECT t.*, g.id as game_id 
-    FROM tournaments t 
-    JOIN games g ON t.game_id = g.id 
+    SELECT t.*, g.id as game_id
+    FROM tournaments t
+    JOIN games g ON t.game_id = g.id
     WHERE t.id = ?
-  `, [tournamentId]) as TournamentRecord | undefined;
-  
+  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
+
   if (!tournament) {
     throw new Error('Tournament not found');
   }
@@ -761,6 +770,7 @@ export async function generateLosersBracketMatches(
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+      description: tournament.description || undefined,
       game_id: tournament.game_id,
       game_mode_id: primaryMode!.id,
       map_id: selectedMaps[0], // First map for compatibility
@@ -806,15 +816,15 @@ export async function generateGrandFinalsMatch(
   losersBracketWinnerId: string
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
   // Get tournament info
   const tournament = await db.get(`
-    SELECT t.*, g.id as game_id 
-    FROM tournaments t 
-    JOIN games g ON t.game_id = g.id 
+    SELECT t.*, g.id as game_id
+    FROM tournaments t
+    JOIN games g ON t.game_id = g.id
     WHERE t.id = ?
-  `, [tournamentId]) as TournamentRecord | undefined;
-  
+  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
+
   if (!tournament) {
     throw new Error('Tournament not found');
   }
@@ -899,6 +909,7 @@ export async function generateGrandFinalsMatch(
   const grandFinalsMatch: GeneratedMatch = {
     id: matchId,
     name: `Grand Finals: ${wbTeam?.team_name || 'WB Winner'} vs ${lbTeam?.team_name || 'LB Winner'}`,
+    description: tournament.description || undefined,
     game_id: tournament.game_id,
     game_mode_id: primaryMode!.id,
     map_id: selectedMaps[0], // First map for compatibility
@@ -942,15 +953,15 @@ export async function generateGrandFinalsResetMatch(
   team2Id: string
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
-  
+
   // Get tournament info
   const tournament = await db.get(`
-    SELECT t.*, g.id as game_id 
-    FROM tournaments t 
-    JOIN games g ON t.game_id = g.id 
+    SELECT t.*, g.id as game_id
+    FROM tournaments t
+    JOIN games g ON t.game_id = g.id
     WHERE t.id = ?
-  `, [tournamentId]) as TournamentRecord | undefined;
-  
+  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
+
   if (!tournament) {
     throw new Error('Tournament not found');
   }
@@ -1035,6 +1046,7 @@ export async function generateGrandFinalsResetMatch(
   const resetMatch: GeneratedMatch = {
     id: matchId,
     name: `Grand Finals Reset: ${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+    description: tournament.description || undefined,
     game_id: tournament.game_id,
     game_mode_id: primaryMode!.id,
     map_id: selectedMaps[0], // First map for compatibility
@@ -1077,13 +1089,13 @@ export async function saveGeneratedMatches(
 
       await db.run(`
         INSERT INTO matches (
-          id, name, game_id, mode_id, map_id, maps, rounds,
+          id, name, description, game_id, mode_id, map_id, maps, rounds,
           max_participants, status, tournament_id,
           tournament_round, tournament_bracket_type, start_date, start_time,
           team1_name, team2_name, red_team_id, blue_team_id, announcements, rules, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [
-        match.id, match.name, match.game_id, match.game_mode_id, match.map_id,
+        match.id, match.name, match.description || null, match.game_id, match.game_mode_id, match.map_id,
         match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
         match.max_participants, match.status, match.tournament_id,
         match.tournament_round, match.tournament_bracket_type, scheduledDate,

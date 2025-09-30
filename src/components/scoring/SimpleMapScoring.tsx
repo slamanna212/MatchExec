@@ -629,18 +629,8 @@ export function SimpleMapScoring({
                         disabled={submitting}
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
-                        styles={{
-                          label: {
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px'
-                          }
-                        }}
                       >
-                        <div>
-                          <div>{team1Name || 'Blue Team'} Wins</div>
-                          {team1Name && <Text size="xs" c="blue" fw={400}>Blue Team</Text>}
-                        </div>
+                        {team1Name || 'Blue Team'} Wins
                       </Button>
 
                       <Button
@@ -651,18 +641,8 @@ export function SimpleMapScoring({
                         disabled={submitting}
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
-                        styles={{
-                          label: {
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px'
-                          }
-                        }}
                       >
-                        <div>
-                          <div>{team2Name || 'Red Team'} Wins</div>
-                          {team2Name && <Text size="xs" c="red" fw={400}>Red Team</Text>}
-                        </div>
+                        {team2Name || 'Red Team'} Wins
                       </Button>
                     </Group>
                   </>
