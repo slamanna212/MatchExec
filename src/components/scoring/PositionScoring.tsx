@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge } from '@mantine/core';
-import { IconTrophy, IconFlag, IconCheck } from '@tabler/icons-react';
+import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge, Box } from '@mantine/core';
+import { IconTrophy, IconFlag, IconCheck, IconClock } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
@@ -12,6 +12,8 @@ interface MatchGame {
   round: number;
   map_id: string;
   map_name: string;
+  image_url?: string;
+  game_id: string;
   mode_scoring_type?: 'Position';
   status: 'pending' | 'ongoing' | 'completed';
   position_results?: string;
@@ -106,6 +108,26 @@ export function PositionScoring({
   }, [participants]);
 
   const selectedGame = matchGames.find(game => game.id === selectedGameId);
+
+  const getMapImageUrl = (gameId: string, mapId: string) => {
+    // Handle special cases where maps don't use webp format
+    if (gameId === 'overwatch2' && mapId === 'ow2-workshop') {
+      return `/assets/games/${gameId}/maps/${mapId}.jpg`;
+    }
+    // Default to webp for all other maps
+    return `/assets/games/${gameId}/maps/${mapId}.webp`;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'green';
+      case 'ongoing':
+        return 'orange';
+      default:
+        return 'gray';
+    }
+  };
 
   // Generate position options (1 to number of participants)
   const positionOptions = Array.from({ length: participants.length }, (_, i) => ({
@@ -208,7 +230,7 @@ export function PositionScoring({
         <Stack gap="sm">
           <Text fw={600} size="sm">Race Schedule</Text>
 
-          <Group gap="sm">
+          <Group gap="md">
             {matchGames.map((game) => (
               <Card
                 key={game.id}
@@ -216,24 +238,64 @@ export function PositionScoring({
                 onClick={() => setSelectedGameId(game.id)}
                 style={{
                   cursor: submitting ? 'not-allowed' : 'pointer',
-                  border: selectedGameId === game.id ? '2px solid var(--mantine-color-blue-6)' : undefined,
-                  opacity: submitting ? 0.6 : 1
+                  minWidth: 180,
+                  height: 120,
+                  backgroundImage: `linear-gradient(${selectedGameId === game.id ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'}), url('${game.image_url || getMapImageUrl(gameType, game.map_id)}')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundColor: '#1a1b1e',
+                  border: selectedGameId === game.id ? `2px solid var(--mantine-color-${getStatusColor(game.status)}-6)` : 'none',
+                  boxShadow: selectedGameId === game.id ? `0 0 0 1px var(--mantine-color-${getStatusColor(game.status)}-6)` : undefined,
+                  opacity: submitting ? 0.6 : 1,
+                  position: 'relative'
                 }}
                 p="sm"
               >
-                <Group gap="xs">
-                  {game.status === 'completed' ? (
-                    <IconCheck size={16} color="green" />
-                  ) : (
-                    <IconFlag size={16} color="gray" />
-                  )}
-                  <Text size="sm" fw={500}>
-                    Race {game.round}
-                  </Text>
-                  <Badge size="xs" color={game.status === 'completed' ? 'green' : 'gray'}>
-                    {game.status}
-                  </Badge>
-                </Group>
+                <Stack gap="xs" h="100%" justify="space-between">
+                  {/* Status Icon and Badge */}
+                  <Group justify="space-between" align="flex-start">
+                    {game.status === 'completed' ? (
+                      <IconCheck size={16} color="green" />
+                    ) : (
+                      <IconFlag size={16} color="gray" />
+                    )}
+                    <Badge
+                      color={getStatusColor(game.status)}
+                      size="xs"
+                      style={{ backgroundColor: `var(--mantine-color-${getStatusColor(game.status)}-6)` }}
+                    >
+                      {game.status}
+                    </Badge>
+                  </Group>
+
+                  {/* Map Info */}
+                  <Box>
+                    <Text
+                      size="xs"
+                      fw={600}
+                      c="white"
+                      style={{
+                        textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+                        lineHeight: 1.2,
+                        fontWeight: 700
+                      }}
+                    >
+                      Race {game.round}
+                    </Text>
+                    <Text
+                      size="xs"
+                      c="white"
+                      style={{
+                        textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+                        lineHeight: 1.1,
+                        fontWeight: 600
+                      }}
+                    >
+                      {game.map_name}
+                    </Text>
+                  </Box>
+                </Stack>
               </Card>
             ))}
           </Group>
