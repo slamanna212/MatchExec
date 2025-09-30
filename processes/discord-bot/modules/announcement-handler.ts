@@ -796,6 +796,8 @@ export class AnnouncementHandler {
     let attachment: AttachmentBuilder | undefined;
     let blueTeamVoiceChannel: string | null = null;
     let redTeamVoiceChannel: string | null = null;
+    let team1Name: string | undefined;
+    let team2Name: string | undefined;
 
     if (this.db) {
       try {
@@ -806,9 +808,12 @@ export class AnnouncementHandler {
           game_icon?: string;
           blue_team_voice_channel?: string;
           red_team_voice_channel?: string;
+          team1_name?: string;
+          team2_name?: string;
         }>(`
           SELECT g.name as game_name, g.color as game_color, g.icon_url as game_icon,
-                 m.blue_team_voice_channel, m.red_team_voice_channel
+                 m.blue_team_voice_channel, m.red_team_voice_channel,
+                 m.team1_name, m.team2_name
           FROM matches m
           JOIN games g ON m.game_id = g.id
           WHERE m.id = ?
@@ -821,6 +826,9 @@ export class AnnouncementHandler {
           if (matchData.game_color) {
             gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
           }
+          // Store team names for later use
+          team1Name = matchData.team1_name;
+          team2Name = matchData.team2_name;
         }
       } catch (error) {
         console.error('Error fetching match data for match start:', error);
@@ -903,36 +911,42 @@ export class AnnouncementHandler {
 
           // Add team rosters
           if (blueTeam.length > 0) {
-            const blueList = blueTeam.map(p => 
+            const blueList = blueTeam.map(p =>
               p.discord_user_id ? `<@${p.discord_user_id}>` : p.username
             ).join('\n');
-            
+
             let blueFieldValue = blueList;
             if (blueTeamVoiceChannel) {
               blueFieldValue += `\n\n🎙️ Voice: <#${blueTeamVoiceChannel}>`;
             }
-            
-            embed.addFields([{ 
-              name: '🔵 Blue Team', 
-              value: blueFieldValue, 
-              inline: true 
+
+            // Use team name if available (tournament), otherwise use "Blue Team"
+            const blueTeamHeader = team1Name ? `🔵 ${team1Name}` : '🔵 Blue Team';
+
+            embed.addFields([{
+              name: blueTeamHeader,
+              value: blueFieldValue,
+              inline: true
             }]);
           }
 
           if (redTeam.length > 0) {
-            const redList = redTeam.map(p => 
+            const redList = redTeam.map(p =>
               p.discord_user_id ? `<@${p.discord_user_id}>` : p.username
             ).join('\n');
-            
+
             let redFieldValue = redList;
             if (redTeamVoiceChannel) {
               redFieldValue += `\n\n🎙️ Voice: <#${redTeamVoiceChannel}>`;
             }
-            
-            embed.addFields([{ 
-              name: '🔴 Red Team', 
-              value: redFieldValue, 
-              inline: true 
+
+            // Use team name if available (tournament), otherwise use "Red Team"
+            const redTeamHeader = team2Name ? `🔴 ${team2Name}` : '🔴 Red Team';
+
+            embed.addFields([{
+              name: redTeamHeader,
+              value: redFieldValue,
+              inline: true
             }]);
           }
 
@@ -1094,19 +1108,31 @@ export class AnnouncementHandler {
     let mapNote: string | null = null;
     let attachment: AttachmentBuilder | undefined;
     let totalMaps = 0;
+    let team1Name: string | undefined;
+    let team2Name: string | undefined;
 
     if (this.db) {
       try {
-        // Get game data
+        // Get game data and team names
         const gameData = await this.db.get<{name: string, color: string}>(`
           SELECT name, color FROM games WHERE id = ?
         `, [scoreData.gameId]);
-        
+
         if (gameData) {
           gameName = gameData.name;
           if (gameData.color) {
             gameColor = parseInt(gameData.color.replace('#', ''), 16);
           }
+        }
+
+        // Get team names from match
+        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
+          SELECT team1_name, team2_name FROM matches WHERE id = ?
+        `, [scoreData.matchId]);
+
+        if (matchData) {
+          team1Name = matchData.team1_name;
+          team2Name = matchData.team2_name;
         }
 
         // Get map data (strip timestamp from map ID first)
@@ -1156,9 +1182,14 @@ export class AnnouncementHandler {
     }
 
     // Create the embed
+    // Use team name if available (tournament), otherwise use scoreData.winningTeamName
+    const winningTeamDisplay = (scoreData.winner === 'team1' && team1Name) ? team1Name :
+                                (scoreData.winner === 'team2' && team2Name) ? team2Name :
+                                scoreData.winningTeamName;
+
     const mapProgress = totalMaps > 0 ? `${scoreData.gameNumber}/${totalMaps}` : scoreData.gameNumber.toString();
     const embed = new EmbedBuilder()
-      .setTitle(`🏆 ${scoreData.winningTeamName} Wins Map ${scoreData.gameNumber}!`)
+      .setTitle(`🏆 ${winningTeamDisplay} Wins Map ${scoreData.gameNumber}!`)
       .setDescription(`**${scoreData.matchName}** - ${mapName}`)
       .setColor(gameColor)
       .addFields([
@@ -1172,10 +1203,10 @@ export class AnnouncementHandler {
     // Add winning team players
     if (scoreData.winningPlayers.length > 0) {
       const playersList = scoreData.winningPlayers.join('\n');
-      embed.addFields([{ 
-        name: `${scoreData.winningTeamName} Players`, 
-        value: playersList, 
-        inline: false 
+      embed.addFields([{
+        name: `${winningTeamDisplay} Players`,
+        value: playersList,
+        inline: false
       }]);
     }
 
@@ -1297,6 +1328,8 @@ export class AnnouncementHandler {
     let gameName = winnerData.gameId;
     let gameColor = winnerData.winner === 'tie' ? 0xffa500 : 0x00d4aa; // Orange for tie, green for victory
     let attachment: AttachmentBuilder | undefined;
+    let team1Name: string | undefined;
+    let team2Name: string | undefined;
 
     if (this.db) {
       try {
@@ -1304,12 +1337,22 @@ export class AnnouncementHandler {
         const gameData = await this.db.get<{name: string, color: string}>(`
           SELECT name, color FROM games WHERE id = ?
         `, [winnerData.gameId]);
-        
+
         if (gameData) {
           gameName = gameData.name;
           if (gameData.color) {
             gameColor = parseInt(gameData.color.replace('#', ''), 16);
           }
+        }
+
+        // Get team names from match
+        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
+          SELECT team1_name, team2_name FROM matches WHERE id = ?
+        `, [winnerData.matchId]);
+
+        if (matchData) {
+          team1Name = matchData.team1_name;
+          team2Name = matchData.team2_name;
         }
       } catch (error) {
         console.error('Error fetching game data for match winner notification:', error);
@@ -1317,14 +1360,19 @@ export class AnnouncementHandler {
     }
 
     // Create appropriate title and description based on winner
+    // Use team name if available (tournament), otherwise use winnerData.winningTeamName
+    const winningTeamDisplay = (winnerData.winner === 'team1' && team1Name) ? team1Name :
+                                (winnerData.winner === 'team2' && team2Name) ? team2Name :
+                                winnerData.winningTeamName;
+
     let title: string;
     let description: string;
-    
+
     if (winnerData.winner === 'tie') {
       title = `🤝 ${winnerData.matchName} - Match Tied!`;
       description = `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`;
     } else {
-      title = `🏆 ${winnerData.winningTeamName} Wins ${winnerData.matchName}!`;
+      title = `🏆 ${winningTeamDisplay} Wins ${winnerData.matchName}!`;
       const losingScore = winnerData.winner === 'team1' ? winnerData.team2Score : winnerData.team1Score;
       const winningScore = winnerData.winner === 'team1' ? winnerData.team1Score : winnerData.team2Score;
       description = `**${winnerData.matchName}** is complete! Final score: **${winningScore}-${losingScore}**`;
@@ -1345,10 +1393,10 @@ export class AnnouncementHandler {
     // Add winning team players (if not a tie)
     if (winnerData.winner !== 'tie' && winnerData.winningPlayers.length > 0) {
       const playersList = winnerData.winningPlayers.join('\n');
-      embed.addFields([{ 
-        name: `${winnerData.winningTeamName} Players`, 
-        value: playersList, 
-        inline: false 
+      embed.addFields([{
+        name: `${winningTeamDisplay} Players`,
+        value: playersList,
+        inline: false
       }]);
     }
 

@@ -51,6 +51,8 @@ export function SimpleMapScoring({
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [team1Name, setTeam1Name] = useState<string | null>(null);
+  const [team2Name, setTeam2Name] = useState<string | null>(null);
 
   // Fetch match games and participants
   useEffect(() => {
@@ -123,7 +125,21 @@ export function SimpleMapScoring({
         
         const data = await response.json();
         setMatchGames(data.games || []);
-        
+
+        // Fetch match details for team names
+        try {
+          const matchResponse = await fetch(`/api/matches/${matchId}`);
+          if (matchResponse.ok) {
+            const matchData = await matchResponse.json();
+            setTeam1Name(matchData.team1_name || null);
+            setTeam2Name(matchData.team2_name || null);
+          } else {
+            console.warn('Failed to fetch match details:', matchResponse.status);
+          }
+        } catch (matchError) {
+          console.warn('Error fetching match details:', matchError);
+        }
+
         // Fetch participants for FFA modes
         try {
           const participantsResponse = await fetch(`/api/matches/${matchId}/participants`);
@@ -561,7 +577,7 @@ export function SimpleMapScoring({
                 )}
                 {selectedGame.status === 'completed' && selectedGame.mode_scoring_type !== 'FFA' && selectedGame.winner_id && (
                   <Badge color={selectedGame.winner_id === 'team1' ? 'blue' : 'red'} size="sm">
-                    Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
+                    Winner: {selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')}
                   </Badge>
                 )}
               </Group>
@@ -613,10 +629,20 @@ export function SimpleMapScoring({
                         disabled={submitting}
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
+                        styles={{
+                          label: {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }
+                        }}
                       >
-                        Blue Team Wins
+                        <div>
+                          <div>{team1Name || 'Blue Team'} Wins</div>
+                          {team1Name && <Text size="xs" c="blue" fw={400}>Blue Team</Text>}
+                        </div>
                       </Button>
-                      
+
                       <Button
                         size="lg"
                         color="red"
@@ -625,8 +651,18 @@ export function SimpleMapScoring({
                         disabled={submitting}
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
+                        styles={{
+                          label: {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }
+                        }}
                       >
-                        Red Team Wins
+                        <div>
+                          <div>{team2Name || 'Red Team'} Wins</div>
+                          {team2Name && <Text size="xs" c="red" fw={400}>Red Team</Text>}
+                        </div>
                       </Button>
                     </Group>
                   </>
@@ -640,7 +676,9 @@ export function SimpleMapScoring({
                 {selectedGame.mode_scoring_type === 'FFA' ? (
                   <>This FFA match has been completed. Winner: {participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown Player'}</>
                 ) : (
-                  <>This map has been completed. Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}</>
+                  <>This map has been completed. Winner: {
+                    selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')
+                  }</>
                 )}
               </Alert>
             )}
