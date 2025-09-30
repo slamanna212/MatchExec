@@ -589,13 +589,17 @@ export function SimpleMapScoring({
             {/* Winner Selection */}
             {selectedGame.status !== 'completed' && (
               <Stack gap="md">
-                {selectedGame.mode_scoring_type === 'FFA' ? (
+                {selectedGame.mode_scoring_type === 'Position' ? (
+                  <Alert color="blue" icon={<IconTrophy size={16} />}>
+                    This mode uses position-based scoring. Please close this dialog and use the Position Scoring interface instead.
+                  </Alert>
+                ) : selectedGame.mode_scoring_type === 'FFA' ? (
                   <>
                     <Text size="sm" c="dimmed" ta="center">
                       <IconTrophy size={16} style={{ marginRight: 8 }} />
                       Select the winner of this Free-For-All match:
                     </Text>
-                    
+
                     <Stack gap="sm" align="center">
                       {participants.map((participant) => (
                         <Button
@@ -620,7 +624,7 @@ export function SimpleMapScoring({
                       <IconSwords size={16} style={{ marginRight: 8 }} />
                       Who won this map?
                     </Text>
-                    
+
                     <Group justify="center" gap="xl">
                       <Button
                         size="lg"
