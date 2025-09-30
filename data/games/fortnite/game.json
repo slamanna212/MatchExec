@@ -1,0 +1,18 @@
+{
+  "id": "fortnite",
+  "name": "Fortnite",
+  "color": "#00D9FF",
+  "genre": "Battle Royale / Third-Person Shooter",
+  "developer": "Epic Games",
+  "releaseDate": "2017-07-25",
+  "patch": "2025-09-30",
+  "dataVersion": "1.0.0",
+  "minPlayers": 1,
+  "maxPlayers": 100,
+  "maxSignups": 100,
+  "mapCodesSupported": true,
+  "assets": {
+    "iconUrl": "/assets/games/fortnite/icon.webp",
+    "coverUrl": "/assets/games/fortnite/cover.jpg"
+  }
+}
