@@ -2,19 +2,6 @@
   {
     "id": "battleisland",
     "name": "Battle Island",
-    "mode": "standard",
-    "imageUrl": "/assets/games/fortnite/maps/battleisland.webp"
-  },
-  {
-    "id": "battleisland-nobuild",
-    "name": "Battle Island",
-    "mode": "nobuild",
-    "imageUrl": "/assets/games/fortnite/maps/battleisland.webp"
-  },
-  {
-    "id": "battleisland-solo",
-    "name": "Battle Island",
-    "mode": "solo",
-    "imageUrl": "/assets/games/fortnite/maps/battleisland.webp"
+    "imageUrl": "/public/assets/games/fortnite/maps/battleisland.webp"
   }
 ]

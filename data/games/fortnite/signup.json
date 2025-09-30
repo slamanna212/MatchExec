@@ -1,3 +1,23 @@
 {
-  "fields": []
+  "fields": [
+    {
+      "id": "epic_games_id",
+      "type": "text",
+      "label": "Epic Games ID",
+      "placeholder": "YourEpicID",
+      "required": true
+    },
+    {
+      "id": "competitive_rank",
+      "type": "text",
+      "label": "Most Recent Competitive Rank",
+      "placeholder": "e.g., Champion, Diamond, Gold",
+      "required": true,
+      "helpText": "Enter your most recent ranked mode division."
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
 }
