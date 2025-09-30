@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction } from 'discord.js';
+import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
 import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';
@@ -82,6 +82,8 @@ class MatchExecBot {
           await this.handleSlashCommand(interaction);
         } else if (interaction.isButton()) {
           await this.handleButtonInteraction(interaction);
+        } else if (interaction.isStringSelectMenu()) {
+          await this.handleStringSelectMenu(interaction);
         } else if (interaction.isModalSubmit()) {
           await this.handleModalSubmit(interaction);
         }
@@ -227,6 +229,12 @@ class MatchExecBot {
   private async handleModalSubmit(interaction: ModalSubmitInteraction) {
     if (this.interactionHandler) {
       await this.interactionHandler.handleModalSubmit(interaction);
+    }
+  }
+
+  private async handleStringSelectMenu(interaction: StringSelectMenuInteraction) {
+    if (this.interactionHandler) {
+      await this.interactionHandler.handleStringSelectMenu(interaction);
     }
   }
 

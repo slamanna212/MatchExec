@@ -68,6 +68,7 @@ export interface Tournament {
   max_participants?: number;
   start_date?: Date;
   start_time?: Date;
+  allow_player_team_selection?: boolean;
   created_at: Date;
   updated_at: Date;
 }

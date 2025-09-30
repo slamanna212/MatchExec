@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box } from '@mantine/core';
+import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box, Switch } from '@mantine/core';
 import { IconArrowLeft, IconUpload, IconTrash, IconPlus } from '@tabler/icons-react';
 import { TournamentFormat } from '@/shared/types';
 
@@ -32,6 +32,7 @@ interface TournamentFormData {
   maxParticipants?: number;
   eventImageUrl?: string;
   preCreatedTeams?: string[]; // Array of team names
+  allowPlayerTeamSelection?: boolean;
 }
 
 export function CreateTournamentPage() {
@@ -44,7 +45,8 @@ export function CreateTournamentPage() {
     format: 'single-elimination',
     roundsPerMatch: 3,
     ruleset: 'casual',
-    preCreatedTeams: []
+    preCreatedTeams: [],
+    allowPlayerTeamSelection: false
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export function CreateTournamentPage() {
     sessionStorage.setItem('tournamentFormData', JSON.stringify(formData));
   }, [formData]);
 
-  const updateFormData = (key: keyof TournamentFormData, value: string | number | TournamentFormat | undefined) => {
+  const updateFormData = (key: keyof TournamentFormData, value: string | number | TournamentFormat | string[] | boolean | undefined) => {
     setFormData(prev => ({
       ...prev,
       [key]: value
@@ -100,7 +102,8 @@ export function CreateTournamentPage() {
       format: 'single-elimination',
       roundsPerMatch: 3,
       ruleset: 'casual',
-      preCreatedTeams: []
+      preCreatedTeams: [],
+      allowPlayerTeamSelection: false
     });
     sessionStorage.removeItem('tournamentFormData');
   };
@@ -162,7 +165,8 @@ export function CreateTournamentPage() {
         roundsPerMatch: formData.roundsPerMatch,
         ruleset: formData.ruleset,
         maxParticipants: formData.maxParticipants,
-        eventImageUrl: formData.eventImageUrl || null
+        eventImageUrl: formData.eventImageUrl || null,
+        allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
       };
 
       const response = await fetch('/api/tournaments', {
@@ -414,6 +418,13 @@ export function CreateTournamentPage() {
               ]}
               value={formData.ruleset || 'casual'}
               onChange={(value) => updateFormData('ruleset', value || 'casual')}
+            />
+
+            <Switch
+              label="Allow Players to Select Teams"
+              description="When enabled, players can choose their team during signup (only works if teams are pre-created in Step 3)"
+              checked={formData.allowPlayerTeamSelection || false}
+              onChange={(e) => updateFormData('allowPlayerTeamSelection', e.currentTarget.checked)}
             />
 
             <Box>
