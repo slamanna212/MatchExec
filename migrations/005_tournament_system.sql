@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS tournament_team_members (
   id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
+  discord_user_id TEXT,
   username TEXT NOT NULL,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (team_id) REFERENCES tournament_teams(id) ON DELETE CASCADE,
@@ -119,3 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_matches_tournament_round ON matches(tournament_ro
 CREATE INDEX IF NOT EXISTS idx_matches_tournament_bracket_type ON matches(tournament_bracket_type);
 CREATE INDEX IF NOT EXISTS idx_matches_winner_team ON matches(winner_team);
 CREATE INDEX IF NOT EXISTS idx_matches_map_id ON matches(map_id);
+
+-- Add discord_user_id to tournament_team_members for existing databases
+-- This allows @ mentions in tournament match announcements
+ALTER TABLE tournament_team_members ADD COLUMN discord_user_id TEXT;

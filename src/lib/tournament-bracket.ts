@@ -1108,35 +1108,35 @@ export async function saveGeneratedMatches(
       // Add team members as match participants
       if (tournamentMatch.team1_id) {
         const team1Members = await db.all(`
-          SELECT user_id, username
+          SELECT user_id, discord_user_id, username
           FROM tournament_team_members
           WHERE team_id = ?
-        `, [tournamentMatch.team1_id]) as { user_id: string; username: string }[];
+        `, [tournamentMatch.team1_id]) as { user_id: string; discord_user_id: string | null; username: string }[];
 
         for (const member of team1Members) {
           const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           await db.run(`
             INSERT INTO match_participants (
-              id, match_id, user_id, username, team, team_assignment, joined_at
-            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'red', 'red']);
+              id, match_id, user_id, discord_user_id, username, team, team_assignment, joined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.discord_user_id, member.username, 'red', 'red']);
         }
       }
 
       if (tournamentMatch.team2_id) {
         const team2Members = await db.all(`
-          SELECT user_id, username
+          SELECT user_id, discord_user_id, username
           FROM tournament_team_members
           WHERE team_id = ?
-        `, [tournamentMatch.team2_id]) as { user_id: string; username: string }[];
+        `, [tournamentMatch.team2_id]) as { user_id: string; discord_user_id: string | null; username: string }[];
 
         for (const member of team2Members) {
           const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           await db.run(`
             INSERT INTO match_participants (
-              id, match_id, user_id, username, team, team_assignment, joined_at
-            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [participantId, tournamentMatch.id, member.user_id, member.username, 'blue', 'blue']);
+              id, match_id, user_id, discord_user_id, username, team, team_assignment, joined_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `, [participantId, tournamentMatch.id, member.user_id, member.discord_user_id, member.username, 'blue', 'blue']);
         }
       }
     }
@@ -1188,7 +1188,7 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
   losersComplete: boolean;
 }> {
   const db = await getDbInstance();
-  
+
   const winnersInfo = await db.get(`
     SELECT
       COALESCE(MAX(tm.round), 0) as max_round,
@@ -1208,11 +1208,73 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
     JOIN tournament_matches tm ON m.id = tm.match_id
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'losers'
   `, [tournamentId]) as RoundStatsInfo;
-  
+
   return {
     maxWinnersRound: winnersInfo.max_round || 0,
     maxLosersRound: losersInfo.max_round || 0,
     winnersComplete: winnersInfo.total > 0 && winnersInfo.completed === winnersInfo.total,
     losersComplete: losersInfo.total > 0 && losersInfo.completed === losersInfo.total
   };
+}
+
+/**
+ * Check if a bracket is ready for grand finals (only one team remaining)
+ * For winners bracket: Check if the highest round has exactly 1 completed match
+ * For losers bracket: Check if the highest round has exactly 1 completed match
+ */
+export async function isBracketReadyForFinals(
+  tournamentId: string,
+  bracketType: 'winners' | 'losers'
+): Promise<boolean> {
+  const db = await getDbInstance();
+
+  // Get the highest round number for this bracket
+  const maxRoundInfo = await db.get(`
+    SELECT MAX(tm.round) as max_round
+    FROM tournament_matches tm
+    WHERE tm.tournament_id = ? AND tm.bracket_type = ?
+  `, [tournamentId, bracketType]) as { max_round: number | null };
+
+  if (!maxRoundInfo || maxRoundInfo.max_round === null) {
+    return false;
+  }
+
+  // Check if the highest round has exactly 1 completed match
+  const highestRoundMatches = await db.get(`
+    SELECT
+      COUNT(*) as total_matches,
+      COUNT(CASE WHEN m.status = 'complete' THEN 1 END) as completed_matches
+    FROM matches m
+    JOIN tournament_matches tm ON m.id = tm.match_id
+    WHERE tm.tournament_id = ?
+      AND tm.bracket_type = ?
+      AND tm.round = ?
+  `, [tournamentId, bracketType, maxRoundInfo.max_round]) as { total_matches: number; completed_matches: number };
+
+  // Ready for finals if there's exactly 1 match in the highest round and it's complete
+  return highestRoundMatches.total_matches === 1 && highestRoundMatches.completed_matches === 1;
+}
+
+/**
+ * Get the winner of a bracket (the last team standing)
+ */
+export async function getBracketWinner(
+  tournamentId: string,
+  bracketType: 'winners' | 'losers'
+): Promise<string | null> {
+  const db = await getDbInstance();
+
+  const result = await db.get(`
+    SELECT m.winner_team
+    FROM matches m
+    JOIN tournament_matches tm ON m.id = tm.match_id
+    WHERE tm.tournament_id = ?
+      AND tm.bracket_type = ?
+      AND m.status = 'complete'
+      AND m.winner_team IS NOT NULL
+    ORDER BY tm.round DESC, tm.match_order DESC
+    LIMIT 1
+  `, [tournamentId, bracketType]) as { winner_team: string } | undefined;
+
+  return result?.winner_team || null;
 }

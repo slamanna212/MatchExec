@@ -157,6 +157,20 @@ export async function POST(
     // Save matches to database
     await saveGeneratedMatches(generatedMatches, tournamentMatches);
 
+    // Queue Discord announcements for each generated match
+    for (const match of generatedMatches) {
+      try {
+        const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await db.run(`
+          INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
+          VALUES (?, ?, 'standard', 'pending')
+        `, [announcementId, match.id]);
+      } catch (error) {
+        console.error(`Failed to queue announcement for match ${match.id}:`, error);
+        // Continue with other announcements even if one fails
+      }
+    }
+
     // Keep tournament in 'assign' status - bracket is generated but tournament not started yet
     await db.run(
       'UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',

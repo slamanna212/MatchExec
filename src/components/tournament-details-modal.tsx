@@ -20,6 +20,7 @@ import { IconTrophy } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { Tournament, TOURNAMENT_FLOW_STEPS, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from './tournament-bracket';
+import { notificationHelper } from '@/lib/notifications';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -297,6 +298,13 @@ export function TournamentDetailsModal({
                 method: 'POST'
               });
               if (response.ok) {
+                const result = await response.json();
+
+                notificationHelper.success({
+                  title: 'Bracket Generated',
+                  message: result.message || 'Tournament bracket generated successfully'
+                });
+
                 // Refresh tournament details to show generated matches
                 const [tournamentResponse, matchesResponse] = await Promise.all([
                   fetch(`/api/tournaments/${tournament.id}`),
@@ -318,10 +326,18 @@ export function TournamentDetailsModal({
                   });
                 }
               } else {
-                console.error('Failed to generate matches');
+                const error = await response.json();
+                notificationHelper.error({
+                  title: 'Bracket Generation Failed',
+                  message: error.error || 'Failed to generate bracket'
+                });
               }
             } catch (error) {
               console.error('Error generating matches:', error);
+              notificationHelper.error({
+                title: 'Connection Error',
+                message: 'Failed to generate bracket'
+              });
             }
           }}
           onBracketAssignment={async (assignments) => {

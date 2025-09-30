@@ -177,7 +177,7 @@ export function TournamentBracket({
         flexDirection: 'column'
       }}
     >
-      <Stack gap="md" style={{ flex: 1 }}>
+      <Stack gap="sm" style={{ flex: 1 }}>
         <Group justify="flex-start" align="center">
           <Badge
             size="sm"
@@ -188,31 +188,29 @@ export function TournamentBracket({
           </Badge>
         </Group>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <Text
-              size="sm"
-              fw={match.winner === match.team1?.id ? 700 : 400}
-              c={match.winner === match.team1?.id ? 'green' : undefined}
-              lineClamp={1}
-            >
-              {match.team1?.name || 'TBD'}
-            </Text>
-          </div>
+        <Stack gap="xs" style={{ flex: 1 }}>
+          <Text
+            size="sm"
+            fw={match.winner === match.team1?.id ? 700 : 400}
+            c={match.winner === match.team1?.id ? 'green' : undefined}
+            lineClamp={1}
+            ta="center"
+          >
+            {match.team1?.name || 'TBD'}
+          </Text>
 
-          <Text size="xs" c="dimmed" fw={500}>vs</Text>
+          <Text size="xs" c="dimmed" fw={500} ta="center">vs</Text>
 
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <Text
-              size="sm"
-              fw={match.winner === match.team2?.id ? 700 : 400}
-              c={match.winner === match.team2?.id ? 'green' : undefined}
-              lineClamp={1}
-            >
-              {match.team2?.name || 'TBD'}
-            </Text>
-          </div>
-        </div>
+          <Text
+            size="sm"
+            fw={match.winner === match.team2?.id ? 700 : 400}
+            c={match.winner === match.team2?.id ? 'green' : undefined}
+            lineClamp={1}
+            ta="center"
+          >
+            {match.team2?.name || 'TBD'}
+          </Text>
+        </Stack>
       </Stack>
     </Card>
   );
@@ -484,7 +482,7 @@ export function TournamentBracket({
             value={viewMode}
             onChange={(value) => setViewMode(value as 'tree' | 'list')}
             data={[
-              { label: 'List', value: 'list' },
+              { label: 'Cards', value: 'list' },
               { label: isAssignMode ? 'Assignment' : 'Tree', value: 'tree' }
             ]}
           />

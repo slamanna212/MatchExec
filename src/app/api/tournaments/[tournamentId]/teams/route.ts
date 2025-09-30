@@ -194,10 +194,18 @@ export async function PUT(
       if (team.members && team.members.length > 0) {
         for (const member of team.members) {
           const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // Get discord_user_id from tournament_participants
+          const participant = await db.get<{ discord_user_id: string }>(`
+            SELECT discord_user_id
+            FROM tournament_participants
+            WHERE tournament_id = ? AND user_id = ?
+          `, [tournamentId, member.userId]);
+
           await db.run(`
-            INSERT INTO tournament_team_members (id, team_id, user_id, username)
-            VALUES (?, ?, ?, ?)
-          `, [memberId, team.teamId, member.userId, member.username]);
+            INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
+            VALUES (?, ?, ?, ?, ?)
+          `, [memberId, team.teamId, member.userId, participant?.discord_user_id || null, member.username]);
 
           // Update the participant's team assignment
           await db.run(`

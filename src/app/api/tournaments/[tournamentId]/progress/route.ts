@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
-import { 
+import {
   generateNextRoundMatches,
   generateLosersBracketMatches,
   generateGrandFinalsMatch,
@@ -8,7 +8,9 @@ import {
   checkGrandFinalsReset,
   saveGeneratedMatches,
   isRoundComplete,
-  getCurrentRoundInfo
+  getCurrentRoundInfo,
+  isBracketReadyForFinals,
+  getBracketWinner
 } from '@/lib/tournament-bracket';
 
 interface Tournament {
@@ -286,58 +288,40 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
     );
   }
 
-  // Check if both brackets are ready for grand finals (currently unused but kept for future logic)
-  // const winnersFinished = roundInfo.maxWinnersRound > 0 && winnersComplete;
-  // const losersFinished = roundInfo.maxLosersRound > 0 && losersComplete;
+  // Check if both brackets are ready for grand finals
+  const winnersReady = await isBracketReadyForFinals(tournamentId, 'winners');
+  const losersReady = await isBracketReadyForFinals(tournamentId, 'losers');
 
-  // Get current winners bracket winner and losers bracket winner
-  const winnersWinner = await db.get(`
-    SELECT m.winner_team
-    FROM matches m
-    JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ?
-      AND tm.bracket_type = 'winners'
-      AND m.status = 'complete'
-    ORDER BY tm.round DESC, tm.match_order DESC
-    LIMIT 1
-  `, [tournamentId]) as WinnerResult | undefined;
+  // If both brackets are complete and ready, generate grand finals
+  if (winnersReady && losersReady) {
+    const winnersWinner = await getBracketWinner(tournamentId, 'winners');
+    const losersWinner = await getBracketWinner(tournamentId, 'losers');
 
-  const losersWinner = await db.get(`
-    SELECT m.winner_team
-    FROM matches m
-    JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ?
-      AND tm.bracket_type = 'losers'
-      AND m.status = 'complete'
-    ORDER BY tm.round DESC, tm.match_order DESC
-    LIMIT 1
-  `, [tournamentId]) as WinnerResult | undefined;
+    if (winnersWinner && losersWinner) {
+      const grandFinalsMatches = await generateGrandFinalsMatch(
+        tournamentId,
+        winnersWinner,
+        losersWinner
+      );
 
-  // Check if we can generate grand finals
-  if (winnersWinner && losersWinner) {
-    const grandFinalsMatches = await generateGrandFinalsMatch(
-      tournamentId,
-      winnersWinner.winner_team,
-      losersWinner.winner_team
-    );
+      const tournamentMatches = [{
+        id: grandFinalsMatches[0].id,
+        tournament_id: tournamentId,
+        round: 1,
+        bracket_type: 'final' as const,
+        team1_id: winnersWinner,
+        team2_id: losersWinner,
+        match_order: 1
+      }];
 
-    const tournamentMatches = [{
-      id: grandFinalsMatches[0].id,
-      tournament_id: tournamentId,
-      round: 1,
-      bracket_type: 'final' as const,
-      team1_id: winnersWinner.winner_team,
-      team2_id: losersWinner.winner_team,
-      match_order: 1
-    }];
+      await saveGeneratedMatches(grandFinalsMatches, tournamentMatches);
 
-    await saveGeneratedMatches(grandFinalsMatches, tournamentMatches);
-
-    return NextResponse.json({
-      message: 'Generated Grand Finals match',
-      matchCount: 1,
-      tournamentId
-    });
+      return NextResponse.json({
+        message: 'Generated Grand Finals match',
+        matchCount: 1,
+        tournamentId
+      });
+    }
   }
 
   // Progress winner's bracket if complete
