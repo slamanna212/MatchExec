@@ -13,7 +13,7 @@ interface MatchGame {
   map_name: string;
   image_url?: string;
   mode_id: string;
-  mode_scoring_type?: 'Normal' | 'FFA';
+  mode_scoring_type?: 'Normal' | 'FFA' | 'Position';
   game_id: string; // game type like "overwatch2"
   status: 'pending' | 'ongoing' | 'completed';
   winner_id?: string;

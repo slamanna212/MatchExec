@@ -1,8 +1,60 @@
 import { getDbInstance } from './database-init';
-import { 
-  MatchResult, 
-  MatchFormat
+import {
+  MatchResult,
+  MatchFormat,
+  PositionScoringConfig
 } from '@/shared/types';
+
+/**
+ * Get points for a given position based on game's scoring config
+ * Returns 0 if position is not in the config
+ */
+export function getPointsForPosition(position: number, config: PositionScoringConfig): number {
+  return config.pointsPerPosition[position.toString()] ?? 0;
+}
+
+/**
+ * Calculate points awarded for position results
+ */
+export async function calculatePositionPoints(
+  positionResults: Record<string, number>,
+  gameId: string
+): Promise<Record<string, number>> {
+  const db = await getDbInstance();
+
+  try {
+    // Get the game's scoring config
+    const gameQuery = `
+      SELECT scoring_config FROM games
+      WHERE id = (SELECT game_id FROM matches WHERE id = (
+        SELECT match_id FROM match_games WHERE id = ?
+      ))
+    `;
+
+    const gameRow = await db.get<{ scoring_config?: string }>(gameQuery, [gameId]);
+
+    if (!gameRow || !gameRow.scoring_config) {
+      console.warn('No scoring config found for game, defaulting to 0 points for all positions');
+      return Object.keys(positionResults).reduce((acc, participantId) => {
+        acc[participantId] = 0;
+        return acc;
+      }, {} as Record<string, number>);
+    }
+
+    const config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+
+    // Calculate points for each participant
+    const pointsAwarded: Record<string, number> = {};
+    for (const [participantId, position] of Object.entries(positionResults)) {
+      pointsAwarded[participantId] = getPointsForPosition(position, config);
+    }
+
+    return pointsAwarded;
+  } catch (error) {
+    console.error('Error calculating position points:', error);
+    throw error;
+  }
+}
 
 /**
  * Get match format from database
@@ -195,7 +247,7 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
 }
 
 /**
- * Save match result - handles both team-based and FFA scoring
+ * Save match result - handles team-based, FFA, and Position scoring
  */
 export async function saveMatchResult(
   matchGameId: string,
@@ -203,17 +255,35 @@ export async function saveMatchResult(
 ): Promise<void> {
   console.log('saveMatchResult - Starting with matchGameId:', matchGameId);
   console.log('saveMatchResult - Result:', JSON.stringify(result, null, 2));
-  
+
   const db = await getDbInstance();
-  
+
   try {
     // First, ensure the match_games entry exists
     await ensureMatchGameExists(matchGameId, result.matchId);
-    
-    // Handle FFA vs Normal scoring differently
-    if (result.isFfaMode && result.participantWinnerId) {
+
+    // Handle Position vs FFA vs Normal scoring
+    if (result.isPositionMode && result.positionResults) {
+      // Position Mode: Save position results and calculate points
+      const pointsAwarded = await calculatePositionPoints(result.positionResults, matchGameId);
+
+      const query = `UPDATE match_games
+                     SET position_results = ?,
+                         points_awarded = ?,
+                         status = 'completed',
+                         completed_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`;
+
+      await db.run(query, [
+        JSON.stringify(result.positionResults),
+        JSON.stringify(pointsAwarded),
+        matchGameId
+      ]);
+      console.log(`Saved Position match result for game ${matchGameId}:`, pointsAwarded);
+    } else if (result.isFfaMode && result.participantWinnerId) {
       // FFA Mode: Save individual participant winner, don't count toward team wins
-      const query = `UPDATE match_games 
+      const query = `UPDATE match_games
                      SET participant_winner_id = ?,
                          is_ffa_mode = 1,
                          status = 'completed',
@@ -225,7 +295,7 @@ export async function saveMatchResult(
       console.log(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
     } else {
       // Normal Mode: Save team winner
-      const query = `UPDATE match_games 
+      const query = `UPDATE match_games
                      SET winner_id = ?,
                          is_ffa_mode = 0,
                          status = 'completed',
@@ -248,7 +318,7 @@ export async function saveMatchResult(
 
     // Queue voice announcements based on match state
     await queueVoiceAnnouncementForScore(result.matchId, hasNextMap, isMatchComplete);
-    
+
   } catch (error) {
     console.error('Error in saveMatchResult:', error);
     throw error;
@@ -716,7 +786,80 @@ async function queueVoiceAnnouncementForScore(
 }
 
 /**
- * Get overall match score (team wins for Normal modes only, excluding FFA)
+ * Get overall position-based scores for a match
+ */
+export async function getOverallPositionScore(matchId: string): Promise<{
+  participantScores: Record<string, { username: string; totalPoints: number; races: number }>;
+  winner: string | null;
+}> {
+  const db = await getDbInstance();
+
+  try {
+    const query = `
+      SELECT mg.points_awarded, mg.position_results
+      FROM match_games mg
+      WHERE mg.match_id = ?
+        AND mg.status = 'completed'
+        AND mg.points_awarded IS NOT NULL
+    `;
+
+    const games = await db.all<{
+      points_awarded: string;
+      position_results: string;
+    }>(query, [matchId]);
+
+    // Aggregate points across all races
+    const participantScores: Record<string, { username: string; totalPoints: number; races: number }> = {};
+
+    for (const game of games) {
+      const pointsAwarded = JSON.parse(game.points_awarded) as Record<string, number>;
+
+      for (const [participantId, points] of Object.entries(pointsAwarded)) {
+        if (!participantScores[participantId]) {
+          // Get participant username
+          const participantQuery = `SELECT username FROM match_participants WHERE id = ?`;
+          const participant = await db.get<{ username: string }>(participantQuery, [participantId]);
+
+          participantScores[participantId] = {
+            username: participant?.username || 'Unknown',
+            totalPoints: 0,
+            races: 0
+          };
+        }
+
+        participantScores[participantId].totalPoints += points;
+        participantScores[participantId].races += 1;
+      }
+    }
+
+    // Determine winner (participant with highest total points)
+    let winner: string | null = null;
+    let highestPoints = -1;
+
+    for (const [participantId, data] of Object.entries(participantScores)) {
+      if (data.totalPoints > highestPoints) {
+        highestPoints = data.totalPoints;
+        winner = participantId;
+      } else if (data.totalPoints === highestPoints) {
+        winner = null; // Tie
+      }
+    }
+
+    return {
+      participantScores,
+      winner
+    };
+  } catch (error) {
+    console.error('Error getting overall position score:', error);
+    return {
+      participantScores: {},
+      winner: null
+    };
+  }
+}
+
+/**
+ * Get overall match score (team wins for Normal modes only, excluding FFA and Position)
  */
 export async function getOverallMatchScore(matchId: string): Promise<{
   team1Wins: number;

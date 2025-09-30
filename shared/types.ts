@@ -19,7 +19,7 @@ export interface GameMode {
   game_id: string;
   name: string;
   description: string;
-  scoring_type: 'Normal' | 'FFA';
+  scoring_type: 'Normal' | 'FFA' | 'Position';
   created_at: Date;
   updated_at: Date;
 }
@@ -205,6 +205,8 @@ export interface MatchGame {
   winner_id?: string; // 'team1', 'team2', or null
   participant_winner_id?: string; // For FFA modes: specific participant ID
   is_ffa_mode: boolean; // True if this is a Free-For-All mode
+  position_results?: string; // JSON: {participantId: position} for Position scoring
+  points_awarded?: string; // JSON: {participantId: points} for Position scoring
   map_id?: string;
   mode_id?: string;
   status: 'pending' | 'ongoing' | 'completed';
@@ -243,7 +245,7 @@ export interface ModeDataJson {
   id: string;
   name: string;
   description: string;
-  scoringType?: 'Normal' | 'FFA';
+  scoringType?: 'Normal' | 'FFA' | 'Position';
 }
 
 export interface MapDataJson {
@@ -263,12 +265,27 @@ export interface MatchResult {
   winner: 'team1' | 'team2';
   participantWinnerId?: string; // For FFA modes
   isFfaMode?: boolean;
+  positionResults?: Record<string, number>; // For Position modes: {participantId: position}
+  isPositionMode?: boolean;
   completedAt: Date;
 }
 
 // Map codes type
 export interface MapCodes {
   [mapId: string]: string; // mapId -> code (up to 24 characters)
+}
+
+// Position-based scoring configuration
+export interface PositionScoringConfig {
+  type: 'Position';
+  pointsPerPosition: Record<string, number>; // {"1": 25, "2": 18, ...}
+}
+
+// Position result for a single participant
+export interface PositionResult {
+  participantId: string;
+  position: number;
+  points: number;
 }
 
 // Signup field types
