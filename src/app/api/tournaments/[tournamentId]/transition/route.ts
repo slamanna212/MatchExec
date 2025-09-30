@@ -79,6 +79,39 @@ async function queueDiscordTournamentStatusUpdate(tournamentId: string, newStatu
   }
 }
 
+// Queue Discord event deletion for a tournament
+async function queueDiscordEventDeletion(tournamentId: string): Promise<boolean> {
+  try {
+    const db = await getDbInstance();
+
+    // Check if there's a Discord event for this tournament
+    const eventRecord = await db.get<{ discord_event_id: string | null }>(`
+      SELECT discord_event_id FROM discord_match_messages
+      WHERE match_id = ? AND discord_event_id IS NOT NULL
+    `, [tournamentId]);
+
+    if (!eventRecord?.discord_event_id) {
+      console.log('ℹ️ No Discord event found for tournament:', tournamentId);
+      return true; // Not an error - tournament might not have an event
+    }
+
+    // Generate unique ID for the deletion queue entry
+    const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Add to deletion queue
+    await db.run(`
+      INSERT INTO discord_deletion_queue (id, match_id, status)
+      VALUES (?, ?, 'pending')
+    `, [deletionId, tournamentId]);
+
+    console.log('🗑️ Discord event deletion queued for tournament:', tournamentId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error queuing Discord event deletion:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
@@ -231,10 +264,24 @@ export async function POST(
         
       case 'complete':
         console.log(`🏆 Tournament ${tournamentId} has been completed`);
+
+        // Queue Discord event deletion for completed tournament
+        try {
+          await queueDiscordEventDeletion(tournamentId);
+        } catch (error) {
+          console.error('❌ Error queuing Discord event deletion for completed tournament:', error);
+        }
         break;
-        
+
       case 'cancelled':
         console.log(`❌ Tournament ${tournamentId} has been cancelled`);
+
+        // Queue Discord event deletion for cancelled tournament
+        try {
+          await queueDiscordEventDeletion(tournamentId);
+        } catch (error) {
+          console.error('❌ Error queuing Discord event deletion for cancelled tournament:', error);
+        }
         break;
     }
 
