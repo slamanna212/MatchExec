@@ -4,8 +4,6 @@ import {
   generateNextRoundMatches,
   generateLosersBracketMatches,
   generateGrandFinalsMatch,
-  generateGrandFinalsResetMatch,
-  checkGrandFinalsReset,
   saveGeneratedMatches,
   isRoundComplete,
   getCurrentRoundInfo,
@@ -40,10 +38,6 @@ interface GrandFinalsMatch {
   team1_name?: string;
   team2_name?: string;
   tournament_round?: number;
-}
-
-interface WinnerResult {
-  winner_team: string;
 }
 
 export async function POST(
@@ -208,78 +202,33 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
     ORDER BY tm.round DESC
   `, [tournamentId]) as GrandFinalsMatch[];
 
-  // If grand finals exist and are complete, check for reset or completion
+  // If grand finals exist and are complete, tournament is complete
   if (grandFinalsMatches.length > 0) {
     const latestFinal = grandFinalsMatches[0];
-    
-    if (latestFinal.status === 'complete' && latestFinal.winner_team) {
-      // Get loser's bracket winner
-      const losersBracketWinner = await db.get(`
-        SELECT m.winner_team
-        FROM matches m
-        JOIN tournament_matches tm ON m.id = tm.match_id
-        WHERE tm.tournament_id = ?
-          AND tm.bracket_type = 'losers'
-          AND m.status = 'complete'
-        ORDER BY tm.round DESC, tm.match_order DESC
-        LIMIT 1
-      `, [tournamentId]) as WinnerResult | undefined;
 
-      const needsReset = await checkGrandFinalsReset(
-        tournamentId,
-        latestFinal.winner_team,
-        losersBracketWinner?.winner_team || ''
+    if (latestFinal.status === 'complete' && latestFinal.winner_team) {
+      // Tournament is complete
+      await db.run(
+        'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['complete', tournamentId]
       );
 
-      if (needsReset && latestFinal.tournament_round === 1) {
-        // Generate reset match
-        const resetMatches = await generateGrandFinalsResetMatch(
-          tournamentId,
-          latestFinal.team1_name || '',
-          latestFinal.team2_name || ''
-        );
-
-        const tournamentMatches = [{
-          id: resetMatches[0].id,
-          tournament_id: tournamentId,
-          round: 2,
-          bracket_type: 'final' as const,
-          team1_id: latestFinal.team1_name || '',
-          team2_id: latestFinal.team2_name || '',
-          match_order: 1
-        }];
-
-        await saveGeneratedMatches(resetMatches, tournamentMatches);
-
-        return NextResponse.json({
-          message: 'Generated Grand Finals Reset match',
-          matchCount: 1,
-          tournamentId
-        });
-      } else {
-        // Tournament is complete
-        await db.run(
-          'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          ['complete', tournamentId]
-        );
-
-        // Queue tournament winner notification
-        try {
-          const { queueTournamentWinnerNotification } = await import('../../../../../lib/tournament-notifications');
-          if (latestFinal.winner_team) {
-            await queueTournamentWinnerNotification(tournamentId, latestFinal.winner_team);
-          }
-        } catch (error) {
-          console.error('Failed to queue tournament winner notification:', error);
-          // Don't fail the tournament completion if notification fails
+      // Queue tournament winner notification
+      try {
+        const { queueTournamentWinnerNotification } = await import('../../../../../lib/tournament-notifications');
+        if (latestFinal.winner_team) {
+          await queueTournamentWinnerNotification(tournamentId, latestFinal.winner_team);
         }
-
-        return NextResponse.json({
-          message: 'Tournament completed!',
-          winner: latestFinal.winner_team,
-          tournamentId
-        });
+      } catch (error) {
+        console.error('Failed to queue tournament winner notification:', error);
+        // Don't fail the tournament completion if notification fails
       }
+
+      return NextResponse.json({
+        message: 'Tournament completed!',
+        winner: latestFinal.winner_team,
+        tournamentId
+      });
     }
 
     return NextResponse.json(
