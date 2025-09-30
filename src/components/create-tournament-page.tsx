@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box } from '@mantine/core';
-import { IconArrowLeft, IconUpload, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconUpload, IconTrash, IconPlus } from '@tabler/icons-react';
 import { TournamentFormat } from '@/shared/types';
 
 interface GameWithIcon {
@@ -31,6 +31,7 @@ interface TournamentFormData {
   ruleset: string;
   maxParticipants?: number;
   eventImageUrl?: string;
+  preCreatedTeams?: string[]; // Array of team names
 }
 
 export function CreateTournamentPage() {
@@ -42,10 +43,12 @@ export function CreateTournamentPage() {
   const [formData, setFormData] = useState<Partial<TournamentFormData>>({
     format: 'single-elimination',
     roundsPerMatch: 3,
-    ruleset: 'casual'
+    ruleset: 'casual',
+    preCreatedTeams: []
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newTeamName, setNewTeamName] = useState('');
 
   // Load games on mount and restore form data from session storage
   useEffect(() => {
@@ -96,9 +99,30 @@ export function CreateTournamentPage() {
     setFormData({
       format: 'single-elimination',
       roundsPerMatch: 3,
-      ruleset: 'casual'
+      ruleset: 'casual',
+      preCreatedTeams: []
     });
     sessionStorage.removeItem('tournamentFormData');
+  };
+
+  const handleAddTeam = () => {
+    if (!newTeamName.trim()) return;
+
+    const currentTeams = formData.preCreatedTeams || [];
+
+    // Check for duplicate team names
+    if (currentTeams.some(team => team.toLowerCase() === newTeamName.trim().toLowerCase())) {
+      alert('A team with this name already exists');
+      return;
+    }
+
+    updateFormData('preCreatedTeams', [...currentTeams, newTeamName.trim()]);
+    setNewTeamName('');
+  };
+
+  const handleRemoveTeam = (teamName: string) => {
+    const currentTeams = formData.preCreatedTeams || [];
+    updateFormData('preCreatedTeams', currentTeams.filter(team => team !== teamName));
   };
 
   const navigateToStep = (step: number) => {
@@ -151,6 +175,21 @@ export function CreateTournamentPage() {
 
       if (response.ok) {
         const tournament = await response.json();
+
+        // Create pre-defined teams if any exist
+        if (formData.preCreatedTeams && formData.preCreatedTeams.length > 0) {
+          const teamCreationPromises = formData.preCreatedTeams.map(teamName =>
+            fetch(`/api/tournaments/${tournament.id}/teams`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ teamName }),
+            })
+          );
+
+          await Promise.all(teamCreationPromises);
+        }
 
         // Clear form data on successful creation
         clearFormData();
@@ -450,7 +489,7 @@ export function CreateTournamentPage() {
         {currentStep === 3 && (
           <Stack>
             <Text mb="md">Configure team settings:</Text>
-            
+
             <NumberInput
               label="Max Participants (Optional)"
               description="Maximum number of players that can register (leave empty for unlimited)"
@@ -460,9 +499,66 @@ export function CreateTournamentPage() {
               onChange={(value) => updateFormData('maxParticipants', value || undefined)}
             />
 
+            <Card withBorder p="md" mt="md">
+              <Text fw={500} mb="md">Pre-Create Teams (Optional)</Text>
+              <Text size="sm" c="dimmed" mb="md">
+                Create team names ahead of time. Players can be assigned to these teams during the signup phase.
+              </Text>
+
+              <Group mb="md">
+                <TextInput
+                  placeholder="Enter team name"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTeamName.trim()) {
+                      handleAddTeam();
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  leftSection={<IconPlus size="1rem" />}
+                  onClick={handleAddTeam}
+                  disabled={!newTeamName.trim()}
+                >
+                  Add Team
+                </Button>
+              </Group>
+
+              {formData.preCreatedTeams && formData.preCreatedTeams.length > 0 && (
+                <Stack gap="xs">
+                  {formData.preCreatedTeams.map((teamName, index) => (
+                    <Card key={index} withBorder padding="sm">
+                      <Group justify="space-between" align="center">
+                        <Group align="center">
+                          <Badge variant="light">{index + 1}</Badge>
+                          <Text size="sm" fw={500}>{teamName}</Text>
+                        </Group>
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          size="sm"
+                          onClick={() => handleRemoveTeam(teamName)}
+                        >
+                          <IconTrash size="1rem" />
+                        </ActionIcon>
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              )}
+
+              {(!formData.preCreatedTeams || formData.preCreatedTeams.length === 0) && (
+                <Text size="sm" c="dimmed" ta="center" py="md">
+                  No teams created yet. Add teams using the form above.
+                </Text>
+              )}
+            </Card>
+
             <Text size="sm" c="dimmed" mt="md">
-              <strong>Note:</strong> Maps and modes will be automatically assigned when tournament matches are generated. 
-              Teams will be formed during the signup phase, and bracket seeding will be done manually by administrators.
+              <strong>Note:</strong> Maps and modes will be automatically assigned when tournament matches are generated.
+              Participants can be assigned to teams during or after the signup phase.
             </Text>
 
             <Group justify="space-between" mt="md">
@@ -529,6 +625,19 @@ export function CreateTournamentPage() {
                     <Text fw={500}>Start:</Text>
                     <Text>{new Date(`${formData.date}T${formData.time}`).toLocaleString()}</Text>
                   </Group>
+                )}
+
+                {formData.preCreatedTeams && formData.preCreatedTeams.length > 0 && (
+                  <div>
+                    <Text fw={500} mb="xs">Pre-Created Teams:</Text>
+                    <Group gap="xs">
+                      {formData.preCreatedTeams.map((teamName, index) => (
+                        <Badge key={index} variant="light" size="lg">
+                          {teamName}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </div>
                 )}
               </Stack>
             </Card>
