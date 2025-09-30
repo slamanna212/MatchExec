@@ -916,7 +916,7 @@ export async function generateGrandFinalsMatch(
     maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,
     max_participants: 12,
-    status: 'created',
+    status: 'assign', // Teams are already assigned, ready to start
     match_type: 'tournament',
     tournament_id: tournamentId,
     tournament_round: 1,
@@ -1053,7 +1053,7 @@ export async function generateGrandFinalsResetMatch(
     maps: selectedMaps, // All maps for the match
     rounds_per_match: tournament.rounds_per_match,
     max_participants: 12,
-    status: 'created',
+    status: 'assign', // Teams are already assigned, ready to start
     match_type: 'tournament',
     tournament_id: tournamentId,
     tournament_round: 2,
