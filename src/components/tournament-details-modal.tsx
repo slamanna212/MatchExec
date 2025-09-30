@@ -46,6 +46,14 @@ interface BracketMatch {
   match_order: number;
 }
 
+interface TeamStanding {
+  team_id: string;
+  team_name: string;
+  matches_played: number;
+  wins: number;
+  losses: number;
+}
+
 interface TournamentWithDetails extends TournamentWithGame {
   teams?: (TournamentTeam & { members?: TournamentTeamMember[] })[];
   matches?: BracketMatch[];
@@ -68,6 +76,7 @@ export function TournamentDetailsModal({
 }: TournamentDetailsModalProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [tournamentDetails, setTournamentDetails] = useState<TournamentWithDetails | null>(null);
+  const [standings, setStandings] = useState<TeamStanding[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Fetch tournament details when modal opens
@@ -76,10 +85,11 @@ export function TournamentDetailsModal({
       const fetchTournamentDetails = async () => {
         setLoading(true);
         try {
-          // Fetch tournament details and matches in parallel
-          const [tournamentResponse, matchesResponse] = await Promise.all([
+          // Fetch tournament details, matches, and standings in parallel
+          const [tournamentResponse, matchesResponse, standingsResponse] = await Promise.all([
             fetch(`/api/tournaments/${tournament.id}`),
-            fetch(`/api/tournaments/${tournament.id}/matches`)
+            fetch(`/api/tournaments/${tournament.id}/matches`),
+            fetch(`/api/tournaments/${tournament.id}/standings`)
           ]);
 
           if (tournamentResponse.ok) {
@@ -89,6 +99,11 @@ export function TournamentDetailsModal({
             if (matchesResponse.ok) {
               const matchesData = await matchesResponse.json();
               matches = matchesData.matches || [];
+            }
+
+            if (standingsResponse.ok) {
+              const standingsData = await standingsResponse.json();
+              setStandings(standingsData.standings || []);
             }
 
             setTournamentDetails({
@@ -279,6 +294,57 @@ export function TournamentDetailsModal({
     </Stack>
   );
 
+  const renderStandingsTab = () => (
+    <Stack gap="md">
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <Loader size="md" />
+        </div>
+      ) : standings && standings.length > 0 ? (
+        <Stack gap="xs">
+          {standings.map((team, index) => (
+            <Card
+              key={team.team_id}
+              withBorder
+              p="md"
+              style={{
+                borderLeft: index === 0 ? '4px solid var(--mantine-color-yellow-5)' : undefined
+              }}
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <Group gap="md">
+                  <Avatar size="md" color={index === 0 ? 'yellow' : 'blue'} variant="filled">
+                    {index + 1}
+                  </Avatar>
+                  <div>
+                    <Text fw={500} size="sm">{team.team_name}</Text>
+                    <Text size="xs" c="dimmed">
+                      {team.matches_played} {team.matches_played === 1 ? 'match' : 'matches'} played
+                    </Text>
+                  </div>
+                </Group>
+                <Group gap="lg">
+                  <div style={{ textAlign: 'center' }}>
+                    <Text size="xs" c="dimmed" fw={500}>WINS</Text>
+                    <Text size="lg" fw={700} c="green">{team.wins}</Text>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <Text size="xs" c="dimmed" fw={500}>LOSSES</Text>
+                    <Text size="lg" fw={700} c="red">{team.losses}</Text>
+                  </div>
+                </Group>
+              </Group>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <Card withBorder p="xl">
+          <Text size="sm" c="dimmed" ta="center">No standings available yet</Text>
+        </Card>
+      )}
+    </Stack>
+  );
+
   const renderBracketTab = () => (
     <Stack gap="md">
       {tournamentDetails ? (
@@ -403,7 +469,8 @@ export function TournamentDetailsModal({
           data={[
             { label: 'Overview', value: 'overview' },
             { label: 'Teams', value: 'teams' },
-            { label: 'Bracket', value: 'bracket' }
+            { label: 'Bracket', value: 'bracket' },
+            { label: 'Standings', value: 'standings' }
           ]}
           fullWidth
         />
@@ -411,6 +478,7 @@ export function TournamentDetailsModal({
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'teams' && renderTeamsTab()}
         {activeTab === 'bracket' && renderBracketTab()}
+        {activeTab === 'standings' && renderStandingsTab()}
 
         <Divider />
 
