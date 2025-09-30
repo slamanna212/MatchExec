@@ -12,6 +12,7 @@ import {
 import { ChannelType, Client, VoiceBasedChannel } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class VoiceHandler {
   private voiceConnections = new Map<string, unknown>(); // channelId -> connection
@@ -58,7 +59,7 @@ export class VoiceHandler {
       }
 
     } catch (error) {
-      console.error('Error testing voice line for user:', error);
+      logger.error('Error testing voice line for user:', error);
       return { success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
     }
   }
@@ -66,7 +67,7 @@ export class VoiceHandler {
   async playVoiceAnnouncement(channelId: string, audioType: 'welcome' | 'nextround' | 'finish', lineNumber?: number): Promise<boolean> {
     try {
       if (!this.client.isReady() || !this.settings) {
-        console.warn('⚠️ Bot not ready or settings not loaded');
+        logger.warning('⚠️ Bot not ready or settings not loaded');
         return false;
       }
 
@@ -75,7 +76,7 @@ export class VoiceHandler {
       }
 
       if (!this.settings.announcer_voice) {
-        console.error('❌ No announcer voice selected in settings:', {
+        logger.error('❌ No announcer voice selected in settings:', {
           voice_announcements_enabled: this.settings.voice_announcements_enabled,
           announcer_voice: this.settings.announcer_voice,
           guild_id: this.settings.guild_id
@@ -89,15 +90,15 @@ export class VoiceHandler {
             `);
             
             if (fallbackVoice) {
-              console.log(`🔧 Using fallback voice: ${fallbackVoice.name} (${fallbackVoice.id})`);
+              logger.debug(`🔧 Using fallback voice: ${fallbackVoice.name} (${fallbackVoice.id})`);
               // Temporarily use this voice for this announcement
               this.settings.announcer_voice = fallbackVoice.id;
             } else {
-              console.error('❌ No voices available in database');
+              logger.error('❌ No voices available in database');
               return false;
             }
           } catch (error) {
-            console.error('❌ Error getting fallback voice:', error);
+            logger.error('❌ Error getting fallback voice:', error);
             return false;
           }
         } else {
@@ -113,7 +114,7 @@ export class VoiceHandler {
       // Get audio file path
       const audioFilePath = await this.getAudioFilePath(this.settings.announcer_voice, audioType, lineNumber);
       if (!audioFilePath) {
-        console.error(`❌ Audio file not found for ${this.settings.announcer_voice} ${audioType} ${lineNumber || 'random'}`);
+        logger.error(`❌ Audio file not found for ${this.settings.announcer_voice} ${audioType} ${lineNumber || 'random'}`);
         return false;
       }
 
@@ -121,7 +122,7 @@ export class VoiceHandler {
       return await this.connectToVoiceChannelAndPlayAudio(channelId, audioFilePath);
       
     } catch (error) {
-      console.error('❌ Error playing voice announcement:', error);
+      logger.error('❌ Error playing voice announcement:', error);
       return false;
     }
   }
@@ -136,7 +137,7 @@ export class VoiceHandler {
       `, [voiceId]);
 
       if (!voice) {
-        console.error(`❌ Voice not found: ${voiceId}`);
+        logger.error(`❌ Voice not found: ${voiceId}`);
         return null;
       }
 
@@ -152,7 +153,7 @@ export class VoiceHandler {
         // Dynamically find available files and pick a random one
         const availableFiles = await this.getAvailableAudioFiles(voiceDir, audioType);
         if (availableFiles.length === 0) {
-          console.warn(`⚠️ No ${audioType} audio files found in ${voiceDir}`);
+          logger.warning(`⚠️ No ${audioType} audio files found in ${voiceDir}`);
           return null;
         }
         
@@ -164,13 +165,13 @@ export class VoiceHandler {
       
       // Check if file exists using fs
       if (!fs.existsSync(fullPath)) {
-        console.warn(`⚠️ Audio file not found: ${fullPath}`);
+        logger.warning(`⚠️ Audio file not found: ${fullPath}`);
         return null;
       }
 
       return fullPath;
     } catch (error) {
-      console.error('❌ Error getting audio file path:', error);
+      logger.error('❌ Error getting audio file path:', error);
       return null;
     }
   }
@@ -192,7 +193,7 @@ export class VoiceHandler {
 
       return audioFiles;
     } catch (error) {
-      console.error('❌ Error getting available audio files:', error);
+      logger.error('❌ Error getting available audio files:', error);
       return [];
     }
   }
@@ -205,7 +206,7 @@ export class VoiceHandler {
       // Get the voice channel
       const channel = await this.client.channels.fetch(channelId) as VoiceBasedChannel;
       if (!channel || channel.type !== ChannelType.GuildVoice) {
-        console.error(`❌ Channel ${channelId} is not a voice channel`);
+        logger.error(`❌ Channel ${channelId} is not a voice channel`);
         this.playbackStatus.set(channelId, false);
         return false;
       }
@@ -223,7 +224,7 @@ export class VoiceHandler {
         try {
           existingConnection.destroy();
         } catch (error) {
-          console.warn(`⚠️ Error cleaning up existing connection:`, error);
+          logger.warning(`⚠️ Error cleaning up existing connection:`, error);
         }
       }
 
@@ -269,7 +270,7 @@ export class VoiceHandler {
                 }
                 this.voiceConnections.delete(channelId);
               } catch (error) {
-                console.warn(`⚠️ Error disconnecting from voice channel ${channelId}:`, error);
+                logger.warning(`⚠️ Error disconnecting from voice channel ${channelId}:`, error);
               }
             }, 1000);
             
@@ -297,7 +298,7 @@ export class VoiceHandler {
         player.once('error', (error) => {
           if (!isResolved) {
             clearTimeout(timeout);
-            console.error(`❌ Error playing voice announcement:`, error);
+            logger.error(`❌ Error playing voice announcement:`, error);
             cleanup();
             resolve(false);
           }
@@ -305,7 +306,7 @@ export class VoiceHandler {
       });
       
     } catch (error) {
-      console.error('❌ Error connecting to voice channel and playing audio:', error);
+      logger.error('❌ Error connecting to voice channel and playing audio:', error);
       this.playbackStatus.set(channelId, false);
       this.activeAudioPlayers.delete(channelId);
       return false;
@@ -333,7 +334,7 @@ export class VoiceHandler {
       }
       return false;
     } catch (error) {
-      console.error('❌ Error disconnecting from voice channel:', error);
+      logger.error('❌ Error disconnecting from voice channel:', error);
       return false;
     }
   }
@@ -344,7 +345,7 @@ export class VoiceHandler {
       try {
         (player as unknown as { stop: () => void }).stop();
       } catch (error) {
-        console.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
+        logger.error(`❌ Error stopping audio player in channel ${channelId}:`, error);
       }
     }
     this.activeAudioPlayers.clear();
@@ -357,7 +358,7 @@ export class VoiceHandler {
       try {
         (connection as unknown as { destroy: () => void }).destroy();
       } catch (error) {
-        console.error(`❌ Error disconnecting from voice channel ${channelId}:`, error);
+        logger.error(`❌ Error disconnecting from voice channel ${channelId}:`, error);
       }
     }
     this.voiceConnections.clear();
@@ -382,12 +383,12 @@ export class VoiceHandler {
       }
 
       if (!this.settings) {
-        console.error('❌ Discord settings not loaded for team announcements');
+        logger.error('❌ Discord settings not loaded for team announcements');
         return { success: false, message: 'Discord settings not loaded' };
       }
 
       if (!this.settings.voice_announcements_enabled) {
-        console.log('ℹ️ Voice announcements are disabled in settings');
+        logger.debug('ℹ️ Voice announcements are disabled in settings');
         return { success: false, message: 'Voice announcements are disabled' };
       }
 
@@ -406,18 +407,18 @@ export class VoiceHandler {
         return { success: false, message: 'No voice channels configured' };
       }
 
-      console.log(`🔊 Playing ${audioType} announcements to ${channels.length} channels, starting with ${firstTeam} team`);
+      logger.debug(`🔊 Playing ${audioType} announcements to ${channels.length} channels, starting with ${firstTeam} team`);
 
       // Play announcements sequentially
       for (const channel of channels) {
-        console.log(`🔊 Playing ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
+        logger.debug(`🔊 Playing ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
         
         const success = await this.playVoiceAnnouncement(channel.id, audioType);
         
         if (!success) {
-          console.warn(`⚠️ Failed to play ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
+          logger.warning(`⚠️ Failed to play ${audioType} announcement to ${channel.team} team channel: ${channel.id}`);
         } else {
-          console.log(`✅ Successfully played ${audioType} announcement to ${channel.team} team channel`);
+          logger.debug(`✅ Successfully played ${audioType} announcement to ${channel.team} team channel`);
         }
         
         // Longer delay between channels to ensure full cleanup and avoid conflicts
@@ -427,7 +428,7 @@ export class VoiceHandler {
       return { success: true, message: `Played ${audioType} announcements to ${channels.length} channels` };
 
     } catch (error) {
-      console.error('❌ Error playing team announcements:', error);
+      logger.error('❌ Error playing team announcements:', error);
       return { success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
     }
   }
@@ -446,7 +447,7 @@ export class VoiceHandler {
       // If no record exists or last was red, return blue. If last was blue, return red.
       return !result || result.last_first_team === 'red' ? 'blue' : 'red';
     } catch (error) {
-      console.error('❌ Error getting next first team:', error);
+      logger.error('❌ Error getting next first team:', error);
       return 'blue'; // Default to blue on error
     }
   }
@@ -463,9 +464,9 @@ export class VoiceHandler {
         VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [matchId, firstTeam, firstTeam]);
 
-      console.log(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
+      logger.debug(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
     } catch (error) {
-      console.error('❌ Error updating first team:', error);
+      logger.error('❌ Error updating first team:', error);
     }
   }
 }

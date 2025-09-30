@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface Voice {
   id: string;
@@ -21,7 +22,7 @@ export async function GET() {
 
     return NextResponse.json(voices);
   } catch (error) {
-    console.error('Error fetching voices:', error);
+    logger.error('Error fetching voices:', error);
     return NextResponse.json(
       { error: 'Failed to fetch voices' },
       { status: 500 }

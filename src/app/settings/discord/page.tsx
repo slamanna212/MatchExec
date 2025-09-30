@@ -5,6 +5,7 @@ import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface DiscordSettings {
   application_id?: string;
@@ -47,7 +48,7 @@ export default function DiscordSettingsPage() {
           });
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -97,7 +98,7 @@ export default function DiscordSettingsPage() {
         });
       }
     } catch (error) {
-      console.error('Error saving Discord settings:', error);
+      logger.error('Error saving Discord settings:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'An error occurred while saving settings.'
@@ -167,7 +168,7 @@ export default function DiscordSettingsPage() {
                           });
                         }
                       } catch (error) {
-                        console.error('Error saving application ID:', error);
+                        logger.error('Error saving application ID:', error);
                         notificationHelper.error({
                           title: 'Connection Error',
                           message: 'An error occurred while saving application ID.'

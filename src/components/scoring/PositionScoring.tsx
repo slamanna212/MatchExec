@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge } from '@mantine/core';
 import { IconTrophy, IconFlag, IconCheck } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 interface MatchGame {
   id: string;
@@ -83,7 +84,7 @@ export function PositionScoring({
           setSelectedGameId(activeGame.id);
         }
       } catch (err) {
-        console.error('Error fetching match data:', err);
+        logger.error('Error fetching match data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load match data');
       } finally {
         setLoading(false);
@@ -175,7 +176,7 @@ export function PositionScoring({
       });
       setPositionAssignments(initial);
     } catch (error) {
-      console.error('Error submitting position results:', error);
+      logger.error('Error submitting position results:', error);
       setError(error instanceof Error ? error.message : 'Failed to save results');
     }
   };

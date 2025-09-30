@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 interface TournamentWithDetails extends Tournament {
   game_name?: string;
@@ -90,7 +91,7 @@ export async function GET(
     
     return NextResponse.json(tournamentWithDetails);
   } catch (error) {
-    console.error('Error fetching tournament:', error);
+    logger.error('Error fetching tournament:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tournament' },
       { status: 500 }
@@ -141,9 +142,9 @@ export async function DELETE(
         VALUES (?, ?, 'pending')
       `, [deletionId, tournamentId]);
 
-      console.log('🗑️ Discord deletion queued for tournament:', tournamentId);
+      logger.debug('🗑️ Discord deletion queued for tournament:', tournamentId);
     } catch (error) {
-      console.error('❌ Error queuing Discord deletion:', error);
+      logger.error('❌ Error queuing Discord deletion:', error);
     }
 
     // Clean up event image if it exists
@@ -153,21 +154,21 @@ export async function DELETE(
           method: 'DELETE',
         });
         if (response.ok) {
-          console.log(`✅ Cleaned up event image for tournament: ${tournamentId}`);
+          logger.debug(`✅ Cleaned up event image for tournament: ${tournamentId}`);
         }
       } catch (error) {
-        console.error('Error cleaning up event image:', error);
+        logger.error('Error cleaning up event image:', error);
       }
     }
 
     // Delete the tournament (CASCADE will handle related records)
     await db.run('DELETE FROM tournaments WHERE id = ?', [tournamentId]);
     
-    console.log(`✅ Tournament deleted: ${tournamentId}`);
+    logger.debug(`✅ Tournament deleted: ${tournamentId}`);
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting tournament:', error);
+    logger.error('Error deleting tournament:', error);
     return NextResponse.json(
       { error: 'Failed to delete tournament' },
       { status: 500 }

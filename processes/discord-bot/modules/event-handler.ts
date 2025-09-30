@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class EventHandler {
   constructor(
@@ -30,7 +31,7 @@ export class EventHandler {
     try {
       const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
       if (!guild) {
-        console.warn('⚠️ Guild not found for Discord event creation');
+        logger.warning('⚠️ Guild not found for Discord event creation');
         return null;
       }
 
@@ -45,7 +46,7 @@ export class EventHandler {
             gameName = gameData.name;
           }
         } catch (error) {
-          console.error('Error fetching game name for Discord event:', error);
+          logger.error('Error fetching game name for Discord event:', error);
         }
       }
 
@@ -89,10 +90,10 @@ export class EventHandler {
             const imageBuffer = fs.readFileSync(imagePath);
             eventOptions.image = imageBuffer;
           } else {
-            console.warn(`⚠️ Event image not found for Discord event: ${imagePath}`);
+            logger.warning(`⚠️ Event image not found for Discord event: ${imagePath}`);
           }
         } catch (error) {
-          console.error(`❌ Error adding cover image to Discord event:`, error);
+          logger.error(`❌ Error adding cover image to Discord event:`, error);
         }
       }
 
@@ -101,7 +102,7 @@ export class EventHandler {
       return discordEvent.id;
 
     } catch (error) {
-      console.error('❌ Error creating Discord event:', error);
+      logger.error('❌ Error creating Discord event:', error);
       return null;
     }
   }
@@ -110,7 +111,7 @@ export class EventHandler {
     try {
       const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
       if (!guild) {
-        console.warn('⚠️ Guild not found for Discord event deletion');
+        logger.warning('⚠️ Guild not found for Discord event deletion');
         return false;
       }
 
@@ -119,11 +120,11 @@ export class EventHandler {
         await event.delete();
         return true;
       } else {
-        console.warn(`⚠️ Discord event not found: ${eventId}`);
+        logger.warning(`⚠️ Discord event not found: ${eventId}`);
         return false;
       }
     } catch (error) {
-      console.warn(`⚠️ Could not delete Discord event ${eventId}:`, (error as Error)?.message);
+      logger.warning(`⚠️ Could not delete Discord event ${eventId}:`, (error as Error)?.message);
       return false;
     }
   }

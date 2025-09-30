@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordBotService } from '../../../../../lib/discord-bot-service';
+import { logger } from '@/lib/logger';
 
 export async function POST() {
   try {
@@ -44,7 +45,7 @@ export async function POST() {
       );
     }
   } catch (error) {
-    console.error('Error testing voice lines:', error);
+    logger.error('Error testing voice lines:', error);
     return NextResponse.json(
       { error: 'Failed to test voice lines' },
       { status: 500 }

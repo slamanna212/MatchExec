@@ -4,6 +4,7 @@ import {
 } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings, DiscordChannel } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class ReminderHandler {
   constructor(
@@ -14,12 +15,12 @@ export class ReminderHandler {
 
   async sendPlayerReminders(matchId: string): Promise<boolean> {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
     if (!this.db) {
-      console.error('❌ Database not available');
+      logger.error('❌ Database not available');
       return false;
     }
 
@@ -44,7 +45,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!matchData) {
-        console.error('❌ Match not found for player reminders:', matchId);
+        logger.error('❌ Match not found for player reminders:', matchId);
         return false;
       }
 
@@ -98,7 +99,7 @@ export class ReminderHandler {
 
         } catch (error) {
           // failureCount++; // Commented out unused variable
-          console.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, error);
+          logger.error(`❌ Failed to send player reminder DM to ${participant.username} (${participant.discord_user_id}):`, error);
         }
       }
 
@@ -106,7 +107,7 @@ export class ReminderHandler {
       return successCount > 0; // Success if at least one DM was sent
 
     } catch (error) {
-      console.error('❌ Error sending player reminders:', error);
+      logger.error('❌ Error sending player reminders:', error);
       return false;
     }
   }
@@ -118,7 +119,7 @@ export class ReminderHandler {
     participantCount: number;
   }): Promise<boolean> {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -165,7 +166,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!matchData) {
-        console.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
+        logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
         return false;
       }
 
@@ -175,7 +176,7 @@ export class ReminderHandler {
         try {
           gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
         } catch {
-          console.warn('⚠️ Invalid game color format, using default green:', matchData.game_color);
+          logger.warning('⚠️ Invalid game color format, using default green:', matchData.game_color);
         }
       }
 
@@ -248,19 +249,19 @@ export class ReminderHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send signup notification to any channels');
+        logger.error('❌ Failed to send signup notification to any channels');
         return false;
       }
 
       return true;
 
     } catch (error) {
-      console.error('❌ Error sending signup notification:', error);
+      logger.error('❌ Error sending signup notification:', error);
       return false;
     }
   }
@@ -292,7 +293,7 @@ export class ReminderHandler {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
       } catch (error) {
-        console.error('Error parsing game color:', error);
+        logger.error('Error parsing game color:', error);
       }
     }
 
@@ -363,12 +364,12 @@ export class ReminderHandler {
 
   async sendMapCodePMs(matchId: string, mapName: string, mapCode: string): Promise<boolean> {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
     if (!this.db) {
-      console.error('❌ Database not available');
+      logger.error('❌ Database not available');
       return false;
     }
 
@@ -387,7 +388,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!matchData) {
-        console.error('❌ Match not found for map code PMs:', matchId);
+        logger.error('❌ Match not found for map code PMs:', matchId);
         return false;
       }
 
@@ -403,7 +404,7 @@ export class ReminderHandler {
       `, [matchId]);
 
       if (!participants || participants.length === 0) {
-        console.log('ℹ️ No participants configured to receive map codes for match:', matchId);
+        logger.debug('ℹ️ No participants configured to receive map codes for match:', matchId);
         return true; // Not an error, just no one to notify
       }
 
@@ -431,15 +432,15 @@ export class ReminderHandler {
 
         } catch (error) {
           // failureCount++; // Commented out unused variable
-          console.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, error);
+          logger.error(`❌ Failed to send map code DM to ${participant.username} (${participant.discord_user_id}):`, error);
         }
       }
 
-      console.log(`📱 Map code PMs sent: ${successCount} successful`);
+      logger.debug(`📱 Map code PMs sent: ${successCount} successful`);
       return successCount > 0; // Success if at least one DM was sent
 
     } catch (error) {
-      console.error('❌ Error sending map code PMs:', error);
+      logger.error('❌ Error sending map code PMs:', error);
       return false;
     }
   }
@@ -463,7 +464,7 @@ export class ReminderHandler {
       try {
         gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
       } catch (error) {
-        console.error('Error parsing game color:', error);
+        logger.error('Error parsing game color:', error);
       }
     }
 
@@ -522,7 +523,7 @@ export class ReminderHandler {
 
       const column = columnMap[notificationType];
       if (!column) {
-        console.error(`Invalid notification type: ${notificationType}`);
+        logger.error(`Invalid notification type: ${notificationType}`);
         return [];
       }
 
@@ -559,7 +560,7 @@ export class ReminderHandler {
       }));
 
     } catch (error) {
-      console.error(`Error fetching channels for ${notificationType}:`, error);
+      logger.error(`Error fetching channels for ${notificationType}:`, error);
       return [];
     }
   }

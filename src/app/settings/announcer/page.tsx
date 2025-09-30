@@ -5,6 +5,7 @@ import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2 } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -65,7 +66,7 @@ export default function AnnouncerSettingsPage() {
           form.setValues(data.announcer);
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -103,7 +104,7 @@ export default function AnnouncerSettingsPage() {
         });
       }
     } catch (error) {
-      console.error('Error saving announcer settings:', error);
+      logger.error('Error saving announcer settings:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'An error occurred while saving announcer settings.'

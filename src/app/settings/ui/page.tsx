@@ -5,6 +5,7 @@ import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;
@@ -33,7 +34,7 @@ export default function UISettingsPage() {
           form.setValues(data.ui);
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -65,7 +66,7 @@ export default function UISettingsPage() {
         });
       }
     } catch (error) {
-      console.error('Error saving UI settings:', error);
+      logger.error('Error saving UI settings:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'An error occurred while saving UI settings.'

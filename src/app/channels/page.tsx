@@ -6,6 +6,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
+import { logger } from '@/lib/logger';
 
 interface ChannelEditData {
   send_announcements: boolean;
@@ -44,7 +45,7 @@ export default function ChannelsPage() {
         setMessage({ type: 'error', text: 'Failed to fetch channels' });
       }
     } catch (error) {
-      console.error('Error fetching channels:', error);
+      logger.error('Error fetching channels:', error);
       setMessage({ type: 'error', text: 'An error occurred while fetching channels' });
     } finally {
       setLoading(false);
@@ -69,7 +70,7 @@ export default function ChannelsPage() {
         setMessage({ type: 'error', text: 'Failed to refresh channel names' });
       }
     } catch (error) {
-      console.error('Error refreshing channel names:', error);
+      logger.error('Error refreshing channel names:', error);
       setMessage({ type: 'error', text: 'An error occurred while refreshing channel names' });
     } finally {
       setRefreshing(false);
@@ -105,7 +106,7 @@ export default function ChannelsPage() {
         setMessage({ type: 'error', text: 'Failed to update notification settings' });
       }
     } catch (error) {
-      console.error('Error updating notifications:', error);
+      logger.error('Error updating notifications:', error);
       setMessage({ type: 'error', text: 'An error occurred while updating settings' });
     }
   };
@@ -127,7 +128,7 @@ export default function ChannelsPage() {
         setMessage({ type: 'error', text: 'Failed to delete channel' });
       }
     } catch (error) {
-      console.error('Error deleting channel:', error);
+      logger.error('Error deleting channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while deleting the channel' });
     }
   };

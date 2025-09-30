@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { logger } from '@/lib/logger';
 import {
   generateNextRoundMatches,
   generateLosersBracketMatches,
@@ -84,7 +85,7 @@ export async function POST(
     }
 
   } catch (error) {
-    console.error('Error progressing tournament:', error);
+    logger.error('Error progressing tournament:', error);
     return NextResponse.json(
       { error: 'Failed to progress tournament' },
       { status: 500 }
@@ -137,7 +138,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
         await queueTournamentWinnerNotification(tournamentId, completedMatches[0].winner_team);
       }
     } catch (error) {
-      console.error('Failed to queue tournament winner notification:', error);
+      logger.error('Failed to queue tournament winner notification:', error);
       // Don't fail the tournament completion if notification fails
     }
 
@@ -220,7 +221,7 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
           await queueTournamentWinnerNotification(tournamentId, latestFinal.winner_team);
         }
       } catch (error) {
-        console.error('Failed to queue tournament winner notification:', error);
+        logger.error('Failed to queue tournament winner notification:', error);
         // Don't fail the tournament completion if notification fails
       }
 

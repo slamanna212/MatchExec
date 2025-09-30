@@ -4,6 +4,7 @@ import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } 
 import { useState, useEffect } from 'react';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
+import { logger } from '@/lib/logger';
 
 export default function DevPage() {
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function DevPage() {
         setVoiceTestMessage({ type: 'error', text: error.error || 'Failed to test voice lines' });
       }
     } catch (error) {
-      console.error('Error testing voice lines:', error);
+      logger.error('Error testing voice lines:', error);
       setVoiceTestMessage({ type: 'error', text: 'Failed to test voice lines' });
     } finally {
       setVoiceTestLoading(false);

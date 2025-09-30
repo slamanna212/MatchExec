@@ -8,6 +8,7 @@ import { ReminderHandler } from './reminder-handler';
 import { EventHandler } from './event-handler';
 import { VoiceHandler } from './voice-handler';
 import { SettingsManager } from './settings-manager';
+import { logger } from '../../../src/lib/logger/server';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -131,7 +132,7 @@ export class QueueProcessor {
 
       for (const announcement of announcements) {
         try {
-          console.log(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
+          logger.debug(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
 
           // Immediately mark as processing to prevent duplicate processing by concurrent queue cycles
           const updateResult = await this.db.run(`
@@ -175,12 +176,12 @@ export class QueueProcessor {
               const timingData = JSON.parse(announcement.announcement_data);
               eventData._timingInfo = timingData;
             } catch {
-              console.warn('Could not parse timing data for timed announcement:', announcement.announcement_id);
+              logger.warning('Could not parse timing data for timed announcement:', announcement.announcement_id);
             }
           }
           
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_announcement_queue 
               SET status = 'failed', posted_at = datetime('now'), error_message = ?
@@ -237,7 +238,7 @@ export class QueueProcessor {
                 `, [messageRecordId, eventData.id as string, ((result as Record<string, unknown>).mainMessage as any).id, ((result as Record<string, unknown>).mainMessage as any).channelId, threadId, discordEventId, 'announcement']);
                 
               } catch (error) {
-                console.error('❌ Error storing Discord message tracking:', error);
+                logger.error('❌ Error storing Discord message tracking:', error);
               }
             }
 
@@ -258,7 +259,7 @@ export class QueueProcessor {
 
           }
         } catch (error) {
-          console.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
+          logger.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -269,7 +270,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing announcement queue:', error);
+      logger.error('❌ Error processing announcement queue:', error);
     }
   }
 
@@ -319,7 +320,7 @@ export class QueueProcessor {
                     await thread.delete();
                   }
                 } catch (error) {
-                  console.warn(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
+                  logger.warning(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
                 }
               }
 
@@ -331,7 +332,7 @@ export class QueueProcessor {
               }
 
             } catch (error) {
-              console.warn(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
+              logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
             }
           }
 
@@ -349,7 +350,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing deletion ${deletion.id}:`, error);
+          logger.error(`❌ Error processing deletion ${deletion.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -360,7 +361,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing deletion queue:', error);
+      logger.error('❌ Error processing deletion queue:', error);
     }
   }
 
@@ -403,7 +404,7 @@ export class QueueProcessor {
               success = true;
             }
           } catch (error) {
-            console.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
+            logger.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
             success = false;
           }
           
@@ -419,7 +420,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing status update ${update.id}:`, error);
+          logger.error(`❌ Error processing status update ${update.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_status_update_queue 
@@ -429,7 +430,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing status update queue:', error);
+      logger.error('❌ Error processing status update queue:', error);
     }
   }
 
@@ -450,7 +451,7 @@ export class QueueProcessor {
         try {
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_reminder_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -506,7 +507,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing reminder ${reminder.id}:`, error);
+          logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_reminder_queue 
@@ -516,7 +517,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing reminder queue:', error);
+      logger.error('❌ Error processing reminder queue:', error);
     }
   }
 
@@ -542,7 +543,7 @@ export class QueueProcessor {
         try {
 
           if (!this.reminderHandler) {
-            console.error('❌ ReminderHandler not available');
+            logger.error('❌ ReminderHandler not available');
             await this.db.run(`
               UPDATE discord_player_reminder_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -586,7 +587,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
+          logger.error(`❌ Error processing player reminder ${reminder.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_player_reminder_queue 
@@ -596,7 +597,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing player reminder queue:', error);
+      logger.error('❌ Error processing player reminder queue:', error);
     }
   }
 
@@ -672,7 +673,7 @@ export class QueueProcessor {
                   JSON.stringify({ success: false, message: 'Voice handler not available' }),
                   request.id
                 ]);
-                console.error(`❌ Voice handler not available for request ${request.id}`);
+                logger.error(`❌ Voice handler not available for request ${request.id}`);
                 continue;
               }
               
@@ -700,7 +701,7 @@ export class QueueProcessor {
           // Handle other request types here in the future
           
         } catch (error) {
-          console.error(`❌ Error processing request ${request.id}:`, error);
+          logger.error(`❌ Error processing request ${request.id}:`, error);
           
           // Mark request as failed
           await this.db.run(`
@@ -714,7 +715,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing Discord bot requests:', error);
+      logger.error('❌ Error processing Discord bot requests:', error);
     }
   }
 
@@ -745,7 +746,7 @@ export class QueueProcessor {
           }
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_score_notification_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -770,7 +771,7 @@ export class QueueProcessor {
           try {
             winningPlayers = JSON.parse(notification.winning_players);
           } catch {
-            console.warn('Could not parse winning players JSON for notification:', notification.id);
+            logger.warning('Could not parse winning players JSON for notification:', notification.id);
           }
 
           // Build score notification data
@@ -796,7 +797,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.log(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
+            logger.debug(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -805,10 +806,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.error(`❌ Failed to post score notification for ${notification.id}`);
+            logger.error(`❌ Failed to post score notification for ${notification.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing score notification ${notification.id}:`, error);
+          logger.error(`❌ Error processing score notification ${notification.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -819,7 +820,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing score notification queue:', error);
+      logger.error('❌ Error processing score notification queue:', error);
     }
   }
 
@@ -850,7 +851,7 @@ export class QueueProcessor {
           }
 
           if (!this.voiceHandler) {
-            console.error('❌ VoiceHandler not available');
+            logger.error('❌ VoiceHandler not available');
             await this.db.run(`
               UPDATE discord_voice_announcement_queue 
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
@@ -859,7 +860,7 @@ export class QueueProcessor {
             continue;
           }
 
-          console.log(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
+          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
 
           // Play the team announcements sequentially
           const result = await this.voiceHandler.playTeamAnnouncements(
@@ -880,7 +881,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [announcement.id]);
 
-            console.log(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
+            logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -889,10 +890,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, [result.message, announcement.id]);
 
-            console.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
+            logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
+          logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -903,7 +904,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing voice announcement queue:', error);
+      logger.error('❌ Error processing voice announcement queue:', error);
     }
   }
 
@@ -933,7 +934,7 @@ export class QueueProcessor {
           }
 
           if (!this.reminderHandler) {
-            console.error('❌ ReminderHandler not available');
+            logger.error('❌ ReminderHandler not available');
             await this.db.run(`
               UPDATE discord_map_code_queue 
               SET status = 'failed', processed_at = datetime('now'), error_message = ?
@@ -942,7 +943,7 @@ export class QueueProcessor {
             continue;
           }
 
-          console.log(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+          logger.debug(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
 
           // Send map code PMs via the reminder handler
           const result = await this.reminderHandler.sendMapCodePMs(
@@ -959,7 +960,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [mapCodeRequest.id]);
 
-            console.log(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+            logger.debug(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -968,10 +969,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, ['Failed to send map code PMs', mapCodeRequest.id]);
 
-            console.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
+            logger.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
+          logger.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -982,7 +983,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing map code queue:', error);
+      logger.error('❌ Error processing map code queue:', error);
     }
   }
 
@@ -1013,7 +1014,7 @@ export class QueueProcessor {
           }
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_match_winner_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -1027,7 +1028,7 @@ export class QueueProcessor {
           try {
             winningPlayers = JSON.parse(notification.winning_players);
           } catch {
-            console.warn('Could not parse winning players JSON for winner notification:', notification.id);
+            logger.warning('Could not parse winning players JSON for winner notification:', notification.id);
           }
 
           let result;
@@ -1046,7 +1047,7 @@ export class QueueProcessor {
               totalParticipants: notification.team1_score // Stored in team1_score
             };
 
-            console.log(`🏆 Sending tournament winner notification for ${tournamentData.tournamentName}`);
+            logger.debug(`🏆 Sending tournament winner notification for ${tournamentData.tournamentName}`);
 
             // Post the tournament winner notification (no delay needed for tournaments)
             result = await this.announcementHandler.postTournamentWinnerNotification(tournamentData);
@@ -1065,7 +1066,7 @@ export class QueueProcessor {
             };
 
             // Wait 15 seconds to ensure last map winner embed goes out first
-            console.log(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
+            logger.debug(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
             await new Promise(resolve => setTimeout(resolve, 15000));
 
             // Post the match winner notification
@@ -1080,7 +1081,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.log(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
+            logger.debug(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -1089,10 +1090,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.error(`❌ Failed to post match winner notification for ${notification.id}`);
+            logger.error(`❌ Failed to post match winner notification for ${notification.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing match winner notification ${notification.id}:`, error);
+          logger.error(`❌ Error processing match winner notification ${notification.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -1103,7 +1104,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing match winner notification queue:', error);
+      logger.error('❌ Error processing match winner notification queue:', error);
     }
   }
 
@@ -1176,7 +1177,7 @@ export class QueueProcessor {
           const channel = await this.client.channels.fetch(messageRecord.channel_id);
           
           if (!channel?.isTextBased() || !('messages' in channel)) {
-            console.warn(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
             continue;
           }
 
@@ -1184,7 +1185,7 @@ export class QueueProcessor {
           const message = await channel.messages.fetch(messageRecord.message_id);
           
           if (!message) {
-            console.warn(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
             continue;
           }
 
@@ -1238,10 +1239,10 @@ export class QueueProcessor {
                 updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
                 
               } else {
-                console.warn(`⚠️ Event image not found for reattachment: ${imagePath}`);
+                logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
               }
             } catch (error) {
-              console.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
+              logger.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
             }
           }
 
@@ -1260,19 +1261,19 @@ export class QueueProcessor {
           successCount++;
 
         } catch (error) {
-          console.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
+          logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error(`❌ Failed to update any Discord messages for match ${matchId}`);
+        logger.error(`❌ Failed to update any Discord messages for match ${matchId}`);
         return false;
       }
 
       return true;
 
     } catch (error) {
-      console.error(`❌ Error updating Discord messages for signup closure:`, error);
+      logger.error(`❌ Error updating Discord messages for signup closure:`, error);
       return false;
     }
   }
@@ -1283,7 +1284,7 @@ export class QueueProcessor {
     }
 
     try {
-      console.log(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
+      logger.debug(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
 
       // Get tournament data with image info for recreating attachments
       const tournamentData = await this.db.get<{
@@ -1305,7 +1306,7 @@ export class QueueProcessor {
         WHERE match_id = ? AND message_type = 'announcement'
       `, [tournamentId]);
 
-      console.log(`📝 Found ${messages.length} tournament messages to update`);
+      logger.debug(`📝 Found ${messages.length} tournament messages to update`);
 
       if (messages.length === 0) {
         // Let's check if there are ANY messages for this tournament
@@ -1320,7 +1321,7 @@ export class QueueProcessor {
         `, [tournamentId]);
 
         if (allMessages.length > 0) {
-          console.log(`ℹ️ Found ${allMessages.length} total messages for tournament ${tournamentId}, but none are announcements`);
+          logger.debug(`ℹ️ Found ${allMessages.length} total messages for tournament ${tournamentId}, but none are announcements`);
         }
 
         return true; // Not an error if no messages exist
@@ -1334,7 +1335,7 @@ export class QueueProcessor {
           const channel = await this.client.channels.fetch(messageRecord.channel_id);
 
           if (!channel?.isTextBased() || !('messages' in channel)) {
-            console.warn(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
             continue;
           }
 
@@ -1342,32 +1343,32 @@ export class QueueProcessor {
           const message = await channel.messages.fetch(messageRecord.message_id);
 
           if (!message) {
-            console.warn(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
             continue;
           }
 
-          console.log(`🔄 Updating tournament message ${messageRecord.message_id} in channel ${messageRecord.channel_id}`);
+          logger.debug(`🔄 Updating tournament message ${messageRecord.message_id} in channel ${messageRecord.channel_id}`);
 
           if (message.embeds[0]) {
-            console.log(`📋 Existing embed title: ${message.embeds[0].title}`);
+            logger.debug(`📋 Existing embed title: ${message.embeds[0].title}`);
           }
 
           if (message.attachments.size > 0) {
-            console.log(`📎 Message has ${message.attachments.size} attachments`);
+            logger.debug(`📎 Message has ${message.attachments.size} attachments`);
           }
 
           // Create updated embed - copy the existing embed exactly but add signups closed message
           const updatedEmbed = message.embeds[0] ?
             EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
 
-          console.log(`🔄 Processing embed update for tournament message`);
+          logger.debug(`🔄 Processing embed update for tournament message`);
 
           // Keep the image in the embed - don't remove it
           // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
           if (updatedEmbed.data.image?.url) {
-            console.log(`🖼️ Keeping existing image in embed: ${updatedEmbed.data.image.url}`);
+            logger.debug(`🖼️ Keeping existing image in embed: ${updatedEmbed.data.image.url}`);
           } else {
-            console.log(`📷 No existing image in embed`);
+            logger.debug(`📷 No existing image in embed`);
           }
 
           // Just add a simple signups closed message at the bottom, don't change anything else
@@ -1382,10 +1383,10 @@ export class QueueProcessor {
               inline: false
             }]);
           } else {
-            console.log(`📋 Signup status field already exists, not adding duplicate`);
+            logger.debug(`📋 Signup status field already exists, not adding duplicate`);
           }
 
-          console.log(`📝 Added signup closure field to tournament embed`);
+          logger.debug(`📝 Added signup closure field to tournament embed`);
 
           // Recreate attachment if there's an event image to prevent Discord from stripping it
           let attachment: AttachmentBuilder | undefined;
@@ -1403,12 +1404,12 @@ export class QueueProcessor {
                 // Update embed to use attachment://filename to reference the reattached image
                 updatedEmbed.setImage(`attachment://tournament_image.${path.extname(imagePath).slice(1)}`);
 
-                console.log(`📎 Recreated attachment for tournament image: ${imagePath}`);
+                logger.debug(`📎 Recreated attachment for tournament image: ${imagePath}`);
               } else {
-                console.warn(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
+                logger.warning(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
               }
             } catch (error) {
-              console.error(`❌ Error recreating attachment for ${tournamentData.event_image_url}:`, error);
+              logger.error(`❌ Error recreating attachment for ${tournamentData.event_image_url}:`, error);
             }
           }
 
@@ -1419,30 +1420,30 @@ export class QueueProcessor {
             files: attachment ? [attachment] : [] // Include recreated attachment if available
           };
 
-          console.log(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
+          logger.debug(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
 
           // Remove all action rows (signup buttons) but keep everything else the same
           await message.edit(editOptions);
 
-          console.log(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
+          logger.debug(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
 
           successCount++;
 
         } catch (error) {
-          console.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
+          logger.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
+        logger.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
         return false;
       }
 
-      console.log(`✅ Successfully updated ${successCount}/${messages.length} tournament messages for ${tournamentId}`);
+      logger.debug(`✅ Successfully updated ${successCount}/${messages.length} tournament messages for ${tournamentId}`);
       return true;
 
     } catch (error) {
-      console.error(`❌ Error updating Discord tournament messages for signup closure:`, error);
+      logger.error(`❌ Error updating Discord tournament messages for signup closure:`, error);
       return false;
     }
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface BracketAssignment {
   position: number;
@@ -61,7 +62,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('Error saving bracket assignments:', error);
+    logger.error('Error saving bracket assignments:', error);
     return NextResponse.json(
       { error: 'Failed to save bracket assignments' },
       { status: 500 }

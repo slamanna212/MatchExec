@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { MatchGame } from '../../../../../../shared/types';
+import { logger } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -51,7 +52,7 @@ export async function POST(
     return NextResponse.json({ success: true, note });
     
   } catch (error) {
-    console.error('Error saving map note:', error);
+    logger.error('Error saving map note:', error);
     return NextResponse.json({ error: 'Failed to save map note' }, { status: 500 });
   }
 }
@@ -79,7 +80,7 @@ export async function GET(
     return NextResponse.json({ notes: notesMap });
     
   } catch (error) {
-    console.error('Error fetching map notes:', error);
+    logger.error('Error fetching map notes:', error);
     return NextResponse.json({ error: 'Failed to fetch map notes' }, { status: 500 });
   }
 }

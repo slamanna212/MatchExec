@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface TournamentParticipant {
   id: string;
@@ -70,7 +71,7 @@ export async function GET(
         }
       }
     } catch (error) {
-      console.warn('Could not fetch signup config for tournament:', error instanceof Error ? error.message : String(error));
+      logger.warning('Could not fetch signup config for tournament:', error instanceof Error ? error.message : String(error));
       // Continue without signup config - this is non-critical
     }
 
@@ -79,7 +80,7 @@ export async function GET(
       signupConfig
     });
   } catch (error) {
-    console.error('Error fetching tournament participants:', error);
+    logger.error('Error fetching tournament participants:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tournament participants' },
       { status: 500 }

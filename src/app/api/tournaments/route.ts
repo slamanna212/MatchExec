@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { Tournament } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 interface TournamentDbRow extends Tournament {
   game_name?: string;
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(tournaments);
   } catch (error) {
-    console.error('Error fetching tournaments:', error);
+    logger.error('Error fetching tournaments:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tournaments' },
       { status: 500 }
@@ -135,11 +136,11 @@ export async function POST(request: NextRequest) {
       WHERE t.id = ?
     `, [tournamentId]);
     
-    console.log(`✅ Tournament created in "created" status: ${name}`);
+    logger.debug(`✅ Tournament created in "created" status: ${name}`);
     
     return NextResponse.json(tournament, { status: 201 });
   } catch (error) {
-    console.error('Error creating tournament:', error);
+    logger.error('Error creating tournament:', error);
     return NextResponse.json(
       { error: 'Failed to create tournament' },
       { status: 500 }

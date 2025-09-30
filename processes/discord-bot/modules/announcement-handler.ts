@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings, DiscordChannel } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class AnnouncementHandler {
   constructor(
@@ -34,7 +35,7 @@ export class AnnouncementHandler {
     start_date?: string;
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -42,7 +43,7 @@ export class AnnouncementHandler {
     const announcementChannels = await this.getChannelsForNotificationType('announcements');
     
     if (announcementChannels.length === 0) {
-      console.warn('⚠️ No channels configured for announcements');
+      logger.warning('⚠️ No channels configured for announcements');
       return false;
     }
 
@@ -114,19 +115,19 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send announcement to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send announcement to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send announcement to any channels');
+        logger.error('❌ Failed to send announcement to any channels');
         return false;
       }
 
       return { success: true, mainMessage, successCount };
 
     } catch (error) {
-      console.error('❌ Error posting event announcement:', error);
+      logger.error('❌ Error posting event announcement:', error);
       return false;
     }
   }
@@ -154,7 +155,7 @@ export class AnnouncementHandler {
             mapNotes[note.map_id] = note.notes;
           });
         } catch (error) {
-          console.error('Error fetching map notes for Discord:', error);
+          logger.error('Error fetching map notes for Discord:', error);
         }
       }
 
@@ -189,7 +190,7 @@ export class AnnouncementHandler {
 
       return thread;
     } catch (error) {
-      console.error('❌ Error creating maps thread:', error);
+      logger.error('❌ Error creating maps thread:', error);
       return null;
     }
   }
@@ -228,7 +229,7 @@ export class AnnouncementHandler {
         } else {
         }
       } catch (error) {
-        console.error('Error fetching game data:', error);
+        logger.error('Error fetching game data:', error);
       }
     }
 
@@ -282,14 +283,14 @@ export class AnnouncementHandler {
               const displayName = mapData ? mapData.name : cleanMapId;
               mapNames.push(`**${displayName}**`);
             } catch (error) {
-              console.error(`Error fetching map name for ${mapId}:`, error);
+              logger.error(`Error fetching map name for ${mapId}:`, error);
               mapNames.push(`**${cleanMapId}**`);
             }
           }
           
           mapDisplay = mapNames.join('\n');
         } catch (error) {
-          console.error('Error fetching map names for Discord:', error);
+          logger.error('Error fetching map names for Discord:', error);
           mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
         }
       } else {
@@ -331,10 +332,10 @@ export class AnnouncementHandler {
           embed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
           
         } else {
-          console.warn(`⚠️ Event image not found: ${imagePath}`);
+          logger.warning(`⚠️ Event image not found: ${imagePath}`);
         }
       } catch (error) {
-        console.error(`❌ Error handling event image ${eventImageUrl}:`, error);
+        logger.error(`❌ Error handling event image ${eventImageUrl}:`, error);
       }
     }
 
@@ -405,7 +406,7 @@ export class AnnouncementHandler {
             modeName = modeData.name;
           }
         } catch (error) {
-          console.error('Error fetching mode name:', error);
+          logger.error('Error fetching mode name:', error);
         }
       }
 
@@ -419,7 +420,7 @@ export class AnnouncementHandler {
           gameColor = parseInt(gameData.color.replace('#', ''), 16);
         }
       } catch (error) {
-        console.error('Error fetching game color for map embed:', error);
+        logger.error('Error fetching game color for map embed:', error);
       }
 
       const title = mapNumber ? `Map ${mapNumber}: ${mapData.name}` : `🗺️ ${mapData.name}`;
@@ -457,14 +458,14 @@ export class AnnouncementHandler {
             return { embed, attachment };
           }
         } catch (error) {
-          console.error(`Error handling map image for ${mapData.name}:`, error);
+          logger.error(`Error handling map image for ${mapData.name}:`, error);
         }
       }
 
       return { embed };
 
     } catch (error) {
-      console.error(`Error creating map embed for ${mapIdentifier}:`, error);
+      logger.error(`Error creating map embed for ${mapIdentifier}:`, error);
       return null;
     }
   }
@@ -484,7 +485,7 @@ export class AnnouncementHandler {
 
       const column = columnMap[notificationType];
       if (!column) {
-        console.error(`Invalid notification type: ${notificationType}`);
+        logger.error(`Invalid notification type: ${notificationType}`);
         return [];
       }
 
@@ -521,7 +522,7 @@ export class AnnouncementHandler {
       }));
 
     } catch (error) {
-      console.error(`Error fetching channels for ${notificationType}:`, error);
+      logger.error(`Error fetching channels for ${notificationType}:`, error);
       return [];
     }
   }
@@ -537,7 +538,7 @@ export class AnnouncementHandler {
     _timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' };
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -545,7 +546,7 @@ export class AnnouncementHandler {
     const reminderChannels = await this.getChannelsForNotificationType('reminders');
     
     if (reminderChannels.length === 0) {
-      console.warn('⚠️ No channels configured for reminders');
+      logger.warning('⚠️ No channels configured for reminders');
       return false;
     }
 
@@ -581,19 +582,19 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send timed reminder to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send timed reminder to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send timed reminder to any channels');
+        logger.error('❌ Failed to send timed reminder to any channels');
         return false;
       }
 
       return { success: true, successCount };
 
     } catch (error) {
-      console.error('❌ Error posting timed reminder:', error);
+      logger.error('❌ Error posting timed reminder:', error);
       return false;
     }
   }
@@ -625,7 +626,7 @@ export class AnnouncementHandler {
           }
         }
       } catch (error) {
-        console.error('Error fetching game data for reminder:', error);
+        logger.error('Error fetching game data for reminder:', error);
       }
     }
 
@@ -676,7 +677,7 @@ export class AnnouncementHandler {
           });
         }
       } catch (error) {
-        console.error('Error finding original announcement message:', error);
+        logger.error('Error finding original announcement message:', error);
       }
     }
 
@@ -695,7 +696,7 @@ export class AnnouncementHandler {
           embed.setImage(`attachment://reminder_image.${path.extname(imagePath).slice(1)}`);
         }
       } catch (error) {
-        console.error(`❌ Error handling reminder image ${eventData.event_image_url}:`, error);
+        logger.error(`❌ Error handling reminder image ${eventData.event_image_url}:`, error);
       }
     }
 
@@ -716,7 +717,7 @@ export class AnnouncementHandler {
     start_date?: string;
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -724,7 +725,7 @@ export class AnnouncementHandler {
     const matchStartChannels = await this.getChannelsForNotificationType('match_start');
     
     if (matchStartChannels.length === 0) {
-      console.warn('⚠️ No channels configured for match start notifications');
+      logger.warning('⚠️ No channels configured for match start notifications');
       return false;
     }
 
@@ -760,19 +761,19 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send match start announcement to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send match start announcement to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send match start announcement to any channels');
+        logger.error('❌ Failed to send match start announcement to any channels');
         return false;
       }
 
       return { success: true, successCount };
 
     } catch (error) {
-      console.error('❌ Error posting match start announcement:', error);
+      logger.error('❌ Error posting match start announcement:', error);
       return false;
     }
   }
@@ -831,7 +832,7 @@ export class AnnouncementHandler {
           team2Name = matchData.team2_name;
         }
       } catch (error) {
-        console.error('Error fetching match data for match start:', error);
+        logger.error('Error fetching match data for match start:', error);
       }
     }
 
@@ -881,7 +882,7 @@ export class AnnouncementHandler {
               : mapNames.join(', ');
           }
         } catch (error) {
-          console.error('Error fetching map names for match start:', error);
+          logger.error('Error fetching map names for match start:', error);
           // Keep the original mapList as fallback
         }
       }
@@ -962,7 +963,7 @@ export class AnnouncementHandler {
           }
         }
       } catch (error) {
-        console.error('Error fetching team assignments for match start:', error);
+        logger.error('Error fetching team assignments for match start:', error);
       }
     }
 
@@ -989,7 +990,7 @@ export class AnnouncementHandler {
           }]);
         }
       } catch (error) {
-        console.error('Error finding original announcement message:', error);
+        logger.error('Error finding original announcement message:', error);
       }
     }
 
@@ -1011,7 +1012,7 @@ export class AnnouncementHandler {
           embed.setImage(`attachment://match_start_image.${path.extname(imagePath).slice(1)}`);
         }
       } catch (error) {
-        console.error(`❌ Error handling match start image ${eventData.event_image_url}:`, error);
+        logger.error(`❌ Error handling match start image ${eventData.event_image_url}:`, error);
       }
     }
 
@@ -1029,7 +1030,7 @@ export class AnnouncementHandler {
     winningPlayers: string[];
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -1037,7 +1038,7 @@ export class AnnouncementHandler {
     const liveUpdateChannels = await this.getChannelsForNotificationType('match_start');
     
     if (liveUpdateChannels.length === 0) {
-      console.warn('⚠️ No channels configured for live updates');
+      logger.warning('⚠️ No channels configured for live updates');
       return false;
     }
 
@@ -1073,19 +1074,19 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send map score notification to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send map score notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send map score notification to any channels');
+        logger.error('❌ Failed to send map score notification to any channels');
         return false;
       }
 
       return { success: true, successCount };
 
     } catch (error) {
-      console.error('❌ Error posting map score notification:', error);
+      logger.error('❌ Error posting map score notification:', error);
       return false;
     }
   }
@@ -1177,7 +1178,7 @@ export class AnnouncementHandler {
           totalMaps = mapCountData.total_maps;
         }
       } catch (error) {
-        console.error('Error fetching game/map data for score notification:', error);
+        logger.error('Error fetching game/map data for score notification:', error);
       }
     }
 
@@ -1233,7 +1234,7 @@ export class AnnouncementHandler {
           embed.setImage(`attachment://${attachmentName}`);
         }
       } catch (error) {
-        console.error(`❌ Error handling map image for score notification:`, error);
+        logger.error(`❌ Error handling map image for score notification:`, error);
       }
     }
 
@@ -1252,7 +1253,7 @@ export class AnnouncementHandler {
     totalMaps: number;
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -1260,7 +1261,7 @@ export class AnnouncementHandler {
     const matchEndChannels = await this.getChannelsForNotificationType('match_start');
     
     if (matchEndChannels.length === 0) {
-      console.warn('⚠️ No channels configured for match end notifications');
+      logger.warning('⚠️ No channels configured for match end notifications');
       return false;
     }
 
@@ -1296,19 +1297,19 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Failed to send match winner notification to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Failed to send match winner notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error('❌ Failed to send match winner notification to any channels');
+        logger.error('❌ Failed to send match winner notification to any channels');
         return false;
       }
 
       return { success: true, successCount };
 
     } catch (error) {
-      console.error('❌ Error posting match winner notification:', error);
+      logger.error('❌ Error posting match winner notification:', error);
       return false;
     }
   }
@@ -1355,7 +1356,7 @@ export class AnnouncementHandler {
           team2Name = matchData.team2_name;
         }
       } catch (error) {
-        console.error('Error fetching game data for match winner notification:', error);
+        logger.error('Error fetching game data for match winner notification:', error);
       }
     }
 
@@ -1423,7 +1424,7 @@ export class AnnouncementHandler {
           }]);
         }
       } catch (error) {
-        console.error('Error finding original announcement message for match winner:', error);
+        logger.error('Error finding original announcement message for match winner:', error);
       }
     }
 
@@ -1441,7 +1442,7 @@ export class AnnouncementHandler {
     totalParticipants: number;
   }) {
     if (!this.client.isReady()) {
-      console.warn('⚠️ Bot not ready');
+      logger.warning('⚠️ Bot not ready');
       return false;
     }
 
@@ -1449,7 +1450,7 @@ export class AnnouncementHandler {
     const liveUpdateChannels = await this.getChannelsForNotificationType('match_start');
 
     if (liveUpdateChannels.length === 0) {
-      console.warn('⚠️ No channels configured for tournament winner notifications');
+      logger.warning('⚠️ No channels configured for tournament winner notifications');
       return false;
     }
 
@@ -1485,15 +1486,15 @@ export class AnnouncementHandler {
             successCount++;
           }
         } catch (error) {
-          console.error(`❌ Error sending tournament winner notification to channel ${channelConfig.discord_channel_id}:`, error);
+          logger.error(`❌ Error sending tournament winner notification to channel ${channelConfig.discord_channel_id}:`, error);
         }
       }
 
-      console.log(`🏆 Tournament winner notification sent to ${successCount}/${liveUpdateChannels.length} channels`);
+      logger.debug(`🏆 Tournament winner notification sent to ${successCount}/${liveUpdateChannels.length} channels`);
       return successCount > 0 ? { success: true } : false;
 
     } catch (error) {
-      console.error('❌ Error posting tournament winner notification:', error);
+      logger.error('❌ Error posting tournament winner notification:', error);
       return false;
     }
   }
@@ -1526,7 +1527,7 @@ export class AnnouncementHandler {
           }
         }
       } catch (error) {
-        console.error('Error fetching game data for tournament winner:', error);
+        logger.error('Error fetching game data for tournament winner:', error);
       }
     }
 

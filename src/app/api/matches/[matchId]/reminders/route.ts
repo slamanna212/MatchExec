@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 
 export async function GET(
@@ -56,7 +57,7 @@ export async function GET(
               announcements = JSON.parse(matchWithAnnouncements.announcements);
             } catch {
               // If it's not valid JSON, skip this match
-              console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
+              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
               return NextResponse.json({
                 match: {
                   id: match.id,
@@ -155,7 +156,7 @@ export async function GET(
             });
           }
         } catch (parseError) {
-          console.error('Error parsing match announcements:', parseError);
+          logger.error('Error parsing match announcements:', parseError);
         }
       }
     }
@@ -180,7 +181,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error fetching match reminders:', error);
+    logger.error('Error fetching match reminders:', error);
     return NextResponse.json(
       { error: 'Failed to fetch match reminders' },
       { status: 500 }

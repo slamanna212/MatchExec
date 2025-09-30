@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -36,7 +37,7 @@ export async function GET(
 
     return NextResponse.json({ standings });
   } catch (error) {
-    console.error('Error fetching tournament standings:', error);
+    logger.error('Error fetching tournament standings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tournament standings' },
       { status: 500 }

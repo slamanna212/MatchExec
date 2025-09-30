@@ -13,3 +13,7 @@ ALTER TABLE match_games ADD COLUMN points_awarded TEXT;
 
 -- Index for faster position-based queries
 CREATE INDEX IF NOT EXISTS idx_match_games_position_results ON match_games(position_results);
+
+-- Add log level setting to app_settings
+INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type, metadata) VALUES
+('log_level', 'warning', 'string', '{"description": "Application log level filter", "options": ["debug", "info", "warning", "error", "critical"]}');

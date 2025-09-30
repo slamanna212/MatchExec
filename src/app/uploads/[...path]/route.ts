@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -53,7 +54,7 @@ export async function GET(
     });
     
   } catch (error) {
-    console.error('Error serving uploaded file:', error);
+    logger.error('Error serving uploaded file:', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }

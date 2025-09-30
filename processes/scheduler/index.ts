@@ -2,6 +2,7 @@
 import { waitForDatabaseReady } from '../../lib/database';
 import * as cron from 'node-cron';
 import { SchedulerSettings } from '../../shared/types';
+import { logger } from '../../src/lib/logger/server';
 
 class MatchExecScheduler {
   private isRunning = false;
@@ -9,11 +10,11 @@ class MatchExecScheduler {
   private cronJobs: cron.ScheduledTask[] = [];
 
   async start() {
-    console.log('🕐 Starting MatchExec Scheduler...');
+    logger.debug('🕐 Starting MatchExec Scheduler...');
     
     try {
       // Wait for database to be ready (migrated and seeded)
-      console.log('⏳ Waiting for database to be ready...');
+      logger.debug('⏳ Waiting for database to be ready...');
       this.db = await waitForDatabaseReady();
       
       this.isRunning = true;
@@ -21,12 +22,12 @@ class MatchExecScheduler {
       // Load and start cron jobs
       await this.loadSchedulerSettings();
       
-      console.log('✅ Scheduler started successfully');
+      logger.debug('✅ Scheduler started successfully');
       
       this.keepAlive();
       
     } catch (error) {
-      console.error('❌ Failed to start scheduler:', error);
+      logger.error('❌ Failed to start scheduler:', error);
       process.exit(1);
     }
   }
@@ -39,7 +40,7 @@ class MatchExecScheduler {
       )) as SchedulerSettings | null;
 
       if (!settings) {
-        console.log('⚠️ No scheduler settings found, using defaults');
+        logger.debug('⚠️ No scheduler settings found, using defaults');
         // Use default settings if none exist
         const defaultSettings = {
           match_check_cron: '0 */1 * * * *',
@@ -50,7 +51,7 @@ class MatchExecScheduler {
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
         this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
         
-        console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
+        logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
 
@@ -65,9 +66,9 @@ class MatchExecScheduler {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
 
-      console.log(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
+      logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
-      console.error('❌ Failed to load scheduler settings:', error);
+      logger.error('❌ Failed to load scheduler settings:', error);
     }
   }
 
@@ -75,24 +76,24 @@ class MatchExecScheduler {
     try {
       if (cron.validate(cronExpression)) {
         const job = cron.schedule(cronExpression, async () => {
-          console.log(`🔄 Running ${name}...`);
+          logger.debug(`🔄 Running ${name}...`);
           try {
             await task();
-            console.log(`✅ ${name} completed`);
+            logger.debug(`✅ ${name} completed`);
           } catch (error) {
-            console.error(`❌ ${name} failed:`, error);
+            logger.error(`❌ ${name} failed:`, error);
           }
         }, {
           timezone: 'UTC'
         });
         
         this.cronJobs.push(job);
-        console.log(`📅 Scheduled ${name}: ${cronExpression}`);
+        logger.debug(`📅 Scheduled ${name}: ${cronExpression}`);
       } else {
-        console.error(`❌ Invalid cron expression for ${name}: ${cronExpression}`);
+        logger.error(`❌ Invalid cron expression for ${name}: ${cronExpression}`);
       }
     } catch (error) {
-      console.error(`❌ Failed to schedule ${name}:`, error);
+      logger.error(`❌ Failed to schedule ${name}:`, error);
     }
   }
 
@@ -109,7 +110,7 @@ class MatchExecScheduler {
     );
 
     for (const match of matchesToStart) {
-      console.log(`🏆 Starting battle phase for match: ${match.name}`);
+      logger.debug(`🏆 Starting battle phase for match: ${match.name}`);
       // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
@@ -147,7 +148,7 @@ class MatchExecScheduler {
     );
 
     for (const match of matchesToComplete) {
-      console.log(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
+      logger.debug(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
       // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
@@ -162,7 +163,7 @@ class MatchExecScheduler {
     }
 
     if (matchesToComplete.length > 0) {
-      console.log(`✅ Auto-completed ${matchesToComplete.length} matches that exceeded battle phase time limit`);
+      logger.debug(`✅ Auto-completed ${matchesToComplete.length} matches that exceeded battle phase time limit`);
     }
   }
 
@@ -187,7 +188,7 @@ class MatchExecScheduler {
       );
       
       if (!discordSettings?.match_reminder_minutes) {
-        console.log('⚠️ No Discord reminder settings found, skipping reminder queue');
+        logger.debug('⚠️ No Discord reminder settings found, skipping reminder queue');
         return;
       }
 
@@ -222,11 +223,11 @@ class MatchExecScheduler {
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
           `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
           
-          console.log(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
+          logger.debug(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
         }
       }
     } catch (error) {
-      console.error('❌ Error queueing match reminders:', error);
+      logger.error('❌ Error queueing match reminders:', error);
     }
   }
 
@@ -255,7 +256,7 @@ class MatchExecScheduler {
               WHERE id = ?
             `, [reminder.id]);
             
-            console.log(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
+            logger.debug(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
           } else {
             // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -266,7 +267,7 @@ class MatchExecScheduler {
             `, [reminder.id]);
           }
         } catch (error) {
-          console.error(`❌ Error processing reminder ${reminder.id}:`, error);
+          logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
           
           // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -278,7 +279,7 @@ class MatchExecScheduler {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing reminder queue:', error);
+      logger.error('❌ Error processing reminder queue:', error);
     }
   }
 
@@ -291,7 +292,7 @@ class MatchExecScheduler {
       );
       
       if (!discordSettings?.player_reminder_minutes) {
-        console.log('⚠️ No player reminder settings found, skipping player reminder queue');
+        logger.debug('⚠️ No player reminder settings found, skipping player reminder queue');
         return;
       }
 
@@ -336,11 +337,11 @@ class MatchExecScheduler {
             `, [reminderId, match.id, participant.user_id, reminderTime.toISOString(), reminderTime.toISOString()]);
           }
           
-          console.log(`📱 Queued player reminder DMs for match: ${match.name} (${participants.length} participants) at ${reminderTime.toISOString()}`);
+          logger.debug(`📱 Queued player reminder DMs for match: ${match.name} (${participants.length} participants) at ${reminderTime.toISOString()}`);
         }
       }
     } catch (error) {
-      console.error('❌ Error queueing player reminders:', error);
+      logger.error('❌ Error queueing player reminders:', error);
     }
   }
 
@@ -357,10 +358,10 @@ class MatchExecScheduler {
         VALUES (?, ?, 'general_reminder', datetime('now'), 'pending')
       `, [reminderId, matchId]);
       
-      console.log('📢 Discord match reminder queued for match:', matchId);
+      logger.debug('📢 Discord match reminder queued for match:', matchId);
       return true;
     } catch (error) {
-      console.error('❌ Error queuing Discord match reminder:', error);
+      logger.error('❌ Error queuing Discord match reminder:', error);
       return false;
     }
   }
@@ -378,10 +379,10 @@ class MatchExecScheduler {
         VALUES (?, ?, 'pending')
       `, [notificationId, matchId]);
       
-      console.log('🏁 Discord match start notification queued for match:', matchId);
+      logger.debug('🏁 Discord match start notification queued for match:', matchId);
       return true;
     } catch (error) {
-      console.error('❌ Error queuing Discord match start notification:', error);
+      logger.error('❌ Error queuing Discord match start notification:', error);
       return false;
     }
   }
@@ -408,7 +409,7 @@ class MatchExecScheduler {
               announcements = JSON.parse(match.announcements);
             } catch {
               // If it's not valid JSON, skip this match
-              console.log(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
+              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
               continue;
             }
           } else if (typeof match.announcements === 'number' || typeof match.announcements === 'boolean') {
@@ -425,13 +426,13 @@ class MatchExecScheduler {
             }
           } else {
             // If announcements is some other type, skip announcement processing
-            console.log(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
+            logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
             continue;
           }
 
           // Ensure announcements is an array
           if (!Array.isArray(announcements)) {
-            console.log(`⚠️ Skipping match ${match.name} - announcements is not an array`);
+            logger.debug(`⚠️ Skipping match ${match.name} - announcements is not an array`);
             continue;
           }
 
@@ -472,17 +473,17 @@ class MatchExecScheduler {
               `, [match.id, JSON.stringify(announcement)]);
               
               if (!existingAnnouncement) {
-                console.log(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
+                logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
                 await this.queueTimedAnnouncement(match.id, announcement);
               }
             }
           }
         } catch (parseError) {
-          console.error(`❌ Error parsing announcements for match ${match.id}:`, parseError);
+          logger.error(`❌ Error parsing announcements for match ${match.id}:`, parseError);
         }
       }
     } catch (error) {
-      console.error('❌ Error handling timed announcements:', error);
+      logger.error('❌ Error handling timed announcements:', error);
     }
   }
 
@@ -499,10 +500,10 @@ class MatchExecScheduler {
         ) VALUES (?, ?, 'pending', 'timed', ?)
       `, [announcementId, matchId, JSON.stringify(announcement)]);
       
-      console.log(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before)`);
+      logger.debug(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before)`);
       return true;
     } catch (error) {
-      console.error('❌ Error queuing timed announcement:', error);
+      logger.error('❌ Error queuing timed announcement:', error);
       return false;
     }
   }
@@ -520,7 +521,7 @@ class MatchExecScheduler {
     );
 
     if (result.changes > 0) {
-      console.log(`🗑️ Cleaned up ${result.changes} old matches`);
+      logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
     }
   }
 
@@ -530,13 +531,13 @@ class MatchExecScheduler {
     // Keep the process alive
     setInterval(() => {
       if (this.isRunning) {
-        console.log('🕐 Scheduler heartbeat');
+        logger.debug('🕐 Scheduler heartbeat');
       }
     }, 300000); // Every 5 minutes
   }
 
   async stop() {
-    console.log('🛑 Stopping scheduler...');
+    logger.debug('🛑 Stopping scheduler...');
     this.isRunning = false;
     
     // Stop all cron jobs
@@ -545,13 +546,13 @@ class MatchExecScheduler {
   }
 
   async reloadSettings() {
-    console.log('🔄 Reloading scheduler settings...');
+    logger.debug('🔄 Reloading scheduler settings...');
     await this.loadSchedulerSettings();
   }
 
   private async refreshChannelNames() {
     try {
-      console.log('🔄 Starting scheduled channel name refresh...');
+      logger.debug('🔄 Starting scheduled channel name refresh...');
       
       // Call the channel refresh API
       const response = await fetch('http://localhost:3000/api/channels/refresh-names', {
@@ -563,16 +564,16 @@ class MatchExecScheduler {
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✅ Channel refresh completed: ${result.updated_count}/${result.total_channels} channels updated`);
+        logger.debug(`✅ Channel refresh completed: ${result.updated_count}/${result.total_channels} channels updated`);
         
         if (result.errors && result.errors.length > 0) {
-          console.warn('⚠️ Some channels had errors during refresh:', result.errors);
+          logger.warning('⚠️ Some channels had errors during refresh:', result.errors);
         }
       } else {
-        console.error('❌ Channel refresh API returned error:', response.status);
+        logger.error('❌ Channel refresh API returned error:', response.status);
       }
     } catch (error) {
-      console.error('❌ Error during scheduled channel refresh:', error);
+      logger.error('❌ Error during scheduled channel refresh:', error);
     }
   }
 }
@@ -582,18 +583,18 @@ const scheduler = new MatchExecScheduler();
 
 // Handle process signals
 process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  logger.debug('🛑 Received SIGINT, shutting down gracefully...');
   await scheduler.stop();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  logger.debug('🛑 Received SIGTERM, shutting down gracefully...');
   await scheduler.stop();
   process.exit(0);
 });
 
 // Start the scheduler
-scheduler.start().catch(console.error);
+scheduler.start().catch(logger.error);
 
 export { MatchExecScheduler };

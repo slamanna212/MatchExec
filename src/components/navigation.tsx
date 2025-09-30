@@ -47,9 +47,11 @@ export function Navigation({ children }: NavigationProps) {
   // Fix hydration issues by ensuring component is mounted on client
   useEffect(() => {
     setMounted(true)
-    
+
     // Fetch version info from API
-    getVersionInfo().then(setVersionInfo).catch(console.error)
+    getVersionInfo().then(setVersionInfo).catch((error) => {
+      console.error('Failed to fetch version info:', error);
+    })
   }, [])
 
   const navigationItems = [

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordSettingsDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -50,7 +51,7 @@ export async function GET() {
 
     return NextResponse.json(safeSettings);
   } catch (error) {
-    console.error('Error fetching Discord settings:', error);
+    logger.error('Error fetching Discord settings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch Discord settings' },
       { status: 500 }
@@ -163,35 +164,35 @@ export async function PUT(request: NextRequest) {
         exec(`npx pm2 describe ${processName}`, (error) => {
           if (error) {
             // Process doesn't exist, start it
-            console.log(`🚀 Starting ${processName} process (not currently running)`);
+            logger.debug(`🚀 Starting ${processName} process (not currently running)`);
             exec(`npx pm2 start ecosystem${isDev ? '.dev' : ''}.config.js --only ${processName}`, (startError) => {
               if (startError) {
-                console.error(`❌ Error starting ${processName}:`, startError.message);
+                logger.error(`❌ Error starting ${processName}:`, startError.message);
               } else {
-                console.log(`✅ Successfully started ${processName} process`);
+                logger.debug(`✅ Successfully started ${processName} process`);
               }
             });
           } else {
             // Process exists, restart it
-            console.log(`🔄 Restarting ${processName} process due to Discord settings change`);
+            logger.debug(`🔄 Restarting ${processName} process due to Discord settings change`);
             exec(`npx pm2 restart ${processName}`, (restartError) => {
               if (restartError) {
-                console.error(`❌ Error restarting ${processName}:`, restartError.message);
+                logger.error(`❌ Error restarting ${processName}:`, restartError.message);
               } else {
-                console.log(`✅ Successfully restarted ${processName} process`);
+                logger.debug(`✅ Successfully restarted ${processName} process`);
               }
             });
           }
         });
 
       } catch (error) {
-        console.error('❌ Error managing Discord bot process:', error);
+        logger.error('❌ Error managing Discord bot process:', error);
       }
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating Discord settings:', error);
+    logger.error('Error updating Discord settings:', error);
     return NextResponse.json(
       { error: 'Failed to update Discord settings' },
       { status: 500 }

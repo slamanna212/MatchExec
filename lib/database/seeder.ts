@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Database } from './connection';
 import { markDbNotReady, markDbReady } from './status';
+import { logger } from '../../src/lib/logger/server';
 
 interface GameData {
   id: string;
@@ -63,12 +64,12 @@ export class DatabaseSeeder {
   }
 
   async seedDatabase(): Promise<void> {
-    console.log('🌱 Starting database seeding...');
+    logger.debug('🌱 Starting database seeding...');
     markDbNotReady('Starting database seeding...');
 
     // Seed games first
     const gameDirectories = this.getGameDirectories();
-    console.log(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
+    logger.debug(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
 
     for (let i = 0; i < gameDirectories.length; i++) {
       const gameDir = gameDirectories[i];
@@ -80,61 +81,61 @@ export class DatabaseSeeder {
     markDbNotReady('Seeding voice data...');
     await this.seedVoices();
 
-    console.log('✅ Database seeding completed');
+    logger.debug('✅ Database seeding completed');
     markDbReady();
   }
 
   private getGameDirectories(): string[] {
-    console.log(`🔍 Checking for game data directory: ${this.dataDir}`);
+    logger.debug(`🔍 Checking for game data directory: ${this.dataDir}`);
     
     if (!fs.existsSync(this.dataDir)) {
-      console.log(`❌ Game data directory not found: ${this.dataDir}`);
+      logger.debug(`❌ Game data directory not found: ${this.dataDir}`);
       return [];
     }
 
     const directories = fs.readdirSync(this.dataDir)
       .filter(dir => fs.statSync(path.join(this.dataDir, dir)).isDirectory());
     
-    console.log(`📂 Found directories: ${directories.join(', ')}`);
+    logger.debug(`📂 Found directories: ${directories.join(', ')}`);
     return directories;
   }
 
   private async seedGame(gameDir: string): Promise<void> {
-    console.log(`\n🎮 Processing game: ${gameDir}`);
+    logger.debug(`\n🎮 Processing game: ${gameDir}`);
     const gamePath = path.join(this.dataDir, gameDir);
     const gameJsonPath = path.join(gamePath, 'game.json');
 
     if (!fs.existsSync(gameJsonPath)) {
-      console.log(`❌ No game.json found for ${gameDir}`);
+      logger.debug(`❌ No game.json found for ${gameDir}`);
       return;
     }
 
     let gameData: GameData;
     try {
       gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf8'));
-      console.log(`📋 Loaded ${gameData.name} (${gameData.id}) v${gameData.dataVersion}`);
+      logger.debug(`📋 Loaded ${gameData.name} (${gameData.id}) v${gameData.dataVersion}`);
     } catch (error) {
-      console.error(`❌ Error parsing game.json for ${gameDir}:`, error);
+      logger.error(`❌ Error parsing game.json for ${gameDir}:`, error);
       return;
     }
 
     // Check if we need to seed this game
     const existingVersion = await this.getExistingDataVersion(gameData.id);
-    console.log(`🔍 Existing version: ${existingVersion || 'none'}, File version: ${gameData.dataVersion}`);
+    logger.debug(`🔍 Existing version: ${existingVersion || 'none'}, File version: ${gameData.dataVersion}`);
     
     if (existingVersion === gameData.dataVersion) {
-      console.log(`✅ ${gameData.name} already up-to-date (v${gameData.dataVersion})`);
+      logger.debug(`✅ ${gameData.name} already up-to-date (v${gameData.dataVersion})`);
       return;
     }
 
-    console.log(`🔄 Seeding ${gameData.name} (v${gameData.dataVersion})...`);
+    logger.debug(`🔄 Seeding ${gameData.name} (v${gameData.dataVersion})...`);
 
     // Seed game data
     try {
       await this.seedGameData(gameData);
-      console.log(`✅ Seeded game data for ${gameData.name}`);
+      logger.debug(`✅ Seeded game data for ${gameData.name}`);
     } catch (error) {
-      console.error(`❌ Error seeding game data for ${gameData.name}:`, error);
+      logger.error(`❌ Error seeding game data for ${gameData.name}:`, error);
       throw error;
     }
 
@@ -146,13 +147,13 @@ export class DatabaseSeeder {
         if (modesContent) {
           const modesData: ModeData[] = JSON.parse(modesContent);
           await this.seedModes(gameData.id, modesData);
-          console.log(`✅ Seeded ${modesData.length} modes for ${gameData.name}`);
+          logger.debug(`✅ Seeded ${modesData.length} modes for ${gameData.name}`);
         }
       } catch (error) {
-        console.error(`❌ Error seeding modes for ${gameData.name}:`, error);
+        logger.error(`❌ Error seeding modes for ${gameData.name}:`, error);
       }
     } else {
-      console.log(`ℹ️ No modes.json found for ${gameData.name}`);
+      logger.debug(`ℹ️ No modes.json found for ${gameData.name}`);
     }
 
     // Seed maps if they exist
@@ -163,21 +164,21 @@ export class DatabaseSeeder {
         if (mapsContent) {
           const mapsData: MapData[] = JSON.parse(mapsContent);
           await this.seedMaps(gameData.id, mapsData, gameData.supportsAllModes);
-          console.log(`✅ Seeded ${mapsData.length} maps for ${gameData.name}`);
+          logger.debug(`✅ Seeded ${mapsData.length} maps for ${gameData.name}`);
         }
       } catch (error) {
-        console.error(`❌ Error seeding maps for ${gameData.name}:`, error);
+        logger.error(`❌ Error seeding maps for ${gameData.name}:`, error);
       }
     } else {
-      console.log(`ℹ️ No maps.json found for ${gameData.name}`);
+      logger.debug(`ℹ️ No maps.json found for ${gameData.name}`);
     }
 
     // Update data version
     try {
       await this.updateDataVersion(gameData.id, gameData.dataVersion);
-      console.log(`✅ Updated ${gameData.name} version to ${gameData.dataVersion}`);
+      logger.debug(`✅ Updated ${gameData.name} version to ${gameData.dataVersion}`);
     } catch (error) {
-      console.error(`❌ Error updating version for ${gameData.name}:`, error);
+      logger.error(`❌ Error updating version for ${gameData.name}:`, error);
       throw error;
     }
   }
@@ -325,27 +326,27 @@ export class DatabaseSeeder {
   }
 
   private async seedVoices(): Promise<void> {
-    console.log('\n🔊 Processing voice data...');
+    logger.debug('\n🔊 Processing voice data...');
     const voicesJsonPath = path.join('./data', 'voices.json');
     
     if (!fs.existsSync(voicesJsonPath)) {
-      console.log('❌ No voices.json file found, skipping voice seeding');
+      logger.debug('❌ No voices.json file found, skipping voice seeding');
       return;
     }
 
     const voiceData: VoiceData = JSON.parse(fs.readFileSync(voicesJsonPath, 'utf8'));
-    console.log(`📋 Loaded voice data v${voiceData.dataVersion} with ${voiceData.voices.length} voices`);
+    logger.debug(`📋 Loaded voice data v${voiceData.dataVersion} with ${voiceData.voices.length} voices`);
 
     // Check if we need to seed voices
     const existingVoiceVersion = await this.getExistingVoiceDataVersion();
-    console.log(`🔍 Existing voice version: ${existingVoiceVersion || 'none'}, File version: ${voiceData.dataVersion}`);
+    logger.debug(`🔍 Existing voice version: ${existingVoiceVersion || 'none'}, File version: ${voiceData.dataVersion}`);
     
     if (existingVoiceVersion === voiceData.dataVersion) {
-      console.log(`✅ Voice data already up-to-date (v${voiceData.dataVersion})`);
+      logger.debug(`✅ Voice data already up-to-date (v${voiceData.dataVersion})`);
       return;
     }
 
-    console.log(`🔄 Seeding voice data v${voiceData.dataVersion}...`);
+    logger.debug(`🔄 Seeding voice data v${voiceData.dataVersion}...`);
 
     // Clear existing voice data
     await this.db.run('DELETE FROM voices');
@@ -361,7 +362,7 @@ export class DatabaseSeeder {
     // Update voice data version
     await this.updateVoiceDataVersion(voiceData.dataVersion);
     
-    console.log(`✅ Seeded ${voiceData.voices.length} voice announcers (v${voiceData.dataVersion})`);
+    logger.debug(`✅ Seeded ${voiceData.voices.length} voice announcers (v${voiceData.dataVersion})`);
   }
 
   private async getExistingVoiceDataVersion(): Promise<string | null> {

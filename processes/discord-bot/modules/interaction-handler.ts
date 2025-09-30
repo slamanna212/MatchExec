@@ -16,6 +16,7 @@ import {
 } from 'discord.js';
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
@@ -35,7 +36,7 @@ export class InteractionHandler {
 
   async registerSlashCommands() {
     if (!this.settings?.bot_token || !this.settings?.guild_id) {
-      console.warn('⚠️ Missing bot token or guild ID, skipping command registration');
+      logger.warning('Missing bot token or guild ID, skipping command registration');
       return;
     }
 
@@ -55,7 +56,7 @@ export class InteractionHandler {
       );
 
     } catch (error) {
-      console.error('❌ Error registering slash commands:', error);
+      logger.error('❌ Error registering slash commands:', error);
     }
   }
 
@@ -74,7 +75,7 @@ export class InteractionHandler {
           });
       }
     } catch (error) {
-      console.error('❌ Error handling slash command:', error);
+      logger.error('❌ Error handling slash command:', error);
       
       const errorMessage = '❌ An error occurred while processing your command.';
       
@@ -247,7 +248,7 @@ export class InteractionHandler {
       }
 
     } catch (error) {
-      console.error('❌ Error handling signup button:', error);
+      logger.error('❌ Error handling signup button:', error);
       await interaction.reply({
         content: '❌ An error occurred. Please try again.',
         flags: MessageFlags.Ephemeral
@@ -408,7 +409,7 @@ export class InteractionHandler {
       }
 
     } catch (error) {
-      console.error('❌ Error processing signup:', error);
+      logger.error('❌ Error processing signup:', error);
       
       if (error instanceof Error && error.message?.includes('UNIQUE constraint failed')) {
         await interaction.reply({
@@ -504,7 +505,7 @@ export class InteractionHandler {
         await interaction.showModal(modal);
       }
     } catch (error) {
-      console.error('❌ Error handling team selection:', error);
+      logger.error('❌ Error handling team selection:', error);
       await interaction.reply({
         content: '❌ An error occurred. Please try again.',
         flags: MessageFlags.Ephemeral

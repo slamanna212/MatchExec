@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -70,7 +71,7 @@ export async function GET(
     
     return NextResponse.json(Array.from(teamsMap.values()));
   } catch (error) {
-    console.error('Error fetching tournament teams:', error);
+    logger.error('Error fetching tournament teams:', error);
     return NextResponse.json(
       { error: 'Failed to fetch teams' },
       { status: 500 }
@@ -135,7 +136,7 @@ export async function POST(
     
     return NextResponse.json({ ...team, members: [] }, { status: 201 });
   } catch (error) {
-    console.error('Error creating team:', error);
+    logger.error('Error creating team:', error);
     return NextResponse.json(
       { error: 'Failed to create team' },
       { status: 500 }
@@ -219,7 +220,7 @@ export async function PUT(
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating team assignments:', error);
+    logger.error('Error updating team assignments:', error);
     return NextResponse.json(
       { error: 'Failed to update team assignments' },
       { status: 500 }
@@ -263,7 +264,7 @@ export async function DELETE(
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting team:', error);
+    logger.error('Error deleting team:', error);
     return NextResponse.json(
       { error: 'Failed to delete team' },
       { status: 500 }

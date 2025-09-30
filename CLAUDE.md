@@ -213,6 +213,63 @@ Individual processes only connect to the database - migrations run once at start
 - Scoring interface with format-specific components
 - Map customization (codes, notes)
 
+## Logging System
+
+The application uses a centralized logging system with configurable log levels and color-coded console output.
+
+### Log Levels
+
+Five log levels in order of increasing severity:
+
+1. **debug** (0) - Gray - Most verbose, development details
+2. **info** (1) - Cyan - Informational messages
+3. **warning** (2) - Yellow - Warnings (default level)
+4. **error** (3) - Red - Error conditions
+5. **critical** (4) - Bold Bright Red - Critical system failures
+
+Only messages at or above the configured level are displayed.
+
+### Usage
+
+```typescript
+import { logger } from '@/lib/logger';
+
+// Log at different levels
+logger.debug('Detailed debug information');
+logger.info('System started successfully');
+logger.warning('Configuration missing, using defaults');
+logger.error('Failed to process request:', error);
+logger.critical('Database connection lost');
+```
+
+### Configuration
+
+Log level is configured via the Application Settings page (`/settings/application`) and stored in the `app_settings` table:
+
+```sql
+SELECT setting_value FROM app_settings WHERE setting_key = 'log_level';
+```
+
+The logger automatically reloads the level from the database every 5 seconds (cached for performance).
+
+### API Endpoint
+
+- **GET** `/api/settings/log-level` - Retrieve current log level
+- **PUT** `/api/settings/log-level` - Update log level (triggers logger reload)
+
+### Implementation Details
+
+- **Location**: `src/lib/logger.ts`
+- **Color Detection**: Automatically detects terminal color support
+- **Performance**: 5-second cache to minimize database queries
+- **Fallback**: Defaults to 'warning' level if database unavailable
+- **Format**: `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`
+
+### Important Notes
+
+- **CLI Scripts**: Standalone utility scripts (e.g., `scripts/*.js`, `add-test-participants.js`) intentionally use native `console` methods as they run outside the application context
+- **Database Init**: `lib/database-init.ts` uses `console.error` for initialization failures since the logger depends on the database being initialized first
+- **All Application Code**: The entire running application (web app, Discord bot, scheduler) uses the centralized logger
 
 ## Technology Stack
 

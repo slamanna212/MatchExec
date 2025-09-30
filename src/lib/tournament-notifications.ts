@@ -1,4 +1,5 @@
 import { getDbInstance } from './database-init';
+import { logger } from '@/lib/logger';
 
 /**
  * Queue a Discord tournament winner notification using the existing match winner queue
@@ -25,7 +26,7 @@ export async function queueTournamentWinnerNotification(
     `, [tournamentId]);
 
     if (!tournamentData) {
-      console.error('Tournament not found for winner notification:', tournamentId);
+      logger.error('Tournament not found for winner notification:', tournamentId);
       return false;
     }
 
@@ -37,7 +38,7 @@ export async function queueTournamentWinnerNotification(
     `, [winnerId]);
 
     if (!winningTeam) {
-      console.error('Winning team not found:', winnerId);
+      logger.error('Winning team not found:', winnerId);
       return false;
     }
 
@@ -80,10 +81,10 @@ export async function queueTournamentWinnerNotification(
       1 // total_maps = 1 to indicate tournament (vs multiple maps in match)
     ]);
 
-    console.log('🏆 Tournament winner notification queued for tournament:', tournamentId);
+    logger.debug('🏆 Tournament winner notification queued for tournament:', tournamentId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing tournament winner notification:', error);
+    logger.error('❌ Error queuing tournament winner notification:', error);
     return false;
   }
 }

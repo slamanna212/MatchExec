@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface TournamentMatch {
   id: string;
@@ -118,7 +119,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error fetching tournament matches:', error);
+    logger.error('Error fetching tournament matches:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tournament matches' },
       { status: 500 }

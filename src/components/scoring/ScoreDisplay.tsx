@@ -13,6 +13,7 @@ import {
 } from '@mantine/core';
 import { IconTrophy, IconEdit, IconClock, IconAlertCircle } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 interface ScoreDisplayProps {
   matchId: string;
@@ -61,7 +62,7 @@ export function ScoreDisplay({
               setParticipants(participantsData.participants || []);
             }
           } catch (participantsError) {
-            console.warn('Failed to fetch participants:', participantsError);
+            logger.warning('Failed to fetch participants:', participantsError);
           }
         }
       } catch (err) {

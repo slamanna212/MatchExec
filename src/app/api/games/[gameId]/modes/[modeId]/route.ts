@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { ModeDataJson } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -29,14 +30,14 @@ export async function GET(
 
       return NextResponse.json(mode);
     } catch (fileError) {
-      console.error(`Error reading modes file for game ${gameId}:`, fileError);
+      logger.error(`Error reading modes file for game ${gameId}:`, fileError);
       return NextResponse.json(
         { error: `Game '${gameId}' not found or modes data unavailable` },
         { status: 404 }
       );
     }
   } catch (error) {
-    console.error('Error in GET /api/games/[gameId]/modes/[modeId]:', error);
+    logger.error('Error in GET /api/games/[gameId]/modes/[modeId]:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

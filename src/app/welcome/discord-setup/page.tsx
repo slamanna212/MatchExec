@@ -5,6 +5,7 @@ import { Title, Text, Button, Stack, Alert, Group, TextInput, PasswordInput, Che
 import { useForm } from '@mantine/form';
 import { IconExternalLink, IconArrowRight, IconBrandDiscord } from '@tabler/icons-react';
 import { useState } from 'react';
+import { logger } from '@/lib/logger';
 
 interface DiscordSettings {
   application_id: string;
@@ -56,7 +57,7 @@ export default function DiscordSetupPage() {
         setMessage({ type: 'error', text: 'Failed to save Discord settings. Please check your values and try again.' });
       }
     } catch (error) {
-      console.error('Error saving Discord settings:', error);
+      logger.error('Error saving Discord settings:', error);
       setMessage({ type: 'error', text: 'An error occurred while saving settings.' });
     } finally {
       setLoading(false);

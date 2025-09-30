@@ -1,15 +1,16 @@
 #!/usr/bin/env tsx
 
 import { spawn, exec } from 'child_process';
+import { logger } from './src/lib/logger';
 // import { promisify } from 'util'; // Currently unused
 
 // const execAsync = promisify(exec); // Currently unused
 
-console.log('🚀 Starting MatchExec application...');
+logger.debug('🚀 Starting MatchExec application...');
 
 async function runCommand(command: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log(`▶️  Running: ${command}`);
+    logger.debug(`▶️  Running: ${command}`);
     const child = exec(command, { cwd: process.cwd() });
     
     child.stdout?.on('data', (data) => {
@@ -35,12 +36,12 @@ async function runCommand(command: string): Promise<void> {
 async function start(): Promise<void> {
   try {
     // Run database migrations first
-    console.log('📊 Running database migrations and seeding...');
+    logger.debug('📊 Running database migrations and seeding...');
     await runCommand('npx tsx scripts/migrate.ts');
-    console.log('✅ Database initialization completed');
+    logger.debug('✅ Database initialization completed');
 
     // Start PM2 processes
-    console.log('🔄 Starting PM2 processes...');
+    logger.debug('🔄 Starting PM2 processes...');
     
     const pm2Process = spawn('pm2-runtime', ['ecosystem.config.js'], {
       stdio: 'inherit',
@@ -48,17 +49,17 @@ async function start(): Promise<void> {
     });
 
     pm2Process.on('exit', (code) => {
-      console.log(`PM2 process exited with code ${code}`);
+      logger.debug(`PM2 process exited with code ${code}`);
       process.exit(code || 0);
     });
 
     pm2Process.on('error', (error) => {
-      console.error('❌ PM2 process error:', error);
+      logger.error('❌ PM2 process error:', error);
       process.exit(1);
     });
     
   } catch (error) {
-    console.error('❌ Startup failed:', error instanceof Error ? error.message : error);
+    logger.error('❌ Startup failed:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }

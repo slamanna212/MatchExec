@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
 import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface SchedulerSettings {
   match_check_cron: string;
@@ -34,7 +35,7 @@ export default function SchedulerSettingsPage() {
           setSchedulerSettings(data.scheduler);
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -66,7 +67,7 @@ export default function SchedulerSettingsPage() {
         });
       }
     } catch (error) {
-      console.error('Error saving scheduler settings:', error);
+      logger.error('Error saving scheduler settings:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'An error occurred while saving scheduler settings.'

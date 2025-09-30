@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
+import { logger } from '@/lib/logger';
 
 export async function PUT(request: Request): Promise<NextResponse> {
   try {
@@ -15,7 +16,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
     return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
-          console.error('Database connection error:', err);
+          logger.error('Database connection error:', err);
           resolve(NextResponse.json({ error: 'Failed to update screen' }, { status: 500 }));
           return;
         }
@@ -27,7 +28,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
             db.close();
             
             if (err) {
-              console.error('Database update error:', err);
+              logger.error('Database update error:', err);
               resolve(NextResponse.json({ error: 'Failed to update screen' }, { status: 500 }));
               return;
             }
@@ -38,7 +39,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
       });
     });
   } catch (error) {
-    console.error('Error updating welcome flow screen:', error);
+    logger.error('Error updating welcome flow screen:', error);
     return NextResponse.json({ error: 'Failed to update screen' }, { status: 500 });
   }
 }

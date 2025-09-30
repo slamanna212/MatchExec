@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { TOURNAMENT_FLOW_STEPS, Tournament } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 // Queue a Discord match start announcement request that the Discord bot will process
 async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
@@ -16,10 +17,10 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
       VALUES (?, ?, 'match_start', 'pending')
     `, [announcementId, matchId]);
 
-    console.log('🚀 Discord match start announcement queued for match:', matchId);
+    logger.debug('🚀 Discord match start announcement queued for match:', matchId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord match start announcement:', error);
+    logger.error('❌ Error queuing Discord match start announcement:', error);
     return false;
   }
 }
@@ -36,7 +37,7 @@ async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise
     `, [tournamentId]);
 
     if (existing) {
-      console.log('📢 Discord tournament announcement already exists for tournament:', tournamentId);
+      logger.debug('📢 Discord tournament announcement already exists for tournament:', tournamentId);
       return true;
     }
 
@@ -49,10 +50,10 @@ async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise
       VALUES (?, ?, 'tournament', 'pending')
     `, [announcementId, tournamentId]);
 
-    console.log('📢 Discord tournament announcement queued for tournament:', tournamentId);
+    logger.debug('📢 Discord tournament announcement queued for tournament:', tournamentId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord tournament announcement:', error);
+    logger.error('❌ Error queuing Discord tournament announcement:', error);
     return false;
   }
 }
@@ -71,10 +72,10 @@ async function queueDiscordTournamentStatusUpdate(tournamentId: string, newStatu
       VALUES (?, ?, ?, 'pending')
     `, [updateId, tournamentId, newStatus]);
 
-    console.log('🔄 Discord tournament status update queued for tournament:', tournamentId, '-> status:', newStatus);
+    logger.debug('🔄 Discord tournament status update queued for tournament:', tournamentId, '-> status:', newStatus);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord tournament status update:', error);
+    logger.error('❌ Error queuing Discord tournament status update:', error);
     return false;
   }
 }
@@ -91,7 +92,7 @@ async function queueDiscordEventDeletion(tournamentId: string): Promise<boolean>
     `, [tournamentId]);
 
     if (!eventRecord?.discord_event_id) {
-      console.log('ℹ️ No Discord event found for tournament:', tournamentId);
+      logger.debug('ℹ️ No Discord event found for tournament:', tournamentId);
       return true; // Not an error - tournament might not have an event
     }
 
@@ -104,10 +105,10 @@ async function queueDiscordEventDeletion(tournamentId: string): Promise<boolean>
       VALUES (?, ?, 'pending')
     `, [deletionId, tournamentId]);
 
-    console.log('🗑️ Discord event deletion queued for tournament:', tournamentId);
+    logger.debug('🗑️ Discord event deletion queued for tournament:', tournamentId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord event deletion:', error);
+    logger.error('❌ Error queuing Discord event deletion:', error);
     return false;
   }
 }
@@ -187,40 +188,40 @@ export async function POST(
       WHERE id = ?
     `, [newStatus, tournamentId]);
 
-    console.log(`🏆 Tournament ${tournamentId} transitioned from ${currentTournament.status} to ${newStatus}`);
+    logger.debug(`🏆 Tournament ${tournamentId} transitioned from ${currentTournament.status} to ${newStatus}`);
 
     // Handle status-specific actions
     switch (newStatus) {
       case 'gather':
-        console.log(`📝 Tournament ${tournamentId} is now open for team signups`);
+        logger.debug(`📝 Tournament ${tournamentId} is now open for team signups`);
         
         // Queue Discord announcement for tournament signup
         const discordSuccess = await queueDiscordTournamentAnnouncement(tournamentId);
         if (!discordSuccess) {
-          console.warn('⚠️ Failed to queue Discord announcement for tournament:', tournamentId);
+          logger.warning('⚠️ Failed to queue Discord announcement for tournament:', tournamentId);
         }
         break;
         
       case 'assign':
-        console.log(`🎯 Tournament ${tournamentId} signups closed, ready for bracket assignment`);
+        logger.debug(`🎯 Tournament ${tournamentId} signups closed, ready for bracket assignment`);
 
         // Queue Discord status update when entering "assign" stage (close signups)
         try {
           const discordUpdateSuccess = await queueDiscordTournamentStatusUpdate(tournamentId, newStatus);
 
           if (discordUpdateSuccess) {
-            console.log(`🔄 Discord tournament status update queued for tournament entering assign stage: ${tournamentId}`);
+            logger.debug(`🔄 Discord tournament status update queued for tournament entering assign stage: ${tournamentId}`);
           } else {
-            console.warn(`⚠️ Failed to queue Discord tournament status update for tournament: ${tournamentId}`);
+            logger.warning(`⚠️ Failed to queue Discord tournament status update for tournament: ${tournamentId}`);
           }
         } catch (discordError) {
-          console.error('❌ Error queuing Discord tournament status update:', discordError);
+          logger.error('❌ Error queuing Discord tournament status update:', discordError);
           // Don't fail the API request if Discord queueing fails
         }
         break;
         
       case 'battle':
-        console.log(`⚔️ Tournament ${tournamentId} started - transitioning first round matches to battle`);
+        logger.debug(`⚔️ Tournament ${tournamentId} started - transitioning first round matches to battle`);
 
         // Transition all first round matches to battle status with proper notifications
         try {
@@ -247,40 +248,40 @@ export async function POST(
               const { initializeMatchGames } = await import('../../../../../lib/scoring-functions');
               await initializeMatchGames(match.id);
 
-              console.log(`🚀 Started match with notifications: ${match.name}`);
+              logger.debug(`🚀 Started match with notifications: ${match.name}`);
             } catch (matchError) {
-              console.error(`❌ Error starting match ${match.id}:`, matchError);
+              logger.error(`❌ Error starting match ${match.id}:`, matchError);
             }
           }
 
           if (firstRoundMatches.length > 0) {
-            console.log(`✅ Started ${firstRoundMatches.length} first round matches`);
+            logger.debug(`✅ Started ${firstRoundMatches.length} first round matches`);
           }
         } catch (error) {
-          console.error('❌ Error starting first round matches:', error);
+          logger.error('❌ Error starting first round matches:', error);
           // Don't fail the tournament transition if match transitions fail
         }
         break;
         
       case 'complete':
-        console.log(`🏆 Tournament ${tournamentId} has been completed`);
+        logger.debug(`🏆 Tournament ${tournamentId} has been completed`);
 
         // Queue Discord event deletion for completed tournament
         try {
           await queueDiscordEventDeletion(tournamentId);
         } catch (error) {
-          console.error('❌ Error queuing Discord event deletion for completed tournament:', error);
+          logger.error('❌ Error queuing Discord event deletion for completed tournament:', error);
         }
         break;
 
       case 'cancelled':
-        console.log(`❌ Tournament ${tournamentId} has been cancelled`);
+        logger.debug(`❌ Tournament ${tournamentId} has been cancelled`);
 
         // Queue Discord event deletion for cancelled tournament
         try {
           await queueDiscordEventDeletion(tournamentId);
         } catch (error) {
-          console.error('❌ Error queuing Discord event deletion for cancelled tournament:', error);
+          logger.error('❌ Error queuing Discord event deletion for cancelled tournament:', error);
         }
         break;
     }
@@ -309,7 +310,7 @@ export async function POST(
     return NextResponse.json(updatedTournament);
 
   } catch (error) {
-    console.error('Error transitioning tournament status:', error);
+    logger.error('Error transitioning tournament status:', error);
     return NextResponse.json(
       { error: 'Failed to transition tournament status' },
       { status: 500 }

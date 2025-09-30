@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error('Health check failed:', error);
+    logger.error('Health check failed:', error);
     return NextResponse.json(
       {
         status: 'unhealthy',

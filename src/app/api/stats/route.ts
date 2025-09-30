@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -24,7 +25,7 @@ export async function GET() {
       totalSignups
     });
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    logger.error('Error fetching stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch stats' },
       { status: 500 }

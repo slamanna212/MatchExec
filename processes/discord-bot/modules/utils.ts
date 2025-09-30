@@ -1,5 +1,6 @@
 import { Database } from '../../../lib/database/connection';
 import { DiscordChannel } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class Utils {
   constructor(private db: Database) {}
@@ -19,7 +20,7 @@ export class Utils {
 
       const column = columnMap[notificationType];
       if (!column) {
-        console.error(`Invalid notification type: ${notificationType}`);
+        logger.error(`Invalid notification type: ${notificationType}`);
         return [];
       }
 
@@ -56,7 +57,7 @@ export class Utils {
       }));
 
     } catch (error) {
-      console.error(`Error fetching channels for ${notificationType}:`, error);
+      logger.error(`Error fetching channels for ${notificationType}:`, error);
       return [];
     }
   }
@@ -68,7 +69,7 @@ export class Utils {
       const colorHex = colorString.replace('#', '');
       return parseInt(colorHex, 16);
     } catch (error) {
-      console.error('Error parsing game color:', error);
+      logger.error('Error parsing game color:', error);
       return 0x4caf50;
     }
   }

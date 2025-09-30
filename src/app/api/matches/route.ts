@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { MatchDbRow, GameDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 
 export async function GET(request: NextRequest) {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(parsedMatches);
   } catch (error) {
-    console.error('Error fetching matches:', error);
+    logger.error('Error fetching matches:', error);
     return NextResponse.json(
       { error: 'Failed to fetch matches' },
       { status: 500 }
@@ -131,24 +132,24 @@ export async function POST(request: NextRequest) {
     };
 
     // DEBUG: Log what data we received
-    console.log('DEBUG - Match creation data:');
-    console.log('  startDate:', startDate);
-    console.log('  announcements:', announcements);
-    console.log('  announcements length:', announcements?.length);
+    logger.debug('DEBUG - Match creation data:');
+    logger.debug('  startDate:', startDate);
+    logger.debug('  announcements:', announcements);
+    logger.debug('  announcements length:', announcements?.length);
     
     // NOTE: Announcements are stored in the announcements field and will be processed by the scheduler
     // The scheduler's handleTimedAnnouncements() method will queue them at the appropriate times
     if (announcements && announcements.length > 0) {
-      console.log(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
+      logger.debug(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
     }
 
     // Discord announcement will be triggered when match transitions to "gather" stage
     // Match created in "created" status - no announcement yet
-    console.log(`✅ Match created in "created" status: ${name}`);
+    logger.debug(`✅ Match created in "created" status: ${name}`);
     
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
-    console.error('Error creating match:', error);
+    logger.error('Error creating match:', error);
     return NextResponse.json(
       { error: 'Failed to create match' },
       { status: 500 }

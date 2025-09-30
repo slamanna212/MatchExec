@@ -8,6 +8,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
+import { logger } from '@/lib/logger';
 
 interface DiscordChannel {
   id: string;
@@ -46,10 +47,10 @@ export default function ChannelsSetupPage() {
 
   // Debug function to test modal opening
   const handleOpenCreateModal = () => {
-    console.log('Add Channel button clicked');
-    console.log('Current modal state:', createModalOpened);
+    logger.debug('Add Channel button clicked');
+    logger.debug('Current modal state:', createModalOpened);
     setCreateModalOpened(true);
-    console.log('Modal should now be open');
+    logger.debug('Modal should now be open');
   };
 
   const closeCreateModal = () => {
@@ -105,7 +106,7 @@ export default function ChannelsSetupPage() {
   }, []);
 
   useEffect(() => {
-    console.log('Modal state changed:', createModalOpened);
+    logger.debug('Modal state changed:', createModalOpened);
   }, [createModalOpened]);
 
   const fetchChannels = async () => {
@@ -116,7 +117,7 @@ export default function ChannelsSetupPage() {
         setChannels(data);
       }
     } catch (error) {
-      console.error('Error fetching channels:', error);
+      logger.error('Error fetching channels:', error);
     }
   };
 
@@ -132,7 +133,7 @@ export default function ChannelsSetupPage() {
         router.push('/');
       }
     } catch (error) {
-      console.error('Error completing welcome flow:', error);
+      logger.error('Error completing welcome flow:', error);
     }
   };
 
@@ -160,7 +161,7 @@ export default function ChannelsSetupPage() {
         });
       }
     } catch (error) {
-      console.error('Error creating channel:', error);
+      logger.error('Error creating channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
     } finally {
       setCreateLoading(false);
@@ -201,7 +202,7 @@ export default function ChannelsSetupPage() {
         setMessage({ type: 'error', text: 'Failed to update notification settings' });
       }
     } catch (error) {
-      console.error('Error updating notifications:', error);
+      logger.error('Error updating notifications:', error);
       setMessage({ type: 'error', text: 'An error occurred while updating settings' });
     }
   };
@@ -223,7 +224,7 @@ export default function ChannelsSetupPage() {
         setMessage({ type: 'error', text: 'Failed to delete channel' });
       }
     } catch (error) {
-      console.error('Error deleting channel:', error);
+      logger.error('Error deleting channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while deleting the channel' });
     }
   };

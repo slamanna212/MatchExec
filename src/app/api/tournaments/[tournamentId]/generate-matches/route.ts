@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { logger } from '@/lib/logger';
 import { 
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
@@ -166,7 +167,7 @@ export async function POST(
           VALUES (?, ?, 'standard', 'pending')
         `, [announcementId, match.id]);
       } catch (error) {
-        console.error(`Failed to queue announcement for match ${match.id}:`, error);
+        logger.error(`Failed to queue announcement for match ${match.id}:`, error);
         // Continue with other announcements even if one fails
       }
     }
@@ -185,7 +186,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('Error generating tournament matches:', error);
+    logger.error('Error generating tournament matches:', error);
     return NextResponse.json(
       { error: 'Failed to generate tournament matches' },
       { status: 500 }

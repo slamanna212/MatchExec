@@ -4,11 +4,13 @@ import { Card, Text, Stack, Button, Group, NumberInput, Select } from '@mantine/
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface ApplicationSettings {
   event_duration_minutes?: number;
   match_reminder_minutes?: number;
   player_reminder_minutes?: number;
+  log_level?: string;
 }
 
 export default function ApplicationSettingsPage() {
@@ -42,6 +44,7 @@ export default function ApplicationSettingsPage() {
       event_duration_minutes: 45,
       match_reminder_minutes: 10,
       player_reminder_minutes: 120,
+      log_level: 'warning',
     },
   });
 
@@ -49,25 +52,36 @@ export default function ApplicationSettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const response = await fetch('/api/settings');
-        
-        if (response.ok) {
-          const data = await response.json();
-          
+        const [settingsResponse, logLevelResponse] = await Promise.all([
+          fetch('/api/settings'),
+          fetch('/api/settings/log-level')
+        ]);
+
+        if (settingsResponse.ok) {
+          const data = await settingsResponse.json();
+
+          // Get log level
+          let logLevel = 'warning';
+          if (logLevelResponse.ok) {
+            const logLevelData = await logLevelResponse.json();
+            logLevel = logLevelData.log_level || 'warning';
+          }
+
           // Set Application form values
           form.setValues({
             event_duration_minutes: data.discord.event_duration_minutes || 45,
             match_reminder_minutes: data.discord.match_reminder_minutes || 10,
             player_reminder_minutes: data.discord.player_reminder_minutes || 120,
+            log_level: logLevel,
           });
-          
+
           // Set player reminder display values
           const playerReminderDisplay = minutesToValueUnit(data.discord.player_reminder_minutes || 120);
           setPlayerReminderValue(playerReminderDisplay.value);
           setPlayerReminderUnit(playerReminderDisplay.unit);
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -82,18 +96,27 @@ export default function ApplicationSettingsPage() {
     try {
       // Convert player reminder display values to minutes
       const playerReminderMinutes = valueUnitToMinutes(playerReminderValue, playerReminderUnit);
-      const payload = {
-        ...values,
+      const discordPayload = {
+        event_duration_minutes: values.event_duration_minutes,
+        match_reminder_minutes: values.match_reminder_minutes,
         player_reminder_minutes: playerReminderMinutes
       };
 
-      const response = await fetch('/api/settings/discord', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      // Save Discord settings and log level in parallel
+      const [discordResponse, logLevelResponse] = await Promise.all([
+        fetch('/api/settings/discord', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(discordPayload),
+        }),
+        fetch('/api/settings/log-level', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ log_level: values.log_level }),
+        })
+      ]);
 
-      if (response.ok) {
+      if (discordResponse.ok && logLevelResponse.ok) {
         notificationHelper.success({
           title: 'Settings Saved',
           message: 'Application settings saved successfully!'
@@ -105,7 +128,7 @@ export default function ApplicationSettingsPage() {
         });
       }
     } catch (error) {
-      console.error('Error saving application settings:', error);
+      logger.error('Error saving application settings:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'An error occurred while saving application settings.'
@@ -178,6 +201,38 @@ export default function ApplicationSettingsPage() {
                   />
                 </Group>
               </Stack>
+
+              <Group justify="flex-end" mt="lg">
+                <Button type="submit" loading={saving} disabled={loading}>
+                  Save Application Settings
+                </Button>
+              </Group>
+            </Stack>
+          </form>
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <form onSubmit={form.onSubmit(handleSubmit)}>
+            <Stack gap="md">
+              <div>
+                <Text size="lg" fw={600} mb="xs">Log Level</Text>
+                <Text size="sm" c="dimmed">Control the verbosity of application logs</Text>
+              </div>
+
+              <Select
+                label="Log Level"
+                description="Only log messages at or above this level will be displayed"
+                placeholder="Select log level"
+                data={[
+                  { value: 'debug', label: 'Debug (Most verbose - all messages)' },
+                  { value: 'info', label: 'Info (Informational messages and above)' },
+                  { value: 'warning', label: 'Warning (Warnings and errors only) - Default' },
+                  { value: 'error', label: 'Error (Errors only)' },
+                  { value: 'critical', label: 'Critical (Critical failures only)' }
+                ]}
+                {...form.getInputProps('log_level')}
+                disabled={loading}
+              />
 
               <Group justify="flex-end" mt="lg">
                 <Button type="submit" loading={saving} disabled={loading}>

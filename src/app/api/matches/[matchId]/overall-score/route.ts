@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOverallMatchScore } from '../../../../../lib/scoring-functions';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
     
     return NextResponse.json(score);
   } catch (error) {
-    console.error('Error fetching overall match score:', error);
+    logger.error('Error fetching overall match score:', error);
     return NextResponse.json(
       { error: 'Failed to fetch overall match score' },
       { status: 500 }

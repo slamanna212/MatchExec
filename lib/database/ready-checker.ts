@@ -1,5 +1,6 @@
 import { Database } from './connection';
 import { readDbStatus } from './status';
+import { logger } from '../../src/lib/logger/server';
 
 export class DatabaseReadinessChecker {
   private db: Database;
@@ -11,7 +12,7 @@ export class DatabaseReadinessChecker {
   async waitForReady(maxWaitTimeMs: number = 60000, checkIntervalMs: number = 1000): Promise<void> {
     const startTime = Date.now();
 
-    console.log('⏳ Waiting for database to be ready...');
+    logger.debug('⏳ Waiting for database to be ready...');
 
     while (Date.now() - startTime < maxWaitTimeMs) {
       // First check the status file to avoid database locks during seeding
@@ -21,14 +22,14 @@ export class DatabaseReadinessChecker {
         // Verify database is actually accessible
         try {
           await this.checkDatabaseReady();
-          console.log('✅ Database is ready');
+          logger.debug('✅ Database is ready');
           return;
         } catch (error) {
-          console.log('⏳ Status indicates ready but database not accessible yet, waiting...');
+          logger.debug('⏳ Status indicates ready but database not accessible yet, waiting...');
         }
       } else {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        console.log(`⏳ ${status.progress} (${elapsed}s elapsed)`);
+        logger.debug(`⏳ ${status.progress} (${elapsed}s elapsed)`);
       }
 
       await this.sleep(checkIntervalMs);

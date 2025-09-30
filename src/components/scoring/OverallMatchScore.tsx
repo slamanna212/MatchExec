@@ -14,6 +14,7 @@ import {
   Progress
 } from '@mantine/core';
 import { IconTrophy, IconUsers, IconTarget } from '@tabler/icons-react';
+import { logger } from '@/lib/logger';
 
 interface OverallMatchScoreProps {
   matchId: string;
@@ -120,7 +121,7 @@ export function OverallMatchScore({ matchId }: OverallMatchScoreProps) {
         }
 
       } catch (err) {
-        console.error('Error fetching overall match score:', err);
+        logger.error('Error fetching overall match score:', err);
         setError(err instanceof Error ? err.message : 'Failed to load match score');
       } finally {
         setLoading(false);
