@@ -8,7 +8,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface DiscordChannel {
   id: string;

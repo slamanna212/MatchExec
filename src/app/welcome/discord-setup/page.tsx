@@ -5,7 +5,7 @@ import { Title, Text, Button, Stack, Alert, Group, TextInput, PasswordInput, Che
 import { useForm } from '@mantine/form';
 import { IconExternalLink, IconArrowRight, IconBrandDiscord } from '@tabler/icons-react';
 import { useState } from 'react';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface DiscordSettings {
   application_id: string;

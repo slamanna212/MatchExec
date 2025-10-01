@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge, Box } from '@mantine/core';
 import { IconTrophy, IconFlag, IconCheck } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface MatchGame {
   id: string;

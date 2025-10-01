@@ -5,7 +5,7 @@ import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;

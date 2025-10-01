@@ -5,7 +5,7 @@ import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface DiscordSettings {
   application_id?: string;

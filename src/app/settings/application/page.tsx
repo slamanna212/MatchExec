@@ -4,7 +4,7 @@ import { Card, Text, Stack, Button, Group, NumberInput, Select } from '@mantine/
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { notificationHelper } from '@/lib/notifications';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface ApplicationSettings {
   event_duration_minutes?: number;
