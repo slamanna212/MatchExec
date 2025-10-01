@@ -24,6 +24,9 @@ COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
 
+# Prune dev dependencies while we still have build tools (needed for native modules on ARM)
+RUN npm prune --omit=dev
+
 FROM node:24-alpine AS runner
 WORKDIR /app
 
@@ -56,7 +59,7 @@ ENV S6_VERBOSITY=2
 RUN addgroup -g 1001 abc && \
     adduser -u 1001 -G abc -h /config -s /bin/bash -D abc
 
-# Copy built application
+# Copy built Next.js application (includes minimal node_modules)
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=abc:abc /app/.next/standalone ./
 COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
@@ -70,8 +73,10 @@ COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
-# Copy node_modules from standalone output (Next.js includes only required runtime deps)
-COPY --from=builder /app/.next/standalone/node_modules ./node_modules
+# Copy production node_modules from builder (already pruned and includes ARM-compiled binaries)
+# Next.js standalone has its own optimized subset, this adds the missing process deps
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy s6-overlay configuration
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
