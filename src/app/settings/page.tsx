@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Group, SimpleGrid } from '@mantine/core';
+import { Card, Text, Stack, Group } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { 
   IconAdjustments, 

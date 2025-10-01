@@ -24,7 +24,7 @@ export class DatabaseReadinessChecker {
           await this.checkDatabaseReady();
           logger.debug('✅ Database is ready');
           return;
-        } catch (error) {
+        } catch {
           logger.debug('⏳ Status indicates ready but database not accessible yet, waiting...');
         }
       } else {

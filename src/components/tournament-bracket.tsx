@@ -13,7 +13,7 @@ import {
   Select,
   Divider
 } from '@mantine/core';
-import { IconTrophy, IconNetwork } from '@tabler/icons-react';
+import { IconTrophy } from '@tabler/icons-react';
 
 interface BracketMatch {
   id: string;
@@ -340,7 +340,7 @@ export function TournamentBracket({
                     Round {round}
                   </Text>
                   <Stack gap="md" style={{ position: 'relative' }}>
-                    {roundMatches.map((match, matchIndex) => (
+                    {roundMatches.map((match) => (
                       <div key={match.id} style={{ position: 'relative' }}>
                         {renderMatchCard(match)}
                         {/* Connector line to next round */}

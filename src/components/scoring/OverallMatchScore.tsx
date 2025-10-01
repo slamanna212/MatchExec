@@ -80,7 +80,6 @@ export function OverallMatchScore({ matchId }: OverallMatchScoreProps) {
           for (const game of fetchedGames) {
             if (game.points_awarded && game.position_results) {
               const points = JSON.parse(game.points_awarded) as Record<string, number>;
-              const positions = JSON.parse(game.position_results) as Record<string, number>;
 
               for (const [participantId, pointsEarned] of Object.entries(points)) {
                 if (!participantScores[participantId]) {

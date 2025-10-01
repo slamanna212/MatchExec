@@ -23,7 +23,7 @@ class ServerLogger extends BaseLogger {
           timestamp: Date.now(),
         };
       }
-    } catch (error) {
+    } catch {
       // Fallback to warning if database not available
       this.currentLevel = 'warning';
     }

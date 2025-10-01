@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge, Box } from '@mantine/core';
-import { IconTrophy, IconFlag, IconCheck, IconClock } from '@tabler/icons-react';
+import { IconTrophy, IconFlag, IconCheck } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
@@ -30,11 +30,6 @@ interface PositionScoringProps {
   gameType: string;
   onResultSubmit: (result: MatchResult) => Promise<void>;
   submitting: boolean;
-}
-
-interface PositionAssignment {
-  participantId: string;
-  position: number | null;
 }
 
 export function PositionScoring({
