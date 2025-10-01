@@ -56,11 +56,7 @@ ENV S6_VERBOSITY=2
 RUN addgroup -g 1001 abc && \
     adduser -u 1001 -G abc -h /config -s /bin/bash -D abc
 
-# Install production dependencies first
-COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev
-
-# Copy built Next.js application (this includes optimized node_modules that will merge with above)
+# Copy built Next.js application (includes minimal node_modules)
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=abc:abc /app/.next/standalone ./
 COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
@@ -73,6 +69,11 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
+
+# Install production dependencies for bot/scheduler processes
+# Next.js standalone already has its own optimized node_modules
+COPY --from=builder /app/package.json /app/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy s6-overlay configuration
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
