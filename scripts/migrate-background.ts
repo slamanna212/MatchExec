@@ -4,7 +4,7 @@ import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
 import { markDbNotReady } from '../lib/database/status';
-import { logger } from '../src/lib/logger';
+import { logger } from '../src/lib/logger/server';
 
 async function runMigrationsInBackground() {
   // Mark as not ready immediately

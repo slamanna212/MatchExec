@@ -1,4 +1,4 @@
-import { logger } from '../src/lib/logger';
+import { logger } from '../src/lib/logger/server';
 
 export interface EventAnnouncementData {
   id: string;

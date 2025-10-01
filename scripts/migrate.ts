@@ -3,7 +3,7 @@
 import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
-import { logger } from './src/lib/logger';
+import { logger } from '../src/lib/logger/server';
 
 async function runMigrations() {
   

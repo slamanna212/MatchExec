@@ -3,16 +3,4 @@
 // to avoid bundling both versions
 
 // For Next.js, we conditionally export based on environment
-const isServer = typeof window === 'undefined';
-
-if (isServer) {
-  // Next.js server components get the server logger
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const serverExports = require('./server');
-  module.exports = serverExports;
-} else {
-  // Next.js client components get the client logger
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const clientExports = require('./client');
-  module.exports = clientExports;
-}
+export * from './server';

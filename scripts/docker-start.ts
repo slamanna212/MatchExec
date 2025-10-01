@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { spawn, exec } from 'child_process';
-import { logger } from './src/lib/logger';
+import { logger } from '../src/lib/logger/server';
 // import { promisify } from 'util'; // Currently unused
 
 // const execAsync = promisify(exec); // Currently unused
