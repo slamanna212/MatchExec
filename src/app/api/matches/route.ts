@@ -14,12 +14,14 @@ export async function GET(request: NextRequest) {
     let query = `
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
              t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
-             gm.name as map_name
+             gm.name as map_name,
+             COUNT(DISTINCT mp.id) as participant_count
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       LEFT JOIN tournament_matches tm ON m.id = tm.match_id
       LEFT JOIN tournaments t ON tm.tournament_id = t.id
       LEFT JOIN game_maps gm ON m.map_id = gm.id AND m.game_id = gm.game_id
+      LEFT JOIN match_participants mp ON m.id = mp.match_id
     `;
     
     const params: string[] = [];
@@ -30,8 +32,8 @@ export async function GET(request: NextRequest) {
       // Default behavior: show all matches EXCEPT completed ones
       query += ` WHERE m.status != 'complete'`;
     }
-    
-    query += ` ORDER BY m.start_time ASC`;
+
+    query += ` GROUP BY m.id ORDER BY m.start_time ASC`;
     
     const matches = await db.all<MatchDbRow>(query, params);
     

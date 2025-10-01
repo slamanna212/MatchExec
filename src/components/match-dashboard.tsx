@@ -164,8 +164,8 @@ const MatchCard = memo(({
         </Group>
         
         <Group justify="space-between">
-          <Text size="sm" c="dimmed">Max Participants:</Text>
-          <Text size="sm">{match.max_participants}</Text>
+          <Text size="sm" c="dimmed">Participants:</Text>
+          <Text size="sm">{(match as any).participant_count || 0}/{match.max_participants}</Text>
         </Group>
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Starts:</Text>
