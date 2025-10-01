@@ -13,7 +13,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
-  IconTournament,
+  IconTrophy,
   IconDeviceGamepad2,
   IconSettings,
   IconCode,
@@ -26,7 +26,9 @@ import {
   IconBrandDiscord,
   IconPaint,
   IconVolume,
-  IconInfoCircle
+  IconInfoCircle,
+  IconHome,
+  IconSwords
 } from '@tabler/icons-react'
 import { getVersionInfo, VersionInfo } from '@/lib/version-client'
 
@@ -45,25 +47,40 @@ export function Navigation({ children }: NavigationProps) {
   // Fix hydration issues by ensuring component is mounted on client
   useEffect(() => {
     setMounted(true)
-    
+
     // Fetch version info from API
-    getVersionInfo().then(setVersionInfo).catch(console.error)
+    getVersionInfo().then(setVersionInfo).catch((error) => {
+      console.error('Failed to fetch version info:', error);
+    })
   }, [])
 
   const navigationItems = [
-    { 
-      label: 'Matches', 
-      href: '/', 
-      icon: IconTournament,
+    {
+      label: 'Home',
+      href: '/',
+      icon: IconHome
+    },
+    {
+      label: 'Matches',
+      href: '/matches',
+      icon: IconSwords,
       links: [
         { label: 'History', href: '/matches/history', icon: IconHistory }
       ]
     },
+    {
+      label: 'Tournaments',
+      href: '/tournaments',
+      icon: IconTrophy,
+      links: [
+        { label: 'History', href: '/tournaments/history', icon: IconHistory }
+      ]
+    },
     { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
     { label: 'Channels', href: '/channels', icon: IconHash },
-    { 
-      label: 'Settings', 
-      href: '/settings', 
+    {
+      label: 'Settings',
+      href: '/settings',
       icon: IconSettings,
       links: [
         { label: 'Application', href: '/settings/application', icon: IconAdjustments },
@@ -174,6 +191,8 @@ export function Navigation({ children }: NavigationProps) {
             // If item has links, don't handle click on parent (let it toggle)
             // const hasChildren = item.links && item.links.length > 0;
             const isSettingsPage = pathname?.startsWith('/settings');
+            const isTournamentsPage = pathname?.startsWith('/tournaments');
+            const isMatchesPage = pathname?.startsWith('/matches');
             
             return (
               <div key={item.href}>
@@ -181,7 +200,12 @@ export function Navigation({ children }: NavigationProps) {
                   href={item.href}
                   label={item.label}
                   leftSection={<item.icon size="1rem" />}
-                  active={mounted && (pathname === item.href || (item.href === '/settings' && pathname?.startsWith('/settings')))}
+                  active={mounted && (
+                    pathname === item.href ||
+                    (item.href === '/settings' && pathname?.startsWith('/settings')) ||
+                    (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
+                    (item.href === '/matches' && pathname?.startsWith('/matches'))
+                  )}
                   childrenOffset={0}
                   c="#F5F5F5"
                   styles={{
@@ -200,8 +224,12 @@ export function Navigation({ children }: NavigationProps) {
                     if (opened) toggle() // Close mobile menu after navigation only if open
                   }}
                 />
-                {/* Only show nested links for Settings when on settings page */}
-                {item.links && (item.href === '/settings' ? isSettingsPage : true) && item.links.map((link) => (
+                {/* Show nested links based on current page */}
+                {item.links && (
+                  (item.href === '/settings' && isSettingsPage) ||
+                  (item.href === '/tournaments' && isTournamentsPage) ||
+                  (item.href === '/matches' && isMatchesPage)
+                ) && item.links.map((link) => (
                   <NavLink
                     key={link.href}
                     href={link.href}

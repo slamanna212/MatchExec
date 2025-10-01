@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Group, SimpleGrid } from '@mantine/core';
+import { Card, Text, Stack, Group } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { 
   IconAdjustments, 
@@ -20,8 +20,8 @@ const settingsCategories = [
     color: '#27ae60',
   },
   {
-    title: 'Announcer', 
-    description: 'Configure voice announcements for matches',
+    title: 'Announcer',
+    description: 'Configure voice announcements and TTS for matches',
     href: '/settings/announcer',
     icon: IconVolume,
     color: '#e67e22',
@@ -29,7 +29,7 @@ const settingsCategories = [
   {
     title: 'Scheduler',
     description: 'Configure automated tasks and their timing',
-    href: '/settings/scheduler', 
+    href: '/settings/scheduler',
     icon: IconClock,
     color: '#9b59b6',
   },
@@ -42,7 +42,7 @@ const settingsCategories = [
   },
   {
     title: 'UI',
-    description: 'Configure user interface behavior and appearance', 
+    description: 'Configure user interface behavior and appearance',
     href: '/settings/ui',
     icon: IconPaint,
     color: '#f39c12',
@@ -65,7 +65,14 @@ export default function SettingsPage() {
           </Group>
         </div>
 
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+            gap: '1rem',
+            gridAutoRows: '1fr'
+          }}
+        >
           {settingsCategories.map((category) => {
             const IconComponent = category.icon;
             return (
@@ -75,10 +82,13 @@ export default function SettingsPage() {
                 padding="lg"
                 radius="md"
                 withBorder
-                style={{ 
+                style={{
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  height: '100%'
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
@@ -90,25 +100,34 @@ export default function SettingsPage() {
                 }}
                 onClick={() => router.push(category.href)}
               >
-                <Group align="flex-start" gap="md">
-                  <div 
-                    style={{ 
+                <Group align="center" gap="md" style={{ width: '100%' }}>
+                  <div
+                    style={{
                       backgroundColor: `${category.color}15`,
                       color: category.color,
                       padding: '12px',
                       borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      flexShrink: 0
                     }}
                   >
                     <IconComponent size="1.5rem" />
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <Text size="md" fw={600} mb="xs">
                       {category.title}
                     </Text>
-                    <Text size="sm" c="dimmed" style={{ lineHeight: 1.4 }}>
+                    <Text
+                      size="sm"
+                      c="dimmed"
+                      style={{
+                        lineHeight: 1.4,
+                        wordWrap: 'break-word',
+                        hyphens: 'auto'
+                      }}
+                    >
                       {category.description}
                     </Text>
                   </div>
@@ -116,7 +135,7 @@ export default function SettingsPage() {
               </Card>
             );
           })}
-        </SimpleGrid>
+        </div>
       </Stack>
     </div>
   );

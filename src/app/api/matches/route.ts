@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { MatchDbRow, GameDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 
 export async function GET(request: NextRequest) {
@@ -11,9 +12,14 @@ export async function GET(request: NextRequest) {
     const db = await getDbInstance();
     
     let query = `
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
+             t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
+             gm.name as map_name
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
+      LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+      LEFT JOIN tournaments t ON tm.tournament_id = t.id
+      LEFT JOIN game_maps gm ON m.map_id = gm.id AND m.game_id = gm.game_id
     `;
     
     const params: string[] = [];
@@ -32,13 +38,13 @@ export async function GET(request: NextRequest) {
     // Parse maps and map codes JSON for each match
     const parsedMatches = matches.map(match => ({
       ...match,
-      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
+      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : (match.map_id ? [match.map_id] : []),
       map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
     }));
     
     return NextResponse.json(parsedMatches);
   } catch (error) {
-    console.error('Error fetching matches:', error);
+    logger.error('Error fetching matches:', error);
     return NextResponse.json(
       { error: 'Failed to fetch matches' },
       { status: 500 }
@@ -126,24 +132,24 @@ export async function POST(request: NextRequest) {
     };
 
     // DEBUG: Log what data we received
-    console.log('DEBUG - Match creation data:');
-    console.log('  startDate:', startDate);
-    console.log('  announcements:', announcements);
-    console.log('  announcements length:', announcements?.length);
+    logger.debug('DEBUG - Match creation data:');
+    logger.debug('  startDate:', startDate);
+    logger.debug('  announcements:', announcements);
+    logger.debug('  announcements length:', announcements?.length);
     
     // NOTE: Announcements are stored in the announcements field and will be processed by the scheduler
     // The scheduler's handleTimedAnnouncements() method will queue them at the appropriate times
     if (announcements && announcements.length > 0) {
-      console.log(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
+      logger.debug(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
     }
 
     // Discord announcement will be triggered when match transitions to "gather" stage
     // Match created in "created" status - no announcement yet
-    console.log(`✅ Match created in "created" status: ${name}`);
+    logger.debug(`✅ Match created in "created" status: ${name}`);
     
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
-    console.error('Error creating match:', error);
+    logger.error('Error creating match:', error);
     return NextResponse.json(
       { error: 'Failed to create match' },
       { status: 500 }

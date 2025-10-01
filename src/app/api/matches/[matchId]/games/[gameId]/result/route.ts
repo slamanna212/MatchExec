@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveMatchResult, getMatchResult } from '../../../../../../../lib/scoring-functions';
 import { MatchResult } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error getting match result:', error);
+    logger.error('Error getting match result:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to get match result' },
       { status: 500 }
@@ -66,7 +67,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('Error saving match result:', error);
+    logger.error('Error saving match result:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to save match result' },
       { status: 500 }

@@ -5,6 +5,7 @@ import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, Te
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import { LazyImage } from '@/components/LazyImage';
+import { logger } from '@/lib/logger';
 
 interface Game {
   id: string;
@@ -60,10 +61,10 @@ export default function GamesPage() {
           const gamesData = await response.json();
           setGames(gamesData);
         } else {
-          console.error('Failed to fetch games');
+          logger.error('Failed to fetch games');
         }
       } catch (error) {
-        console.error('Error fetching games:', error);
+        logger.error('Error fetching games:', error);
       } finally {
         setLoading(false);
       }
@@ -84,10 +85,10 @@ export default function GamesPage() {
         const mapsData = await response.json();
         setMaps(mapsData);
       } else {
-        console.error('Failed to fetch maps');
+        logger.error('Failed to fetch maps');
       }
     } catch (error) {
-      console.error('Error fetching maps:', error);
+      logger.error('Error fetching maps:', error);
     } finally {
       setModalLoading(false);
     }
@@ -104,10 +105,10 @@ export default function GamesPage() {
         const modesData = await response.json();
         setModes(modesData);
       } else {
-        console.error('Failed to fetch modes');
+        logger.error('Failed to fetch modes');
       }
     } catch (error) {
-      console.error('Error fetching modes:', error);
+      logger.error('Error fetching modes:', error);
     } finally {
       setModalLoading(false);
     }

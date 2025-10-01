@@ -27,7 +27,7 @@ export class Database {
         if (err) {
           reject(err);
         } else {
-          console.log(`Connected to SQLite database at ${this.dbPath}`);
+          // Don't log here to avoid circular dependency with logger
           resolve();
         }
       });

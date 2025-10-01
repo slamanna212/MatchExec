@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function PUT(
   request: NextRequest,
@@ -58,7 +59,7 @@ export async function PUT(
       message: 'Channel notification settings updated successfully' 
     });
   } catch (error) {
-    console.error('Error updating Discord channel:', error);
+    logger.error('Error updating Discord channel:', error);
     return NextResponse.json(
       { error: 'Failed to update Discord channel' },
       { status: 500 }
@@ -94,7 +95,7 @@ export async function DELETE(
       message: 'Channel deleted successfully' 
     });
   } catch (error) {
-    console.error('Error deleting Discord channel:', error);
+    logger.error('Error deleting Discord channel:', error);
     return NextResponse.json(
       { error: 'Failed to delete Discord channel' },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { MatchDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -53,7 +54,7 @@ export async function POST(
       mapCodes 
     });
   } catch (error) {
-    console.error('Error saving map codes:', error);
+    logger.error('Error saving map codes:', error);
     return NextResponse.json(
       { error: 'Failed to save map codes' },
       { status: 500 }
@@ -88,7 +89,7 @@ export async function GET(
       mapCodes 
     });
   } catch (error) {
-    console.error('Error retrieving map codes:', error);
+    logger.error('Error retrieving map codes:', error);
     return NextResponse.json(
       { error: 'Failed to retrieve map codes' },
       { status: 500 }

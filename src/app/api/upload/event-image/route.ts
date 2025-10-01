@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error uploading event image:', error);
+    logger.error('Error uploading event image:', error);
     return NextResponse.json(
       { error: 'Failed to upload image' },
       { status: 500 }
@@ -140,13 +141,13 @@ export async function DELETE(request: NextRequest) {
     // Check if file exists and delete it
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log(`✅ Deleted event image: ${filename}`);
+      logger.debug(`✅ Deleted event image: ${filename}`);
     }
 
     return NextResponse.json({ success: true });
 
   } catch (error) {
-    console.error('Error deleting event image:', error);
+    logger.error('Error deleting event image:', error);
     return NextResponse.json(
       { error: 'Failed to delete image' },
       { status: 500 }

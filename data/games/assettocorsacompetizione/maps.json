@@ -1,0 +1,122 @@
+[
+  {
+    "id": "barcelona",
+    "name": "Circuit de Barcelona Catalunya",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/barcelona.jpg"
+  },
+  {
+    "id": "brandshatch",
+    "name": "Brands Hatch Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/brandshatch.jpg"
+  },
+  {
+    "id": "hungaroring",
+    "name": "Hungaroring",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/hungaroring.jpg"
+  },
+  {
+    "id": "misano",
+    "name": "Misano World Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/misano.jpg"
+  },
+  {
+    "id": "monza",
+    "name": "Autodromo Nazionale Monza",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/monza.jpg"
+  },
+  {
+    "id": "nurburgringgp",
+    "name": "Nürburgring - GP Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/nurb.jpeg"
+  },
+  {
+    "id": "paulricard",
+    "name": "Circuit Paul Ricard",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/paulricard.jpg"
+  },
+  {
+    "id": "silverstone",
+    "name": "Silverstone Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/silverstone.jpg"
+  },
+  {
+    "id": "spa",
+    "name": "Circuit de Spa-Francorchamps",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/spa.jpg"
+  },
+  {
+    "id": "zolder",
+    "name": "Circuit Zolder",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/zolder.jpg"
+  },
+  {
+    "id": "kyalami",
+    "name": "Kyalami Racing Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/kyalami.jpg"
+  },
+  {
+    "id": "bathurst",
+    "name": "Mount Panorama Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/mountpanorama.jpg"
+  },
+  {
+    "id": "lagunaseca",
+    "name": "WeatherTech Raceway Laguna Seca",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/lagunaseca.jpg"
+  },
+  {
+    "id": "suzuka",
+    "name": "Suzuka Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/suzuka.jpg"
+  },
+  {
+    "id": "imola",
+    "name": "Imola Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/imola.jpg"
+  },
+  {
+    "id": "donington",
+    "name": "Donington Park Racing Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/donington.jpg"
+  },
+  {
+    "id": "oultonpark",
+    "name": "Oulton Park Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/oulton.jpg"
+  },
+  {
+    "id": "snetterton",
+    "name": "Snetterton Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/snetterton.jpg"
+  },
+  {
+    "id": "cota",
+    "name": "Circuit of the Americas",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/cota.jpg"
+  },
+  {
+    "id": "indianapolis",
+    "name": "Indianapolis Motor Speedway - IndyCar GP",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/indy.jpg"
+  },
+  {
+    "id": "watkinsglen",
+    "name": "Watkins Glen International",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/theglen.jpg"
+  },
+  {
+    "id": "valencia",
+    "name": "Circuit Ricardo Tormo",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/valencia.jpg"
+  },
+  {
+    "id": "redbullring",
+    "name": "Red Bull Ring",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/rbr.jpg"
+  },
+  {
+    "id": "nurburgring24h",
+    "name": "Nürburgring - 24H Circuit",
+    "thumbnailUrl": "/assets/games/assettocorsacompetizione/maps/nurb.jpeg"
+  }
+]

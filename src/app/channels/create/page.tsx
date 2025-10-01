@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
+import { logger } from '@/lib/logger';
 
 interface CreateChannelForm {
   channel_type: 'text' | 'voice';
@@ -116,7 +117,7 @@ export default function CreateChannelPage() {
         });
       }
     } catch (error) {
-      console.error('Error creating channel:', error);
+      logger.error('Error creating channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
     } finally {
       setLoading(false);

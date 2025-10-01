@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Database } from './connection';
+import { logger } from '../../src/lib/logger/server';
 
 export class MigrationRunner {
   private db: Database;
@@ -69,7 +70,7 @@ export class MigrationRunner {
       await this.db.exec(sql);
       await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
     } catch (error) {
-      console.error(`Migration ${filename} failed:`, error);
+      logger.error(`Migration ${filename} failed:`, error);
       throw error;
     }
   }

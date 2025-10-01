@@ -2,7 +2,9 @@
 
 import { MantineProvider, createTheme } from '@mantine/core'
 import { ModalsProvider } from '@mantine/modals'
+import { Notifications } from '@mantine/notifications'
 import '@mantine/core/styles.css'
+import '@mantine/notifications/styles.css'
 import './globals.css'
 
 const theme = createTheme({
@@ -19,6 +21,18 @@ const theme = createTheme({
       '#6d28d9',
       '#5b21b6',
       '#420d4a'
+    ],
+    purple: [
+      '#faf5ff',
+      '#f3e8ff',
+      '#e9d5ff',
+      '#d8b4fe',
+      '#c084fc',
+      '#a855f7',
+      '#9333ea',
+      '#7c3aed',
+      '#6d28d9',
+      '#5b21b6'
     ],
     gray: [
       '#f8f9fa',
@@ -42,6 +56,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme} defaultColorScheme="dark">
       <ModalsProvider>
+        <Notifications />
         {children}
       </ModalsProvider>
     </MantineProvider>

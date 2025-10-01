@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function POST() {
   try {
@@ -62,12 +63,12 @@ export async function POST() {
         } else {
           const errorMsg = `Failed to refresh channel ${channel.discord_channel_id}: HTTP ${response.status}`;
           errors.push(errorMsg);
-          console.error(errorMsg);
+          logger.error(errorMsg);
         }
       } catch (error) {
         const errorMsg = `Failed to refresh channel ${channel.discord_channel_id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
-        console.error(errorMsg);
+        logger.error(errorMsg);
       }
     }
 
@@ -78,7 +79,7 @@ export async function POST() {
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {
-    console.error('Error refreshing channel names:', error);
+    logger.error('Error refreshing channel names:', error);
     return NextResponse.json(
       { error: 'Failed to refresh channel names' },
       { status: 500 }

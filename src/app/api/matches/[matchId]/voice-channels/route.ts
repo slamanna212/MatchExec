@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -41,7 +42,7 @@ export async function GET(
       }
     });
   } catch (error) {
-    console.error('Error fetching voice channels:', error);
+    logger.error('Error fetching voice channels:', error);
     return NextResponse.json(
       { error: 'Failed to fetch voice channels' },
       { status: 500 }

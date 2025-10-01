@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { MATCH_FLOW_STEPS, MatchDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 // Queue a Discord announcement request that the Discord bot will process
 async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
@@ -14,7 +15,7 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
     `, [matchId]);
     
     if (existing) {
-      console.log('📢 Discord announcement already exists for match:', matchId);
+      logger.debug('📢 Discord announcement already exists for match:', matchId);
       return true;
     }
     
@@ -27,10 +28,10 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
       VALUES (?, ?, 'standard', 'pending')
     `, [announcementId, matchId]);
     
-    console.log('📢 Discord announcement queued for match:', matchId);
+    logger.debug('📢 Discord announcement queued for match:', matchId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord announcement:', error);
+    logger.error('❌ Error queuing Discord announcement:', error);
     return false;
   }
 }
@@ -49,10 +50,10 @@ async function queueDiscordStatusUpdate(matchId: string, newStatus: string): Pro
       VALUES (?, ?, ?, 'pending')
     `, [updateId, matchId, newStatus]);
     
-    console.log('🔄 Discord status update queued for match:', matchId, '-> status:', newStatus);
+    logger.debug('🔄 Discord status update queued for match:', matchId, '-> status:', newStatus);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord status update:', error);
+    logger.error('❌ Error queuing Discord status update:', error);
     return false;
   }
 }
@@ -62,16 +63,19 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
   try {
     const db = await getDbInstance();
     
+    // Generate unique ID for the announcement queue entry
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     // Add to main announcement queue with match_start type
     await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (match_id, announcement_type, status)
-      VALUES (?, 'match_start', 'pending')
-    `, [matchId]);
+      INSERT OR IGNORE INTO discord_announcement_queue (id, match_id, announcement_type, status)
+      VALUES (?, ?, 'match_start', 'pending')
+    `, [announcementId, matchId]);
     
-    console.log('🚀 Discord match start announcement queued for match:', matchId);
+    logger.debug('🚀 Discord match start announcement queued for match:', matchId);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord match start announcement:', error);
+    logger.error('❌ Error queuing Discord match start announcement:', error);
     return false;
   }
 }
@@ -90,10 +94,10 @@ async function queueMapCodePMs(matchId: string, mapName: string, mapCode: string
       VALUES (?, ?, ?, ?, 'pending')
     `, [queueId, matchId, mapName, mapCode]);
     
-    console.log('📱 Map code PMs queued for match:', matchId, '-> map:', mapName);
+    logger.debug('📱 Map code PMs queued for match:', matchId, '-> map:', mapName);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing map code PMs:', error);
+    logger.error('❌ Error queuing map code PMs:', error);
     return false;
   }
 }
@@ -116,13 +120,45 @@ async function queueVoiceAnnouncement(
     `, [matchId]);
 
     if (!match) {
-      console.error('❌ Match not found for voice announcement:', matchId);
+      logger.error('❌ Match not found for voice announcement:', matchId);
       return false;
     }
 
-    // Skip if no voice channels are configured
-    if (!match.blue_team_voice_channel && !match.red_team_voice_channel) {
-      console.log('📢 No voice channels configured for match:', matchId);
+    // If no match-specific voice channels, try to get global voice channels
+    let blueChannelId = match.blue_team_voice_channel;
+    let redChannelId = match.red_team_voice_channel;
+
+    if (!blueChannelId && !redChannelId) {
+      // Try to get global voice channels from discord_channels table
+      const blueChannel = await db.get<{ discord_channel_id: string }>(`
+        SELECT discord_channel_id FROM discord_channels
+        WHERE type = 2 AND (
+          LOWER(name) LIKE '%blue%' OR
+          LOWER(channel_name) LIKE '%blue%' OR
+          LOWER(name) LIKE '%team%1%' OR
+          LOWER(channel_name) LIKE '%team%1%'
+        )
+        LIMIT 1
+      `);
+
+      const redChannel = await db.get<{ discord_channel_id: string }>(`
+        SELECT discord_channel_id FROM discord_channels
+        WHERE type = 2 AND (
+          LOWER(name) LIKE '%red%' OR
+          LOWER(channel_name) LIKE '%red%' OR
+          LOWER(name) LIKE '%team%2%' OR
+          LOWER(channel_name) LIKE '%team%2%'
+        )
+        LIMIT 1
+      `);
+
+      blueChannelId = blueChannel?.discord_channel_id;
+      redChannelId = redChannel?.discord_channel_id;
+    }
+
+    // Skip if still no voice channels are configured
+    if (!blueChannelId && !redChannelId) {
+      logger.debug('📢 No voice channels configured for match:', matchId);
       return true; // Not an error, just nothing to do
     }
 
@@ -151,10 +187,10 @@ async function queueVoiceAnnouncement(
       firstTeam
     ]);
     
-    console.log(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
+    logger.debug(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing voice announcement:', error);
+    logger.error('❌ Error queuing voice announcement:', error);
     return false;
   }
 }
@@ -206,7 +242,7 @@ export async function POST(
       WHERE id = ?
     `, [newStatus, matchId]);
 
-    console.log(`🔄 Match ${matchId} transitioned from ${currentMatch.status} to ${newStatus}`);
+    logger.debug(`🔄 Match ${matchId} transitioned from ${currentMatch.status} to ${newStatus}`);
 
     // Trigger Discord announcement when entering "gather" stage
     if (newStatus === 'gather') {
@@ -221,15 +257,15 @@ export async function POST(
           const discordSuccess = await queueDiscordAnnouncement(matchId);
           
           if (discordSuccess) {
-            console.log(`📢 Discord announcement queued for match entering gather stage: ${matchId}`);
+            logger.debug(`📢 Discord announcement queued for match entering gather stage: ${matchId}`);
           } else {
-            console.warn(`⚠️ Failed to queue Discord announcement for match: ${matchId}`);
+            logger.warning(`⚠️ Failed to queue Discord announcement for match: ${matchId}`);
           }
         } else {
-          console.log(`📢 Discord announcement already queued for match: ${matchId}, skipping duplicate`);
+          logger.debug(`📢 Discord announcement already queued for match: ${matchId}, skipping duplicate`);
         }
       } catch (discordError) {
-        console.error('❌ Error queuing Discord announcement:', discordError);
+        logger.error('❌ Error queuing Discord announcement:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
     }
@@ -240,12 +276,12 @@ export async function POST(
         const discordUpdateSuccess = await queueDiscordStatusUpdate(matchId, newStatus);
         
         if (discordUpdateSuccess) {
-          console.log(`🔄 Discord status update queued for match entering assign stage: ${matchId}`);
+          logger.debug(`🔄 Discord status update queued for match entering assign stage: ${matchId}`);
         } else {
-          console.warn(`⚠️ Failed to queue Discord status update for match: ${matchId}`);
+          logger.warning(`⚠️ Failed to queue Discord status update for match: ${matchId}`);
         }
       } catch (discordError) {
-        console.error('❌ Error queuing Discord status update:', discordError);
+        logger.error('❌ Error queuing Discord status update:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
     }
@@ -256,12 +292,12 @@ export async function POST(
         const discordMatchStartSuccess = await queueDiscordMatchStart(matchId);
         
         if (discordMatchStartSuccess) {
-          console.log(`🚀 Discord match start notification queued for match entering battle stage: ${matchId}`);
+          logger.debug(`🚀 Discord match start notification queued for match entering battle stage: ${matchId}`);
         } else {
-          console.warn(`⚠️ Failed to queue Discord match start notification for match: ${matchId}`);
+          logger.warning(`⚠️ Failed to queue Discord match start notification for match: ${matchId}`);
         }
       } catch (discordError) {
-        console.error('❌ Error queuing Discord match start notification:', discordError);
+        logger.error('❌ Error queuing Discord match start notification:', discordError);
         // Don't fail the API request if Discord queueing fails
       }
 
@@ -270,12 +306,12 @@ export async function POST(
         const voiceAnnouncementSuccess = await queueVoiceAnnouncement(matchId, 'welcome');
         
         if (voiceAnnouncementSuccess) {
-          console.log(`🔊 Welcome voice announcement queued for match entering battle stage: ${matchId}`);
+          logger.debug(`🔊 Welcome voice announcement queued for match entering battle stage: ${matchId}`);
         } else {
-          console.warn(`⚠️ Failed to queue welcome voice announcement for match: ${matchId}`);
+          logger.warning(`⚠️ Failed to queue welcome voice announcement for match: ${matchId}`);
         }
       } catch (voiceError) {
-        console.error('❌ Error queuing welcome voice announcement:', voiceError);
+        logger.error('❌ Error queuing welcome voice announcement:', voiceError);
         // Don't fail the API request if voice queueing fails
       }
 
@@ -283,9 +319,9 @@ export async function POST(
       try {
         const { initializeMatchGames } = await import('../../../../../lib/scoring-functions');
         await initializeMatchGames(matchId);
-        console.log(`🎮 Match games initialized for all maps in match: ${matchId}`);
+        logger.debug(`🎮 Match games initialized for all maps in match: ${matchId}`);
       } catch (initError) {
-        console.error('❌ Error initializing match games:', initError);
+        logger.error('❌ Error initializing match games:', initError);
         // Don't fail the API request if match games initialization fails
       }
 
@@ -325,7 +361,7 @@ export async function POST(
                 firstMapName = mapNameData.name;
               }
             } catch (error) {
-              console.error('Error fetching map name for first map PM queue:', error);
+              logger.error('Error fetching map name for first map PM queue:', error);
               // Keep original firstMapId as fallback
             }
             
@@ -347,15 +383,15 @@ export async function POST(
               const mapCodeSuccess = await queueMapCodePMs(matchId, firstMapName, firstMapCode);
               
               if (mapCodeSuccess) {
-                console.log(`📱 Map code PMs queued for first map "${firstMapName}" in match: ${matchId}`);
+                logger.debug(`📱 Map code PMs queued for first map "${firstMapName}" in match: ${matchId}`);
               } else {
-                console.warn(`⚠️ Failed to queue map code PMs for first map in match: ${matchId}`);
+                logger.warning(`⚠️ Failed to queue map code PMs for first map in match: ${matchId}`);
               }
             }
           }
         }
       } catch (mapCodeError) {
-        console.error('❌ Error queuing map code PMs for first map:', mapCodeError);
+        logger.error('❌ Error queuing map code PMs for first map:', mapCodeError);
         // Don't fail the API request if map code queueing fails
       }
     }
@@ -377,7 +413,7 @@ export async function POST(
     return NextResponse.json(parsedMatch);
 
   } catch (error) {
-    console.error('Error transitioning match status:', error);
+    logger.error('Error transitioning match status:', error);
     return NextResponse.json(
       { error: 'Failed to transition match status' },
       { status: 500 }

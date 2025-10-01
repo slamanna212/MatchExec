@@ -1,8 +1,9 @@
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction } from 'discord.js';
+import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
 import { Database } from '../../lib/database';
 import { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
+import { logger } from '../../src/lib/logger/server';
 
 // Import our modules
 import { VoiceHandler } from './modules/voice-handler';
@@ -33,7 +34,6 @@ class MatchExecBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.DirectMessages
       ]
@@ -66,7 +66,7 @@ class MatchExecBot {
         try {
           await this.interactionHandler.registerSlashCommands();
         } catch (error) {
-          console.error('❌ Error registering slash commands:', error);
+          logger.error('❌ Error registering slash commands:', error);
           // Don't crash if slash command registration fails
         }
       }
@@ -83,11 +83,13 @@ class MatchExecBot {
           await this.handleSlashCommand(interaction);
         } else if (interaction.isButton()) {
           await this.handleButtonInteraction(interaction);
+        } else if (interaction.isStringSelectMenu()) {
+          await this.handleStringSelectMenu(interaction);
         } else if (interaction.isModalSubmit()) {
           await this.handleModalSubmit(interaction);
         }
       } catch (error) {
-        console.error('Error handling interaction:', error);
+        logger.error('Error handling interaction:', error);
       }
     });
 
@@ -96,12 +98,12 @@ class MatchExecBot {
     
     // Add global error handlers to prevent crashes
     process.on('uncaughtException', (error) => {
-      console.error('❌ Uncaught Exception:', error);
+      logger.critical('❌ Uncaught Exception:', error);
       // Don't exit, just log the error
     });
-    
+
     process.on('unhandledRejection', (reason, promise) => {
-      console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+      logger.critical('❌ Unhandled Rejection at:', promise, 'reason:', reason);
       // Don't exit, just log the error
     });
   }
@@ -117,7 +119,7 @@ class MatchExecBot {
       
       return result?.setting_value === 'true';
     } catch (error) {
-      console.error('❌ Error checking welcome flow status:', error);
+      logger.error('❌ Error checking welcome flow status:', error);
       return false;
     }
   }
@@ -130,16 +132,16 @@ class MatchExecBot {
       // Check if welcome flow is completed
       const welcomeCompleted = await this.checkWelcomeFlowCompleted();
       if (!welcomeCompleted) {
-        console.log('⏳ Welcome flow not completed yet, waiting...');
+        logger.info('⏳ Welcome flow not completed yet, waiting...');
         return false;
       }
-      
+
       // Initialize settings manager
       this.settingsManager = new SettingsManager(this.db);
       this.settings = await this.settingsManager.loadSettings();
 
       if (!this.settings?.bot_token) {
-        console.warn('⚠️ Bot token not configured');
+        logger.warning('⚠️ Bot token not configured');
         return false;
       }
 
@@ -171,7 +173,7 @@ class MatchExecBot {
       return true;
 
     } catch (error) {
-      console.error('❌ Failed to initialize bot:', error);
+      logger.error('❌ Failed to initialize bot:', error);
       return false;
     }
   }
@@ -207,7 +209,7 @@ class MatchExecBot {
     try {
       await this.queueProcessor.processAllQueues();
     } catch (error) {
-      console.error('❌ Error processing queues:', error);
+      logger.error('❌ Error processing queues:', error);
       // Don't let queue processing errors crash the bot
     }
   }
@@ -231,6 +233,12 @@ class MatchExecBot {
     }
   }
 
+  private async handleStringSelectMenu(interaction: StringSelectMenuInteraction) {
+    if (this.interactionHandler) {
+      await this.interactionHandler.handleStringSelectMenu(interaction);
+    }
+  }
+
   // Signup notification method for InteractionHandler
   private async sendSignupNotification(eventId: string, signupInfo: {
     username: string;
@@ -244,7 +252,7 @@ class MatchExecBot {
         await this.reminderHandler.sendSignupNotification(eventId, signupInfo);
       }
     } catch (error) {
-      console.error('❌ Error sending signup notification:', error);
+      logger.error('❌ Error sending signup notification:', error);
     }
   }
 
@@ -300,36 +308,36 @@ class MatchExecBot {
     }
     
     if (!this.settings?.bot_token) {
-      console.error('❌ No bot token available, cannot start bot');
+      logger.error('❌ No bot token available, cannot start bot');
       return;
     }
 
     try {
       await this.client.login(this.settings.bot_token);
-      console.log('✅ Discord bot successfully connected');
+      logger.info('✅ Discord bot successfully connected');
     } catch (error) {
-      console.error('❌ Failed to login to Discord:', error);
+      logger.error('❌ Failed to login to Discord:', error);
     }
   }
 
   private startWelcomeFlowWatcher() {
-    console.log('👀 Watching for welcome flow completion...');
-    
+    logger.info('👀 Watching for welcome flow completion...');
+
     const checkInterval = setInterval(async () => {
       const welcomeCompleted = await this.checkWelcomeFlowCompleted();
-      
+
       if (welcomeCompleted) {
-        console.log('✅ Welcome flow completed! Initializing Discord bot...');
+        logger.info('✅ Welcome flow completed! Initializing Discord bot...');
         clearInterval(checkInterval);
-        
+
         // Try to initialize and start the bot again
         const initialized = await this.initialize();
         if (initialized && this.settings?.bot_token) {
           try {
             await this.client.login(this.settings.bot_token);
-            console.log('✅ Discord bot successfully connected');
+            logger.info('✅ Discord bot successfully connected');
           } catch (error) {
-            console.error('❌ Failed to login to Discord:', error);
+            logger.error('❌ Failed to login to Discord:', error);
           }
         }
       }
@@ -345,8 +353,8 @@ const bot = new MatchExecBot();
   try {
     await bot.start();
   } catch (error) {
-    console.error('❌ Failed to start Discord bot:', error);
-    console.error('Full error:', error);
+    logger.critical('❌ Failed to start Discord bot:', error);
+    logger.critical('Full error:', error);
     process.exit(1);
   }
 })();

@@ -8,6 +8,7 @@ import { ReminderHandler } from './reminder-handler';
 import { EventHandler } from './event-handler';
 import { VoiceHandler } from './voice-handler';
 import { SettingsManager } from './settings-manager';
+import { logger } from '../../../src/lib/logger/server';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -66,7 +67,7 @@ interface QueuedMatchWinner {
   match_id: string;
   match_name: string;
   game_id: string;
-  winner: 'team1' | 'team2' | 'tie';
+  winner: 'team1' | 'team2' | 'tie' | 'tournament';
   winning_team_name: string;
   winning_players: string;
   team1_score: number;
@@ -95,7 +96,7 @@ export class QueueProcessor {
     try {
       // Use the original approach - JOIN with matches table to get all needed data
       const announcements = await this.db.all<{
-        id: string;
+        announcement_id: string;
         match_id: string;
         name: string;
         description: string;
@@ -110,24 +111,35 @@ export class QueueProcessor {
         announcement_type?: string;
         announcement_data?: string;
       }>(`
-        SELECT daq.id, daq.match_id, daq.announcement_type, daq.announcement_data,
-               m.name, m.description, m.game_id, m.max_participants, m.guild_id, 
-               m.maps, m.livestream_link, m.event_image_url, m.start_date, m.rules
+        SELECT daq.id as announcement_id, daq.match_id, daq.announcement_type, daq.announcement_data,
+               COALESCE(m.name, t.name) as name,
+               COALESCE(m.description, t.description) as description,
+               COALESCE(m.game_id, t.game_id) as game_id,
+               COALESCE(m.max_participants, t.max_participants) as max_participants,
+               COALESCE(m.guild_id, ds.guild_id) as guild_id,
+               m.maps, m.livestream_link, COALESCE(m.event_image_url, t.event_image_url) as event_image_url,
+               COALESCE(m.start_date, t.start_time) as start_date,
+               COALESCE(m.rules, 'casual') as rules
         FROM discord_announcement_queue daq
-        JOIN matches m ON daq.match_id = m.id
-        WHERE daq.status = 'pending'
+        LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start'))
+        LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
+        LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
+        WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
         ORDER BY daq.created_at ASC
         LIMIT 5
       `);
 
+
       for (const announcement of announcements) {
         try {
+          logger.debug(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
+
           // Immediately mark as processing to prevent duplicate processing by concurrent queue cycles
           const updateResult = await this.db.run(`
             UPDATE discord_announcement_queue 
             SET status = 'processing', posted_at = datetime('now')
             WHERE id = ? AND status = 'pending'
-          `, [announcement.id]);
+          `, [announcement.announcement_id]);
           
           if (updateResult.changes === 0) {
             continue;
@@ -164,17 +176,17 @@ export class QueueProcessor {
               const timingData = JSON.parse(announcement.announcement_data);
               eventData._timingInfo = timingData;
             } catch {
-              console.warn('Could not parse timing data for timed announcement:', announcement.id);
+              logger.warning('Could not parse timing data for timed announcement:', announcement.announcement_id);
             }
           }
           
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_announcement_queue 
               SET status = 'failed', posted_at = datetime('now'), error_message = ?
               WHERE id = ?
-            `, ['AnnouncementHandler not available', announcement.id]);
+            `, ['AnnouncementHandler not available', announcement.announcement_id]);
             continue;
           }
 
@@ -226,7 +238,7 @@ export class QueueProcessor {
                 `, [messageRecordId, eventData.id as string, ((result as Record<string, unknown>).mainMessage as any).id, ((result as Record<string, unknown>).mainMessage as any).channelId, threadId, discordEventId, 'announcement']);
                 
               } catch (error) {
-                console.error('❌ Error storing Discord message tracking:', error);
+                logger.error('❌ Error storing Discord message tracking:', error);
               }
             }
 
@@ -235,7 +247,7 @@ export class QueueProcessor {
               UPDATE discord_announcement_queue 
               SET status = 'completed', posted_at = CURRENT_TIMESTAMP
               WHERE id = ?
-            `, [announcement.id]);
+            `, [announcement.announcement_id]);
 
           } else {
             // Mark as failed
@@ -243,22 +255,22 @@ export class QueueProcessor {
               UPDATE discord_announcement_queue 
               SET status = 'failed', error_message = 'Failed to post announcement'
               WHERE id = ?
-            `, [announcement.id]);
+            `, [announcement.announcement_id]);
 
           }
         } catch (error) {
-          console.error(`❌ Error processing announcement ${announcement.id}:`, error);
+          logger.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
           
           // Mark as failed
           await this.db.run(`
             UPDATE discord_announcement_queue 
             SET status = 'failed', posted_at = datetime('now'), error_message = ?
             WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+          `, [error instanceof Error ? error.message : 'Unknown error', announcement.announcement_id]);
         }
       }
     } catch (error) {
-      console.error('❌ Error processing announcement queue:', error);
+      logger.error('❌ Error processing announcement queue:', error);
     }
   }
 
@@ -308,7 +320,7 @@ export class QueueProcessor {
                     await thread.delete();
                   }
                 } catch (error) {
-                  console.warn(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
+                  logger.warning(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
                 }
               }
 
@@ -320,7 +332,7 @@ export class QueueProcessor {
               }
 
             } catch (error) {
-              console.warn(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
+              logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
             }
           }
 
@@ -338,7 +350,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing deletion ${deletion.id}:`, error);
+          logger.error(`❌ Error processing deletion ${deletion.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -349,7 +361,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing deletion queue:', error);
+      logger.error('❌ Error processing deletion queue:', error);
     }
   }
 
@@ -380,13 +392,19 @@ export class QueueProcessor {
           try {
             if (newStatus === 'assign') {
               // When transitioning to 'assign' (signups closed), remove signup buttons
-              success = await this.updateMatchMessagesForSignupClosure(matchId);
+              // Check if this is a tournament or match
+              const isTournament = matchId.startsWith('tournament_');
+              if (isTournament) {
+                success = await this.updateTournamentMessagesForSignupClosure(matchId);
+              } else {
+                success = await this.updateMatchMessagesForSignupClosure(matchId);
+              }
             } else {
               // For other status changes, just log for now
               success = true;
             }
           } catch (error) {
-            console.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
+            logger.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
             success = false;
           }
           
@@ -402,7 +420,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing status update ${update.id}:`, error);
+          logger.error(`❌ Error processing status update ${update.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_status_update_queue 
@@ -412,7 +430,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing status update queue:', error);
+      logger.error('❌ Error processing status update queue:', error);
     }
   }
 
@@ -433,7 +451,7 @@ export class QueueProcessor {
         try {
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_reminder_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -489,7 +507,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing reminder ${reminder.id}:`, error);
+          logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_reminder_queue 
@@ -499,7 +517,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing reminder queue:', error);
+      logger.error('❌ Error processing reminder queue:', error);
     }
   }
 
@@ -525,7 +543,7 @@ export class QueueProcessor {
         try {
 
           if (!this.reminderHandler) {
-            console.error('❌ ReminderHandler not available');
+            logger.error('❌ ReminderHandler not available');
             await this.db.run(`
               UPDATE discord_player_reminder_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -569,7 +587,7 @@ export class QueueProcessor {
 
 
         } catch (error) {
-          console.error(`❌ Error processing player reminder ${reminder.id}:`, error);
+          logger.error(`❌ Error processing player reminder ${reminder.id}:`, error);
           
           await this.db.run(`
             UPDATE discord_player_reminder_queue 
@@ -579,7 +597,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing player reminder queue:', error);
+      logger.error('❌ Error processing player reminder queue:', error);
     }
   }
 
@@ -655,7 +673,7 @@ export class QueueProcessor {
                   JSON.stringify({ success: false, message: 'Voice handler not available' }),
                   request.id
                 ]);
-                console.error(`❌ Voice handler not available for request ${request.id}`);
+                logger.error(`❌ Voice handler not available for request ${request.id}`);
                 continue;
               }
               
@@ -683,7 +701,7 @@ export class QueueProcessor {
           // Handle other request types here in the future
           
         } catch (error) {
-          console.error(`❌ Error processing request ${request.id}:`, error);
+          logger.error(`❌ Error processing request ${request.id}:`, error);
           
           // Mark request as failed
           await this.db.run(`
@@ -697,7 +715,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing Discord bot requests:', error);
+      logger.error('❌ Error processing Discord bot requests:', error);
     }
   }
 
@@ -728,7 +746,7 @@ export class QueueProcessor {
           }
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_score_notification_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -753,7 +771,7 @@ export class QueueProcessor {
           try {
             winningPlayers = JSON.parse(notification.winning_players);
           } catch {
-            console.warn('Could not parse winning players JSON for notification:', notification.id);
+            logger.warning('Could not parse winning players JSON for notification:', notification.id);
           }
 
           // Build score notification data
@@ -779,7 +797,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.log(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
+            logger.debug(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -788,10 +806,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.error(`❌ Failed to post score notification for ${notification.id}`);
+            logger.error(`❌ Failed to post score notification for ${notification.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing score notification ${notification.id}:`, error);
+          logger.error(`❌ Error processing score notification ${notification.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -802,7 +820,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing score notification queue:', error);
+      logger.error('❌ Error processing score notification queue:', error);
     }
   }
 
@@ -823,7 +841,7 @@ export class QueueProcessor {
         try {
           // Immediately mark as processing to prevent duplicate processing
           const updateResult = await this.db.run(`
-            UPDATE discord_voice_announcement_queue 
+            UPDATE discord_voice_announcement_queue
             SET status = 'processing', updated_at = datetime('now')
             WHERE id = ? AND status = 'pending'
           `, [announcement.id]);
@@ -833,7 +851,7 @@ export class QueueProcessor {
           }
 
           if (!this.voiceHandler) {
-            console.error('❌ VoiceHandler not available');
+            logger.error('❌ VoiceHandler not available');
             await this.db.run(`
               UPDATE discord_voice_announcement_queue 
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
@@ -842,7 +860,7 @@ export class QueueProcessor {
             continue;
           }
 
-          console.log(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
+          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
 
           // Play the team announcements sequentially
           const result = await this.voiceHandler.playTeamAnnouncements(
@@ -858,12 +876,12 @@ export class QueueProcessor {
 
             // Mark as completed
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'completed', completed_at = datetime('now')
               WHERE id = ?
             `, [announcement.id]);
 
-            console.log(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
+            logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -872,21 +890,21 @@ export class QueueProcessor {
               WHERE id = ?
             `, [result.message, announcement.id]);
 
-            console.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
+            logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
+          logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
-            UPDATE discord_voice_announcement_queue 
+            UPDATE discord_voice_announcement_queue
             SET status = 'failed', completed_at = datetime('now'), error_message = ?
             WHERE id = ?
           `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
         }
       }
     } catch (error) {
-      console.error('❌ Error processing voice announcement queue:', error);
+      logger.error('❌ Error processing voice announcement queue:', error);
     }
   }
 
@@ -916,7 +934,7 @@ export class QueueProcessor {
           }
 
           if (!this.reminderHandler) {
-            console.error('❌ ReminderHandler not available');
+            logger.error('❌ ReminderHandler not available');
             await this.db.run(`
               UPDATE discord_map_code_queue 
               SET status = 'failed', processed_at = datetime('now'), error_message = ?
@@ -925,7 +943,7 @@ export class QueueProcessor {
             continue;
           }
 
-          console.log(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+          logger.debug(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
 
           // Send map code PMs via the reminder handler
           const result = await this.reminderHandler.sendMapCodePMs(
@@ -942,7 +960,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [mapCodeRequest.id]);
 
-            console.log(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+            logger.debug(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -951,10 +969,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, ['Failed to send map code PMs', mapCodeRequest.id]);
 
-            console.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
+            logger.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
+          logger.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -965,7 +983,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing map code queue:', error);
+      logger.error('❌ Error processing map code queue:', error);
     }
   }
 
@@ -996,7 +1014,7 @@ export class QueueProcessor {
           }
 
           if (!this.announcementHandler) {
-            console.error('❌ AnnouncementHandler not available');
+            logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
               UPDATE discord_match_winner_queue 
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
@@ -1010,28 +1028,50 @@ export class QueueProcessor {
           try {
             winningPlayers = JSON.parse(notification.winning_players);
           } catch {
-            console.warn('Could not parse winning players JSON for winner notification:', notification.id);
+            logger.warning('Could not parse winning players JSON for winner notification:', notification.id);
           }
 
-          // Build winner notification data
-          const winnerData = {
-            matchId: notification.match_id,
-            matchName: notification.match_name,
-            gameId: notification.game_id,
-            winner: notification.winner,
-            winningTeamName: notification.winning_team_name,
-            winningPlayers: winningPlayers,
-            team1Score: notification.team1_score,
-            team2Score: notification.team2_score,
-            totalMaps: notification.total_maps
-          };
+          let result;
 
-          // Wait 15 seconds to ensure last map winner embed goes out first
-          console.log(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
-          await new Promise(resolve => setTimeout(resolve, 15000));
-          
-          // Post the match winner notification
-          const result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
+          // Check if this is a tournament winner notification (winner field = 'tournament')
+          if (notification.winner === 'tournament') {
+            // Build tournament winner notification data
+            const tournamentData = {
+              tournamentId: notification.match_id, // We stored tournament ID in match_id
+              tournamentName: notification.match_name.replace('🏆 ', ''), // Remove trophy emoji
+              gameId: notification.game_id,
+              winner: notification.match_id, // Tournament ID
+              winningTeamName: notification.winning_team_name,
+              winningPlayers: winningPlayers,
+              format: (notification.team2_score === 1 ? 'double-elimination' : 'single-elimination') as 'double-elimination' | 'single-elimination', // Decoded from team2_score
+              totalParticipants: notification.team1_score // Stored in team1_score
+            };
+
+            logger.debug(`🏆 Sending tournament winner notification for ${tournamentData.tournamentName}`);
+
+            // Post the tournament winner notification (no delay needed for tournaments)
+            result = await this.announcementHandler.postTournamentWinnerNotification(tournamentData);
+          } else {
+            // Build regular match winner notification data
+            const winnerData = {
+              matchId: notification.match_id,
+              matchName: notification.match_name,
+              gameId: notification.game_id,
+              winner: notification.winner,
+              winningTeamName: notification.winning_team_name,
+              winningPlayers: winningPlayers,
+              team1Score: notification.team1_score,
+              team2Score: notification.team2_score,
+              totalMaps: notification.total_maps
+            };
+
+            // Wait 15 seconds to ensure last map winner embed goes out first
+            logger.debug(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
+            await new Promise(resolve => setTimeout(resolve, 15000));
+
+            // Post the match winner notification
+            result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
+          }
           
           if (result && typeof result === 'object' && result.success) {
             // Mark as completed
@@ -1041,7 +1081,7 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.log(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
+            logger.debug(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
           } else {
             // Mark as failed
             await this.db.run(`
@@ -1050,10 +1090,10 @@ export class QueueProcessor {
               WHERE id = ?
             `, [notification.id]);
 
-            console.error(`❌ Failed to post match winner notification for ${notification.id}`);
+            logger.error(`❌ Failed to post match winner notification for ${notification.id}`);
           }
         } catch (error) {
-          console.error(`❌ Error processing match winner notification ${notification.id}:`, error);
+          logger.error(`❌ Error processing match winner notification ${notification.id}:`, error);
           
           // Mark as failed
           await this.db.run(`
@@ -1064,7 +1104,7 @@ export class QueueProcessor {
         }
       }
     } catch (error) {
-      console.error('❌ Error processing match winner notification queue:', error);
+      logger.error('❌ Error processing match winner notification queue:', error);
     }
   }
 
@@ -1137,7 +1177,7 @@ export class QueueProcessor {
           const channel = await this.client.channels.fetch(messageRecord.channel_id);
           
           if (!channel?.isTextBased() || !('messages' in channel)) {
-            console.warn(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
             continue;
           }
 
@@ -1145,7 +1185,7 @@ export class QueueProcessor {
           const message = await channel.messages.fetch(messageRecord.message_id);
           
           if (!message) {
-            console.warn(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
             continue;
           }
 
@@ -1199,10 +1239,10 @@ export class QueueProcessor {
                 updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
                 
               } else {
-                console.warn(`⚠️ Event image not found for reattachment: ${imagePath}`);
+                logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
               }
             } catch (error) {
-              console.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
+              logger.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
             }
           }
 
@@ -1221,19 +1261,189 @@ export class QueueProcessor {
           successCount++;
 
         } catch (error) {
-          console.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
+          logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
         }
       }
 
       if (successCount === 0) {
-        console.error(`❌ Failed to update any Discord messages for match ${matchId}`);
+        logger.error(`❌ Failed to update any Discord messages for match ${matchId}`);
         return false;
       }
 
       return true;
 
     } catch (error) {
-      console.error(`❌ Error updating Discord messages for signup closure:`, error);
+      logger.error(`❌ Error updating Discord messages for signup closure:`, error);
+      return false;
+    }
+  }
+
+  private async updateTournamentMessagesForSignupClosure(tournamentId: string): Promise<boolean> {
+    if (!this.client.isReady() || !this.db) {
+      return false;
+    }
+
+    try {
+      logger.debug(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
+
+      // Get tournament data with image info for recreating attachments
+      const tournamentData = await this.db.get<{
+        event_image_url?: string;
+      }>(`
+        SELECT event_image_url
+        FROM tournaments
+        WHERE id = ?
+      `, [tournamentId]);
+
+      // Get all announcement messages for this tournament
+      const messages = await this.db.all<{
+        message_id: string;
+        channel_id: string;
+        message_type: string;
+      }>(`
+        SELECT message_id, channel_id, message_type
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+      `, [tournamentId]);
+
+      logger.debug(`📝 Found ${messages.length} tournament messages to update`);
+
+      if (messages.length === 0) {
+        // Let's check if there are ANY messages for this tournament
+        const allMessages = await this.db.all<{
+          message_id: string;
+          channel_id: string;
+          message_type: string;
+        }>(`
+          SELECT message_id, channel_id, message_type
+          FROM discord_match_messages
+          WHERE match_id = ?
+        `, [tournamentId]);
+
+        if (allMessages.length > 0) {
+          logger.debug(`ℹ️ Found ${allMessages.length} total messages for tournament ${tournamentId}, but none are announcements`);
+        }
+
+        return true; // Not an error if no messages exist
+      }
+
+      let successCount = 0;
+
+      for (const messageRecord of messages) {
+        try {
+          // Fetch the Discord channel
+          const channel = await this.client.channels.fetch(messageRecord.channel_id);
+
+          if (!channel?.isTextBased() || !('messages' in channel)) {
+            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+            continue;
+          }
+
+          // Fetch the Discord message
+          const message = await channel.messages.fetch(messageRecord.message_id);
+
+          if (!message) {
+            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+            continue;
+          }
+
+          logger.debug(`🔄 Updating tournament message ${messageRecord.message_id} in channel ${messageRecord.channel_id}`);
+
+          if (message.embeds[0]) {
+            logger.debug(`📋 Existing embed title: ${message.embeds[0].title}`);
+          }
+
+          if (message.attachments.size > 0) {
+            logger.debug(`📎 Message has ${message.attachments.size} attachments`);
+          }
+
+          // Create updated embed - copy the existing embed exactly but add signups closed message
+          const updatedEmbed = message.embeds[0] ?
+            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+
+          logger.debug(`🔄 Processing embed update for tournament message`);
+
+          // Keep the image in the embed - don't remove it
+          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
+          if (updatedEmbed.data.image?.url) {
+            logger.debug(`🖼️ Keeping existing image in embed: ${updatedEmbed.data.image.url}`);
+          } else {
+            logger.debug(`📷 No existing image in embed`);
+          }
+
+          // Just add a simple signups closed message at the bottom, don't change anything else
+          const existingFields = updatedEmbed.data.fields || [];
+          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+
+          if (signupStatusFieldIndex === -1) {
+            // Add new field at the bottom
+            updatedEmbed.addFields([{
+              name: '📋 Signup Status',
+              value: '🔒 **Team signups are now closed**',
+              inline: false
+            }]);
+          } else {
+            logger.debug(`📋 Signup status field already exists, not adding duplicate`);
+          }
+
+          logger.debug(`📝 Added signup closure field to tournament embed`);
+
+          // Recreate attachment if there's an event image to prevent Discord from stripping it
+          let attachment: AttachmentBuilder | undefined;
+          if (tournamentData?.event_image_url && tournamentData.event_image_url.trim()) {
+            try {
+              // Convert URL path to file system path for local files
+              const imagePath = path.join(process.cwd(), 'public', tournamentData.event_image_url.replace(/^\//, ''));
+
+              if (fs.existsSync(imagePath)) {
+                // Create attachment for the event image
+                attachment = new AttachmentBuilder(imagePath, {
+                  name: `tournament_image.${path.extname(imagePath).slice(1)}`
+                });
+
+                // Update embed to use attachment://filename to reference the reattached image
+                updatedEmbed.setImage(`attachment://tournament_image.${path.extname(imagePath).slice(1)}`);
+
+                logger.debug(`📎 Recreated attachment for tournament image: ${imagePath}`);
+              } else {
+                logger.warning(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
+              }
+            } catch (error) {
+              logger.error(`❌ Error recreating attachment for ${tournamentData.event_image_url}:`, error);
+            }
+          }
+
+          const editOptions: Record<string, unknown> = {
+            content: null, // Explicitly clear any content that might cause image display
+            embeds: [updatedEmbed],
+            components: [], // This removes all buttons
+            files: attachment ? [attachment] : [] // Include recreated attachment if available
+          };
+
+          logger.debug(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
+
+          // Remove all action rows (signup buttons) but keep everything else the same
+          await message.edit(editOptions);
+
+          logger.debug(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
+
+          successCount++;
+
+        } catch (error) {
+          logger.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
+        }
+      }
+
+      if (successCount === 0) {
+        logger.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
+        return false;
+      }
+
+      logger.debug(`✅ Successfully updated ${successCount}/${messages.length} tournament messages for ${tournamentId}`);
+      return true;
+
+    } catch (error) {
+      logger.error(`❌ Error updating Discord tournament messages for signup closure:`, error);
       return false;
     }
   }

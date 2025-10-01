@@ -1,13 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import { logger } from '../src/lib/logger/server';
 
 export interface SignupField {
   id: string;
-  type: 'text' | 'largetext';
+  type: 'text' | 'largetext' | 'number';
   label: string;
   placeholder?: string;
   required: boolean;
   helpText?: string;
+  min?: number;
+  max?: number;
 }
 
 export interface SignupForm {
@@ -31,7 +34,7 @@ export class SignupFormLoader {
       const signupPath = path.join(process.cwd(), 'data', 'games', gameId, 'signup.json');
       
       if (!fs.existsSync(signupPath)) {
-        console.warn(`⚠️ No signup form found for game: ${gameId}`);
+        logger.warning(`⚠️ No signup form found for game: ${gameId}`);
         return this.getDefaultSignupForm();
       }
 
@@ -39,17 +42,17 @@ export class SignupFormLoader {
       
       // Validate the signup form structure
       if (!this.isValidSignupForm(signupData)) {
-        console.error(`❌ Invalid signup form structure for game: ${gameId}`);
+        logger.error(`❌ Invalid signup form structure for game: ${gameId}`);
         return this.getDefaultSignupForm();
       }
 
       // Cache the form
       this.cache.set(gameId, signupData);
-      console.log(`✅ Loaded signup form for game: ${gameId}`);
+      logger.debug(`✅ Loaded signup form for game: ${gameId}`);
       return signupData;
 
     } catch (error) {
-      console.error(`❌ Error loading signup form for ${gameId}:`, error);
+      logger.error(`❌ Error loading signup form for ${gameId}:`, error);
       return this.getDefaultSignupForm();
     }
   }
@@ -65,9 +68,9 @@ export class SignupFormLoader {
         if (!field || typeof field !== 'object') return false;
         const f = field as Record<string, unknown>;
         return !!(
-          f.id && 
-          f.type && 
-          ['text', 'largetext'].includes(f.type as string) &&
+          f.id &&
+          f.type &&
+          ['text', 'largetext', 'number'].includes(f.type as string) &&
           f.label &&
           typeof f.required === 'boolean'
         );

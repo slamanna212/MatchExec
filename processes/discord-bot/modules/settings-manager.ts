@@ -1,12 +1,13 @@
 import { Database } from '../../../lib/database/connection';
 import { DiscordSettings } from '../../../shared/types';
+import { logger } from '../../../src/lib/logger/server';
 
 export class SettingsManager {
   constructor(private db: Database) {}
 
   async loadSettings(): Promise<DiscordSettings | null> {
     if (!this.db) {
-      console.error('❌ Database not initialized in SettingsManager');
+      logger.error('❌ Database not initialized in SettingsManager');
       return null;
     }
 
@@ -32,7 +33,7 @@ export class SettingsManager {
 
       return settings;
     } catch (error) {
-      console.error('❌ Error loading Discord settings:', error);
+      logger.error('❌ Error loading Discord settings:', error);
       return null;
     }
   }

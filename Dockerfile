@@ -1,16 +1,15 @@
 # Support multi-platform builds
-FROM --platform=$BUILDPLATFORM node:24-alpine AS base
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies for native modules
 RUN apk add --no-cache python3 py3-setuptools make g++ git
 
+# Copy package files and install all dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev --production
-
-FROM base AS builder
 RUN npm ci
+
 # Copy source code files in order of change frequency (least to most likely to change)
 COPY shared ./shared
 COPY lib ./lib
@@ -24,19 +23,6 @@ COPY public ./public
 COPY *.config.* ./
 COPY tsconfig.json ./
 RUN npm run build
-
-# Create separate stage for production dependencies only
-FROM node:24-alpine AS production-deps
-WORKDIR /app
-
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 py3-setuptools make g++ git
-
-# Copy and install only production dependencies
-COPY production.package.json ./package.json
-RUN npm install && \
-    rm -rf /app/node_modules/*/test* /app/node_modules/*/tests* /app/node_modules/*/example* /app/node_modules/*/docs* /app/node_modules/*/*.md 2>/dev/null || true && \
-    npm cache clean --force
 
 FROM node:24-alpine AS runner
 WORKDIR /app
@@ -75,9 +61,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=abc:abc /app/.next/standalone ./
 COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
 
-# Copy only production node_modules from production-deps stage
-COPY --from=production-deps /app/node_modules ./node_modules
-
+# Copy runtime dependencies and application files
 COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/src ./src
@@ -85,6 +69,9 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
+
+# Copy node_modules from standalone output (Next.js includes only required runtime deps)
+COPY --from=builder /app/.next/standalone/node_modules ./node_modules
 
 # Copy s6-overlay configuration
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/

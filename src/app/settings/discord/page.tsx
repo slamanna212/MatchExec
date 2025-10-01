@@ -1,9 +1,11 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Alert, Checkbox } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
+import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger';
 
 interface DiscordSettings {
   application_id?: string;
@@ -16,7 +18,6 @@ interface DiscordSettings {
 export default function DiscordSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<DiscordSettings>({
     initialValues: {
@@ -47,7 +48,7 @@ export default function DiscordSettingsPage() {
           });
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -58,8 +59,7 @@ export default function DiscordSettingsPage() {
 
   const handleSubmit = async (values: DiscordSettings) => {
     setSaving(true);
-    setMessage(null);
-    
+
     try {
       // Don't send the masked bot token, let the server keep the existing one
       const payload = { ...values };
@@ -74,7 +74,10 @@ export default function DiscordSettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Discord settings saved successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Discord settings saved successfully!'
+        });
         // Refresh the form to get the latest data
         const refreshResponse = await fetch('/api/settings/discord');
         if (refreshResponse.ok) {
@@ -89,11 +92,17 @@ export default function DiscordSettingsPage() {
           form.setValues(sanitizedData);
         }
       } else {
-        setMessage({ type: 'error', text: 'Failed to save Discord settings.' });
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: 'Failed to save Discord settings.'
+        });
       }
     } catch (error) {
-      console.error('Error saving Discord settings:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving settings.' });
+      logger.error('Error saving Discord settings:', error);
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving settings.'
+      });
     } finally {
       setSaving(false);
     }
@@ -113,12 +122,6 @@ export default function DiscordSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {message && (
-            <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
-              {message.text}
-            </Alert>
-          )}
-
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <Group align="end">
@@ -151,16 +154,25 @@ export default function DiscordSettingsPage() {
                         });
 
                         if (response.ok) {
-                          setMessage({ type: 'success', text: 'Application ID saved! Opening Discord authorization...' });
+                          notificationHelper.success({
+                            title: 'Application ID Saved',
+                            message: 'Application ID saved! Opening Discord authorization...'
+                          });
                           // Open Discord authorization URL
                           const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=17929378196480&scope=bot%20applications.commands`;
                           window.open(url, '_blank');
                         } else {
-                          setMessage({ type: 'error', text: 'Failed to save application ID.' });
+                          notificationHelper.error({
+                            title: 'Save Failed',
+                            message: 'Failed to save application ID.'
+                          });
                         }
                       } catch (error) {
-                        console.error('Error saving application ID:', error);
-                        setMessage({ type: 'error', text: 'An error occurred while saving application ID.' });
+                        logger.error('Error saving application ID:', error);
+                        notificationHelper.error({
+                          title: 'Connection Error',
+                          message: 'An error occurred while saving application ID.'
+                        });
                       } finally {
                         setSaving(false);
                       }

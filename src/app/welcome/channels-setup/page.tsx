@@ -7,8 +7,8 @@ import {
   ActionIcon, Modal, Checkbox, Alert, TextInput, Radio, Progress
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useDisclosure } from '@mantine/hooks';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
+import { logger } from '@/lib/logger';
 
 interface DiscordChannel {
   id: string;
@@ -43,12 +43,26 @@ export default function ChannelsSetupPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Create channel modal
-  const [createModalOpened, { open: openCreateModal, close: closeCreateModal }] = useDisclosure(false);
+  const [createModalOpened, setCreateModalOpened] = useState(false);
+
+  // Debug function to test modal opening
+  const handleOpenCreateModal = () => {
+    logger.debug('Add Channel button clicked');
+    logger.debug('Current modal state:', createModalOpened);
+    setCreateModalOpened(true);
+    logger.debug('Modal should now be open');
+  };
+
+  const closeCreateModal = () => {
+    setCreateModalOpened(false);
+    setCurrentStep(0);
+    createForm.reset();
+  };
   const [currentStep, setCurrentStep] = useState(0);
   const [createLoading, setCreateLoading] = useState(false);
 
   // Edit channel modal
-  const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
+  const [editModalOpened, setEditModalOpened] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
   const [editData, setEditData] = useState<ChannelEditData>({
     send_announcements: false,
@@ -91,6 +105,10 @@ export default function ChannelsSetupPage() {
     fetchChannels();
   }, []);
 
+  useEffect(() => {
+    logger.debug('Modal state changed:', createModalOpened);
+  }, [createModalOpened]);
+
   const fetchChannels = async () => {
     try {
       const response = await fetch('/api/channels');
@@ -99,7 +117,7 @@ export default function ChannelsSetupPage() {
         setChannels(data);
       }
     } catch (error) {
-      console.error('Error fetching channels:', error);
+      logger.error('Error fetching channels:', error);
     }
   };
 
@@ -115,7 +133,7 @@ export default function ChannelsSetupPage() {
         router.push('/');
       }
     } catch (error) {
-      console.error('Error completing welcome flow:', error);
+      logger.error('Error completing welcome flow:', error);
     }
   };
 
@@ -143,7 +161,7 @@ export default function ChannelsSetupPage() {
         });
       }
     } catch (error) {
-      console.error('Error creating channel:', error);
+      logger.error('Error creating channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
     } finally {
       setCreateLoading(false);
@@ -158,7 +176,12 @@ export default function ChannelsSetupPage() {
       send_match_start: channel.send_match_start || false,
       send_signup_updates: channel.send_signup_updates || false
     });
-    openEditModal();
+    setEditModalOpened(true);
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpened(false);
+    setSelectedChannel(null);
   };
 
   const handleSaveNotifications = async () => {
@@ -179,7 +202,7 @@ export default function ChannelsSetupPage() {
         setMessage({ type: 'error', text: 'Failed to update notification settings' });
       }
     } catch (error) {
-      console.error('Error updating notifications:', error);
+      logger.error('Error updating notifications:', error);
       setMessage({ type: 'error', text: 'An error occurred while updating settings' });
     }
   };
@@ -201,7 +224,7 @@ export default function ChannelsSetupPage() {
         setMessage({ type: 'error', text: 'Failed to delete channel' });
       }
     } catch (error) {
-      console.error('Error deleting channel:', error);
+      logger.error('Error deleting channel:', error);
       setMessage({ type: 'error', text: 'An error occurred while deleting the channel' });
     }
   };
@@ -384,7 +407,7 @@ export default function ChannelsSetupPage() {
           <Text size="lg" fw={600}>Your Channels</Text>
           <Button
             leftSection={<IconPlus size="1rem" />}
-            onClick={openCreateModal}
+            onClick={handleOpenCreateModal}
           >
             Add Channel
           </Button>
@@ -507,6 +530,7 @@ export default function ChannelsSetupPage() {
         onClose={closeCreateModal}
         title="Add Discord Channel"
         size="lg"
+        zIndex={1001}
       >
         <Stack gap="lg">
           <div>
@@ -563,6 +587,7 @@ export default function ChannelsSetupPage() {
         onClose={closeEditModal}
         title="Channel Notification Settings"
         size="md"
+        zIndex={1001}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">

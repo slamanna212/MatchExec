@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
 
     return NextResponse.json(settings || { auto_refresh_interval_seconds: 10 });
   } catch (error) {
-    console.error('Error fetching UI settings:', error);
+    logger.error('Error fetching UI settings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch UI settings' },
       { status: 500 }
@@ -41,7 +42,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ message: 'UI settings updated successfully' });
   } catch (error) {
-    console.error('Error updating UI settings:', error);
+    logger.error('Error updating UI settings:', error);
     return NextResponse.json(
       { error: 'Failed to update UI settings' },
       { status: 500 }

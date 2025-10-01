@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 
 export async function GET(
@@ -48,9 +49,55 @@ export async function GET(
       
       if (matchWithAnnouncements?.announcements) {
         try {
-          const announcements = JSON.parse(matchWithAnnouncements.announcements);
+          let announcements;
+
+          // Handle different announcement field formats
+          if (typeof matchWithAnnouncements.announcements === 'string') {
+            try {
+              announcements = JSON.parse(matchWithAnnouncements.announcements);
+            } catch {
+              // If it's not valid JSON, skip this match
+              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
+              return NextResponse.json({
+                match: {
+                  id: match.id,
+                  name: match.name,
+                  start_date: match.start_date,
+                  player_notifications: Boolean(match.player_notifications),
+                  status: match.status
+                },
+                reminders: [],
+                reminderCount: 0
+              });
+            }
+          } else if (typeof matchWithAnnouncements.announcements === 'number' || typeof matchWithAnnouncements.announcements === 'boolean') {
+            // For tournament matches, announcements is a boolean/number flag
+            // Use default announcement schedule for tournament matches
+            if (matchWithAnnouncements.announcements) {
+              announcements = [
+                { id: 'default_1hour', value: 1, unit: 'hours' },
+                { id: 'default_30min', value: 30, unit: 'minutes' }
+              ];
+            } else {
+              // announcements disabled for this tournament match
+              return NextResponse.json({
+                match: {
+                  id: match.id,
+                  name: match.name,
+                  start_date: match.start_date,
+                  player_notifications: Boolean(match.player_notifications),
+                  status: match.status
+                },
+                reminders: [],
+                reminderCount: 0
+              });
+            }
+          } else {
+            announcements = matchWithAnnouncements.announcements;
+          }
+
           const startDate = new Date(match.start_date);
-          
+
           for (const announcement of announcements) {
             // Calculate when this announcement should be sent
             const { value, unit, id } = announcement;
@@ -109,7 +156,7 @@ export async function GET(
             });
           }
         } catch (parseError) {
-          console.error('Error parsing match announcements:', parseError);
+          logger.error('Error parsing match announcements:', parseError);
         }
       }
     }
@@ -134,7 +181,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error fetching match reminders:', error);
+    logger.error('Error fetching match reminders:', error);
     return NextResponse.json(
       { error: 'Failed to fetch match reminders' },
       { status: 500 }
