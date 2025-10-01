@@ -186,7 +186,7 @@ export function CreateMatchPage() {
     } else {
       // Clear form data when going back to matches from step 1
       clearFormData();
-      router.push('/');
+      router.push('/matches');
     }
   };
 
@@ -554,7 +554,7 @@ export function CreateMatchPage() {
         }
         
         clearFormData();
-        router.push('/');
+        router.push('/matches');
       } else {
         const errorData = await response.json();
         console.error('Failed to create match:', errorData.error);

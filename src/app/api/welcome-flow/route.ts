@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
+import { logger } from '@/lib/logger';
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -9,7 +10,7 @@ export async function GET(): Promise<NextResponse> {
     return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
-          console.error('Database connection error:', err);
+          logger.error('Database connection error:', err);
           resolve(NextResponse.json({ 
             isFirstRun: true, 
             completed: false, 
@@ -25,7 +26,7 @@ export async function GET(): Promise<NextResponse> {
             db.close();
             
             if (err) {
-              console.error('Database query error:', err);
+              logger.error('Database query error:', err);
               resolve(NextResponse.json({ 
                 isFirstRun: true, 
                 completed: false, 
@@ -49,7 +50,7 @@ export async function GET(): Promise<NextResponse> {
       });
     });
   } catch (error) {
-    console.error('Error checking welcome flow status:', error);
+    logger.error('Error checking welcome flow status:', error);
     return NextResponse.json({ 
       isFirstRun: true, 
       completed: false, 
@@ -72,7 +73,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
     return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
-          console.error('Database connection error:', err);
+          logger.error('Database connection error:', err);
           resolve(NextResponse.json({ error: 'Failed to complete welcome flow' }, { status: 500 }));
           return;
         }
@@ -84,7 +85,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
             db.close();
             
             if (err) {
-              console.error('Database update error:', err);
+              logger.error('Database update error:', err);
               resolve(NextResponse.json({ error: 'Failed to complete welcome flow' }, { status: 500 }));
               return;
             }
@@ -95,7 +96,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
       });
     });
   } catch (error) {
-    console.error('Error completing welcome flow:', error);
+    logger.error('Error completing welcome flow:', error);
     return NextResponse.json({ error: 'Failed to complete welcome flow' }, { status: 500 });
   }
 }

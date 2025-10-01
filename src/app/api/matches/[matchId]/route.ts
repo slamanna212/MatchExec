@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { MatchDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -40,7 +41,7 @@ export async function GET(
     
     return NextResponse.json(parsedMatch);
   } catch (error) {
-    console.error('Error fetching match:', error);
+    logger.error('Error fetching match:', error);
     return NextResponse.json(
       { error: 'Failed to fetch match' },
       { status: 500 }
@@ -77,9 +78,9 @@ export async function DELETE(
         VALUES (?, ?, 'pending')
       `, [deletionId, matchId]);
       
-      console.log('🗑️ Discord deletion queued for match:', matchId);
+      logger.debug('🗑️ Discord deletion queued for match:', matchId);
     } catch (error) {
-      console.error('❌ Error queuing Discord deletion:', error);
+      logger.error('❌ Error queuing Discord deletion:', error);
     }
     
     // Clean up event image if it exists
@@ -89,10 +90,10 @@ export async function DELETE(
           method: 'DELETE',
         });
         if (response.ok) {
-          console.log(`✅ Cleaned up event image for match: ${matchId}`);
+          logger.debug(`✅ Cleaned up event image for match: ${matchId}`);
         }
       } catch (error) {
-        console.error('Error cleaning up event image:', error);
+        logger.error('Error cleaning up event image:', error);
       }
     }
     
@@ -101,7 +102,7 @@ export async function DELETE(
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting match:', error);
+    logger.error('Error deleting match:', error);
     return NextResponse.json(
       { error: 'Failed to delete match' },
       { status: 500 }

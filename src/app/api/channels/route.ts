@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export interface DiscordChannel {
   id: string;
@@ -47,7 +48,7 @@ export async function GET() {
 
     return NextResponse.json(formattedChannels);
   } catch (error) {
-    console.error('Error fetching Discord channels:', error);
+    logger.error('Error fetching Discord channels:', error);
     return NextResponse.json(
       { error: 'Failed to fetch Discord channels' },
       { status: 500 }
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       message: 'Channel created successfully' 
     });
   } catch (error) {
-    console.error('Error creating Discord channel:', error);
+    logger.error('Error creating Discord channel:', error);
     return NextResponse.json(
       { error: 'Failed to create Discord channel' },
       { status: 500 }

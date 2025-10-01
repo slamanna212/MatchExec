@@ -1,0 +1,20 @@
+[
+  {
+    "id": "standard",
+    "name": "Standard",
+    "description": "Classic Fortnite Battle Royale with building mechanics. Teams compete to be the last standing.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "nobuild",
+    "name": "No Build",
+    "description": "Fortnite Battle Royale without building mechanics. Pure shooting and tactics.",
+    "scoringType": "Normal"
+  },
+  {
+    "id": "solo",
+    "name": "Solo",
+    "description": "Every player for themselves. Last player standing wins.",
+    "scoringType": "FFA"
+  }
+]

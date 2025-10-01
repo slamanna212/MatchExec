@@ -21,6 +21,14 @@
 
 /* Override Mantine's body background - must come after Mantine styles */
 
+:root[data-mantine-color-scheme='light'] {
+  --mantine-color-body: #e9eaee;
+}
+
+[data-mantine-color-scheme='light'] body {
+  background-color: #e9eaee !important;
+}
+
 :root[data-mantine-color-scheme='dark'] {
   --mantine-color-body: #101019;
   --mantine-color-dark-6: #292933;

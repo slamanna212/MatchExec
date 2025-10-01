@@ -1,4 +1,5 @@
 import { Database } from './database/connection';
+import { logger } from '../src/lib/logger/server';
 
 interface VoiceTestRequest {
   id: string;
@@ -36,7 +37,7 @@ export class DiscordBotService {
     `, [userId]);
 
     if (existingRequest) {
-      console.log(`⏭️ Voice test already pending for user ${userId}, returning existing request`);
+      logger.debug(`⏭️ Voice test already pending for user ${userId}, returning existing request`);
       return existingRequest.id;
     }
 

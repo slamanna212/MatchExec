@@ -1,8 +1,61 @@
 import { getDbInstance } from './database-init';
-import { 
-  MatchResult, 
-  MatchFormat
+import { logger } from '@/lib/logger';
+import {
+  MatchResult,
+  MatchFormat,
+  PositionScoringConfig
 } from '@/shared/types';
+
+/**
+ * Get points for a given position based on game's scoring config
+ * Returns 0 if position is not in the config
+ */
+export function getPointsForPosition(position: number, config: PositionScoringConfig): number {
+  return config.pointsPerPosition[position.toString()] ?? 0;
+}
+
+/**
+ * Calculate points awarded for position results
+ */
+export async function calculatePositionPoints(
+  positionResults: Record<string, number>,
+  gameId: string
+): Promise<Record<string, number>> {
+  const db = await getDbInstance();
+
+  try {
+    // Get the game's scoring config
+    const gameQuery = `
+      SELECT scoring_config FROM games
+      WHERE id = (SELECT game_id FROM matches WHERE id = (
+        SELECT match_id FROM match_games WHERE id = ?
+      ))
+    `;
+
+    const gameRow = await db.get<{ scoring_config?: string }>(gameQuery, [gameId]);
+
+    if (!gameRow || !gameRow.scoring_config) {
+      logger.warning('No scoring config found for game, defaulting to 0 points for all positions');
+      return Object.keys(positionResults).reduce((acc, participantId) => {
+        acc[participantId] = 0;
+        return acc;
+      }, {} as Record<string, number>);
+    }
+
+    const config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+
+    // Calculate points for each participant
+    const pointsAwarded: Record<string, number> = {};
+    for (const [participantId, position] of Object.entries(positionResults)) {
+      pointsAwarded[participantId] = getPointsForPosition(position, config);
+    }
+
+    return pointsAwarded;
+  } catch (error) {
+    logger.error('Error calculating position points:', error);
+    throw error;
+  }
+}
 
 /**
  * Get match format from database
@@ -18,7 +71,7 @@ export async function getMatchFormat(matchId: string): Promise<MatchFormat> {
     const row = await db.get<{ match_format?: string }>(query, [matchId]);
     return (row?.match_format as MatchFormat) || 'casual';
   } catch (error) {
-    console.error('Error in getMatchFormat:', error);
+    logger.error('Error in getMatchFormat:', error);
     throw error;
   }
 }
@@ -27,7 +80,7 @@ export async function getMatchFormat(matchId: string): Promise<MatchFormat> {
  * Create match_games entries for all maps in a match
  */
 export async function initializeMatchGames(matchId: string): Promise<void> {
-  console.log('initializeMatchGames - Starting with matchId:', matchId);
+  logger.debug('initializeMatchGames - Starting with matchId:', matchId);
   
   const db = await getDbInstance();
   
@@ -37,12 +90,12 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
     const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
     
     if (!matchRow || !matchRow.maps) {
-      console.log('initializeMatchGames - No maps found for match');
+      logger.debug('initializeMatchGames - No maps found for match');
       return;
     }
     
     const maps = JSON.parse(matchRow.maps);
-    console.log(`initializeMatchGames - Found ${maps.length} maps:`, maps);
+    logger.debug(`initializeMatchGames - Found ${maps.length} maps:`, maps);
     
     // Create a match_games entry for each map
     for (let i = 0; i < maps.length; i++) {
@@ -74,7 +127,7 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
         `;
         
         await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
-        console.log(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
+        logger.debug(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
         
         // Clean up the temporary Round 0 entry if it exists
         if (noteEntry) {
@@ -82,16 +135,16 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
             DELETE FROM match_games 
             WHERE match_id = ? AND map_id = ? AND round = 0
           `, [matchId, mapId]);
-          console.log(`Cleaned up temporary note entry for ${mapId}`);
+          logger.debug(`Cleaned up temporary note entry for ${mapId}`);
         }
       } else {
-        console.log(`Match game ${gameId} already exists`);
+        logger.debug(`Match game ${gameId} already exists`);
       }
     }
     
-    console.log('initializeMatchGames - Completed successfully');
+    logger.debug('initializeMatchGames - Completed successfully');
   } catch (error) {
-    console.error('Error in initializeMatchGames:', error);
+    logger.error('Error in initializeMatchGames:', error);
     throw error;
   }
 }
@@ -100,11 +153,11 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
  * Get all match games for a match with their current status
  */
 export async function getMatchGames(matchId: string): Promise<Array<Record<string, unknown>>> {
-  console.log(`getMatchGames: Starting for matchId: ${matchId}`);
+  logger.debug(`getMatchGames: Starting for matchId: ${matchId}`);
   
   try {
     const db = await getDbInstance();
-    console.log('getMatchGames: Database instance obtained');
+    logger.debug('getMatchGames: Database instance obtained');
     
     // First get the match games
     const gamesQuery = `
@@ -114,9 +167,9 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
       ORDER BY mg.round ASC
     `;
     
-    console.log('getMatchGames: Executing games query...');
+    logger.debug('getMatchGames: Executing games query...');
     const games = await db.all<Record<string, unknown>>(gamesQuery, [matchId]);
-    console.log(`getMatchGames: Query completed, found ${games?.length || 0} games`);
+    logger.debug(`getMatchGames: Query completed, found ${games?.length || 0} games`);
     
     // Now enrich each game with map data by stripping timestamps
     for (const game of games) {
@@ -148,8 +201,8 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
     
     return games || [];
   } catch (error) {
-    console.error('Error in getMatchGames:', error);
-    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('Error in getMatchGames:', error);
+    logger.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
     throw error;
   }
 }
@@ -158,22 +211,22 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
  * Ensure a match_games entry exists for the given match game ID
  */
 async function ensureMatchGameExists(matchGameId: string, matchId: string): Promise<void> {
-  console.log('ensureMatchGameExists - Starting with matchGameId:', matchGameId, 'matchId:', matchId);
+  logger.debug('ensureMatchGameExists - Starting with matchGameId:', matchGameId, 'matchId:', matchId);
   
   const db = await getDbInstance();
-  console.log('ensureMatchGameExists - Database instance obtained');
+  logger.debug('ensureMatchGameExists - Database instance obtained');
   
   try {
     // Check if the match_games entry already exists
     const checkQuery = `SELECT id FROM match_games WHERE id = ?`;
-    console.log('ensureMatchGameExists - Running check query');
+    logger.debug('ensureMatchGameExists - Running check query');
     
     const row = await db.get<{ id: string }>(checkQuery, [matchGameId]);
     const exists = !!row;
-    console.log('ensureMatchGameExists - Check query result:', exists);
+    logger.debug('ensureMatchGameExists - Check query result:', exists);
 
     if (!exists) {
-      console.log('ensureMatchGameExists - Entry does not exist, creating new entry');
+      logger.debug('ensureMatchGameExists - Entry does not exist, creating new entry');
       // Create the match_games entry
       const insertQuery = `
         INSERT INTO match_games (
@@ -183,37 +236,55 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
       `;
       
       await db.run(insertQuery, [matchGameId, matchId]);
-      console.log(`Created match game entry ${matchGameId} for match ${matchId}`);
+      logger.debug(`Created match game entry ${matchGameId} for match ${matchId}`);
     } else {
-      console.log('ensureMatchGameExists - Entry already exists, skipping creation');
+      logger.debug('ensureMatchGameExists - Entry already exists, skipping creation');
     }
-    console.log('ensureMatchGameExists - Completed successfully');
+    logger.debug('ensureMatchGameExists - Completed successfully');
   } catch (error) {
-    console.error('Error in ensureMatchGameExists:', error);
+    logger.error('Error in ensureMatchGameExists:', error);
     throw error;
   }
 }
 
 /**
- * Save match result - handles both team-based and FFA scoring
+ * Save match result - handles team-based, FFA, and Position scoring
  */
 export async function saveMatchResult(
   matchGameId: string,
   result: MatchResult
 ): Promise<void> {
-  console.log('saveMatchResult - Starting with matchGameId:', matchGameId);
-  console.log('saveMatchResult - Result:', JSON.stringify(result, null, 2));
-  
+  logger.debug('saveMatchResult - Starting with matchGameId:', matchGameId);
+  logger.debug('saveMatchResult - Result:', JSON.stringify(result, null, 2));
+
   const db = await getDbInstance();
-  
+
   try {
     // First, ensure the match_games entry exists
     await ensureMatchGameExists(matchGameId, result.matchId);
-    
-    // Handle FFA vs Normal scoring differently
-    if (result.isFfaMode && result.participantWinnerId) {
+
+    // Handle Position vs FFA vs Normal scoring
+    if (result.isPositionMode && result.positionResults) {
+      // Position Mode: Save position results and calculate points
+      const pointsAwarded = await calculatePositionPoints(result.positionResults, matchGameId);
+
+      const query = `UPDATE match_games
+                     SET position_results = ?,
+                         points_awarded = ?,
+                         status = 'completed',
+                         completed_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`;
+
+      await db.run(query, [
+        JSON.stringify(result.positionResults),
+        JSON.stringify(pointsAwarded),
+        matchGameId
+      ]);
+      logger.debug(`Saved Position match result for game ${matchGameId}:`, pointsAwarded);
+    } else if (result.isFfaMode && result.participantWinnerId) {
       // FFA Mode: Save individual participant winner, don't count toward team wins
-      const query = `UPDATE match_games 
+      const query = `UPDATE match_games
                      SET participant_winner_id = ?,
                          is_ffa_mode = 1,
                          status = 'completed',
@@ -222,10 +293,10 @@ export async function saveMatchResult(
                      WHERE id = ?`;
 
       await db.run(query, [result.participantWinnerId, matchGameId]);
-      console.log(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
+      logger.debug(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
     } else {
       // Normal Mode: Save team winner
-      const query = `UPDATE match_games 
+      const query = `UPDATE match_games
                      SET winner_id = ?,
                          is_ffa_mode = 0,
                          status = 'completed',
@@ -234,7 +305,7 @@ export async function saveMatchResult(
                      WHERE id = ?`;
 
       await db.run(query, [result.winner, matchGameId]);
-      console.log(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
+      logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
     }
 
     // Queue Discord score notification
@@ -248,9 +319,9 @@ export async function saveMatchResult(
 
     // Queue voice announcements based on match state
     await queueVoiceAnnouncementForScore(result.matchId, hasNextMap, isMatchComplete);
-    
+
   } catch (error) {
-    console.error('Error in saveMatchResult:', error);
+    logger.error('Error in saveMatchResult:', error);
     throw error;
   }
 }
@@ -299,7 +370,7 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
       completedAt: new Date(row.completed_at!)
     };
   } catch (error) {
-    console.error('Error in getMatchResult:', error);
+    logger.error('Error in getMatchResult:', error);
     throw error;
   }
 }
@@ -331,23 +402,23 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
       `;
       
       await db.run(updateQuery, [nextMap.id]);
-      console.log(`Set next map ${nextMap.id} to ongoing status`);
+      logger.debug(`Set next map ${nextMap.id} to ongoing status`);
 
       // Queue map code PMs for the new map if map codes are supported
       try {
         await queueMapCodePMsForNext(matchId, nextMap.map_name);
       } catch (mapCodeError) {
-        console.error('Error queuing map code PMs for next map:', mapCodeError);
+        logger.error('Error queuing map code PMs for next map:', mapCodeError);
         // Don't throw - this is a non-critical operation
       }
 
       return true; // There is a next map
     } else {
-      console.log('No pending maps found to set as ongoing');
+      logger.debug('No pending maps found to set as ongoing');
       return false; // No next map
     }
   } catch (error) {
-    console.error('Error setting next map to ongoing:', error);
+    logger.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
     return false;
   }
@@ -355,10 +426,10 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
 
 // Queue map code PMs for the next map
 async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promise<void> {
-  console.log('🔍 queueMapCodePMsForNext called with:', matchId, mapName);
+  logger.debug('🔍 queueMapCodePMsForNext called with:', matchId, mapName);
   
   if (!mapName) {
-    console.log('No map name available for map code PMs');
+    logger.debug('No map name available for map code PMs');
     return;
   }
 
@@ -376,7 +447,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
       WHERE m.id = ?
     `, [matchId]);
 
-    console.log('🔍 matchData:', matchData);
+    logger.debug('🔍 matchData:', matchData);
     
     if (matchData?.map_codes_supported) {
       const mapCodes = matchData.map_codes ? JSON.parse(matchData.map_codes) : {};
@@ -396,9 +467,9 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
         }
       }
       
-      console.log('🔍 mapCodes:', mapCodes);
-      console.log('🔍 cleanMapName:', cleanMapName);
-      console.log('🔍 mapCode:', mapCode);
+      logger.debug('🔍 mapCodes:', mapCodes);
+      logger.debug('🔍 cleanMapName:', cleanMapName);
+      logger.debug('🔍 mapCode:', mapCode);
       
       if (mapCode) {
         // Generate unique ID for the queue entry
@@ -422,7 +493,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
             displayMapName = mapNameData.name;
           }
         } catch (error) {
-          console.error('Error fetching map name for PM queue:', error);
+          logger.error('Error fetching map name for PM queue:', error);
           // Keep original mapName as fallback
         }
 
@@ -432,13 +503,13 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
           VALUES (?, ?, ?, ?, 'pending')
         `, [queueId, matchId, displayMapName, mapCode]);
         
-        console.log('📱 Map code PMs queued for next map:', mapName, 'in match:', matchId);
+        logger.debug('📱 Map code PMs queued for next map:', mapName, 'in match:', matchId);
       } else {
-        console.log('No map code found for map:', mapName);
+        logger.debug('No map code found for map:', mapName);
       }
     }
   } catch (error) {
-    console.error('Error queuing map code PMs for next map:', error);
+    logger.error('Error queuing map code PMs for next map:', error);
     throw error;
   }
 }
@@ -471,7 +542,7 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
     }>(gameDataQuery, [matchGameId]);
 
     if (!gameData) {
-      console.warn('No game data found for score notification');
+      logger.warning('No game data found for score notification');
       return;
     }
 
@@ -482,15 +553,15 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
     if (result.isFfaMode && result.participantWinnerId) {
       // FFA Mode: Get the individual winner's name
       const participantQuery = `
-        SELECT username
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND id = ?
       `;
-      const participant = await db.get<{ username: string }>(participantQuery, [gameData.match_id, result.participantWinnerId]);
-      
+      const participant = await db.get<{ username: string; discord_user_id?: string | null }>(participantQuery, [gameData.match_id, result.participantWinnerId]);
+
       if (participant) {
         winningTeamName = participant.username;
-        winningPlayers = [participant.username];
+        winningPlayers = [participant.discord_user_id ? `<@${participant.discord_user_id}>` : participant.username];
       } else {
         winningTeamName = 'Unknown Player';
         winningPlayers = ['Unknown Player'];
@@ -501,14 +572,14 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
       const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
       
       const playersQuery = `
-        SELECT username
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND team_assignment = ?
         ORDER BY username ASC
       `;
 
-      const players = await db.all<{ username: string }>(playersQuery, [gameData.match_id, teamAssignment]);
-      winningPlayers = players.map(p => p.username);
+      const players = await db.all<{ username: string; discord_user_id?: string | null }>(playersQuery, [gameData.match_id, teamAssignment]);
+      winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
     }
 
     // Generate unique notification ID
@@ -533,9 +604,9 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
       JSON.stringify(winningPlayers)
     ]);
 
-    console.log(`✅ Queued score notification: ${winningTeamName} wins game ${gameData.round}`);
+    logger.debug(`✅ Queued score notification: ${winningTeamName} wins game ${gameData.round}`);
   } catch (error) {
-    console.error('Error queueing score notification:', error);
+    logger.error('Error queueing score notification:', error);
     // Don't throw - this is not critical for the main scoring flow
   }
 }
@@ -567,16 +638,59 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
 
     const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
 
-    // If all games are completed, mark match as complete
+    // If all games are completed, mark match as complete and determine winner
     if (statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total) {
+      // Calculate overall match winner based on game wins
+      const winnerQuery = `
+        SELECT
+          COUNT(*) as total_normal_games,
+          SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
+          SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
+        FROM match_games mg
+        WHERE mg.match_id = ?
+          AND mg.status = 'completed'
+          AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL)
+          AND mg.winner_id IS NOT NULL
+      `;
+
+      const winResult = await db.get<{
+        total_normal_games: number;
+        team1_wins: number;
+        team2_wins: number;
+      }>(winnerQuery, [matchId]);
+
+      let winnerTeam: string | null = null;
+      if (winResult && winResult.total_normal_games > 0) {
+        if (winResult.team1_wins > winResult.team2_wins) {
+          // Get team1 ID from tournament_matches or match data
+          const team1Data = await db.get<{ red_team_id?: string; team1_id?: string }>(`
+            SELECT m.red_team_id, tm.team1_id
+            FROM matches m
+            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+            WHERE m.id = ?
+          `, [matchId]);
+          winnerTeam = team1Data?.team1_id || team1Data?.red_team_id || null;
+        } else if (winResult.team2_wins > winResult.team1_wins) {
+          // Get team2 ID from tournament_matches or match data
+          const team2Data = await db.get<{ blue_team_id?: string; team2_id?: string }>(`
+            SELECT m.blue_team_id, tm.team2_id
+            FROM matches m
+            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+            WHERE m.id = ?
+          `, [matchId]);
+          winnerTeam = team2Data?.team2_id || team2Data?.blue_team_id || null;
+        }
+        // If tied, leave winnerTeam as null
+      }
+
       const updateMatchQuery = `
-        UPDATE matches 
-        SET status = 'complete', end_date = CURRENT_TIMESTAMP 
+        UPDATE matches
+        SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      
-      await db.run(updateMatchQuery, [matchId]);
-      console.log(`Match ${matchId} marked as complete`);
+
+      await db.run(updateMatchQuery, [winnerTeam, matchId]);
+      logger.debug(`Match ${matchId} marked as complete with winner: ${winnerTeam || 'tie/none'}`);
       
       // Queue match winner notification
       await queueMatchWinnerNotification(matchId);
@@ -589,7 +703,7 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
     
     return false; // Match is not complete yet
   } catch (error) {
-    console.error('Error updating match status:', error);
+    logger.error('Error updating match status:', error);
     // Don't throw - this is a non-critical operation
     return false;
   }
@@ -616,13 +730,13 @@ async function queueVoiceAnnouncementForScore(
     `, [matchId]);
 
     if (!match) {
-      console.warn('Match not found for voice announcement:', matchId);
+      logger.warning('Match not found for voice announcement:', matchId);
       return;
     }
 
     // Skip if no voice channels are configured
     if (!match.blue_team_voice_channel && !match.red_team_voice_channel) {
-      console.log('📢 No voice channels configured for match:', matchId);
+      logger.debug('📢 No voice channels configured for match:', matchId);
       return;
     }
 
@@ -636,7 +750,7 @@ async function queueVoiceAnnouncementForScore(
       announcementType = 'nextround';
     } else {
       // No more maps but match not complete - shouldn't happen, but skip
-      console.warn('No next map but match not complete for:', matchId);
+      logger.warning('No next map but match not complete for:', matchId);
       return;
     }
 
@@ -665,15 +779,88 @@ async function queueVoiceAnnouncementForScore(
       firstTeam
     ]);
     
-    console.log(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
+    logger.debug(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
   } catch (error) {
-    console.error('❌ Error queuing voice announcement for score:', error);
+    logger.error('❌ Error queuing voice announcement for score:', error);
     // Don't throw - this is not critical for the main scoring flow
   }
 }
 
 /**
- * Get overall match score (team wins for Normal modes only, excluding FFA)
+ * Get overall position-based scores for a match
+ */
+export async function getOverallPositionScore(matchId: string): Promise<{
+  participantScores: Record<string, { username: string; totalPoints: number; races: number }>;
+  winner: string | null;
+}> {
+  const db = await getDbInstance();
+
+  try {
+    const query = `
+      SELECT mg.points_awarded, mg.position_results
+      FROM match_games mg
+      WHERE mg.match_id = ?
+        AND mg.status = 'completed'
+        AND mg.points_awarded IS NOT NULL
+    `;
+
+    const games = await db.all<{
+      points_awarded: string;
+      position_results: string;
+    }>(query, [matchId]);
+
+    // Aggregate points across all races
+    const participantScores: Record<string, { username: string; totalPoints: number; races: number }> = {};
+
+    for (const game of games) {
+      const pointsAwarded = JSON.parse(game.points_awarded) as Record<string, number>;
+
+      for (const [participantId, points] of Object.entries(pointsAwarded)) {
+        if (!participantScores[participantId]) {
+          // Get participant username
+          const participantQuery = `SELECT username FROM match_participants WHERE id = ?`;
+          const participant = await db.get<{ username: string }>(participantQuery, [participantId]);
+
+          participantScores[participantId] = {
+            username: participant?.username || 'Unknown',
+            totalPoints: 0,
+            races: 0
+          };
+        }
+
+        participantScores[participantId].totalPoints += points;
+        participantScores[participantId].races += 1;
+      }
+    }
+
+    // Determine winner (participant with highest total points)
+    let winner: string | null = null;
+    let highestPoints = -1;
+
+    for (const [participantId, data] of Object.entries(participantScores)) {
+      if (data.totalPoints > highestPoints) {
+        highestPoints = data.totalPoints;
+        winner = participantId;
+      } else if (data.totalPoints === highestPoints) {
+        winner = null; // Tie
+      }
+    }
+
+    return {
+      participantScores,
+      winner
+    };
+  } catch (error) {
+    logger.error('Error getting overall position score:', error);
+    return {
+      participantScores: {},
+      winner: null
+    };
+  }
+}
+
+/**
+ * Get overall match score (team wins for Normal modes only, excluding FFA and Position)
  */
 export async function getOverallMatchScore(matchId: string): Promise<{
   team1Wins: number;
@@ -724,7 +911,7 @@ export async function getOverallMatchScore(matchId: string): Promise<{
       overallWinner
     };
   } catch (error) {
-    console.error('Error getting overall match score:', error);
+    logger.error('Error getting overall match score:', error);
     return {
       team1Wins: 0,
       team2Wins: 0,
@@ -787,7 +974,7 @@ export async function getMatchGamesWithResults(matchId: string): Promise<Array<{
       is_ffa_mode: Boolean(game.is_ffa_mode)
     }));
   } catch (error) {
-    console.error('Error getting match games with results:', error);
+    logger.error('Error getting match games with results:', error);
     return [];
   }
 }
@@ -808,7 +995,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
     `, [matchId]);
 
     if (!matchData) {
-      console.warn('Match not found for winner notification:', matchId);
+      logger.warning('Match not found for winner notification:', matchId);
       return;
     }
 
@@ -816,7 +1003,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
     const scoreData = await getOverallMatchScore(matchId);
     
     if (scoreData.totalNormalGames === 0) {
-      console.warn('No completed normal games found for match winner notification:', matchId);
+      logger.warning('No completed normal games found for match winner notification:', matchId);
       return;
     }
 
@@ -832,14 +1019,14 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
       const teamAssignment = winner === 'team1' ? 'blue' : 'red';
       
       // Get winning team players
-      const players = await db.all<{ username: string }>(`
-        SELECT username
+      const players = await db.all<{ username: string; discord_user_id?: string | null }>(`
+        SELECT username, discord_user_id
         FROM match_participants
         WHERE match_id = ? AND team_assignment = ?
         ORDER BY username ASC
       `, [matchId, teamAssignment]);
-      
-      winningPlayers = players.map(p => p.username);
+
+      winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
     }
 
     // Generate unique notification ID
@@ -864,9 +1051,9 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
       scoreData.totalNormalGames
     ]);
 
-    console.log(`🏆 Match winner notification queued: ${winningTeamName} wins ${matchData.name} (${scoreData.team1Wins}-${scoreData.team2Wins})`);
+    logger.debug(`🏆 Match winner notification queued: ${winningTeamName} wins ${matchData.name} (${scoreData.team1Wins}-${scoreData.team2Wins})`);
   } catch (error) {
-    console.error('❌ Error queuing match winner notification:', error);
+    logger.error('❌ Error queuing match winner notification:', error);
     // Don't throw - this is not critical for the main scoring flow
   }
 }
@@ -887,9 +1074,9 @@ async function queueDiscordDeletion(matchId: string): Promise<void> {
       VALUES (?, ?, 'pending')
     `, [deletionId, matchId]);
     
-    console.log(`🗑️ Discord deletion queued for completed match: ${matchId}`);
+    logger.debug(`🗑️ Discord deletion queued for completed match: ${matchId}`);
   } catch (error) {
-    console.error('❌ Error queuing Discord deletion for completed match:', error);
+    logger.error('❌ Error queuing Discord deletion for completed match:', error);
     // Don't throw - this is not critical for the main scoring flow
   }
 }

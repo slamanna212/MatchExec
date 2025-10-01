@@ -19,7 +19,7 @@ export interface GameMode {
   game_id: string;
   name: string;
   description: string;
-  scoring_type: 'Normal' | 'FFA';
+  scoring_type: 'Normal' | 'FFA' | 'Position';
   created_at: Date;
   updated_at: Date;
 }
@@ -47,14 +47,52 @@ export interface Match {
   status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   start_date?: Date;
   end_date?: Date;
+  tournament_id?: string;
+  bracket_type?: 'winners' | 'losers' | 'final';
+  bracket_round?: number;
+  red_team_id?: string;
+  blue_team_id?: string;
   created_at: Date;
   updated_at: Date;
+}
+
+// Tournament-related types
+export interface Tournament {
+  id: string;
+  name: string;
+  description?: string;
+  format: 'single-elimination' | 'double-elimination';
+  status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
+  game_id: string;
+  rounds_per_match: number;
+  max_participants?: number;
+  start_date?: Date;
+  start_time?: Date;
+  allow_player_team_selection?: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface TournamentTeam {
+  id: string;
+  tournament_id: string;
+  team_name: string;
+  created_at: Date;
+}
+
+export interface TournamentTeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  username: string;
+  joined_at: Date;
 }
 
 // Database row types (includes fields not in the base interface)
 export interface MatchDbRow extends Match {
   maps?: string; // JSON string in database
   map_codes?: string; // JSON string storing map codes
+  map_id?: string; // Single map ID for tournament matches
   event_image_url?: string;
   rules?: string;
   rounds?: number;
@@ -133,6 +171,22 @@ export const MATCH_FLOW_STEPS = {
   cancelled: { name: 'Cancelled', progress: 0 }
 } as const;
 
+// Tournament progress constants
+export const TOURNAMENT_FLOW_STEPS = {
+  created: { name: 'Setup', progress: 20 },
+  gather: { name: 'Signups', progress: 40 },
+  assign: { name: 'Bracket', progress: 60 },
+  battle: { name: 'Matches', progress: 80 },
+  complete: { name: 'Complete', progress: 100 },
+  cancelled: { name: 'Cancelled', progress: 0 }
+} as const;
+
+// Tournament format types
+export type TournamentFormat = 'single-elimination' | 'double-elimination';
+
+// Tournament status types  
+export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
+
 export interface MatchParticipant {
   id: string;
   match_id: string;
@@ -151,6 +205,8 @@ export interface MatchGame {
   winner_id?: string; // 'team1', 'team2', or null
   participant_winner_id?: string; // For FFA modes: specific participant ID
   is_ffa_mode: boolean; // True if this is a Free-For-All mode
+  position_results?: string; // JSON: {participantId: position} for Position scoring
+  points_awarded?: string; // JSON: {participantId: points} for Position scoring
   map_id?: string;
   mode_id?: string;
   status: 'pending' | 'ongoing' | 'completed';
@@ -189,7 +245,7 @@ export interface ModeDataJson {
   id: string;
   name: string;
   description: string;
-  scoringType?: 'Normal' | 'FFA';
+  scoringType?: 'Normal' | 'FFA' | 'Position';
 }
 
 export interface MapDataJson {
@@ -209,12 +265,27 @@ export interface MatchResult {
   winner: 'team1' | 'team2';
   participantWinnerId?: string; // For FFA modes
   isFfaMode?: boolean;
+  positionResults?: Record<string, number>; // For Position modes: {participantId: position}
+  isPositionMode?: boolean;
   completedAt: Date;
 }
 
 // Map codes type
 export interface MapCodes {
   [mapId: string]: string; // mapId -> code (up to 24 characters)
+}
+
+// Position-based scoring configuration
+export interface PositionScoringConfig {
+  type: 'Position';
+  pointsPerPosition: Record<string, number>; // {"1": 25, "2": 18, ...}
+}
+
+// Position result for a single participant
+export interface PositionResult {
+  participantId: string;
+  position: number;
+  points: number;
 }
 
 // Signup field types

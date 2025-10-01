@@ -1,0 +1,25 @@
+{
+  "fields": [
+    {
+      "id": "player_name",
+      "type": "text",
+      "label": "Player Name",
+      "placeholder": "Your in-game name",
+      "required": true
+    },
+    {
+      "id": "safety_rating",
+      "type": "number",
+      "label": "Safety Rating",
+      "placeholder": "0-100",
+      "required": true,
+      "min": 0,
+      "max": 100,
+      "helpText": "Enter your current Safety Rating (0-100)"
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}

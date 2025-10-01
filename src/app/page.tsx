@@ -1,8 +1,7 @@
 'use client'
 
-
-import { MatchDashboard } from '@/components/match-dashboard';
+import { HomePage } from '@/components/home-page';
 
 export default function Home() {
-  return <MatchDashboard />;
+  return <HomePage />;
 }

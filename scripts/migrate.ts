@@ -3,6 +3,7 @@
 import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
+import { logger } from '../src/lib/logger/server';
 
 async function runMigrations() {
   
@@ -22,7 +23,7 @@ async function runMigrations() {
     
     
   } catch (error) {
-    console.error('❌ Error during database initialization:', error);
+    logger.error('❌ Error during database initialization:', error);
     process.exit(1);
   } finally {
     // Close the database connection
@@ -33,7 +34,7 @@ async function runMigrations() {
 // Run migrations if this script is executed directly
 if (require.main === module) {
   runMigrations().catch((error) => {
-    console.error('❌ Migration script failed:', error);
+    logger.error('❌ Migration script failed:', error);
     process.exit(1);
   });
 }

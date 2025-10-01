@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchGamesWithResults } from '../../../../../lib/scoring-functions';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
     
     return NextResponse.json({ games });
   } catch (error) {
-    console.error('Error fetching match games with results:', error);
+    logger.error('Error fetching match games with results:', error);
     return NextResponse.json(
       { error: 'Failed to fetch match games with results' },
       { status: 500 }

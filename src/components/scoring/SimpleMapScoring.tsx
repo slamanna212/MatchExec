@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Stack, Group, Card, Button, Text, Badge, Divider, Alert, Loader, Box, ActionIcon } from '@mantine/core';
 import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
+import { logger } from '@/lib/logger/client';
 
 interface MatchGame {
   id: string;
@@ -13,7 +14,7 @@ interface MatchGame {
   map_name: string;
   image_url?: string;
   mode_id: string;
-  mode_scoring_type?: 'Normal' | 'FFA';
+  mode_scoring_type?: 'Normal' | 'FFA' | 'Position';
   game_id: string; // game type like "overwatch2"
   status: 'pending' | 'ongoing' | 'completed';
   winner_id?: string;
@@ -51,11 +52,13 @@ export function SimpleMapScoring({
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [team1Name, setTeam1Name] = useState<string | null>(null);
+  const [team2Name, setTeam2Name] = useState<string | null>(null);
 
   // Fetch match games and participants
   useEffect(() => {
     if (!matchId || matchId.trim() === '') {
-      console.log('SimpleMapScoring: Waiting for valid matchId, current value:', matchId);
+      logger.debug('SimpleMapScoring: Waiting for valid matchId, current value:', matchId);
       setLoading(true); // Keep loading while waiting for valid matchId
       setError(null);
       return;
@@ -67,8 +70,8 @@ export function SimpleMapScoring({
         setLoading(true);
         setError(null);
         const url = `/api/matches/${matchId}/games?t=${Date.now()}`;
-        console.log('SimpleMapScoring: Fetching from URL:', url);
-        console.log('SimpleMapScoring: matchId:', matchId);
+        logger.debug('SimpleMapScoring: Fetching from URL:', url);
+        logger.debug('SimpleMapScoring: matchId:', matchId);
         response = await fetch(url, {
           method: 'GET',
           headers: {
@@ -76,24 +79,24 @@ export function SimpleMapScoring({
             'Cache-Control': 'no-cache',
           },
         });
-        console.log('SimpleMapScoring: Response received:', response.status, response.statusText);
+        logger.debug('SimpleMapScoring: Response received:', response.status, response.statusText);
         if (!response.ok) {
           let errorMessage = `HTTP ${response.status}: Failed to load match games`;
           try {
             const responseText = await response.text();
-            console.log('SimpleMapScoring: Error response body:', responseText);
+            logger.debug('SimpleMapScoring: Error response body:', responseText);
             if (responseText.trim()) {
               const errorData = JSON.parse(responseText);
               errorMessage = errorData.error || errorMessage;
             }
           } catch (jsonError) {
-            console.error('Failed to parse error response as JSON:', jsonError);
+            logger.error('Failed to parse error response as JSON:', jsonError);
           }
           
           // If it's a 405 error, it might be a transient routing issue in development
           // Let's retry once after a short delay
           if (response.status === 405) {
-            console.log('SimpleMapScoring: Got 405, retrying after delay...');
+            logger.debug('SimpleMapScoring: Got 405, retrying after delay...');
             await new Promise(resolve => setTimeout(resolve, 1000));
             try {
               const retryUrl = `/api/matches/${matchId}/games?retry=${Date.now()}`;
@@ -106,14 +109,14 @@ export function SimpleMapScoring({
               });
               
               if (retryResponse.ok) {
-                console.log('SimpleMapScoring: Retry successful');
+                logger.debug('SimpleMapScoring: Retry successful');
                 response = retryResponse;
               } else {
-                console.log('SimpleMapScoring: Retry also failed:', retryResponse.status);
+                logger.debug('SimpleMapScoring: Retry also failed:', retryResponse.status);
                 throw new Error(errorMessage);
               }
             } catch (retryError) {
-              console.error('SimpleMapScoring: Retry failed:', retryError);
+              logger.error('SimpleMapScoring: Retry failed:', retryError);
               throw new Error(errorMessage);
             }
           } else {
@@ -123,7 +126,21 @@ export function SimpleMapScoring({
         
         const data = await response.json();
         setMatchGames(data.games || []);
-        
+
+        // Fetch match details for team names
+        try {
+          const matchResponse = await fetch(`/api/matches/${matchId}`);
+          if (matchResponse.ok) {
+            const matchData = await matchResponse.json();
+            setTeam1Name(matchData.team1_name || null);
+            setTeam2Name(matchData.team2_name || null);
+          } else {
+            logger.warning('Failed to fetch match details:', matchResponse.status);
+          }
+        } catch (matchError) {
+          logger.warning('Error fetching match details:', matchError);
+        }
+
         // Fetch participants for FFA modes
         try {
           const participantsResponse = await fetch(`/api/matches/${matchId}/participants`);
@@ -131,10 +148,10 @@ export function SimpleMapScoring({
             const participantsData = await participantsResponse.json();
             setParticipants(participantsData.participants || []);
           } else {
-            console.warn('Failed to fetch participants:', participantsResponse.status);
+            logger.warning('Failed to fetch participants:', participantsResponse.status);
           }
         } catch (participantsError) {
-          console.warn('Error fetching participants:', participantsError);
+          logger.warning('Error fetching participants:', participantsError);
         }
         
         // Auto-select the first pending/ongoing game
@@ -145,8 +162,8 @@ export function SimpleMapScoring({
           setSelectedGameId(activeGame.id);
         }
       } catch (err) {
-        console.error('Error fetching match games:', err);
-        console.error('Response status:', response?.status);
+        logger.error('Error fetching match games:', err);
+        logger.error('Response status:', response?.status);
         setError(err instanceof Error ? err.message : 'Failed to load match games');
       } finally {
         setLoading(false);
@@ -290,16 +307,16 @@ export function SimpleMapScoring({
             const data = await refreshResponse.json();
             setMatchGames(data.games || []);
           } else {
-            console.warn('Background refresh failed:', refreshResponse.status);
+            logger.warning('Background refresh failed:', refreshResponse.status);
             // Don't show error to user since optimistic update already worked
           }
         } catch (error) {
-          console.warn('Background refresh error:', error);
+          logger.warning('Background refresh error:', error);
           // Don't show error to user since optimistic update already worked
         }
       }, 1000);
     } catch (error) {
-      console.error('Error in handleTeamWin:', error);
+      logger.error('Error in handleTeamWin:', error);
       setError(error instanceof Error ? error.message : 'Failed to save result');
     }
   };
@@ -352,14 +369,14 @@ export function SimpleMapScoring({
             const data = await refreshResponse.json();
             setMatchGames(data.games || []);
           } else {
-            console.warn('Background refresh failed:', refreshResponse.status);
+            logger.warning('Background refresh failed:', refreshResponse.status);
           }
         } catch (error) {
-          console.warn('Background refresh error:', error);
+          logger.warning('Background refresh error:', error);
         }
       }, 1000);
     } catch (error) {
-      console.error('Error in handleParticipantWin:', error);
+      logger.error('Error in handleParticipantWin:', error);
       setError(error instanceof Error ? error.message : 'Failed to save result');
     }
   };
@@ -561,7 +578,7 @@ export function SimpleMapScoring({
                 )}
                 {selectedGame.status === 'completed' && selectedGame.mode_scoring_type !== 'FFA' && selectedGame.winner_id && (
                   <Badge color={selectedGame.winner_id === 'team1' ? 'blue' : 'red'} size="sm">
-                    Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}
+                    Winner: {selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')}
                   </Badge>
                 )}
               </Group>
@@ -572,13 +589,17 @@ export function SimpleMapScoring({
             {/* Winner Selection */}
             {selectedGame.status !== 'completed' && (
               <Stack gap="md">
-                {selectedGame.mode_scoring_type === 'FFA' ? (
+                {selectedGame.mode_scoring_type === 'Position' ? (
+                  <Alert color="blue" icon={<IconTrophy size={16} />}>
+                    This mode uses position-based scoring. Please close this dialog and use the Position Scoring interface instead.
+                  </Alert>
+                ) : selectedGame.mode_scoring_type === 'FFA' ? (
                   <>
                     <Text size="sm" c="dimmed" ta="center">
                       <IconTrophy size={16} style={{ marginRight: 8 }} />
                       Select the winner of this Free-For-All match:
                     </Text>
-                    
+
                     <Stack gap="sm" align="center">
                       {participants.map((participant) => (
                         <Button
@@ -603,7 +624,7 @@ export function SimpleMapScoring({
                       <IconSwords size={16} style={{ marginRight: 8 }} />
                       Who won this map?
                     </Text>
-                    
+
                     <Group justify="center" gap="xl">
                       <Button
                         size="lg"
@@ -614,9 +635,9 @@ export function SimpleMapScoring({
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
                       >
-                        Blue Team Wins
+                        {team1Name || 'Blue Team'} Wins
                       </Button>
-                      
+
                       <Button
                         size="lg"
                         color="red"
@@ -626,7 +647,7 @@ export function SimpleMapScoring({
                         loading={submitting}
                         leftSection={<IconTrophy size={20} />}
                       >
-                        Red Team Wins
+                        {team2Name || 'Red Team'} Wins
                       </Button>
                     </Group>
                   </>
@@ -640,7 +661,9 @@ export function SimpleMapScoring({
                 {selectedGame.mode_scoring_type === 'FFA' ? (
                   <>This FFA match has been completed. Winner: {participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown Player'}</>
                 ) : (
-                  <>This map has been completed. Winner: {selectedGame.winner_id === 'team1' ? 'Blue Team' : 'Red Team'}</>
+                  <>This map has been completed. Winner: {
+                    selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')
+                  }</>
                 )}
               </Alert>
             )}

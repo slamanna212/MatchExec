@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
+import { logger } from '@/lib/logger';
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -9,7 +10,7 @@ export async function GET(): Promise<NextResponse> {
     return new Promise<NextResponse>((resolve) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
-          console.error('Database connection error:', err);
+          logger.error('Database connection error:', err);
           resolve(NextResponse.json({ error: 'Database connection failed' }, { status: 500 }));
           return;
         }
@@ -21,7 +22,7 @@ export async function GET(): Promise<NextResponse> {
             db.close();
             
             if (err) {
-              console.error('Database query error:', err);
+              logger.error('Database query error:', err);
               resolve(NextResponse.json({ error: 'Database query failed' }, { status: 500 }));
               return;
             }
@@ -38,7 +39,7 @@ export async function GET(): Promise<NextResponse> {
       });
     });
   } catch (error) {
-    console.error('API error:', error);
+    logger.error('API error:', error);
     return NextResponse.json({ error: 'API error', details: String(error) }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: Request,
@@ -22,7 +23,7 @@ export async function GET(
 
     return NextResponse.json(maps);
   } catch (error) {
-    console.error('Error fetching maps for mode:', error);
+    logger.error('Error fetching maps for mode:', error);
     return NextResponse.json(
       { error: 'Failed to fetch maps for mode' },
       { status: 500 }

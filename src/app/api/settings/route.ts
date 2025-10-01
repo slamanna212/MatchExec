@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface DiscordSettings {
   application_id: string;
@@ -88,7 +89,7 @@ export async function GET() {
       voices: voices || []
     });
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    logger.error('Error fetching settings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch settings' },
       { status: 500 }

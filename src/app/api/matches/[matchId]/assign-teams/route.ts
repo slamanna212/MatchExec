@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -38,7 +39,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating team assignments:', error);
+    logger.error('Error updating team assignments:', error);
     return NextResponse.json(
       { error: 'Failed to update team assignments' },
       { status: 500 }

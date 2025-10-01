@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { SchedulerSettings } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -20,7 +21,7 @@ export async function GET() {
     
     return NextResponse.json(settings);
   } catch (error) {
-    console.error('Error fetching scheduler settings:', error);
+    logger.error('Error fetching scheduler settings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch scheduler settings' },
       { status: 500 }
@@ -72,7 +73,7 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json(updatedSettings);
   } catch (error) {
-    console.error('Error updating scheduler settings:', error);
+    logger.error('Error updating scheduler settings:', error);
     return NextResponse.json(
       { error: 'Failed to update scheduler settings' },
       { status: 500 }

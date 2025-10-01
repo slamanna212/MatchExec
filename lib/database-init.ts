@@ -20,5 +20,8 @@ export function getDbInstance() {
 
 // Initialize database when module is loaded
 if (typeof window === 'undefined') {
-  getDbInstance().catch(console.error);
+  getDbInstance().catch((error) => {
+    // Use console.error here as logger may not be ready yet during initialization
+    console.error('Failed to initialize database:', error);
+  });
 }

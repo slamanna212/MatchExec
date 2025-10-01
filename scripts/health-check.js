@@ -54,7 +54,7 @@ function checkPM2Processes() {
     }
     const processes = JSON.parse(output);
     
-    const requiredProcesses = ['matchexec-web', 'discord-bot', 'scheduler', 'worker'];
+    const requiredProcesses = ['matchexec-web', 'discord-bot', 'scheduler'];
     const runningProcesses = processes
       .filter(p => p.pm2_env.status === 'online')
       .map(p => p.name);

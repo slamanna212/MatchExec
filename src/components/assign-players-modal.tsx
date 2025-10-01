@@ -75,6 +75,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mapCodesSupported, setMapCodesSupported] = useState(false);
+  const [scoringType, setScoringType] = useState<'Normal' | 'FFA' | 'Position'>('Normal');
 
   // Check if screen is mobile size (same breakpoint as Navigation component)
   useEffect(() => {
@@ -124,6 +125,15 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         setMapCodesSupported(matchData.map_codes_supported || false);
       } else {
         console.error('Failed to fetch match data:', matchResponse.status);
+      }
+
+      // Fetch match games to detect scoring type
+      const gamesResponse = await fetch(`/api/matches/${matchId}/games`);
+      if (gamesResponse.ok) {
+        const gamesData = await gamesResponse.json();
+        if (gamesData.games?.length > 0) {
+          setScoringType(gamesData.games[0].mode_scoring_type || 'Normal');
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -320,11 +330,18 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         size="xs"
         value={participant.team_assignment}
         onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
-        data={[
-          { value: 'reserve', label: 'Reserve' },
-          { value: 'blue', label: 'Blue Team' },
-          { value: 'red', label: 'Red Team' }
-        ]}
+        data={
+          scoringType === 'Position'
+            ? [
+                { value: 'reserve', label: 'Reserve' },
+                { value: 'blue', label: 'Blue Team' }
+              ]
+            : [
+                { value: 'reserve', label: 'Reserve' },
+                { value: 'blue', label: 'Blue Team' },
+                { value: 'red', label: 'Red Team' }
+              ]
+        }
         w={120}
         mb="xs"
         styles={{
@@ -435,15 +452,17 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             {/* Desktop Layout */}
             <div className="hidden md:block">
               <Grid>
-                <Grid.Col span={4}>
+                <Grid.Col span={scoringType === 'Position' ? 6 : 4}>
                   {renderTeamSection('reserve', 'Reserve', 'gray')}
                 </Grid.Col>
-                <Grid.Col span={4}>
+                <Grid.Col span={scoringType === 'Position' ? 6 : 4}>
                   {renderTeamSection('blue', 'Blue Team', 'blue')}
                 </Grid.Col>
-                <Grid.Col span={4}>
-                  {renderTeamSection('red', 'Red Team', 'red')}
-                </Grid.Col>
+                {scoringType !== 'Position' && (
+                  <Grid.Col span={4}>
+                    {renderTeamSection('red', 'Red Team', 'red')}
+                  </Grid.Col>
+                )}
               </Grid>
             </div>
             
@@ -452,7 +471,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
               <Stack gap="lg">
                 {renderTeamSection('reserve', 'Reserve', 'gray')}
                 {renderTeamSection('blue', 'Blue Team', 'blue')}
-                {renderTeamSection('red', 'Red Team', 'red')}
+                {scoringType !== 'Position' && renderTeamSection('red', 'Red Team', 'red')}
               </Stack>
             </div>
             

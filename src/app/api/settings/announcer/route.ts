@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -32,7 +33,7 @@ export async function GET() {
 
     return NextResponse.json(settings);
   } catch (error) {
-    console.error('Error fetching announcer settings:', error);
+    logger.error('Error fetching announcer settings:', error);
     return NextResponse.json(
       { error: 'Failed to fetch announcer settings' },
       { status: 500 }
@@ -76,7 +77,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating announcer settings:', error);
+    logger.error('Error updating announcer settings:', error);
     return NextResponse.json(
       { error: 'Failed to update announcer settings' },
       { status: 500 }

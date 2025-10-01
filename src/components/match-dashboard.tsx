@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Card, 
-  Text, 
-  Button, 
+import { motion } from 'framer-motion';
+import {
+  Card,
+  Text,
+  Button,
   Avatar,
   Divider,
   Loader,
   Group,
   Stack,
   Grid,
-  RingProgress,
   TextInput,
   useMantineColorScheme
 } from '@mantine/core';
@@ -21,7 +21,7 @@ import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
-
+import { AnimatedRingProgress } from './AnimatedRingProgress';
 import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -47,6 +47,9 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  tournament_name?: string;
+  tournament_round?: number;
+  tournament_bracket_type?: string;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -101,13 +104,18 @@ const MatchCard = memo(({
         <Stack gap="xs" style={{ flex: 1 }}>
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
+          {match.tournament_name && (
+            <Text size="xs" c="violet" fw={500}>
+              {match.tournament_name} - Round {match.tournament_round} ({match.tournament_bracket_type})
+            </Text>
+          )}
         </Stack>
-        <RingProgress
+        <AnimatedRingProgress
           size={50}
           thickness={4}
           sections={[
-            { 
-              value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
+            {
+              value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
               color: match.game_color || '#95a5a6'
             }
           ]}
@@ -156,8 +164,8 @@ const MatchCard = memo(({
         </Group>
         
         <Group justify="space-between">
-          <Text size="sm" c="dimmed">Max Participants:</Text>
-          <Text size="sm">{match.max_participants}</Text>
+          <Text size="sm" c="dimmed">Participants:</Text>
+          <Text size="sm">{(match as MatchWithGame & { participant_count?: number }).participant_count || 0}/{match.max_participants}</Text>
         </Group>
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Starts:</Text>
@@ -302,14 +310,20 @@ export function MatchDashboard() {
 
   const fetchMapNames = async (gameId: string) => {
     try {
+      // Fetch game info to check if it supports all modes
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      let supportsAllModes = false;
+
+      if (gameResponse.ok) {
+        const gameInfo = await gameResponse.json();
+        supportsAllModes = gameInfo.supportsAllModes || false;
+      }
+
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-        
-        // Check if this game supports all modes (flexible mode combinations)
-        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
         
         if (supportsAllModes) {
           // For flexible games, get all possible modes and create all combinations
@@ -693,6 +707,17 @@ export function MatchDashboard() {
     });
   };
 
+  // Animation variants for staggered entrance
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
   // Memoize expensive match card rendering
   // Handle score submission
   const handleResultSubmit = async (result: MatchResult) => {
@@ -736,15 +761,33 @@ export function MatchDashboard() {
   }, [matches, searchQuery]);
 
   const memoizedMatchCards = useMemo(() => {
-    return filteredMatches.map((match) => (
+    const itemVariants = {
+      hidden: { opacity: 0, y: 20 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+          duration: 0.4
+        }
+      }
+    };
+
+    return filteredMatches.map((match, index) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
-        <MatchCard 
-          match={match}
-          mapNames={mapNames}
-          onViewDetails={handleViewDetails}
-          onAssignPlayers={handleAssignPlayers}
-          getNextStatusButton={getNextStatusButton}
-        />
+        <motion.div
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={index}
+        >
+          <MatchCard
+            match={match}
+            mapNames={mapNames}
+            onViewDetails={handleViewDetails}
+            onAssignPlayers={handleAssignPlayers}
+            getNextStatusButton={getNextStatusButton}
+          />
+        </motion.div>
       </Grid.Col>
     ));
   }, [filteredMatches, mapNames, handleViewDetails, getNextStatusButton]);
@@ -820,9 +863,15 @@ export function MatchDashboard() {
           </Stack>
         </Card>
       ) : (
-        <Grid>
-          {memoizedMatchCards}
-        </Grid>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Grid>
+            {memoizedMatchCards}
+          </Grid>
+        </motion.div>
       )}
 
 

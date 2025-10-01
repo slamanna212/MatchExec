@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { ParticipantDbRow, MatchDbRow } from '@/shared/types';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -49,7 +50,7 @@ export async function GET(
         signupConfig = JSON.parse(signupData);
       }
     } catch {
-      console.log('No signup form config found for game:', match.game_id);
+      logger.debug('No signup form config found for game:', match.game_id);
     }
     
     return NextResponse.json({
@@ -57,7 +58,7 @@ export async function GET(
       signupConfig: signupConfig
     });
   } catch (error) {
-    console.error('Error fetching match participants:', error);
+    logger.error('Error fetching match participants:', error);
     return NextResponse.json(
       { error: 'Failed to fetch participants' },
       { status: 500 }

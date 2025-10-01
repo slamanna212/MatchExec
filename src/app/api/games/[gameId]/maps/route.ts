@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: Request,
@@ -9,11 +10,11 @@ export async function GET(
     const db = await getDbInstance();
     const { gameId } = await params;
     
-    console.log('[DEBUG] Fetching maps for gameId:', gameId);
+    logger.debug('[DEBUG] Fetching maps for gameId:', gameId);
     
     // For CS2, use a special query to group by map name and show supported modes
     if (gameId === 'cs2') {
-      console.log('[DEBUG] Using CS2 special handling');
+      logger.debug('[DEBUG] Using CS2 special handling');
       try {
         const maps = await db.all(`
           SELECT DISTINCT
@@ -31,10 +32,10 @@ export async function GET(
           ORDER BY gm.name ASC
         `, [gameId]);
         
-        console.log('[DEBUG] CS2 maps result:', maps);
+        logger.debug('[DEBUG] CS2 maps result:', maps);
         return NextResponse.json(maps);
       } catch (cs2Error) {
-        console.error('[ERROR] CS2 query failed:', cs2Error);
+        logger.error('[ERROR] CS2 query failed:', cs2Error);
         throw cs2Error;
       }
     }
@@ -84,7 +85,7 @@ export async function GET(
 
     return NextResponse.json(maps);
   } catch (error) {
-    console.error('Error fetching maps:', error);
+    logger.error('Error fetching maps:', error);
     return NextResponse.json(
       { error: 'Failed to fetch maps' },
       { status: 500 }

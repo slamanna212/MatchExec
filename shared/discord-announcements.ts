@@ -1,3 +1,5 @@
+import { logger } from '../src/lib/logger/server';
+
 export interface EventAnnouncementData {
   id: string;
   name: string;
@@ -23,7 +25,7 @@ export async function postEventAnnouncement(eventData: EventAnnouncementData): P
     `, [eventData.id]);
     
     if (existing) {
-      console.log('📢 Discord announcement already queued for:', eventData.name);
+      logger.debug('📢 Discord announcement already queued for:', eventData.name);
       return true;
     }
     
@@ -36,10 +38,10 @@ export async function postEventAnnouncement(eventData: EventAnnouncementData): P
       VALUES (?, ?, 'standard', 'pending')
     `, [announcementId, eventData.id]);
     
-    console.log('📢 Discord announcement queued for:', eventData.name);
+    logger.debug('📢 Discord announcement queued for:', eventData.name);
     return true;
   } catch (error) {
-    console.error('❌ Error queuing Discord announcement:', error);
+    logger.error('❌ Error queuing Discord announcement:', error);
     return false;
   }
 }

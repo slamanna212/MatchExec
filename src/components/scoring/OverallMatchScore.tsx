@@ -14,6 +14,7 @@ import {
   Progress
 } from '@mantine/core';
 import { IconTrophy, IconUsers, IconTarget } from '@tabler/icons-react';
+import { logger } from '@/lib/logger/client';
 
 interface OverallMatchScoreProps {
   matchId: string;
@@ -36,13 +37,22 @@ interface GameResult {
   participant_winner_id?: string;
   participant_winner_name?: string;
   is_ffa_mode: boolean;
+  position_results?: string;
+  points_awarded?: string;
+}
+
+interface PositionScore {
+  participantScores: Record<string, { username: string; totalPoints: number; races: number }>;
+  winner: string | null;
 }
 
 export function OverallMatchScore({ matchId }: OverallMatchScoreProps) {
   const [score, setScore] = useState<OverallScore | null>(null);
+  const [positionScore, setPositionScore] = useState<PositionScore | null>(null);
   const [games, setGames] = useState<GameResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scoringMode, setScoringMode] = useState<'Normal' | 'FFA' | 'Position'>('Normal');
 
   useEffect(() => {
     const fetchOverallScore = async () => {
@@ -50,24 +60,67 @@ export function OverallMatchScore({ matchId }: OverallMatchScoreProps) {
         setLoading(true);
         setError(null);
 
-        // Fetch overall score
-        const scoreResponse = await fetch(`/api/matches/${matchId}/overall-score`);
-        if (!scoreResponse.ok) {
-          throw new Error('Failed to fetch overall score');
-        }
-        const scoreData = await scoreResponse.json();
-        setScore(scoreData);
-
-        // Fetch game results
+        // Fetch game results first to determine scoring mode
         const gamesResponse = await fetch(`/api/matches/${matchId}/games-with-results`);
         if (!gamesResponse.ok) {
           throw new Error('Failed to fetch game results');
         }
         const gamesData = await gamesResponse.json();
-        setGames(gamesData.games || []);
+        const fetchedGames = gamesData.games || [];
+        setGames(fetchedGames);
+
+        // Determine scoring mode from first game
+        const hasPositionGames = fetchedGames.some((g: GameResult) => g.position_results);
+        if (hasPositionGames) {
+          setScoringMode('Position');
+          // For position-based, we need a different API endpoint
+          // For now, calculate from the games data
+          const participantScores: Record<string, { username: string; totalPoints: number; races: number }> = {};
+
+          for (const game of fetchedGames) {
+            if (game.points_awarded && game.position_results) {
+              const points = JSON.parse(game.points_awarded) as Record<string, number>;
+
+              for (const [participantId, pointsEarned] of Object.entries(points)) {
+                if (!participantScores[participantId]) {
+                  participantScores[participantId] = {
+                    username: participantId, // We'd need to fetch this
+                    totalPoints: 0,
+                    races: 0
+                  };
+                }
+                participantScores[participantId].totalPoints += pointsEarned;
+                participantScores[participantId].races += 1;
+              }
+            }
+          }
+
+          // Determine winner
+          let winner: string | null = null;
+          let highestPoints = -1;
+          for (const [participantId, data] of Object.entries(participantScores)) {
+            if (data.totalPoints > highestPoints) {
+              highestPoints = data.totalPoints;
+              winner = participantId;
+            } else if (data.totalPoints === highestPoints) {
+              winner = null; // Tie
+            }
+          }
+
+          setPositionScore({ participantScores, winner });
+        } else {
+          setScoringMode('Normal');
+          // Fetch overall team score
+          const scoreResponse = await fetch(`/api/matches/${matchId}/overall-score`);
+          if (!scoreResponse.ok) {
+            throw new Error('Failed to fetch overall score');
+          }
+          const scoreData = await scoreResponse.json();
+          setScore(scoreData);
+        }
 
       } catch (err) {
-        console.error('Error fetching overall match score:', err);
+        logger.error('Error fetching overall match score:', err);
         setError(err instanceof Error ? err.message : 'Failed to load match score');
       } finally {
         setLoading(false);
@@ -123,9 +176,81 @@ export function OverallMatchScore({ matchId }: OverallMatchScoreProps) {
 
   const overallWinner = getOverallWinnerDisplay();
   const totalGames = games.length;
-  const normalGames = games.filter(g => !g.is_ffa_mode).length;
+  const normalGames = games.filter(g => !g.is_ffa_mode && !g.position_results).length;
   const ffaGames = games.filter(g => g.is_ffa_mode).length;
+  const positionGames = games.filter(g => g.position_results).length;
 
+  // For Position scoring mode, render leaderboard
+  if (scoringMode === 'Position' && positionScore) {
+    const sortedParticipants = Object.entries(positionScore.participantScores)
+      .sort(([, a], [, b]) => b.totalPoints - a.totalPoints);
+
+    return (
+      <Card withBorder p="md">
+        <Stack gap="md">
+          {/* Header */}
+          <Group justify="space-between">
+            <Group gap="sm">
+              <IconTrophy size={20} color="gold" />
+              <Text fw={600} size="lg">Race Leaderboard</Text>
+            </Group>
+            <Badge size="lg" color="blue" variant="filled">
+              Position-Based Scoring
+            </Badge>
+          </Group>
+
+          {/* Leaderboard */}
+          <Stack gap="xs">
+            {sortedParticipants.map(([participantId, data], index) => (
+              <Card
+                key={participantId}
+                withBorder
+                p="sm"
+                style={{
+                  backgroundColor: index === 0 ? 'var(--mantine-color-yellow-0)' : undefined
+                }}
+              >
+                <Group justify="space-between">
+                  <Group gap="sm">
+                    <Badge
+                      size="lg"
+                      color={index === 0 ? 'yellow' : index === 1 ? 'gray' : index === 2 ? 'orange' : 'blue'}
+                      variant={index < 3 ? 'filled' : 'outline'}
+                    >
+                      {index + 1}
+                    </Badge>
+                    <Text fw={600}>{data.username}</Text>
+                  </Group>
+                  <Group gap="md">
+                    <div>
+                      <Text size="xl" fw={700} ta="right">{data.totalPoints}</Text>
+                      <Text size="xs" c="dimmed" ta="right">points</Text>
+                    </div>
+                    <div>
+                      <Text size="sm" fw={500} ta="right">{data.races}</Text>
+                      <Text size="xs" c="dimmed" ta="right">races</Text>
+                    </div>
+                  </Group>
+                </Group>
+              </Card>
+            ))}
+          </Stack>
+
+          <Divider />
+
+          {/* Stats */}
+          <Group justify="center">
+            <div>
+              <Text size="sm" fw={500} ta="center">{positionGames}</Text>
+              <Text size="xs" c="dimmed" ta="center">Races Completed</Text>
+            </div>
+          </Group>
+        </Stack>
+      </Card>
+    );
+  }
+
+  // Normal/FFA scoring mode
   return (
     <Card withBorder p="md">
       <Stack gap="md">

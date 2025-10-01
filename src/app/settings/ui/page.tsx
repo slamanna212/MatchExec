@@ -1,9 +1,11 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Alert, NumberInput } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
+import { notificationHelper } from '@/lib/notifications';
+import { logger } from '@/lib/logger/client';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;
@@ -12,7 +14,6 @@ interface UISettings {
 export default function UISettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<UISettings>({
     initialValues: {
@@ -33,7 +34,7 @@ export default function UISettingsPage() {
           form.setValues(data.ui);
         }
       } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
       } finally {
         setLoading(false);
       }
@@ -44,8 +45,7 @@ export default function UISettingsPage() {
 
   const handleSubmit = async (values: UISettings) => {
     setSaving(true);
-    setMessage(null);
-    
+
     try {
       const response = await fetch('/api/settings/ui', {
         method: 'PUT',
@@ -54,14 +54,23 @@ export default function UISettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'UI settings saved successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'UI settings saved successfully!'
+        });
       } else {
         const errorData = await response.json();
-        setMessage({ type: 'error', text: errorData.error || 'Failed to save UI settings.' });
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: errorData.error || 'Failed to save UI settings.'
+        });
       }
     } catch (error) {
-      console.error('Error saving UI settings:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving UI settings.' });
+      logger.error('Error saving UI settings:', error);
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving UI settings.'
+      });
     } finally {
       setSaving(false);
     }
@@ -81,12 +90,6 @@ export default function UISettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {message && (
-            <Alert color={message.type === 'success' ? 'green' : 'red'} mb="md">
-              {message.text}
-            </Alert>
-          )}
-
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <NumberInput
