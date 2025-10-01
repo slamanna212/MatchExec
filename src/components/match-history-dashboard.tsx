@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { motion } from 'framer-motion';
 import { 
   Card, 
   Text, 
@@ -95,8 +96,8 @@ const HistoryMatchCard = memo(({
           size={50}
           thickness={4}
           sections={[
-            { 
-              value: MATCH_FLOW_STEPS[match.status]?.progress || 0, 
+            {
+              value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
               color: match.game_color || '#95a5a6'
             }
           ]}
@@ -426,16 +427,45 @@ export function MatchHistoryDashboard() {
     );
   }, [matches, searchQuery]);
 
+  // Animation variants for staggered entrance
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
   // Memoize expensive match card rendering
   const memoizedMatchCards = useMemo(() => {
-    return filteredMatches.map((match) => (
+    const itemVariants = {
+      hidden: { opacity: 0, y: 20 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+          duration: 0.4
+        }
+      }
+    };
+
+    return filteredMatches.map((match, index) => (
       <Grid.Col key={match.id} span={{ base: 12, md: 6, lg: 4 }}>
-        <HistoryMatchCard 
-          match={match}
-          mapNames={mapNames}
-          onViewDetails={handleViewDetails}
-          formatMapName={formatMapName}
-        />
+        <motion.div
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={index}
+        >
+          <HistoryMatchCard
+            match={match}
+            mapNames={mapNames}
+            onViewDetails={handleViewDetails}
+            formatMapName={formatMapName}
+          />
+        </motion.div>
       </Grid.Col>
     ));
   }, [filteredMatches, mapNames, handleViewDetails, formatMapName]);
@@ -495,9 +525,15 @@ export function MatchHistoryDashboard() {
           </Stack>
         </Card>
       ) : (
-        <Grid>
-          {memoizedMatchCards}
-        </Grid>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Grid>
+            {memoizedMatchCards}
+          </Grid>
+        </motion.div>
       )}
 
       <MatchDetailsModal

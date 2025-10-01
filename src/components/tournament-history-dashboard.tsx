@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { motion } from 'framer-motion';
 import {
   Card,
   Text,
@@ -195,14 +196,43 @@ export function TournamentHistoryDashboard() {
     setDetailsModalOpen(true);
   }, []);
 
+  // Animation variants for staggered entrance
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
   // Memoize tournament card rendering
   const memoizedTournamentCards = useMemo(() => {
-    return filteredTournaments.map((tournament) => (
+    const itemVariants = {
+      hidden: { opacity: 0, y: 20 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+          duration: 0.4
+        }
+      }
+    };
+
+    return filteredTournaments.map((tournament, index) => (
       <Grid.Col key={tournament.id} span={{ base: 12, md: 6, lg: 4 }}>
-        <HistoryTournamentCard
-          tournament={tournament}
-          onViewDetails={handleViewDetails}
-        />
+        <motion.div
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={index}
+        >
+          <HistoryTournamentCard
+            tournament={tournament}
+            onViewDetails={handleViewDetails}
+          />
+        </motion.div>
       </Grid.Col>
     ));
   }, [filteredTournaments, handleViewDetails]);
@@ -261,9 +291,15 @@ export function TournamentHistoryDashboard() {
           </Stack>
         </Card>
       ) : (
-        <Grid>
-          {memoizedTournamentCards}
-        </Grid>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Grid>
+            {memoizedTournamentCards}
+          </Grid>
+        </motion.div>
       )}
 
       <TournamentDetailsModal
