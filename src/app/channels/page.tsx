@@ -6,7 +6,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface ChannelEditData {
   send_announcements: boolean;

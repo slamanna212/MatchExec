@@ -4,6 +4,8 @@ import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid } f
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { IconTrophy, IconSwords, IconUsers } from '@tabler/icons-react';
+import { motion } from 'framer-motion';
+import { AnimatedCounter } from './AnimatedCounter';
 
 interface Stats {
   totalMatches: number;
@@ -13,7 +15,7 @@ interface Stats {
 
 interface StatItem {
   title: string;
-  value: string;
+  value: number;
   icon: typeof IconSwords;
   color: string;
 }
@@ -40,33 +42,60 @@ export function HomePage() {
   const statItems = [
     {
       title: 'Total Matches',
-      value: loading ? '...' : stats.totalMatches.toLocaleString(),
+      value: stats.totalMatches,
       icon: IconSwords,
       color: '#06B6D4'
     },
     {
       title: 'Total Tournaments',
-      value: loading ? '...' : stats.totalTournaments.toLocaleString(),
+      value: stats.totalTournaments,
       icon: IconTrophy,
       color: '#4895EF'
     },
     {
       title: 'Total Signups',
-      value: loading ? '...' : stats.totalSignups.toLocaleString(),
+      value: stats.totalSignups,
       icon: IconUsers,
       color: '#763c62'
     }
   ];
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.15
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.5
+      }
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <Stack gap="xl">
         {/* Stats Section */}
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
-          {statItems.map((stat: StatItem) => {
-            const Icon = stat.icon;
-            return (
-              <Card
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+            {statItems.map((stat: StatItem) => {
+              const Icon = stat.icon;
+              return (
+                <motion.div key={stat.title} variants={itemVariants}>
+                  <Card
                 key={stat.title}
                 shadow={colorScheme === 'light' ? 'lg' : 'sm'}
                 p="lg"
@@ -83,15 +112,17 @@ export function HomePage() {
                       {stat.title}
                     </Text>
                     <Text fw={700} size="xl" mt="xs">
-                      {stat.value}
+                      {loading ? '...' : <AnimatedCounter value={stat.value} />}
                     </Text>
                   </div>
                   <Icon size={32} stroke={1.5} style={{ color: stat.color.startsWith('#') ? stat.color : `var(--mantine-color-${stat.color}-6)` }} />
                 </Group>
-              </Card>
-            );
-          })}
-        </SimpleGrid>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </SimpleGrid>
+        </motion.div>
 
         {/* Main Cards Section */}
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">

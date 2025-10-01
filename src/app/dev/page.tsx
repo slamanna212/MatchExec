@@ -4,7 +4,7 @@ import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } 
 import { useState, useEffect } from 'react';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 export default function DevPage() {
   useEffect(() => {

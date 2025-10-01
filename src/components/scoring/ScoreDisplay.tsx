@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconTrophy, IconEdit, IconClock, IconAlertCircle } from '@tabler/icons-react';
 import { MatchResult } from '@/shared/types';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface ScoreDisplayProps {
   matchId: string;

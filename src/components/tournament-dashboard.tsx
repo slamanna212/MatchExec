@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Card, 
-  Text, 
-  Button, 
+import { motion } from 'framer-motion';
+import {
+  Card,
+  Text,
+  Button,
   Avatar,
   Divider,
   Loader,
   Group,
   Stack,
   Grid,
-  RingProgress,
   TextInput,
   useMantineColorScheme,
   Badge
@@ -21,6 +21,7 @@ import { modals } from '@mantine/modals';
 import { Tournament, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
+import { AnimatedRingProgress } from './AnimatedRingProgress';
 import { notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -89,12 +90,12 @@ const TournamentCard = memo(({
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
-        <RingProgress
+        <AnimatedRingProgress
           size={50}
           thickness={4}
           sections={[
-            { 
-              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0, 
+            {
+              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
               color: tournament.game_color || '#95a5a6'
             }
           ]}
@@ -359,6 +360,17 @@ export function TournamentDashboard() {
     }
   }, [fetchTournaments]);
 
+  // Animation variants for staggered entrance
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
   const getNextStatusButton = useCallback((tournament: TournamentWithGame): React.JSX.Element | null => {
     switch (tournament.status) {
       case 'created':
@@ -520,13 +532,31 @@ export function TournamentDashboard() {
 
   // Memoize tournament cards for better performance
   const memoizedTournamentCards = useMemo(() => {
-    return filteredTournaments.map((tournament) => (
+    const itemVariants = {
+      hidden: { opacity: 0, y: 20 },
+      visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+          duration: 0.4
+        }
+      }
+    };
+
+    return filteredTournaments.map((tournament, index) => (
       <Grid.Col key={tournament.id} span={{ base: 12, md: 6, lg: 4 }}>
-        <TournamentCard 
-          tournament={tournament}
-          onViewDetails={handleViewDetails}
-          getNextStatusButton={getNextStatusButton}
-        />
+        <motion.div
+          variants={itemVariants}
+          initial="hidden"
+          animate="visible"
+          custom={index}
+        >
+          <TournamentCard
+            tournament={tournament}
+            onViewDetails={handleViewDetails}
+            getNextStatusButton={getNextStatusButton}
+          />
+        </motion.div>
       </Grid.Col>
     ));
   }, [filteredTournaments, handleViewDetails, getNextStatusButton]);
@@ -587,9 +617,15 @@ export function TournamentDashboard() {
           <Text size="lg" c="dimmed">No tournaments match your search</Text>
         </div>
       ) : (
-        <Grid>
-          {memoizedTournamentCards}
-        </Grid>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Grid>
+            {memoizedTournamentCards}
+          </Grid>
+        </motion.div>
       )}
 
       <TournamentDetailsModal

@@ -14,7 +14,7 @@ import {
   Progress
 } from '@mantine/core';
 import { IconTrophy, IconUsers, IconTarget } from '@tabler/icons-react';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface OverallMatchScoreProps {
   matchId: string;

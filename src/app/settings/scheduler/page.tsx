@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
 import { notificationHelper } from '@/lib/notifications';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface SchedulerSettings {
   match_check_cron: string;

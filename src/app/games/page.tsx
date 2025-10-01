@@ -5,7 +5,7 @@ import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, Te
 import { useEffect, useState } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import { LazyImage } from '@/components/LazyImage';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface Game {
   id: string;

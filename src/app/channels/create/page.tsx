@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
-import { logger } from '@/lib/logger';
+import { logger } from '@/lib/logger/client';
 
 interface CreateChannelForm {
   channel_type: 'text' | 'voice';
