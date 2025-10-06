@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@discordjs/voice": "0.19.0",
-    "@mantine/core": "8.3.1",
+    "@mantine/core": "8.3.3",
     "@mantine/dates": "8.3.1",
     "@mantine/form": "8.3.1",
     "@mantine/hooks": "8.3.1",
