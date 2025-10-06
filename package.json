@@ -45,7 +45,7 @@
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "sqlite3": "5.1.7",
-    "tsx": "4.20.5",
+    "tsx": "4.20.6",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
