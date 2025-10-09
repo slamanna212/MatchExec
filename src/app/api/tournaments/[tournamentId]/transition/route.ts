@@ -205,6 +205,65 @@ export async function POST(
       case 'assign':
         logger.debug(`🎯 Tournament ${tournamentId} signups closed, ready for bracket assignment`);
 
+        // Auto-create solo teams for games with team_size = 1 modes
+        try {
+          // Check if teams already exist
+          const existingTeamCount = await db.get<{ count: number }>(`
+            SELECT COUNT(*) as count FROM tournament_teams WHERE tournament_id = ?
+          `, [tournamentId]);
+
+          if (!existingTeamCount || existingTeamCount.count === 0) {
+            // No teams exist, check if we should auto-create solo teams
+            const participants = await db.all<{ id: string; user_id: string; username: string }>(`
+              SELECT id, user_id, username FROM tournament_participants WHERE tournament_id = ?
+            `, [tournamentId]);
+
+            if (participants.length > 0) {
+              // Get all modes for this game to check team sizes
+              const gameModes = await db.all<{ team_size: number }>(`
+                SELECT team_size FROM game_modes WHERE game_id = (
+                  SELECT game_id FROM tournaments WHERE id = ?
+                )
+              `, [tournamentId]);
+
+              // Check if any mode has team_size = 1 (supports solo play)
+              const hasSoloMode = gameModes.some(mode => mode.team_size === 1);
+
+              if (hasSoloMode) {
+                // Auto-create solo teams (one per participant)
+                logger.debug(`🤖 Auto-creating solo teams for ${participants.length} participants`);
+
+                for (const participant of participants) {
+                  const teamId = `team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+                  // Create team with participant's name
+                  await db.run(`
+                    INSERT INTO tournament_teams (id, tournament_id, team_name)
+                    VALUES (?, ?, ?)
+                  `, [teamId, tournamentId, participant.username]);
+
+                  // Add participant as team member
+                  await db.run(`
+                    INSERT INTO tournament_team_members (id, team_id, user_id, username)
+                    VALUES (?, ?, ?, ?)
+                  `, [memberId, teamId, participant.user_id, participant.username]);
+
+                  // Update participant's team assignment
+                  await db.run(`
+                    UPDATE tournament_participants SET team_assignment = ? WHERE id = ?
+                  `, [teamId, participant.id]);
+                }
+
+                logger.debug(`✅ Created ${participants.length} solo teams automatically`);
+              }
+            }
+          }
+        } catch (autoTeamError) {
+          logger.error('❌ Error auto-creating solo teams:', autoTeamError);
+          // Don't fail the transition if auto-team creation fails
+        }
+
         // Queue Discord status update when entering "assign" stage (close signups)
         try {
           const discordUpdateSuccess = await queueDiscordTournamentStatusUpdate(tournamentId, newStatus);

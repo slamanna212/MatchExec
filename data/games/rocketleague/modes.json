@@ -1,0 +1,34 @@
+[
+  {
+    "id": "duel",
+    "name": "1v1 Duel",
+    "description": "One-on-one competitive mode. Show your individual skills in intense 1v1 matches.",
+    "teamSize": 1,
+    "maxTeams": 2,
+    "scoringType": "Normal"
+  },
+  {
+    "id": "doubles",
+    "name": "2v2 Doubles",
+    "description": "Two versus two competitive mode. Coordinate with your teammate to dominate the field.",
+    "teamSize": 2,
+    "maxTeams": 2,
+    "scoringType": "Normal"
+  },
+  {
+    "id": "standard",
+    "name": "3v3 Standard",
+    "description": "Three versus three competitive mode. The classic Rocket League experience.",
+    "teamSize": 3,
+    "maxTeams": 2,
+    "scoringType": "Normal"
+  },
+  {
+    "id": "chaos",
+    "name": "4v4 Chaos",
+    "description": "Four versus four casual mode. Chaotic and fun with more players on the field.",
+    "teamSize": 4,
+    "maxTeams": 2,
+    "scoringType": "Normal"
+  }
+]
