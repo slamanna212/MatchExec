@@ -1,3 +1,5 @@
+// Production PM2 configuration for local deployments
+// Note: Docker deployments use s6-overlay, not PM2
 module.exports = {
   apps: [
     {
@@ -8,7 +10,7 @@ module.exports = {
       autorestart: false,
       env: {
         NODE_ENV: 'production',
-        DATABASE_PATH: '/app/app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db'
       }
     },
     {
@@ -28,7 +30,7 @@ module.exports = {
       interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'production',
-        DATABASE_PATH: '/app/app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db'
       }
     },
     {
@@ -38,7 +40,7 @@ module.exports = {
       interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'production',
-        DATABASE_PATH: '/app/app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db'
       }
     }
   ]

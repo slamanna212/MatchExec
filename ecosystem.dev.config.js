@@ -1,3 +1,4 @@
+// Development PM2 configuration with hot reload
 module.exports = {
   apps: [
     {
@@ -7,7 +8,8 @@ module.exports = {
       interpreter_args: 'tsx',
       autorestart: false,
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        DATABASE_PATH: './app_data/data/matchexec.db'
       }
     },
     {
@@ -25,7 +27,8 @@ module.exports = {
       interpreter: 'npx',
       interpreter_args: 'tsx',
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        DATABASE_PATH: './app_data/data/matchexec.db'
       },
       watch: ['./processes/discord-bot', './shared', './lib']
     },
@@ -35,7 +38,8 @@ module.exports = {
       interpreter: 'npx',
       interpreter_args: 'tsx',
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        DATABASE_PATH: './app_data/data/matchexec.db'
       },
       watch: ['./processes/scheduler', './shared', './lib']
     }
