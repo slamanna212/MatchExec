@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
-import { Navigation } from "@/components/navigation";
 import { ColorSchemeScript } from '@mantine/core';
-import WelcomeFlowWrapper from '@/components/WelcomeFlowWrapper';
+import { ConditionalNavigation } from '@/components/ConditionalNavigation';
 import { DatabaseStatusWrapper } from '@/components/DatabaseStatusWrapper';
 
 const geistSans = Geist({
@@ -40,11 +39,9 @@ export default function RootLayout({
       >
         <Providers>
           <DatabaseStatusWrapper>
-            <WelcomeFlowWrapper>
-              <Navigation>
-                {children}
-              </Navigation>
-            </WelcomeFlowWrapper>
+            <ConditionalNavigation>
+              {children}
+            </ConditionalNavigation>
           </DatabaseStatusWrapper>
         </Providers>
       </body>
