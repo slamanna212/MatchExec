@@ -7,8 +7,8 @@ export async function GET() {
   try {
     const db = await getDbInstance();
     
-    const settings = await db.get<DiscordSettingsDbRow>(` 
-      SELECT 
+    const settings = await db.get<DiscordSettingsDbRow>(`
+      SELECT
         application_id,
         bot_token,
         guild_id,
@@ -18,8 +18,10 @@ export async function GET() {
         match_reminder_minutes,
         player_reminder_minutes,
         announcer_voice,
-        voice_announcements_enabled
-      FROM discord_settings 
+        voice_announcements_enabled,
+        voice_channel_category_id,
+        voice_channel_cleanup_delay_minutes
+      FROM discord_settings
       WHERE id = 1
     `);
 
@@ -35,7 +37,9 @@ export async function GET() {
       match_reminder_minutes: settings.match_reminder_minutes || 10,
       player_reminder_minutes: settings.player_reminder_minutes || 120,
       announcer_voice: settings.announcer_voice || 'wrestling-announcer',
-      voice_announcements_enabled: Boolean(settings.voice_announcements_enabled)
+      voice_announcements_enabled: Boolean(settings.voice_announcements_enabled),
+      voice_channel_category_id: settings.voice_channel_category_id || '',
+      voice_channel_cleanup_delay_minutes: settings.voice_channel_cleanup_delay_minutes || 10
     } : {
       application_id: '',
       bot_token: '',
@@ -46,7 +50,9 @@ export async function GET() {
       match_reminder_minutes: 10,
       player_reminder_minutes: 120,
       announcer_voice: 'wrestling-announcer',
-      voice_announcements_enabled: false
+      voice_announcements_enabled: false,
+      voice_channel_category_id: '',
+      voice_channel_cleanup_delay_minutes: 10
     };
 
     return NextResponse.json(safeSettings);
@@ -74,7 +80,9 @@ export async function PUT(request: NextRequest) {
       match_reminder_minutes,
       player_reminder_minutes,
       announcer_voice,
-      voice_announcements_enabled
+      voice_announcements_enabled,
+      voice_channel_category_id,
+      voice_channel_cleanup_delay_minutes
     } = body;
 
     // First ensure we have a settings row
@@ -131,6 +139,16 @@ export async function PUT(request: NextRequest) {
     if (voice_announcements_enabled !== undefined) {
       updateFields.push('voice_announcements_enabled = ?');
       updateValues.push(voice_announcements_enabled ? 1 : 0);
+    }
+
+    if (voice_channel_category_id !== undefined) {
+      updateFields.push('voice_channel_category_id = ?');
+      updateValues.push(voice_channel_category_id || '');
+    }
+
+    if (voice_channel_cleanup_delay_minutes !== undefined) {
+      updateFields.push('voice_channel_cleanup_delay_minutes = ?');
+      updateValues.push(voice_channel_cleanup_delay_minutes || 10);
     }
 
     // Handle bot token separately

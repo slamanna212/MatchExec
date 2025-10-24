@@ -134,6 +134,8 @@ export interface DiscordSettingsDbRow {
   player_reminder_minutes?: number;
   announcer_voice?: string;
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
+  voice_channel_category_id?: string;
+  voice_channel_cleanup_delay_minutes?: number;
   [key: string]: unknown;
 }
 

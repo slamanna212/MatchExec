@@ -65,6 +65,8 @@ class MatchExecScheduler {
       if (settings.channel_refresh_cron) {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
+      // Run voice channel cleanup every 5 minutes
+      this.startCronJob('Voice Channel Cleanup', '*/5 * * * *', this.cleanupVoiceChannels.bind(this));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
@@ -574,6 +576,59 @@ class MatchExecScheduler {
       }
     } catch (error) {
       logger.error('❌ Error during scheduled channel refresh:', error);
+    }
+  }
+
+  private async cleanupVoiceChannels() {
+    try {
+      logger.debug('🔄 Starting voice channel cleanup...');
+
+      // Get Discord settings to know the cleanup delay
+      // @ts-expect-error - Database get method typed as unknown
+      const discordSettings = await this.db.get(
+        'SELECT voice_channel_cleanup_delay_minutes FROM discord_settings WHERE id = 1'
+      );
+
+      const cleanupDelayMinutes = discordSettings?.voice_channel_cleanup_delay_minutes || 10;
+
+      // Find matches that completed/cancelled and are past the cleanup delay
+      // @ts-expect-error - Database all method typed as unknown
+      const matchesForCleanup = await this.db.all(`
+        SELECT DISTINCT m.id, m.name, m.status, m.updated_at
+        FROM matches m
+        INNER JOIN auto_voice_channels avc ON m.id = avc.match_id
+        WHERE m.status IN ('completed', 'cancelled')
+        AND datetime(m.updated_at, '+${cleanupDelayMinutes} minutes') <= datetime('now')
+        LIMIT 10
+      `);
+
+      if (matchesForCleanup.length === 0) {
+        logger.debug('ℹ️ No voice channels ready for cleanup');
+        return;
+      }
+
+      logger.debug(`🗑️ Found ${matchesForCleanup.length} matches with voice channels ready for cleanup`);
+
+      // Import and use the voice channel manager to delete channels
+      const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
+
+      for (const match of matchesForCleanup) {
+        try {
+          const success = await deleteMatchVoiceChannels(match.id);
+
+          if (success) {
+            logger.debug(`✅ Cleaned up voice channels for match: ${match.name} (${match.id})`);
+          } else {
+            logger.warning(`⚠️ Failed to cleanup voice channels for match: ${match.name} (${match.id})`);
+          }
+        } catch (error) {
+          logger.error(`❌ Error cleaning up voice channels for match ${match.id}:`, error);
+        }
+      }
+
+      logger.debug(`✅ Voice channel cleanup completed`);
+    } catch (error) {
+      logger.error('❌ Error during voice channel cleanup:', error);
     }
   }
 }

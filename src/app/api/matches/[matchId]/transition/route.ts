@@ -288,9 +288,35 @@ export async function POST(
 
     // Trigger Discord match start notification when entering "battle" stage
     if (newStatus === 'battle') {
+      // First, create voice channels for the match
+      try {
+        const { createMatchVoiceChannels, trackVoiceChannels } = await import('../../../../../lib/voice-channel-manager');
+        const voiceChannelResult = await createMatchVoiceChannels(matchId);
+
+        if (voiceChannelResult.success && voiceChannelResult.blueChannelId && voiceChannelResult.redChannelId) {
+          // Update the match with the created voice channel IDs
+          await db.run(`
+            UPDATE matches
+            SET blue_team_voice_channel = ?, red_team_voice_channel = ?
+            WHERE id = ?
+          `, [voiceChannelResult.blueChannelId, voiceChannelResult.redChannelId, matchId]);
+
+          // Track the channels for cleanup later
+          await trackVoiceChannels(matchId, voiceChannelResult.blueChannelId, voiceChannelResult.redChannelId);
+
+          logger.debug(`🎤 Voice channels created for match ${matchId}: Blue=${voiceChannelResult.blueChannelId}, Red=${voiceChannelResult.redChannelId}`);
+        } else {
+          logger.debug(`ℹ️ Voice channels not created for match ${matchId}: ${voiceChannelResult.message || 'Unknown reason'}`);
+        }
+      } catch (voiceError) {
+        logger.error('❌ Error creating voice channels for match:', voiceError);
+        // Don't fail the API request if voice channel creation fails
+      }
+
+      // Queue the Discord match start announcement
       try {
         const discordMatchStartSuccess = await queueDiscordMatchStart(matchId);
-        
+
         if (discordMatchStartSuccess) {
           logger.debug(`🚀 Discord match start notification queued for match entering battle stage: ${matchId}`);
         } else {

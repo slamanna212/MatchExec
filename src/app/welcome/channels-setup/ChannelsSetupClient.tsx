@@ -41,7 +41,9 @@ export default function ChannelsSetupClient() {
   const router = useRouter();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  
+  const [voiceCategoryId, setVoiceCategoryId] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+
   // Create channel modal
   const [createModalOpened, setCreateModalOpened] = useState(false);
 
@@ -103,6 +105,7 @@ export default function ChannelsSetupClient() {
 
   useEffect(() => {
     fetchChannels();
+    fetchVoiceCategoryId();
   }, []);
 
   useEffect(() => {
@@ -118,6 +121,40 @@ export default function ChannelsSetupClient() {
       }
     } catch (error) {
       logger.error('Error fetching channels:', error);
+    }
+  };
+
+  const fetchVoiceCategoryId = async () => {
+    try {
+      const response = await fetch('/api/settings/discord');
+      if (response.ok) {
+        const data = await response.json();
+        setVoiceCategoryId(data.voice_channel_category_id || '');
+      }
+    } catch (error) {
+      logger.error('Error fetching voice category ID:', error);
+    }
+  };
+
+  const saveVoiceCategoryId = async () => {
+    setSavingCategory(true);
+    try {
+      const response = await fetch('/api/settings/discord', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice_channel_category_id: voiceCategoryId }),
+      });
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Voice channel category saved successfully!' });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save voice channel category' });
+      }
+    } catch (error) {
+      logger.error('Error saving voice category ID:', error);
+      setMessage({ type: 'error', text: 'An error occurred while saving' });
+    } finally {
+      setSavingCategory(false);
     }
   };
 
@@ -404,7 +441,11 @@ export default function ChannelsSetupClient() {
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" mb="md">
-          <Text size="lg" fw={600}>Your Channels</Text>
+          <Group>
+            <IconMessage size="1.2rem" />
+            <Text size="lg" fw={600}>Text Channels</Text>
+            <Badge color="blue" variant="light">{textChannels.length}</Badge>
+          </Group>
           <Button
             leftSection={<IconPlus size="1rem" />}
             onClick={handleOpenCreateModal}
@@ -413,100 +454,80 @@ export default function ChannelsSetupClient() {
           </Button>
         </Group>
 
-        <Grid>
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Card shadow="sm" padding="md" radius="md" withBorder>
-              <Group mb="md">
-                <IconMessage size="1.2rem" />
-                <Text size="md" fw={600}>Text Channels</Text>
-                <Badge color="blue" variant="light">{textChannels.length}</Badge>
-              </Group>
+        <Stack gap="sm">
+          {textChannels.length === 0 ? (
+            <Text c="dimmed" ta="center" py="md" size="sm">No text channels added yet</Text>
+          ) : (
+            textChannels.map((channel) => (
+              <Card key={channel.id} p="sm" withBorder>
+                <Group justify="space-between">
+                  <div>
+                    <Text fw={500} size="sm">
+                      {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      ID: {channel.discord_channel_id}
+                    </Text>
+                    <Group gap="xs" mt="xs">
+                      {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
+                      {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
+                      {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
+                      {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
+                    </Group>
+                  </div>
+                  <Group gap="xs">
+                    <ActionIcon
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditChannel(channel)}
+                    >
+                      <IconSettings size="0.8rem" />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="outline"
+                      color="red"
+                      size="sm"
+                      onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
+                    >
+                      <IconTrash size="0.8rem" />
+                    </ActionIcon>
+                  </Group>
+                </Group>
+              </Card>
+            ))
+          )}
+        </Stack>
+      </Card>
 
-              <Stack gap="sm">
-                {textChannels.length === 0 ? (
-                  <Text c="dimmed" ta="center" py="md" size="sm">No text channels added yet</Text>
-                ) : (
-                  textChannels.map((channel) => (
-                    <Card key={channel.id} p="sm" withBorder>
-                      <Group justify="space-between">
-                        <div>
-                          <Text fw={500} size="sm">
-                            {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            ID: {channel.discord_channel_id}
-                          </Text>
-                          <Group gap="xs" mt="xs">
-                            {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
-                            {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
-                            {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
-                            {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
-                          </Group>
-                        </div>
-                        <Group gap="xs">
-                          <ActionIcon
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditChannel(channel)}
-                          >
-                            <IconSettings size="0.8rem" />
-                          </ActionIcon>
-                          <ActionIcon
-                            variant="outline"
-                            color="red"
-                            size="sm"
-                            onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
-                          >
-                            <IconTrash size="0.8rem" />
-                          </ActionIcon>
-                        </Group>
-                      </Group>
-                    </Card>
-                  ))
-                )}
-              </Stack>
-            </Card>
-          </Grid.Col>
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Group mb="md">
+          <IconMicrophone size="1.2rem" />
+          <Text size="lg" fw={600}>Voice Channel Category</Text>
+        </Group>
 
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Card shadow="sm" padding="md" radius="md" withBorder>
-              <Group mb="md">
-                <IconMicrophone size="1.2rem" />
-                <Text size="md" fw={600}>Voice Channels</Text>
-                <Badge color="grape" variant="light">{voiceChannels.length}</Badge>
-              </Group>
+        <Text size="sm" c="dimmed" mb="md">
+          Voice channels will be automatically created in this category when matches start.
+          Right-click a Discord category and select &quot;Copy ID&quot; to get the category ID.
+        </Text>
 
-              <Stack gap="sm">
-                {voiceChannels.length === 0 ? (
-                  <Text c="dimmed" ta="center" py="md" size="sm">No voice channels added yet</Text>
-                ) : (
-                  voiceChannels.map((channel) => (
-                    <Card key={channel.id} p="sm" withBorder>
-                      <Group justify="space-between">
-                        <div>
-                          <Text fw={500} size="sm">
-                            {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            ID: {channel.discord_channel_id}
-                          </Text>
-                        </div>
-                        <ActionIcon
-                          variant="outline"
-                          color="red"
-                          size="sm"
-                          onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
-                        >
-                          <IconTrash size="0.8rem" />
-                        </ActionIcon>
-                      </Group>
-                    </Card>
-                  ))
-                )}
-              </Stack>
-            </Card>
-          </Grid.Col>
-        </Grid>
+        <TextInput
+          label="Discord Category ID"
+          placeholder="123456789012345678"
+          description="Category where match voice channels will be auto-created"
+          value={voiceCategoryId}
+          onChange={(e) => setVoiceCategoryId(e.target.value)}
+          error={voiceCategoryId && !/^\d{17,19}$/.test(voiceCategoryId) ? 'Invalid Discord category ID format' : null}
+        />
+
+        <Group justify="flex-end" mt="md">
+          <Button
+            onClick={saveVoiceCategoryId}
+            loading={savingCategory}
+            disabled={!voiceCategoryId || !/^\d{17,19}$/.test(voiceCategoryId)}
+          >
+            Save Category
+          </Button>
+        </Group>
       </Card>
 
       <Group justify="space-between" mt="xl">
