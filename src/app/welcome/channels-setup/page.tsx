@@ -138,8 +138,15 @@ export default function ChannelsSetupPage() {
   };
 
   const handleCreateChannel = async () => {
+    // Validate form before submitting
+    const validation = createForm.validate();
+    if (validation.hasErrors) {
+      setMessage({ type: 'error', text: 'Please fill in all required fields correctly' });
+      return;
+    }
+
     setCreateLoading(true);
-    
+
     try {
       const response = await fetch('/api/channels', {
         method: 'POST',

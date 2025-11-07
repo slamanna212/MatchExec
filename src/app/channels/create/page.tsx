@@ -94,6 +94,13 @@ export default function CreateChannelPage() {
   };
 
   const handleSubmit = async () => {
+    // Validate form before submitting
+    const validation = form.validate();
+    if (validation.hasErrors) {
+      setMessage({ type: 'error', text: 'Please fill in all required fields correctly' });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
