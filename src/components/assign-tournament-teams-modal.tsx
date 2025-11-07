@@ -20,6 +20,7 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconX, IconSearch } from '@tabler/icons-react';
 import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { showError, showSuccess } from '@/lib/notifications';
 
 interface SignupField {
   id: string;
@@ -195,14 +196,15 @@ export function AssignTournamentTeamsModal({
       });
 
       if (response.ok) {
+        showSuccess('Team assignments saved successfully!');
         onClose();
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to save team assignments');
+        showError(error.error || 'Failed to save team assignments');
       }
     } catch (error) {
       console.error('Error saving team assignments:', error);
-      alert('Failed to save team assignments');
+      showError('Failed to save team assignments');
     } finally {
       setSaving(false);
     }

@@ -16,6 +16,7 @@ import {
 import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
+import { showSuccess, showError } from '@/lib/notifications';
 
 interface CreateChannelForm {
   discord_channel_id: string;
@@ -29,7 +30,6 @@ export default function CreateChannelPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<CreateChannelForm>({
     initialValues: {
@@ -88,7 +88,6 @@ export default function CreateChannelPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    setMessage(null);
 
     try {
       const response = await fetch('/api/channels', {
@@ -98,20 +97,15 @@ export default function CreateChannelPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Channel created successfully!' });
-        setTimeout(() => {
-          router.push('/channels');
-        }, 1500);
+        showSuccess('Channel created successfully!');
+        router.push('/channels');
       } else {
         const errorData = await response.json();
-        setMessage({ 
-          type: 'error', 
-          text: errorData.error || 'Failed to create channel' 
-        });
+        showError(errorData.error || 'Failed to create channel');
       }
     } catch (error) {
       logger.error('Error creating channel:', error);
-      setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
+      showError('An error occurred while creating the channel');
     } finally {
       setLoading(false);
     }
@@ -251,12 +245,6 @@ export default function CreateChannelPage() {
                 {steps[currentStep].description}
               </Text>
             </div>
-
-            {message && (
-              <Alert color={message.type === 'success' ? 'green' : 'red'}>
-                {message.text}
-              </Alert>
-            )}
 
             {/* Step Content */}
             <div>

@@ -23,6 +23,7 @@ import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
 import { MatchDetailsModal } from './match-details-modal';
+import { showError } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -257,6 +258,9 @@ export function MatchDashboard() {
       }
     } catch (error) {
       console.error('Error fetching matches:', error);
+      if (!silent) {
+        showError('Failed to load matches. Please refresh the page.');
+      }
     } finally {
       if (!silent) {
         setLoading(false);
@@ -555,9 +559,11 @@ export function MatchDashboard() {
         setDetailsModalOpen(false);
       } else {
         console.error('Failed to delete match');
+        showError('Failed to delete match. Please try again.');
       }
     } catch (error) {
       console.error('Error deleting match:', error);
+      showError('An error occurred while deleting the match.');
     }
   };
 
@@ -583,9 +589,11 @@ export function MatchDashboard() {
         }
       } else {
         console.error('Failed to transition match status');
+        showError('Failed to update match status. Please try again.');
       }
     } catch (error) {
       console.error('Error transitioning match status:', error);
+      showError('An error occurred while updating the match status.');
     }
   }, []);
 
