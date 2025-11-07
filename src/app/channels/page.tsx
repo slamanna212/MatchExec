@@ -1,8 +1,9 @@
 'use client'
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Title } from '@mantine/core';
-import { useDisclosure, useMantineColorScheme } from '@mantine/hooks';
+
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Title, useMantineColorScheme } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
