@@ -1,8 +1,8 @@
 'use client'
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Title } from '@mantine/core';
+import { useDisclosure, useMantineColorScheme } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
@@ -16,6 +16,7 @@ interface ChannelEditData {
 }
 
 export default function ChannelsPage() {
+  const { colorScheme } = useMantineColorScheme();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -230,57 +231,89 @@ export default function ChannelsPage() {
           </Alert>
         )}
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Group mb="md">
+        {/* Channels Section */}
+        <div>
+          <Group mb="md" align="center">
             <IconMessage size="1.2rem" />
-            <Text size="lg" fw={600}>Channels</Text>
+            <Title order={2} size="h3">Channels</Title>
             <Badge color="blue" variant="light">{textChannels.length}</Badge>
           </Group>
 
-          <Stack gap="sm">
-            {textChannels.length === 0 ? (
+          {textChannels.length === 0 ? (
+            <Card shadow="sm" padding="lg" radius="md" withBorder>
               <Text c="dimmed" ta="center" py="xl">No channels configured</Text>
-            ) : (
-              textChannels.map((channel) => (
-                <Card key={channel.id} p="sm" withBorder>
-                  <Group justify="space-between">
-                    <div>
-                      <Text fw={500} size="sm">
-                        {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        ID: {channel.discord_channel_id}
-                      </Text>
-                      <Group gap="xs" mt="xs">
+            </Card>
+          ) : (
+            <Grid>
+              {textChannels.map((channel) => (
+                <Grid.Col key={channel.id} span={{ base: 12, md: 6, lg: 4 }}>
+                  <Card
+                    shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+                    padding="lg"
+                    radius="md"
+                    withBorder
+                    bg={colorScheme === 'light' ? 'white' : undefined}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
+                      height: '100%'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = colorScheme === 'light'
+                        ? '0 8px 16px rgba(0,0,0,0.15)'
+                        : '0 4px 12px rgba(0,0,0,0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '';
+                    }}
+                  >
+                    <Stack gap="md" h="100%">
+                      <div>
+                        <Text fw={600} size="md" mb="xs">
+                          {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          ID: {channel.discord_channel_id}
+                        </Text>
+                      </div>
+
+                      <Group gap="xs" wrap="wrap">
                         {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
                         {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
                         {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                         {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
+                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && (
+                          <Badge size="xs" color="gray" variant="light">No notifications</Badge>
+                        )}
                       </Group>
-                    </div>
-                    <Group gap="xs">
-                      <ActionIcon
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditChannel(channel)}
-                      >
-                        <IconSettings size="0.8rem" />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="outline"
-                        color="red"
-                        size="sm"
-                        onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
-                      >
-                        <IconTrash size="0.8rem" />
-                      </ActionIcon>
-                    </Group>
-                  </Group>
-                </Card>
-              ))
-            )}
-          </Stack>
-        </Card>
+
+                      <Group gap="xs" mt="auto" justify="flex-end">
+                        <ActionIcon
+                          variant="outline"
+                          size="lg"
+                          onClick={() => handleEditChannel(channel)}
+                        >
+                          <IconSettings size="1rem" />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="outline"
+                          color="red"
+                          size="lg"
+                          onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
+                        >
+                          <IconTrash size="1rem" />
+                        </ActionIcon>
+                      </Group>
+                    </Stack>
+                  </Card>
+                </Grid.Col>
+              ))}
+            </Grid>
+          )}
+        </div>
 
         {/* Edit Notifications Modal */}
         <Modal
