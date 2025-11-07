@@ -11,10 +11,10 @@ export default function NotFound() {
         The page you&apos;re looking for doesn&apos;t exist.
       </Text>
       <Group justify="center">
-        <Button component={Link} href="/" variant="filled">
+        <Button component="a" href="/" variant="filled">
           Go Home
         </Button>
-        <Button component={Link} href="/games" variant="outline">
+        <Button component="a" href="/games" variant="outline">
           Browse Games
         </Button>
       </Group>

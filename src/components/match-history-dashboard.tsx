@@ -501,8 +501,8 @@ export function MatchHistoryDashboard() {
             <Text c="dimmed" mb="md">
               Completed matches will appear here
             </Text>
-            <Button 
-              component={Link}
+            <Button
+              component="a"
               href="/matches"
             >
               View Active Matches
@@ -516,8 +516,8 @@ export function MatchHistoryDashboard() {
             <Text c="dimmed" mb="md">
               No completed matches match your search for &quot;{searchQuery}&quot;
             </Text>
-            <Button 
-              component={Link}
+            <Button
+              component="a"
               href="/matches"
             >
               View Active Matches

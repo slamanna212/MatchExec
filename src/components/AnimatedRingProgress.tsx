@@ -23,13 +23,16 @@ export function AnimatedRingProgress({
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true });
   const hasAnimated = useRef(false);
+  const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Only animate once when first coming into view
     if (!isInView || hasAnimated.current) {
-      // If already animated, just update to the new value immediately
+      // If already animated, update immediately on prop changes
       if (hasAnimated.current) {
-        setAnimatedSections(sections);
+        // Use requestAnimationFrame to avoid synchronous setState in effect
+        animationRef.current = requestAnimationFrame(() => {
+          setAnimatedSections(sections);
+        });
       }
       return;
     }
@@ -52,11 +55,17 @@ export function AnimatedRingProgress({
       );
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        animationRef.current = requestAnimationFrame(animate);
       }
     };
 
-    requestAnimationFrame(animate);
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
   }, [isInView, sections, duration]);
 
   return (

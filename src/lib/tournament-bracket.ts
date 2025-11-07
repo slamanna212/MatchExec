@@ -136,7 +136,6 @@ export async function generateSingleEliminationMatches(
   bracketAssignments: BracketAssignment[],
   gameId: string,
   roundsPerMatch: number,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
@@ -293,8 +292,7 @@ export async function generateNextRoundMatches(
   tournamentId: string,
   currentRound: number,
   bracketType: 'winners' | 'losers' | 'final',
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  format: 'single-elimination' | 'double-elimination'
+  _format: 'single-elimination' | 'double-elimination'
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
@@ -480,7 +478,6 @@ export async function generateDoubleEliminationMatches(
   bracketAssignments: BracketAssignment[],
   gameId: string,
   roundsPerMatch: number,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();

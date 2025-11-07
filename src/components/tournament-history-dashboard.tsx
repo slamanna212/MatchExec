@@ -268,7 +268,7 @@ export function TournamentHistoryDashboard() {
               Completed tournaments will appear here
             </Text>
             <Button
-              component={Link}
+              component="a"
               href="/tournaments"
             >
               View Active Tournaments
@@ -283,7 +283,7 @@ export function TournamentHistoryDashboard() {
               No completed tournaments match your search for &quot;{searchQuery}&quot;
             </Text>
             <Button
-              component={Link}
+              component="a"
               href="/tournaments"
             >
               View Active Tournaments

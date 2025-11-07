@@ -14,7 +14,7 @@ export function DatabaseLoadingScreen() {
   const [status, setStatus] = useState<DatabaseStatus>({
     ready: false,
     progress: 'Initializing database...',
-    timestamp: Date.now()
+    timestamp: 0
   });
   const [isReady, setIsReady] = useState(false);
 
