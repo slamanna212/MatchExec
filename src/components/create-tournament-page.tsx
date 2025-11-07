@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box, Switch } from '@mantine/core';
 import { IconArrowLeft, IconUpload, IconTrash, IconPlus } from '@tabler/icons-react';
 import { TournamentFormat } from '@/shared/types';
+import { showError, showWarning, showSuccess } from '@/lib/notifications';
 
 interface GameWithIcon {
   id: string;
@@ -115,7 +116,7 @@ export function CreateTournamentPage() {
 
     // Check for duplicate team names
     if (currentTeams.some(team => team.toLowerCase() === newTeamName.trim().toLowerCase())) {
-      alert('A team with this name already exists');
+      showWarning('A team with this name already exists');
       return;
     }
 
@@ -209,14 +210,15 @@ export function CreateTournamentPage() {
           });
         }
 
+        showSuccess('Tournament created successfully!');
         router.push('/tournaments');
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create tournament');
+        showError(error.error || 'Failed to create tournament');
       }
     } catch (error) {
       console.error('Error creating tournament:', error);
-      alert('Failed to create tournament');
+      showError('Failed to create tournament');
     }
   };
 
@@ -225,7 +227,7 @@ export function CreateTournamentPage() {
 
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      showError('File size must be less than 5MB');
       return;
     }
 
@@ -243,13 +245,14 @@ export function CreateTournamentPage() {
         const result = await response.json();
         updateFormData('eventImageUrl', result.imageUrl);
         setImagePreview(result.imageUrl);
+        showSuccess('Image uploaded successfully!');
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to upload image');
+        showError(error.error || 'Failed to upload image');
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image');
+      showError('Failed to upload image');
     } finally {
       setUploadingImage(false);
     }

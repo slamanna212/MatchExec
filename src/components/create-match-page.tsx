@@ -6,6 +6,7 @@ import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Texta
 import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft, IconNote } from '@tabler/icons-react';
 import { GameMap } from '@/shared/types';
 import { MapNoteModal } from './map-note-modal';
+import { showError, showSuccess } from '@/lib/notifications';
 
 interface GameWithIcon {
   id: string;
@@ -100,9 +101,12 @@ export function CreateMatchPage() {
         if (response.ok) {
           const gamesData = await response.json();
           setGames(gamesData);
+        } else {
+          showError('Failed to load games. Please refresh the page.');
         }
       } catch (error) {
         console.error('Error fetching games:', error);
+        showError('Failed to load games. Please refresh the page.');
       }
     };
 
@@ -231,6 +235,7 @@ export function CreateMatchPage() {
       }
     } catch (error) {
       console.error('Error fetching game data:', error);
+      showError('Failed to load game modes and maps.');
     } finally {
       setLoadingMaps(false);
     }
@@ -312,13 +317,13 @@ export function CreateMatchPage() {
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type)) {
-      alert('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
+      showError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
       return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File too large. Maximum size is 5MB.');
+      showError('File too large. Maximum size is 5MB.');
       return;
     }
 
@@ -336,13 +341,14 @@ export function CreateMatchPage() {
         const result = await response.json();
         updateFormData('eventImageUrl', result.imageUrl);
         setImagePreview(result.imageUrl);
+        showSuccess('Image uploaded successfully!');
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to upload image');
+        showError(error.error || 'Failed to upload image');
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image');
+      showError('Failed to upload image');
     } finally {
       setUploadingImage(false);
     }
@@ -529,6 +535,7 @@ export function CreateMatchPage() {
             }
           } catch (noteError) {
             console.error('Error saving map notes:', noteError);
+            showError('Failed to save map notes.');
           }
         }
         
@@ -552,15 +559,18 @@ export function CreateMatchPage() {
             console.error('Error transitioning match to gather stage:', transitionError);
           }
         }
-        
+
         clearFormData();
+        showSuccess('Match created successfully!');
         router.push('/matches');
       } else {
         const errorData = await response.json();
         console.error('Failed to create match:', errorData.error);
+        showError(errorData.error || 'Failed to create match. Please try again.');
       }
     } catch (error) {
       console.error('Error creating match:', error);
+      showError('An error occurred while creating the match.');
     }
   };
 

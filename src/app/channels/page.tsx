@@ -1,14 +1,14 @@
 'use client'
 
 
-
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Loader, Center, Title, useMantineColorScheme } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { modals } from '@mantine/modals';
 import { useEffect, useState } from 'react';
-import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
+import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
 import { logger } from '@/lib/logger/client';
-import { notificationHelper } from '@/lib/notifications';
+import { showSuccess, showError } from '@/lib/notifications';
 
 interface ChannelEditData {
   send_announcements: boolean;
@@ -18,7 +18,6 @@ interface ChannelEditData {
 }
 
 export default function ChannelsPage() {
-  const { colorScheme } = useMantineColorScheme();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,17 +43,11 @@ export default function ChannelsPage() {
         const data = await response.json();
         setChannels(data);
       } else {
-        notificationHelper.error({
-          title: 'Fetch Failed',
-          message: 'Failed to fetch channels'
-        });
+        showError('Failed to fetch channels');
       }
     } catch (error) {
       logger.error('Error fetching channels:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'An error occurred while fetching channels'
-      });
+      showError('An error occurred while fetching channels');
     } finally {
       setLoading(false);
     }
@@ -66,26 +59,17 @@ export default function ChannelsPage() {
       const response = await fetch('/api/channels/refresh-names', {
         method: 'POST'
       });
-
+      
       if (response.ok) {
         const result = await response.json();
-        notificationHelper.success({
-          title: 'Channels Refreshed',
-          message: `Refreshed ${result.updated_count} of ${result.total_channels} channels`
-        });
+        showSuccess(`Refreshed ${result.updated_count} of ${result.total_channels} channels`);
         await fetchChannels(); // Refresh the list
       } else {
-        notificationHelper.error({
-          title: 'Refresh Failed',
-          message: 'Failed to refresh channel names'
-        });
+        showError('Failed to refresh channel names');
       }
     } catch (error) {
       logger.error('Error refreshing channel names:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'An error occurred while refreshing channel names'
-      });
+      showError('An error occurred while refreshing channel names');
     } finally {
       setRefreshing(false);
     }
@@ -113,59 +97,50 @@ export default function ChannelsPage() {
       });
 
       if (response.ok) {
-        notificationHelper.success({
-          title: 'Settings Saved',
-          message: 'Notification settings updated successfully!'
-        });
+        showSuccess('Notification settings updated successfully!');
         closeEditModal();
         await fetchChannels();
       } else {
-        notificationHelper.error({
-          title: 'Update Failed',
-          message: 'Failed to update notification settings'
-        });
+        showError('Failed to update notification settings');
       }
     } catch (error) {
       logger.error('Error updating notifications:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'An error occurred while updating settings'
-      });
+      showError('An error occurred while updating settings');
     }
   };
 
   const handleDeleteChannel = async (channelId: string, channelName?: string) => {
-    if (!confirm(`Are you sure you want to delete ${channelName || 'this channel'}?`)) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Delete Channel',
+      children: (
+        <Text size="sm">
+          Are you sure you want to delete {channelName || 'this channel'}? This action cannot be undone.
+        </Text>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'DELETE'
+          });
 
-    try {
-      const response = await fetch(`/api/channels/${channelId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        notificationHelper.success({
-          title: 'Channel Deleted',
-          message: 'Channel deleted successfully!'
-        });
-        await fetchChannels();
-      } else {
-        notificationHelper.error({
-          title: 'Delete Failed',
-          message: 'Failed to delete channel'
-        });
-      }
-    } catch (error) {
-      logger.error('Error deleting channel:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'An error occurred while deleting the channel'
-      });
-    }
+          if (response.ok) {
+            showSuccess('Channel deleted successfully!');
+            await fetchChannels();
+          } else {
+            showError('Failed to delete channel');
+          }
+        } catch (error) {
+          logger.error('Error deleting channel:', error);
+          showError('An error occurred while deleting the channel');
+        }
+      },
+    });
   };
 
   const textChannels = channels.filter(ch => ch.channel_type === 'text');
+  const voiceChannels = channels.filter(ch => ch.channel_type === 'voice');
 
   // Calculate notification status
   const notificationStatus = {
@@ -215,8 +190,8 @@ export default function ChannelsPage() {
           <Grid>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle
-                  size="0.8rem"
+                <IconCircle 
+                  size="0.8rem" 
                   style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -225,8 +200,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle
-                  size="0.8rem"
+                <IconCircle 
+                  size="0.8rem" 
                   style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -235,8 +210,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle
-                  size="0.8rem"
+                <IconCircle 
+                  size="0.8rem" 
                   style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -245,8 +220,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle
-                  size="0.8rem"
+                <IconCircle 
+                  size="0.8rem" 
                   style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -256,89 +231,100 @@ export default function ChannelsPage() {
           </Grid>
         </Card>
 
-        {/* Channels Section */}
-        <div>
-          <Group mb="md" align="center">
-            <IconMessage size="1.2rem" />
-            <Title order={2} size="h3">Channels</Title>
-            <Badge color="blue" variant="light">{textChannels.length}</Badge>
-          </Group>
-
-          {textChannels.length === 0 ? (
+        <Grid>
+          <Grid.Col span={{ base: 12, md: 6 }}>
             <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Text c="dimmed" ta="center" py="xl">No channels configured</Text>
-            </Card>
-          ) : (
-            <Grid>
-              {textChannels.map((channel) => (
-                <Grid.Col key={channel.id} span={{ base: 12, md: 6, lg: 4 }}>
-                  <Card
-                    shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-                    padding="lg"
-                    radius="md"
-                    withBorder
-                    bg={colorScheme === 'light' ? 'white' : undefined}
-                    style={{
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
-                      height: '100%'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = colorScheme === 'light'
-                        ? '0 8px 16px rgba(0,0,0,0.15)'
-                        : '0 4px 12px rgba(0,0,0,0.3)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '';
-                    }}
-                  >
-                    <Stack gap="md" h="100%">
-                      <div>
-                        <Text fw={600} size="md" mb="xs">
-                          {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          ID: {channel.discord_channel_id}
-                        </Text>
-                      </div>
+              <Group mb="md">
+                <IconMessage size="1.2rem" />
+                <Text size="lg" fw={600}>Text Channels</Text>
+                <Badge color="blue" variant="light">{textChannels.length}</Badge>
+              </Group>
 
-                      <Group gap="xs" wrap="wrap">
-                        {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
-                        {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
-                        {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
-                        {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
-                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && (
-                          <Badge size="xs" color="gray" variant="light">No notifications</Badge>
-                        )}
+              <Stack gap="sm">
+                {textChannels.length === 0 ? (
+                  <Text c="dimmed" ta="center" py="xl">No text channels configured</Text>
+                ) : (
+                  textChannels.map((channel) => (
+                    <Card key={channel.id} p="sm" withBorder>
+                      <Group justify="space-between">
+                        <div>
+                          <Text fw={500} size="sm">
+                            {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            ID: {channel.discord_channel_id}
+                          </Text>
+                          <Group gap="xs" mt="xs">
+                            {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
+                            {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
+                            {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
+                            {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
+                          </Group>
+                        </div>
+                        <Group gap="xs">
+                          <ActionIcon
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditChannel(channel)}
+                          >
+                            <IconSettings size="0.8rem" />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="outline"
+                            color="red"
+                            size="sm"
+                            onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
+                          >
+                            <IconTrash size="0.8rem" />
+                          </ActionIcon>
+                        </Group>
                       </Group>
+                    </Card>
+                  ))
+                )}
+              </Stack>
+            </Card>
+          </Grid.Col>
 
-                      <Group gap="xs" mt="auto" justify="flex-end">
-                        <ActionIcon
-                          variant="outline"
-                          size="lg"
-                          onClick={() => handleEditChannel(channel)}
-                        >
-                          <IconSettings size="1rem" />
-                        </ActionIcon>
+          <Grid.Col span={{ base: 12, md: 6 }}>
+            <Card shadow="sm" padding="lg" radius="md" withBorder>
+              <Group mb="md">
+                <IconMicrophone size="1.2rem" />
+                <Text size="lg" fw={600}>Voice Channels</Text>
+                <Badge color="grape" variant="light">{voiceChannels.length}</Badge>
+              </Group>
+
+              <Stack gap="sm">
+                {voiceChannels.length === 0 ? (
+                  <Text c="dimmed" ta="center" py="xl">No voice channels configured</Text>
+                ) : (
+                  voiceChannels.map((channel) => (
+                    <Card key={channel.id} p="sm" withBorder>
+                      <Group justify="space-between">
+                        <div>
+                          <Text fw={500} size="sm">
+                            {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            ID: {channel.discord_channel_id}
+                          </Text>
+                        </div>
                         <ActionIcon
                           variant="outline"
                           color="red"
-                          size="lg"
+                          size="sm"
                           onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
                         >
-                          <IconTrash size="1rem" />
+                          <IconTrash size="0.8rem" />
                         </ActionIcon>
                       </Group>
-                    </Stack>
-                  </Card>
-                </Grid.Col>
-              ))}
-            </Grid>
-          )}
-        </div>
+                    </Card>
+                  ))
+                )}
+              </Stack>
+            </Card>
+          </Grid.Col>
+        </Grid>
 
         {/* Edit Notifications Modal */}
         <Modal
