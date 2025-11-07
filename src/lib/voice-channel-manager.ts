@@ -27,56 +27,96 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
       return { success: true, message: 'Voice channel category not configured' };
     }
 
-    // Get match data
+    // Get match data including game mode
     const match = await db.get<{
       id: string;
       name: string;
       tournament_id?: string;
-    }>('SELECT id, name, tournament_id FROM matches WHERE id = ?', [matchId]);
+      game_mode_id: string;
+    }>('SELECT id, name, tournament_id, game_mode_id FROM matches WHERE id = ?', [matchId]);
 
     if (!match) {
       logger.error('Match not found for voice channel creation:', matchId);
       return { success: false, message: 'Match not found' };
     }
 
-    // Determine channel naming based on match type
+    // Get game mode to determine team structure
+    const gameMode = await db.get<{
+      max_teams: number;
+    }>('SELECT max_teams FROM game_modes WHERE id = ?', [match.game_mode_id]);
+
+    const isSingleTeam = gameMode?.max_teams === 1;
+    logger.debug(`Match ${matchId} is ${isSingleTeam ? 'single-team' : 'dual-team'} mode (max_teams=${gameMode?.max_teams})`);
+
+
+    // Determine channel naming based on match type and team structure
     let blueChannelName: string;
-    let redChannelName: string;
+    let redChannelName: string | undefined;
 
-    if (match.tournament_id) {
-      // Tournament match: Get team names from tournament_matches
-      const tournamentMatch = await db.get<{
-        participant1_id: string;
-        participant2_id: string;
-      }>(`
-        SELECT participant1_id, participant2_id
-        FROM tournament_matches
-        WHERE match_id = ?
-      `, [matchId]);
+    if (isSingleTeam) {
+      // Single-team match: Create one channel for all participants
+      if (match.tournament_id) {
+        // Tournament match: Try to get team name
+        const tournamentMatch = await db.get<{
+          participant1_id: string;
+        }>(`
+          SELECT participant1_id
+          FROM tournament_matches
+          WHERE match_id = ?
+        `, [matchId]);
 
-      if (tournamentMatch) {
-        const team1 = await db.get<{ team_name: string }>(`
-          SELECT team_name FROM tournament_participants WHERE id = ?
-        `, [tournamentMatch.participant1_id]);
+        if (tournamentMatch) {
+          const team = await db.get<{ team_name: string }>(`
+            SELECT team_name FROM tournament_participants WHERE id = ?
+          `, [tournamentMatch.participant1_id]);
 
-        const team2 = await db.get<{ team_name: string }>(`
-          SELECT team_name FROM tournament_participants WHERE id = ?
-        `, [tournamentMatch.participant2_id]);
-
-        const team1Name = team1?.team_name || 'Team 1';
-        const team2Name = team2?.team_name || 'Team 2';
-        const vsName = `${team1Name} vs ${team2Name}`;
-        blueChannelName = vsName;
-        redChannelName = vsName;
+          blueChannelName = team?.team_name || match.name;
+        } else {
+          blueChannelName = match.name;
+        }
       } else {
-        // Fallback if tournament match data not available
+        // Standalone match: Just use match name
+        blueChannelName = match.name;
+      }
+      // No second channel for single-team matches
+      redChannelName = undefined;
+    } else {
+      // Dual-team match: Create two channels (blue and red)
+      if (match.tournament_id) {
+        // Tournament match: Get team names from tournament_matches
+        const tournamentMatch = await db.get<{
+          participant1_id: string;
+          participant2_id: string;
+        }>(`
+          SELECT participant1_id, participant2_id
+          FROM tournament_matches
+          WHERE match_id = ?
+        `, [matchId]);
+
+        if (tournamentMatch) {
+          const team1 = await db.get<{ team_name: string }>(`
+            SELECT team_name FROM tournament_participants WHERE id = ?
+          `, [tournamentMatch.participant1_id]);
+
+          const team2 = await db.get<{ team_name: string }>(`
+            SELECT team_name FROM tournament_participants WHERE id = ?
+          `, [tournamentMatch.participant2_id]);
+
+          const team1Name = team1?.team_name || 'Team 1';
+          const team2Name = team2?.team_name || 'Team 2';
+          const vsName = `${team1Name} vs ${team2Name}`;
+          blueChannelName = vsName;
+          redChannelName = vsName;
+        } else {
+          // Fallback if tournament match data not available
+          blueChannelName = `${match.name} - Blue Team`;
+          redChannelName = `${match.name} - Red Team`;
+        }
+      } else {
+        // Standalone match: Use match title + team colors
         blueChannelName = `${match.name} - Blue Team`;
         redChannelName = `${match.name} - Red Team`;
       }
-    } else {
-      // Standalone match: Use match title + team colors
-      blueChannelName = `${match.name} - Blue Team`;
-      redChannelName = `${match.name} - Red Team`;
     }
 
     // Queue a Discord bot request to create the channels
@@ -91,11 +131,12 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
         matchId,
         categoryId: settings.voice_channel_category_id,
         blueChannelName,
-        redChannelName
+        redChannelName, // May be undefined for single-team matches
+        isSingleTeam
       })
     ]);
 
-    logger.debug(`Voice channel creation request queued: ${requestId}`);
+    logger.debug(`Voice channel creation request queued: ${requestId} (${isSingleTeam ? 'single' : 'dual'} team)`);
 
     // Wait for the bot to process the request (poll with timeout)
     const maxWaitTime = 30000; // 30 seconds
@@ -193,20 +234,33 @@ export async function deleteMatchVoiceChannels(matchId: string): Promise<boolean
 export async function trackVoiceChannels(
   matchId: string,
   blueChannelId: string,
-  redChannelId: string
+  redChannelId?: string
 ): Promise<void> {
   try {
     const db = await getDbInstance();
 
-    const blueId = `auto_voice_${Date.now()}_blue_${Math.random().toString(36).substr(2, 9)}`;
-    const redId = `auto_voice_${Date.now()}_red_${Math.random().toString(36).substr(2, 9)}`;
+    if (redChannelId) {
+      // Dual-team match: Track both channels
+      const blueId = `auto_voice_${Date.now()}_blue_${Math.random().toString(36).substr(2, 9)}`;
+      const redId = `auto_voice_${Date.now()}_red_${Math.random().toString(36).substr(2, 9)}`;
 
-    await db.run(`
-      INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
-      VALUES (?, ?, ?, 'blue'), (?, ?, ?, 'red')
-    `, [blueId, matchId, blueChannelId, redId, matchId, redChannelId]);
+      await db.run(`
+        INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
+        VALUES (?, ?, ?, 'blue'), (?, ?, ?, 'red')
+      `, [blueId, matchId, blueChannelId, redId, matchId, redChannelId]);
 
-    logger.debug(`Voice channels tracked for match ${matchId}`);
+      logger.debug(`Voice channels tracked for match ${matchId} (dual-team)`);
+    } else {
+      // Single-team match: Track only one channel
+      const channelId = `auto_voice_${Date.now()}_all_${Math.random().toString(36).substr(2, 9)}`;
+
+      await db.run(`
+        INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
+        VALUES (?, ?, ?, 'all')
+      `, [channelId, matchId, blueChannelId]);
+
+      logger.debug(`Voice channel tracked for match ${matchId} (single-team)`);
+    }
   } catch (error) {
     logger.error('Error tracking voice channels:', error);
   }

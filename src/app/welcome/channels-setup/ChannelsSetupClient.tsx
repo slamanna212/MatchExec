@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { 
-  Title, Text, Button, Stack, Group, Card, Grid, Badge, 
+import {
+  Title, Text, Button, Stack, Group, Card, Badge,
   ActionIcon, Modal, Checkbox, Alert, TextInput, Radio, Progress
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
@@ -415,7 +415,6 @@ export default function ChannelsSetupClient() {
   );
 
   const textChannels = channels.filter(ch => ch.channel_type === 'text');
-  const voiceChannels = channels.filter(ch => ch.channel_type === 'voice');
 
   return (
     <Stack gap="lg">

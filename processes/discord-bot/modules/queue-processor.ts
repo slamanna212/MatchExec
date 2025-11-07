@@ -639,9 +639,9 @@ export class QueueProcessor {
           if (request.type === 'voice_channel_create') {
             // Parse the request data
             const requestData = JSON.parse(request.data);
-            const { matchId, categoryId, blueChannelName, redChannelName } = requestData;
+            const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
 
-            logger.debug(`Creating voice channels for match ${matchId} in category ${categoryId}`);
+            logger.debug(`Creating voice channel${isSingleTeam ? '' : 's'} for match ${matchId} in category ${categoryId} (${isSingleTeam ? 'single' : 'dual'} team)`);
 
             // Mark as processing
             const updateResult = await this.db.run(`
@@ -666,21 +666,25 @@ export class QueueProcessor {
 
               const guild = await this.client.guilds.fetch(settings.guild_id);
 
-              // Create blue team voice channel
+              // Create primary voice channel (stored as "blue" for compatibility)
               const blueChannel = await guild.channels.create({
                 name: blueChannelName,
                 type: 2, // Voice channel
                 parent: categoryId,
               });
 
-              // Create red team voice channel
-              const redChannel = await guild.channels.create({
-                name: redChannelName,
-                type: 2, // Voice channel
-                parent: categoryId,
-              });
-
-              logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
+              let redChannel;
+              if (!isSingleTeam && redChannelName) {
+                // Create red team voice channel only for dual-team matches
+                redChannel = await guild.channels.create({
+                  name: redChannelName,
+                  type: 2, // Voice channel
+                  parent: categoryId,
+                });
+                logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
+              } else {
+                logger.debug(`✅ Voice channel created: ${blueChannel.id}`);
+              }
 
               // Update the request with the result
               await this.db.run(`
@@ -691,7 +695,7 @@ export class QueueProcessor {
                 JSON.stringify({
                   success: true,
                   blueChannelId: blueChannel.id,
-                  redChannelId: redChannel.id
+                  redChannelId: redChannel?.id
                 }),
                 request.id
               ]);
