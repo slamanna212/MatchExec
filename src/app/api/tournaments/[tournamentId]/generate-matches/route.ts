@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import type {
+  BracketAssignment 
+} from '@/lib/tournament-bracket';
 import { 
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
-  saveGeneratedMatches,
-  BracketAssignment 
+  saveGeneratedMatches 
 } from '@/lib/tournament-bracket';
 
 interface Tournament {

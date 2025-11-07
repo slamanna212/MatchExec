@@ -1,5 +1,5 @@
-import { Database } from '../../../lib/database/connection';
-import { DiscordChannel } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class Utils {

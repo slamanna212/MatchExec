@@ -1,9 +1,10 @@
+import type {
+  Client} from 'discord.js';
 import {
-  Client,
   EmbedBuilder
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings, DiscordChannel } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class ReminderHandler {

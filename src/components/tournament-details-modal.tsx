@@ -1,7 +1,8 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect } from 'react';
-import { 
+import {
   Modal,
   Stack,
   Group,
@@ -18,7 +19,8 @@ import {
 } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
-import { Tournament, TOURNAMENT_FLOW_STEPS, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentBracket } from './tournament-bracket';
 import { notificationHelper } from '@/lib/notifications';
 
@@ -112,7 +114,7 @@ export function TournamentDetailsModal({
             });
           }
         } catch (error) {
-          console.error('Error fetching tournament details:', error);
+          logger.error('Error fetching tournament details:', error);
         } finally {
           setLoading(false);
         }
@@ -399,7 +401,7 @@ export function TournamentDetailsModal({
                 });
               }
             } catch (error) {
-              console.error('Error generating matches:', error);
+              logger.error('Error generating matches:', error);
               notificationHelper.error({
                 title: 'Connection Error',
                 message: 'Failed to generate bracket'
@@ -416,10 +418,10 @@ export function TournamentDetailsModal({
                 body: JSON.stringify({ assignments })
               });
               if (!response.ok) {
-                console.error('Failed to save bracket assignments');
+                logger.error('Failed to save bracket assignments');
               }
             } catch (error) {
-              console.error('Error saving bracket assignments:', error);
+              logger.error('Error saving bracket assignments:', error);
             }
           }}
         />

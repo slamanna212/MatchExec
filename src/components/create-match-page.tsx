@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Avatar, Group, Grid, Badge, TextInput, Textarea, Select, Checkbox, ActionIcon, Image, FileButton, Box, Container, Title, Breadcrumbs, Anchor, Progress, NumberInput } from '@mantine/core';
 import { IconPlus, IconX, IconUpload, IconTrash, IconArrowLeft, IconNote } from '@tabler/icons-react';
-import { GameMap } from '@/shared/types';
+import type { GameMap } from '@/shared/types';
 import { MapNoteModal } from './map-note-modal';
 import { showError, showSuccess } from '@/lib/notifications';
+import { logger } from '@/lib/logger/client';
 
 interface GameWithIcon {
   id: string;
@@ -105,7 +106,7 @@ export function CreateMatchPage() {
           showError('Failed to load games. Please refresh the page.');
         }
       } catch (error) {
-        console.error('Error fetching games:', error);
+        logger.error('Error fetching games:', error);
         showError('Failed to load games. Please refresh the page.');
       }
     };
@@ -123,7 +124,7 @@ export function CreateMatchPage() {
           setImagePreview(parsedData.eventImageUrl);
         }
       } catch (error) {
-        console.error('Error parsing saved form data:', error);
+        logger.error('Error parsing saved form data:', error);
       }
     }
 
@@ -134,7 +135,7 @@ export function CreateMatchPage() {
         const parsedMaps = JSON.parse(savedMaps);
         setSelectedMaps(parsedMaps);
       } catch (error) {
-        console.error('Error parsing saved maps:', error);
+        logger.error('Error parsing saved maps:', error);
       }
     }
 
@@ -234,7 +235,7 @@ export function CreateMatchPage() {
         }
       }
     } catch (error) {
-      console.error('Error fetching game data:', error);
+      logger.error('Error fetching game data:', error);
       showError('Failed to load game modes and maps.');
     } finally {
       setLoadingMaps(false);
@@ -347,7 +348,7 @@ export function CreateMatchPage() {
         showError(error.error || 'Failed to upload image');
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logger.error('Error uploading image:', error);
       showError('Failed to upload image');
     } finally {
       setUploadingImage(false);
@@ -361,7 +362,7 @@ export function CreateMatchPage() {
           method: 'DELETE',
         });
       } catch (error) {
-        console.error('Error deleting image:', error);
+        logger.error('Error deleting image:', error);
       }
     }
     updateFormData('eventImageUrl', undefined);
@@ -378,7 +379,7 @@ export function CreateMatchPage() {
         setMapsForMode(maps);
       }
     } catch (error) {
-      console.error('Error fetching maps for mode:', error);
+      logger.error('Error fetching maps for mode:', error);
     } finally {
       setLoadingMaps(false);
     }
@@ -426,7 +427,7 @@ export function CreateMatchPage() {
 
     // Check if map.id exists
     if (!map.id) {
-      console.error('Map ID is undefined:', map);
+      logger.error('Map ID is undefined:', map);
       return;
     }
 
@@ -534,7 +535,7 @@ export function CreateMatchPage() {
               });
             }
           } catch (noteError) {
-            console.error('Error saving map notes:', noteError);
+            logger.error('Error saving map notes:', noteError);
             showError('Failed to save map notes.');
           }
         }
@@ -551,12 +552,12 @@ export function CreateMatchPage() {
             });
 
             if (transitionResponse.ok) {
-              console.log(`✅ Match created and moved to gather stage - Discord announcement will be posted`);
+              logger.info(`✅ Match created and moved to gather stage - Discord announcement will be posted`);
             } else {
-              console.warn('Match created but failed to start signups automatically');
+              logger.warning('Match created but failed to start signups automatically');
             }
           } catch (transitionError) {
-            console.error('Error transitioning match to gather stage:', transitionError);
+            logger.error('Error transitioning match to gather stage:', transitionError);
           }
         }
 
@@ -565,11 +566,11 @@ export function CreateMatchPage() {
         router.push('/matches');
       } else {
         const errorData = await response.json();
-        console.error('Failed to create match:', errorData.error);
+        logger.error('Failed to create match:', errorData.error);
         showError(errorData.error || 'Failed to create match. Please try again.');
       }
     } catch (error) {
-      console.error('Error creating match:', error);
+      logger.error('Error creating match:', error);
       showError('An error occurred while creating the match.');
     }
   };

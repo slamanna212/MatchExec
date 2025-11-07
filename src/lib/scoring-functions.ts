@@ -1,6 +1,6 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
-import {
+import type {
   MatchResult,
   MatchFormat,
   PositionScoringConfig
@@ -413,10 +413,10 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
       }
 
       return true; // There is a next map
-    } else {
+    } 
       logger.debug('No pending maps found to set as ongoing');
       return false; // No next map
-    }
+    
   } catch (error) {
     logger.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation

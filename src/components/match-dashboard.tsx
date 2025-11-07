@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -17,7 +18,8 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
+import type { Match, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
+import { MATCH_FLOW_STEPS } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
@@ -37,7 +39,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   
   // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
   // We need to treat this as UTC, so append 'Z'
-  return new Date(timestamp + 'Z');
+  return new Date(`${timestamp  }Z`);
 };
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
@@ -257,7 +259,7 @@ export function MatchDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      logger.error('Error fetching matches:', error);
       if (!silent) {
         showError('Failed to load matches. Please refresh the page.');
       }
@@ -278,7 +280,7 @@ export function MatchDashboard() {
           setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
         }
       } catch (error) {
-        console.error('Error fetching UI settings:', error);
+        logger.error('Error fetching UI settings:', error);
       }
     };
 
@@ -382,7 +384,7 @@ export function MatchDashboard() {
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
-      console.error('Error fetching map names:', error);
+      logger.error('Error fetching map names:', error);
     }
   };
 
@@ -412,7 +414,7 @@ export function MatchDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching map notes:', error);
+      logger.error('Error fetching map notes:', error);
     }
   };
 
@@ -478,14 +480,14 @@ export function MatchDashboard() {
           return prevConfig;
         });
       } else {
-        console.error('Failed to fetch participants');
+        logger.error('Failed to fetch participants');
         if (!silent) {
           setParticipants([]);
           setSignupConfig(null);
         }
       }
     } catch (error) {
-      console.error('Error fetching participants:', error);
+      logger.error('Error fetching participants:', error);
       if (!silent) {
         setParticipants([]);
         setSignupConfig(null);
@@ -507,13 +509,13 @@ export function MatchDashboard() {
         const data = await response.json();
         setReminders(data.reminders || []);
       } else {
-        console.error('Failed to fetch reminders');
+        logger.error('Failed to fetch reminders');
         if (!silent) {
           setReminders([]);
         }
       }
     } catch (error) {
-      console.error('Error fetching reminders:', error);
+      logger.error('Error fetching reminders:', error);
       if (!silent) {
         setReminders([]);
       }
@@ -545,6 +547,7 @@ export function MatchDashboard() {
 
       return () => clearInterval(participantsInterval);
     }
+    return undefined;
   }, [detailsModalOpen, selectedMatch, refreshInterval, fetchParticipants, fetchReminders]);
 
   const handleDeleteMatch = async (matchId: string) => {
@@ -558,11 +561,11 @@ export function MatchDashboard() {
         setMatches(prev => prev.filter(match => match.id !== matchId));
         setDetailsModalOpen(false);
       } else {
-        console.error('Failed to delete match');
+        logger.error('Failed to delete match');
         showError('Failed to delete match. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting match:', error);
+      logger.error('Error deleting match:', error);
       showError('An error occurred while deleting the match.');
     }
   };
@@ -585,14 +588,14 @@ export function MatchDashboard() {
         ));
         
         if (newStatus === 'gather') {
-          console.log(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
+          logger.info(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
         }
       } else {
-        console.error('Failed to transition match status');
+        logger.error('Failed to transition match status');
         showError('Failed to update match status. Please try again.');
       }
     } catch (error) {
-      console.error('Error transitioning match status:', error);
+      logger.error('Error transitioning match status:', error);
       showError('An error occurred while updating the match status.');
     }
   }, []);
@@ -752,7 +755,7 @@ export function MatchDashboard() {
       setScoringModalOpen(false);
       setSelectedMatchForScoring(null);
     } catch (error) {
-      console.error('Error submitting result:', error);
+      logger.error('Error submitting result:', error);
       throw error; // Re-throw to let the modal handle the error display
     }
   };

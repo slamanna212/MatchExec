@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
 import {
@@ -19,7 +20,7 @@ import {
   Select
 } from '@mantine/core';
 import { IconPlus, IconX, IconSearch } from '@tabler/icons-react';
-import { TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
 
 interface SignupField {
@@ -122,7 +123,7 @@ export function AssignTournamentTeamsModal({
         }
       }
     } catch (error) {
-      console.error('Error fetching tournament data:', error);
+      logger.error('Error fetching tournament data:', error);
     } finally {
       setLoading(false);
     }
@@ -150,7 +151,7 @@ export function AssignTournamentTeamsModal({
         setNewTeamName('');
       }
     } catch (error) {
-      console.error('Error creating team:', error);
+      logger.error('Error creating team:', error);
     }
   };
 
@@ -168,7 +169,7 @@ export function AssignTournamentTeamsModal({
         ));
       }
     } catch (error) {
-      console.error('Error deleting team:', error);
+      logger.error('Error deleting team:', error);
     }
   };
 
@@ -203,7 +204,7 @@ export function AssignTournamentTeamsModal({
         showError(error.error || 'Failed to save team assignments');
       }
     } catch (error) {
-      console.error('Error saving team assignments:', error);
+      logger.error('Error saving team assignments:', error);
       showError('Failed to save team assignments');
     } finally {
       setSaving(false);

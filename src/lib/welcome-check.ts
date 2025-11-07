@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getDbInstance } from './database-init';
+import { logger } from '@/lib/logger/server';
 
 /**
  * Server-side utility to check if welcome flow is complete
@@ -14,7 +15,7 @@ export async function isWelcomeComplete(): Promise<boolean> {
     );
     return result?.setting_value === 'true';
   } catch (error) {
-    console.error('Error checking welcome status:', error);
+    logger.error('Error checking welcome status:', error);
     return false; // Default to not complete on error (safer)
   }
 }

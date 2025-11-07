@@ -1,13 +1,14 @@
-import { Client, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import type { Client} from 'discord.js';
+import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
-import { AnnouncementHandler } from './announcement-handler';
-import { ReminderHandler } from './reminder-handler';
-import { EventHandler } from './event-handler';
-import { VoiceHandler } from './voice-handler';
-import { SettingsManager } from './settings-manager';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
+import type { AnnouncementHandler } from './announcement-handler';
+import type { ReminderHandler } from './reminder-handler';
+import type { EventHandler } from './event-handler';
+import type { VoiceHandler } from './voice-handler';
+import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 
 // Interfaces for different queue types - matching existing DB structure

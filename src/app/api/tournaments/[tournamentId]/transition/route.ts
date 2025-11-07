@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
-import { TOURNAMENT_FLOW_STEPS, Tournament } from '@/shared/types';
+import type { Tournament } from '@/shared/types';
+import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 // Queue a Discord match start announcement request that the Discord bot will process

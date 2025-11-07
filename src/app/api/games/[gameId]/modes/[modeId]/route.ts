@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ModeDataJson } from '@/shared/types';
+import type { ModeDataJson } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 export async function GET(

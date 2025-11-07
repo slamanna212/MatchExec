@@ -2,7 +2,7 @@
 
 import { Badge } from '@mantine/core';
 import { IconFlame, IconSwords } from '@tabler/icons-react';
-import { MatchFormat } from '@/shared/types';
+import type { MatchFormat } from '@/shared/types';
 
 interface FormatBadgeProps {
   format: MatchFormat;

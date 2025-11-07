@@ -35,8 +35,8 @@ export class Database {
   }
 
   async close(): Promise<void> {
-    if (!this.db) return;
-    
+    if (!this.db) return Promise.resolve();
+
     return new Promise((resolve, reject) => {
       this.db!.close((err) => {
         if (err) {

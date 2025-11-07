@@ -9,9 +9,10 @@ import {
   getVoiceConnection,
   entersState
 } from '@discordjs/voice';
-import { ChannelType, Client, VoiceBasedChannel } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import type { Client, VoiceBasedChannel } from 'discord.js';
+import { ChannelType } from 'discord.js';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class VoiceHandler {
@@ -54,9 +55,9 @@ export class VoiceHandler {
           message: `Successfully played voice line in user's channel`,
           channelId: channelId
         };
-      } else {
+      } 
         return { success: false, message: 'Failed to play voice line' };
-      }
+      
 
     } catch (error) {
       logger.error('Error testing voice line for user:', error);

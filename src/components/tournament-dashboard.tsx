@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -18,7 +19,8 @@ import {
   Badge
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Tournament, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
+import type { Tournament} from '@/shared/types';
+import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
@@ -34,7 +36,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   }
   
   // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(timestamp + 'Z');
+  return new Date(`${timestamp  }Z`);
 };
 
 interface TournamentWithGame extends Tournament {
@@ -188,7 +190,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching tournaments:', error);
+      logger.error('Error fetching tournaments:', error);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -206,7 +208,7 @@ export function TournamentDashboard() {
           setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
         }
       } catch (error) {
-        console.error('Error fetching UI settings:', error);
+        logger.error('Error fetching UI settings:', error);
       }
     };
 
@@ -249,14 +251,14 @@ export function TournamentDashboard() {
         ));
       } else {
         const error = await response.json();
-        console.error('Failed to transition tournament status:', error);
+        logger.error('Failed to transition tournament status:', error);
         notificationHelper.error({
           title: 'Status Update Failed',
           message: error.error || 'Failed to update tournament status'
         });
       }
     } catch (error) {
-      console.error('Error transitioning tournament status:', error);
+      logger.error('Error transitioning tournament status:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to update tournament status'
@@ -281,7 +283,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error deleting tournament:', error);
+      logger.error('Error deleting tournament:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to delete tournament'
@@ -302,7 +304,7 @@ export function TournamentDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Tournament progressed:', result.message);
+        logger.info('Tournament progressed:', result.message);
 
         notificationHelper.success({
           title: 'Round Advanced',
@@ -319,7 +321,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error progressing tournament:', error);
+      logger.error('Error progressing tournament:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to progress tournament'
@@ -335,7 +337,7 @@ export function TournamentDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Bracket generated:', result.message);
+        logger.info('Bracket generated:', result.message);
 
         notificationHelper.success({
           title: 'Bracket Generated',
@@ -352,7 +354,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error generating bracket:', error);
+      logger.error('Error generating bracket:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to generate bracket'

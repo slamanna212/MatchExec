@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box, Switch } from '@mantine/core';
 import { IconArrowLeft, IconUpload, IconTrash, IconPlus } from '@tabler/icons-react';
-import { TournamentFormat } from '@/shared/types';
+import type { TournamentFormat } from '@/shared/types';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
+import { logger } from '@/lib/logger/client';
 
 interface GameWithIcon {
   id: string;
@@ -63,7 +64,7 @@ export function CreateTournamentPage() {
           setGames(gamesData);
         }
       } catch (error) {
-        console.error('Error fetching games:', error);
+        logger.error('Error fetching games:', error);
       }
     };
 
@@ -81,7 +82,7 @@ export function CreateTournamentPage() {
           setImagePreview(parsedData.eventImageUrl);
         }
       } catch (error) {
-        console.error('Error parsing saved form data:', error);
+        logger.error('Error parsing saved form data:', error);
       }
     }
   }, []);
@@ -217,7 +218,7 @@ export function CreateTournamentPage() {
         showError(error.error || 'Failed to create tournament');
       }
     } catch (error) {
-      console.error('Error creating tournament:', error);
+      logger.error('Error creating tournament:', error);
       showError('Failed to create tournament');
     }
   };
@@ -251,7 +252,7 @@ export function CreateTournamentPage() {
         showError(error.error || 'Failed to upload image');
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logger.error('Error uploading image:', error);
       showError('Failed to upload image');
     } finally {
       setUploadingImage(false);
@@ -265,7 +266,7 @@ export function CreateTournamentPage() {
           method: 'DELETE',
         });
       } catch (error) {
-        console.error('Error deleting image:', error);
+        logger.error('Error deleting image:', error);
       }
     }
     updateFormData('eventImageUrl', undefined);

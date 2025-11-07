@@ -1,4 +1,5 @@
-import { BaseLogger, LogLevel } from './base';
+import type { LogLevel } from './base';
+import { BaseLogger } from './base';
 
 class ClientLogger extends BaseLogger {
   constructor() {

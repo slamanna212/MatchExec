@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Database } from './connection';
+import type { Database } from './connection';
 import { markDbNotReady, markDbReady } from './status';
 import { logger } from '../../src/lib/logger/server';
 
@@ -60,7 +60,7 @@ export class DatabaseSeeder {
   private db: Database;
   private dataDir: string;
 
-  constructor(db: Database, dataDir: string = './data/games') {
+  constructor(db: Database, dataDir = './data/games') {
     this.db = db;
     this.dataDir = dataDir;
   }

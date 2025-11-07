@@ -29,6 +29,7 @@ export function MapNoteModal({
       });
       return () => cancelAnimationFrame(frame);
     }
+    return undefined;
   }, [initialNote, opened]);
 
   const handleSave = () => {

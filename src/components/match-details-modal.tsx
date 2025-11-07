@@ -1,7 +1,8 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useMemo, useEffect } from 'react';
-import { 
+import {
   Modal,
   Stack,
   Group,
@@ -19,7 +20,8 @@ import {
   TextInput
 } from '@mantine/core';
 import { IconTrophy, IconDeviceFloppy } from '@tabler/icons-react';
-import { Match, MATCH_FLOW_STEPS } from '@/shared/types';
+import type { Match} from '@/shared/types';
+import { MATCH_FLOW_STEPS } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
 import responsiveTextClasses from './responsive-text.module.css';
 
@@ -140,7 +142,7 @@ export function MatchDetailsModal({
           setMatchGames(data.games || []);
         }
       } catch (error) {
-        console.error('Failed to fetch match games:', error);
+        logger.error('Failed to fetch match games:', error);
       } finally {
         setGamesLoading(false);
       }
@@ -189,7 +191,7 @@ export function MatchDetailsModal({
         selectedMatch.map_codes = mapCodes;
       }
     } catch (error) {
-      console.error('Failed to save map codes:', error);
+      logger.error('Failed to save map codes:', error);
     } finally {
       setMapCodesSaving(false);
     }

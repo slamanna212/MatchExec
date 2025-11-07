@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import React, { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import {
@@ -30,7 +31,8 @@ import {
   IconHome,
   IconSwords
 } from '@tabler/icons-react'
-import { getVersionInfo, VersionInfo } from '@/lib/version-client'
+import type { VersionInfo } from '@/lib/version-client';
+import { getVersionInfo } from '@/lib/version-client'
 
 interface NavigationProps {
   children: React.ReactNode
@@ -53,7 +55,7 @@ export function Navigation({ children }: NavigationProps) {
 
     // Fetch version info from API
     getVersionInfo().then(setVersionInfo).catch((error) => {
-      console.error('Failed to fetch version info:', error);
+      logger.error('Failed to fetch version info:', error);
     });
 
     return () => cancelAnimationFrame(frame);

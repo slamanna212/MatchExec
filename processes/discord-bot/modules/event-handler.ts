@@ -1,14 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import {
+import type {
   Client,
   Message,
-  GuildScheduledEventPrivacyLevel,
-  GuildScheduledEventEntityType,
   GuildScheduledEventCreateOptions
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import {
+  GuildScheduledEventPrivacyLevel,
+  GuildScheduledEventEntityType
+} from 'discord.js';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class EventHandler {
@@ -27,7 +29,7 @@ export class EventHandler {
     start_date: string;
     livestream_link?: string;
     event_image_url?: string;
-  }, message: Message, rounds: number = 1): Promise<string | null> {
+  }, message: Message, rounds = 1): Promise<string | null> {
     try {
       const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
       if (!guild) {
@@ -119,10 +121,10 @@ export class EventHandler {
       if (event) {
         await event.delete();
         return true;
-      } else {
+      } 
         logger.warning(`⚠️ Discord event not found: ${eventId}`);
         return false;
-      }
+      
     } catch (error) {
       logger.warning(`⚠️ Could not delete Discord event ${eventId}:`, (error as Error)?.message);
       return false;

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
-import { ParticipantDbRow, MatchDbRow } from '@/shared/types';
+import type { ParticipantDbRow, MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 export async function GET(

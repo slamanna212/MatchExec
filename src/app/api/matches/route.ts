@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import { MatchDbRow, GameDbRow } from '@/shared/types';
+import type { MatchDbRow, GameDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 

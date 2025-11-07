@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
@@ -98,11 +99,11 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
 
       if (matchResponse.ok) {
         const matchData = await matchResponse.json();
-        console.log('Match data received:', matchData);
-        console.log('Map codes supported:', matchData.map_codes_supported);
+        logger.info('Match data received:', matchData);
+        logger.info('Map codes supported:', matchData.map_codes_supported);
         setMapCodesSupported(matchData.map_codes_supported || false);
       } else {
-        console.error('Failed to fetch match data:', matchResponse.status);
+        logger.error('Failed to fetch match data:', matchResponse.status);
       }
 
       // Fetch match games to detect scoring type
@@ -114,7 +115,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -192,10 +193,10 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
       if (response.ok) {
         onClose();
       } else {
-        console.error('Failed to save team assignments');
+        logger.error('Failed to save team assignments');
       }
     } catch (error) {
-      console.error('Error saving team assignments:', error);
+      logger.error('Error saving team assignments:', error);
     } finally {
       setSaving(false);
     }

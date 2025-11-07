@@ -1,17 +1,19 @@
 import fs from 'fs';
 import path from 'path';
-import {
+import type {
   Client,
   Message,
+  ThreadChannel
+} from 'discord.js';
+import {
   EmbedBuilder,
   AttachmentBuilder,
   ButtonBuilder,
   ActionRowBuilder,
-  ButtonStyle,
-  ThreadChannel
+  ButtonStyle
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings, DiscordChannel } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class AnnouncementHandler {
@@ -171,7 +173,7 @@ export class AnnouncementHandler {
           const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
           
           // Find all notes that match this base map ID and get by index
-          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(cleanMapId + '-')).sort();
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${cleanMapId  }-`)).sort();
           mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
         }
         

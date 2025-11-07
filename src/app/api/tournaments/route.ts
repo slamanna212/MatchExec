@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import { Tournament } from '@/shared/types';
+import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 interface TournamentDbRow extends Tournament {

@@ -1,7 +1,7 @@
 'use client';
 
 import { Container, Paper, Box } from '@mantine/core';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 interface WelcomeLayoutProps {
   children: ReactNode;

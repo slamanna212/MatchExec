@@ -1,8 +1,11 @@
-import {
+import type {
   Client,
   ChatInputCommandInteraction,
   ButtonInteraction,
   ModalSubmitInteraction,
+  StringSelectMenuInteraction
+} from 'discord.js';
+import {
   SlashCommandBuilder,
   REST,
   Routes,
@@ -11,11 +14,10 @@ import {
   ActionRowBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder,
-  StringSelectMenuInteraction
+  StringSelectMenuBuilder
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 // Import SignupFormLoader

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DatabaseLoadingScreen } from './DatabaseLoadingScreen';
+import { logger } from '@/lib/logger/client';
 
 interface DatabaseStatus {
   ready: boolean;
@@ -33,7 +34,7 @@ export function DatabaseStatusWrapper({ children }: DatabaseStatusWrapperProps) 
           }
         }
       } catch (error) {
-        console.error('Failed to check database status:', error);
+        logger.error('Failed to check database status:', error);
         // On error, assume ready and show the app
         setIsChecking(false);
       }

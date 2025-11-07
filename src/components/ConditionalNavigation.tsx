@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { Navigation } from '@/components/navigation';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 interface ConditionalNavigationProps {
   children: ReactNode;

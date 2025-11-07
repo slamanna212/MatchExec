@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { Database } from './connection';
+import type { Database } from './connection';
 import { logger } from '../../src/lib/logger/server';
 
 export class MigrationRunner {
   private db: Database;
   private migrationsDir: string;
 
-  constructor(db: Database, migrationsDir: string = './migrations') {
+  constructor(db: Database, migrationsDir = './migrations') {
     this.db = db;
     this.migrationsDir = migrationsDir;
   }

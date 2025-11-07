@@ -34,7 +34,7 @@ export function AnimatedRingProgress({
           setAnimatedSections(sections);
         });
       }
-      return;
+      return undefined;
     }
 
     hasAnimated.current = true;

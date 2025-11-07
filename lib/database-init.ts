@@ -1,4 +1,5 @@
-import { Database, getDatabase } from './database/connection';
+import type { Database} from './database/connection';
+import { getDatabase } from './database/connection';
 
 async function initializeDatabase(): Promise<Database> {
   const db = getDatabase();

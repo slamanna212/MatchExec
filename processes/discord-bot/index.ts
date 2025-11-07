@@ -1,7 +1,8 @@
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import type { ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
-import { Database } from '../../lib/database';
-import { DiscordSettings } from '../../shared/types';
+import type { Database } from '../../lib/database';
+import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 import { logger } from '../../src/lib/logger/server';
 

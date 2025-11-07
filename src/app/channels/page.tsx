@@ -5,8 +5,8 @@ import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Check
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { useEffect, useState } from 'react';
-import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
-import { DiscordChannel } from '../api/channels/route';
+import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
+import type { DiscordChannel } from '../api/channels/route';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
 
@@ -141,7 +141,7 @@ export default function ChannelsPage() {
   };
 
   const textChannels = channels.filter(ch => ch.channel_type === 'text');
-  const voiceChannels = channels.filter(ch => ch.channel_type === 'voice');
+  const _voiceChannels = channels.filter(ch => ch.channel_type === 'voice');
 
   // Calculate notification status
   const notificationStatus = {

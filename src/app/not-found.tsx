@@ -1,5 +1,4 @@
 import { Container, Title, Text, Button, Group } from '@mantine/core';
-import Link from 'next/link';
 
 export default function NotFound() {
   return (
