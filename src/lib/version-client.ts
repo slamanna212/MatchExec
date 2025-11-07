@@ -1,4 +1,4 @@
-import { logger } from '@/lib/logger/server';
+import { logger } from '@/lib/logger/client';
 
 export interface VersionInfo {
   version: string;

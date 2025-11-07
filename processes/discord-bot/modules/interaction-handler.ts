@@ -23,6 +23,15 @@ import { logger } from '../../../src/lib/logger/server';
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
 
+// Import helper functions
+import { parseModalCustomId } from '../utils/id-parsers';
+import {
+  collectFormData,
+  insertParticipant,
+  getParticipantCount,
+  buildConfirmationMessage
+} from './interaction-helpers';
+
 export class InteractionHandler {
   constructor(
     private client: Client,
@@ -261,158 +270,68 @@ export class InteractionHandler {
   async handleModalSubmit(interaction: ModalSubmitInteraction) {
     if (!interaction.customId.startsWith('signup_form_')) return;
 
-    // Check if this is a team-based signup (format: signup_form_team_{tournamentId}_{teamId})
-    let selectedTeamId: string | null = null;
-    let eventId: string;
-
-    if (interaction.customId.startsWith('signup_form_team_')) {
-      // Remove the prefix to get: tournament_{timestamp}_{random}_team_{timestamp}_{random}
-      const withoutPrefix = interaction.customId.replace('signup_form_team_', '');
-
-      // Find the position of the second occurrence of "team_" which starts the team ID
-      const teamIdMarker = withoutPrefix.indexOf('team_', 'tournament_'.length);
-
-      if (teamIdMarker > 0) {
-        eventId = withoutPrefix.substring(0, teamIdMarker - 1); // -1 to remove trailing underscore
-        selectedTeamId = withoutPrefix.substring(teamIdMarker);
-      } else {
-        // Fallback if parsing fails
-        eventId = interaction.customId.replace('signup_form_', '');
-      }
-    } else {
-      eventId = interaction.customId.replace('signup_form_', '');
+    // Parse modal custom ID
+    const parsedId = parseModalCustomId(interaction.customId);
+    if (!parsedId) {
+      logger.error('Failed to parse modal custom ID:', interaction.customId);
+      return;
     }
 
-    const isTournament = eventId.startsWith('tournament_');
-
     try {
-      if (this.db) {
-        // Get game ID to load the signup form structure
-
-        let eventData: {game_id: string} | null = null;
-
-        if (isTournament) {
-          eventData = await this.db.get<{game_id: string}>(`
-            SELECT game_id FROM tournaments WHERE id = ?
-          `, [eventId]) || null;
-        } else {
-          eventData = await this.db.get<{game_id: string}>(`
-            SELECT game_id FROM matches WHERE id = ?
-          `, [eventId]) || null;
-        }
-
-        if (!eventData) {
-          throw new Error('Event not found');
-        }
-
-        // Load signup form to get field structure
-        const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
-        if (!signupForm) {
-          throw new Error('Could not load signup form');
-        }
-
-        // Collect all form data
-        const signupData: {[key: string]: string} = {};
-        let displayUsername = interaction.user.username; // fallback
-
-        for (const field of signupForm.fields) {
-          try {
-            const value = interaction.fields.getTextInputValue(field.id);
-            signupData[field.id] = value;
-
-            // Use the first field as the display username (usually username/battlenet_name)
-            if (field.id === 'username' || field.id === 'battlenet_name') {
-              displayUsername = value;
-            }
-          } catch {
-            // Field might not exist in modal if we hit the 5-field limit
-            if (field.required) {
-              throw new Error(`Required field ${field.id} is missing`);
-            }
-          }
-        }
-
-        // Generate participant ID
-        const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        // Add participant to database with signup data and Discord user ID
-        if (isTournament) {
-          // Insert participant with team assignment if team was selected
-          await this.db.run(`
-            INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data, team_assignment)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData), selectedTeamId]);
-
-          // If team was selected, also add to tournament_team_members
-          if (selectedTeamId) {
-            const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            await this.db.run(`
-              INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
-              VALUES (?, ?, ?, ?, ?)
-            `, [memberId, selectedTeamId, interaction.user.id, interaction.user.id, displayUsername]);
-          }
-        } else {
-          await this.db.run(`
-            INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
-        }
-
-        // Get current participant count
-        let participantCount = null;
-        if (isTournament) {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
-          `, [eventId]);
-        } else {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-          `, [eventId]);
-        }
-
-        // Create confirmation message with submitted data
-        let confirmationMessage = `✅ Successfully signed up for the event!\n`;
-
-        // Show team name if selected
-        if (selectedTeamId) {
-          const team = await this.db.get<{team_name: string}>(`
-            SELECT team_name FROM tournament_teams WHERE id = ?
-          `, [selectedTeamId]);
-          if (team) {
-            confirmationMessage += `**Team:** ${team.team_name}\n`;
-          }
-        }
-
-        // Show key information from the signup form
-        for (const field of signupForm.fields.slice(0, 3)) { // Show first 3 fields
-          if (signupData[field.id]) {
-            const label = field.label.replace(/\s*\(Optional\)\s*$/i, ''); // Remove "(Optional)" from display
-            confirmationMessage += `**${label}:** ${signupData[field.id]}\n`;
-          }
-        }
-
-        confirmationMessage += `**Participants:** ${participantCount?.count || 1}`;
-
-        await interaction.reply({
-          content: confirmationMessage,
-          flags: MessageFlags.Ephemeral
-        });
-
-        // Send signup notification to configured channels
-        await this.sendSignupNotification(eventId, {
-          username: displayUsername,
-          discordUserId: interaction.user.id,
-          signupData: signupData,
-          participantCount: participantCount?.count || 1
-        });
-
-      } else {
+      if (!this.db) {
         throw new Error('Database not available');
       }
 
+      // Get game ID to load the signup form structure
+      const eventData = await this.db.get<{ game_id: string }>(
+        `SELECT game_id FROM ${parsedId.isTournament ? 'tournaments' : 'matches'} WHERE id = ?`,
+        [parsedId.eventId]
+      );
+
+      if (!eventData) {
+        throw new Error('Event not found');
+      }
+
+      // Load signup form to get field structure
+      const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
+      if (!signupForm) {
+        throw new Error('Could not load signup form');
+      }
+
+      // Collect form data
+      const { signupData, displayUsername } = collectFormData(interaction, signupForm);
+
+      // Insert participant into database
+      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData);
+
+      // Get participant count
+      const participantCount = await getParticipantCount(this.db, parsedId.eventId, parsedId.isTournament);
+
+      // Build confirmation message
+      const confirmationMessage = await buildConfirmationMessage(
+        this.db,
+        parsedId,
+        signupForm,
+        signupData,
+        participantCount
+      );
+
+      await interaction.reply({
+        content: confirmationMessage,
+        flags: MessageFlags.Ephemeral
+      });
+
+      // Send signup notification to configured channels
+      await this.sendSignupNotification(parsedId.eventId, {
+        username: displayUsername,
+        discordUserId: interaction.user.id,
+        signupData: signupData,
+        participantCount: participantCount
+      });
+
     } catch (error) {
       logger.error('❌ Error processing signup:', error);
-      
+
       if (error instanceof Error && error.message?.includes('UNIQUE constraint failed')) {
         await interaction.reply({
           content: '❌ You are already signed up for this event!',

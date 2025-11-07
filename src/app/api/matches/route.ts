@@ -1,8 +1,16 @@
 import type { NextRequest} from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import type { MatchDbRow, GameDbRow } from '@/shared/types';
+import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { safeJSONParse } from '@/lib/utils/validation';
+import {
+  validateMatchRequest,
+  prepareMatchData,
+  insertMatchToDatabase,
+  parseMatchResponse,
+  type MatchRequestBody
+} from './helpers';
 
 
 export async function GET(request: NextRequest) {
@@ -37,14 +45,14 @@ export async function GET(request: NextRequest) {
     query += ` GROUP BY m.id ORDER BY m.start_time ASC`;
     
     const matches = await db.all<MatchDbRow>(query, params);
-    
+
     // Parse maps and map codes JSON for each match
     const parsedMatches = matches.map(match => ({
       ...match,
-      maps: match.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : (match.map_id ? [match.map_id] : []),
-      map_codes: match.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
+      maps: match.maps ? safeJSONParse(typeof match.maps === 'string' ? match.maps : null, match.map_id ? [match.map_id] : []) : (match.map_id ? [match.map_id] : []),
+      map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {})
     }));
-    
+
     return NextResponse.json(parsedMatches);
   } catch (error) {
     logger.error('Error fetching matches:', error);
@@ -57,99 +65,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { 
-      name, 
-      description, 
-      gameId, 
-      startDate,
-      livestreamLink,
-      rules,
-      rounds,
-      maps,
-      eventImageUrl,
-      playerNotifications,
-      announcementVoiceChannel,
-      announcements,
-    } = body;
-    
-    if (!name || !gameId) {
+    const body: MatchRequestBody = await request.json();
+
+    // Validate request
+    const validation = validateMatchRequest(body);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: 'Missing required fields: name and gameId' },
+        { error: validation.error },
         { status: 400 }
       );
     }
-    
+
     const db = await getDbInstance();
-    const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Get the game's max signups setting
-    const game = await db.get<GameDbRow>('SELECT max_signups FROM games WHERE id = ?', [gameId]);
-    const maxParticipants = game?.max_signups || 20; // fallback to 20 if not found
-    
-    // For now, use placeholder values for Discord fields until they're configured
-    const guildId = 'placeholder_guild';
-    const channelId = 'placeholder_channel';
-    
-    const startDateTime = startDate ? new Date(startDate).toISOString() : null;
-    
-    await db.run(`
-      INSERT INTO matches (
-        id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date, start_time,
-        rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcement_voice_channel, announcements, match_format
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      matchId,
-      name,
-      description || null,
-      gameId,
-      guildId,
-      channelId,
-      maxParticipants,
-      'created',
-      startDateTime,
-      startDateTime,  // Using the same value for both start_date and start_time
-      rules || null,
-      rounds || null,
-      maps && maps.length > 0 ? JSON.stringify(maps) : null,
-      livestreamLink || null,
-      eventImageUrl || null,
-      playerNotifications ?? true,
-      announcementVoiceChannel || null,
-      announcements && announcements.length > 0 ? JSON.stringify(announcements) : null,
-      rules || 'casual'  // Use rules as match_format, default to casual
-    ]);
-    
+
+    // Prepare match data
+    const preparedData = await prepareMatchData(body, db);
+
+    // Insert match into database
+    await insertMatchToDatabase(db, body, preparedData);
+
+    // Fetch and parse the created match
     const match = await db.get<MatchDbRow>(`
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       WHERE m.id = ?
-    `, [matchId]);
-    
-    // Parse maps and map codes for the returned match
-    const parsedMatch = {
-      ...(match || {}),
-      maps: match?.maps ? (typeof match.maps === 'string' ? JSON.parse(match.maps) : match.maps) : [],
-      map_codes: match?.map_codes ? (typeof match.map_codes === 'string' ? JSON.parse(match.map_codes) : match.map_codes) : {}
-    };
+    `, [preparedData.matchId]);
 
-    // DEBUG: Log what data we received
-    logger.debug('DEBUG - Match creation data:');
-    logger.debug('  startDate:', startDate);
-    logger.debug('  announcements:', announcements);
-    logger.debug('  announcements length:', announcements?.length);
-    
-    // NOTE: Announcements are stored in the announcements field and will be processed by the scheduler
-    // The scheduler's handleTimedAnnouncements() method will queue them at the appropriate times
-    if (announcements && announcements.length > 0) {
-      logger.debug(`📅 Match created with ${announcements.length} timed announcements - scheduler will process them`);
+    const parsedMatch = parseMatchResponse(match);
+
+    // Log match creation
+    logger.debug('DEBUG - Match creation data:', {
+      startDate: body.startDate,
+      announcementCount: body.announcements?.length || 0
+    });
+
+    if (body.announcements && body.announcements.length > 0) {
+      logger.debug(`📅 Match created with ${body.announcements.length} timed announcements - scheduler will process them`);
     }
 
-    // Discord announcement will be triggered when match transitions to "gather" stage
-    // Match created in "created" status - no announcement yet
-    logger.debug(`✅ Match created in "created" status: ${name}`);
-    
+    logger.debug(`✅ Match created in "created" status: ${body.name}`);
+
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {
     logger.error('Error creating match:', error);
