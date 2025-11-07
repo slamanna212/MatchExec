@@ -84,6 +84,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block voice channel creation - voice channels are auto-created
+    if (channel_type === 'voice') {
+      return NextResponse.json(
+        { error: 'Voice channels are automatically created and cannot be manually added' },
+        { status: 400 }
+      );
+    }
+
     // Check if channel already exists
     const existing = await db.get(
       'SELECT id FROM discord_channels WHERE discord_channel_id = ?',

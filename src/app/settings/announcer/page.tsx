@@ -10,7 +10,6 @@ import { logger } from '@/lib/logger/client';
 interface AnnouncerSettings {
   announcer_voice?: string;
   voice_announcements_enabled?: boolean;
-  announcement_voice_channel?: string;
 }
 
 interface Voice {
@@ -43,7 +42,6 @@ export default function AnnouncerSettingsPage() {
     initialValues: {
       announcer_voice: 'wrestling-announcer',
       voice_announcements_enabled: false,
-      announcement_voice_channel: '',
     },
   });
 

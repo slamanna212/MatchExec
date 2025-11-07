@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import {
   Title, Text, Button, Stack, Group, Card, Badge,
-  ActionIcon, Modal, Checkbox, Alert, TextInput, Radio, Progress
+  ActionIcon, Modal, Checkbox, Alert, TextInput, Progress
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
@@ -22,7 +22,6 @@ interface DiscordChannel {
 }
 
 interface CreateChannelForm {
-  channel_type: 'text' | 'voice';
   discord_channel_id: string;
   send_announcements: boolean;
   send_reminders: boolean;
@@ -75,7 +74,6 @@ export default function ChannelsSetupClient() {
 
   const createForm = useForm<CreateChannelForm>({
     initialValues: {
-      channel_type: 'text',
       discord_channel_id: '',
       send_announcements: false,
       send_reminders: false,
@@ -92,11 +90,8 @@ export default function ChannelsSetupClient() {
   });
 
   const steps = [
-    { title: 'Channel Type', description: 'Select whether this is a text or voice channel' },
     { title: 'Channel ID', description: 'Enter the Discord channel ID' },
-    ...(createForm.values.channel_type === 'text' ? [{
-      title: 'Notifications', description: 'Configure notification settings for this text channel'
-    }] : []),
+    { title: 'Notifications', description: 'Configure notification settings for this text channel' },
     { title: 'Review', description: 'Review and create the channel' }
   ];
 
@@ -267,11 +262,11 @@ export default function ChannelsSetupClient() {
   };
 
   const handleCreateNext = () => {
-    if (currentStep === 1) {
+    if (currentStep === 0) {
       const validation = createForm.validate();
       if (validation.hasErrors) return;
     }
-    
+
     if (currentStep < totalSteps - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -286,32 +281,6 @@ export default function ChannelsSetupClient() {
   const renderCreateStepContent = () => {
     switch (currentStep) {
       case 0:
-        return (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              Choose the type of Discord channel you want to add to the bot.
-            </Text>
-            <Radio.Group
-              value={createForm.values.channel_type}
-              onChange={(value) => createForm.setFieldValue('channel_type', value as 'text' | 'voice')}
-            >
-              <Stack gap="sm">
-                <Radio
-                  value="text"
-                  label="Text Channel"
-                  description="A channel where users can send messages. Supports notification settings."
-                />
-                <Radio
-                  value="voice"
-                  label="Voice Channel"
-                  description="A channel where users can join voice calls. Used for voice match coordination."
-                />
-              </Stack>
-            </Radio.Group>
-          </Stack>
-        );
-
-      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -335,10 +304,7 @@ export default function ChannelsSetupClient() {
           </Stack>
         );
 
-      case 2:
-        if (createForm.values.channel_type === 'voice') {
-          return renderCreateReviewStep();
-        }
+      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -369,7 +335,7 @@ export default function ChannelsSetupClient() {
           </Stack>
         );
 
-      case 3:
+      case 2:
         return renderCreateReviewStep();
 
       default:
@@ -385,30 +351,22 @@ export default function ChannelsSetupClient() {
       <Card p="md" withBorder>
         <Stack gap="sm">
           <Group justify="space-between">
-            <Text size="sm" fw={500}>Channel Type:</Text>
-            <Text size="sm" tt="capitalize">{createForm.values.channel_type}</Text>
-          </Group>
-          <Group justify="space-between">
             <Text size="sm" fw={500}>Channel ID:</Text>
             <Text size="sm" ff="monospace">{createForm.values.discord_channel_id}</Text>
           </Group>
-          {createForm.values.channel_type === 'text' && (
-            <>
-              <Text size="sm" fw={500} mt="sm">Notifications:</Text>
-              <Stack gap="xs" pl="md">
-                {createForm.values.send_announcements && <Text size="sm">✓ Match Announcements</Text>}
-                {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
-                {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
-                {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
-                {!createForm.values.send_announcements && 
-                 !createForm.values.send_reminders && 
-                 !createForm.values.send_match_start && 
-                 !createForm.values.send_signup_updates && (
-                  <Text size="sm" c="dimmed">No notifications enabled</Text>
-                )}
-              </Stack>
-            </>
-          )}
+          <Text size="sm" fw={500} mt="sm">Notifications:</Text>
+          <Stack gap="xs" pl="md">
+            {createForm.values.send_announcements && <Text size="sm">✓ Match Announcements</Text>}
+            {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
+            {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
+            {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
+            {!createForm.values.send_announcements &&
+             !createForm.values.send_reminders &&
+             !createForm.values.send_match_start &&
+             !createForm.values.send_signup_updates && (
+              <Text size="sm" c="dimmed">No notifications enabled</Text>
+            )}
+          </Stack>
         </Stack>
       </Card>
     </Stack>
@@ -423,13 +381,13 @@ export default function ChannelsSetupClient() {
           Setup Discord Channels 📢
         </Title>
         <Text ta="center" c="dimmed">
-          Add text and voice channels for match notifications
+          Add text channels for match notifications and configure voice channel settings
         </Text>
       </div>
 
       <Text>
-        Add Discord channels to receive match notifications and announcements. 
-        You can always add more channels later from the main channels page.
+        Add Discord text channels to receive match notifications and announcements.
+        Voice channels for matches are created automatically. You can always add more channels later from the main channels page.
       </Text>
 
       {message && (
@@ -442,7 +400,7 @@ export default function ChannelsSetupClient() {
         <Group justify="space-between" mb="md">
           <Group>
             <IconMessage size="1.2rem" />
-            <Text size="lg" fw={600}>Text Channels</Text>
+            <Text size="lg" fw={600}>Channels</Text>
             <Badge color="blue" variant="light">{textChannels.length}</Badge>
           </Group>
           <Button
@@ -455,7 +413,7 @@ export default function ChannelsSetupClient() {
 
         <Stack gap="sm">
           {textChannels.length === 0 ? (
-            <Text c="dimmed" ta="center" py="md" size="sm">No text channels added yet</Text>
+            <Text c="dimmed" ta="center" py="md" size="sm">No channels added yet</Text>
           ) : (
             textChannels.map((channel) => (
               <Card key={channel.id} p="sm" withBorder>
