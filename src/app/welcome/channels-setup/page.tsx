@@ -90,11 +90,8 @@ export default function ChannelsSetupPage() {
   });
 
   const steps = [
-    { title: 'Channel Type', description: 'Select whether this is a text or voice channel' },
     { title: 'Channel ID', description: 'Enter the Discord channel ID' },
-    ...(createForm.values.channel_type === 'text' ? [{
-      title: 'Notifications', description: 'Configure notification settings for this text channel'
-    }] : []),
+    { title: 'Notifications', description: 'Configure notification settings for this text channel' },
     { title: 'Review', description: 'Review and create the channel' }
   ];
 
@@ -237,11 +234,11 @@ export default function ChannelsSetupPage() {
   };
 
   const handleCreateNext = () => {
-    if (currentStep === 1) {
+    if (currentStep === 0) {
       const validation = createForm.validate();
       if (validation.hasErrors) return;
     }
-    
+
     if (currentStep < totalSteps - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -256,32 +253,6 @@ export default function ChannelsSetupPage() {
   const renderCreateStepContent = () => {
     switch (currentStep) {
       case 0:
-        return (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              Choose the type of Discord channel you want to add to the bot.
-            </Text>
-            <Radio.Group
-              value={createForm.values.channel_type}
-              onChange={(value) => createForm.setFieldValue('channel_type', value as 'text' | 'voice')}
-            >
-              <Stack gap="sm">
-                <Radio
-                  value="text"
-                  label="Text Channel"
-                  description="A channel where users can send messages. Supports notification settings."
-                />
-                <Radio
-                  value="voice"
-                  label="Voice Channel"
-                  description="A channel where users can join voice calls. Used for voice match coordination."
-                />
-              </Stack>
-            </Radio.Group>
-          </Stack>
-        );
-
-      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -305,10 +276,7 @@ export default function ChannelsSetupPage() {
           </Stack>
         );
 
-      case 2:
-        if (createForm.values.channel_type === 'voice') {
-          return renderCreateReviewStep();
-        }
+      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -339,7 +307,7 @@ export default function ChannelsSetupPage() {
           </Stack>
         );
 
-      case 3:
+      case 2:
         return renderCreateReviewStep();
 
       default:
@@ -355,30 +323,22 @@ export default function ChannelsSetupPage() {
       <Card p="md" withBorder>
         <Stack gap="sm">
           <Group justify="space-between">
-            <Text size="sm" fw={500}>Channel Type:</Text>
-            <Text size="sm" tt="capitalize">{createForm.values.channel_type}</Text>
-          </Group>
-          <Group justify="space-between">
             <Text size="sm" fw={500}>Channel ID:</Text>
             <Text size="sm" ff="monospace">{createForm.values.discord_channel_id}</Text>
           </Group>
-          {createForm.values.channel_type === 'text' && (
-            <>
-              <Text size="sm" fw={500} mt="sm">Notifications:</Text>
-              <Stack gap="xs" pl="md">
-                {createForm.values.send_announcements && <Text size="sm">✓ Match Announcements</Text>}
-                {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
-                {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
-                {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
-                {!createForm.values.send_announcements && 
-                 !createForm.values.send_reminders && 
-                 !createForm.values.send_match_start && 
-                 !createForm.values.send_signup_updates && (
-                  <Text size="sm" c="dimmed">No notifications enabled</Text>
-                )}
-              </Stack>
-            </>
-          )}
+          <Text size="sm" fw={500} mt="sm">Notifications:</Text>
+          <Stack gap="xs" pl="md">
+            {createForm.values.send_announcements && <Text size="sm">✓ Match Announcements</Text>}
+            {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
+            {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
+            {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
+            {!createForm.values.send_announcements &&
+             !createForm.values.send_reminders &&
+             !createForm.values.send_match_start &&
+             !createForm.values.send_signup_updates && (
+              <Text size="sm" c="dimmed">No notifications enabled</Text>
+            )}
+          </Stack>
         </Stack>
       </Card>
     </Stack>
