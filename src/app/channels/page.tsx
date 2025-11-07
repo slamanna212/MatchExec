@@ -2,12 +2,13 @@
 
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Alert, Loader, Center, Title, useMantineColorScheme } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Loader, Center, Title, useMantineColorScheme } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import { DiscordChannel } from '../api/channels/route';
 import { logger } from '@/lib/logger/client';
+import { notificationHelper } from '@/lib/notifications';
 
 interface ChannelEditData {
   send_announcements: boolean;
@@ -30,7 +31,6 @@ export default function ChannelsPage() {
     send_match_start: false,
     send_signup_updates: false
   });
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     fetchChannels();
@@ -44,11 +44,17 @@ export default function ChannelsPage() {
         const data = await response.json();
         setChannels(data);
       } else {
-        setMessage({ type: 'error', text: 'Failed to fetch channels' });
+        notificationHelper.error({
+          title: 'Fetch Failed',
+          message: 'Failed to fetch channels'
+        });
       }
     } catch (error) {
       logger.error('Error fetching channels:', error);
-      setMessage({ type: 'error', text: 'An error occurred while fetching channels' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while fetching channels'
+      });
     } finally {
       setLoading(false);
     }
@@ -60,20 +66,26 @@ export default function ChannelsPage() {
       const response = await fetch('/api/channels/refresh-names', {
         method: 'POST'
       });
-      
+
       if (response.ok) {
         const result = await response.json();
-        setMessage({ 
-          type: 'success', 
-          text: `Refreshed ${result.updated_count} of ${result.total_channels} channels` 
+        notificationHelper.success({
+          title: 'Channels Refreshed',
+          message: `Refreshed ${result.updated_count} of ${result.total_channels} channels`
         });
         await fetchChannels(); // Refresh the list
       } else {
-        setMessage({ type: 'error', text: 'Failed to refresh channel names' });
+        notificationHelper.error({
+          title: 'Refresh Failed',
+          message: 'Failed to refresh channel names'
+        });
       }
     } catch (error) {
       logger.error('Error refreshing channel names:', error);
-      setMessage({ type: 'error', text: 'An error occurred while refreshing channel names' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while refreshing channel names'
+      });
     } finally {
       setRefreshing(false);
     }
@@ -101,15 +113,24 @@ export default function ChannelsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Notification settings updated successfully!' });
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Notification settings updated successfully!'
+        });
         closeEditModal();
         await fetchChannels();
       } else {
-        setMessage({ type: 'error', text: 'Failed to update notification settings' });
+        notificationHelper.error({
+          title: 'Update Failed',
+          message: 'Failed to update notification settings'
+        });
       }
     } catch (error) {
       logger.error('Error updating notifications:', error);
-      setMessage({ type: 'error', text: 'An error occurred while updating settings' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while updating settings'
+      });
     }
   };
 
@@ -124,14 +145,23 @@ export default function ChannelsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Channel deleted successfully!' });
+        notificationHelper.success({
+          title: 'Channel Deleted',
+          message: 'Channel deleted successfully!'
+        });
         await fetchChannels();
       } else {
-        setMessage({ type: 'error', text: 'Failed to delete channel' });
+        notificationHelper.error({
+          title: 'Delete Failed',
+          message: 'Failed to delete channel'
+        });
       }
     } catch (error) {
       logger.error('Error deleting channel:', error);
-      setMessage({ type: 'error', text: 'An error occurred while deleting the channel' });
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while deleting the channel'
+      });
     }
   };
 
@@ -185,8 +215,8 @@ export default function ChannelsPage() {
           <Grid>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
+                <IconCircle
+                  size="0.8rem"
                   style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -195,8 +225,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
+                <IconCircle
+                  size="0.8rem"
                   style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -205,8 +235,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
+                <IconCircle
+                  size="0.8rem"
                   style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -215,8 +245,8 @@ export default function ChannelsPage() {
             </Grid.Col>
             <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
               <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
+                <IconCircle
+                  size="0.8rem"
                   style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
                   fill="currentColor"
                 />
@@ -225,12 +255,6 @@ export default function ChannelsPage() {
             </Grid.Col>
           </Grid>
         </Card>
-
-        {message && (
-          <Alert color={message.type === 'success' ? 'green' : 'red'} onClose={() => setMessage(null)}>
-            {message.text}
-          </Alert>
-        )}
 
         {/* Channels Section */}
         <div>
