@@ -299,17 +299,19 @@ class MatchExecBot {
   async start() {
     // Initialize database and settings first
     const initialized = await this.initialize();
-    
+
     if (!initialized) {
-      // If initialization failed due to incomplete welcome flow, 
-      // set up a periodic check to try again
-      this.startWelcomeFlowWatcher();
-      return;
+      // Welcome flow not complete or settings missing
+      // Exit cleanly - PM2/s6 will keep process alive but idle
+      logger.info('⏸️  Discord bot will start after welcome flow is completed');
+      logger.info('💡 Complete the setup wizard at the web interface to activate the bot');
+      process.exit(0);
     }
-    
+
     if (!this.settings?.bot_token) {
       logger.error('❌ No bot token available, cannot start bot');
-      return;
+      logger.info('💡 Configure Discord settings in the web interface');
+      process.exit(0);
     }
 
     try {
@@ -317,31 +319,8 @@ class MatchExecBot {
       logger.info('✅ Discord bot successfully connected');
     } catch (error) {
       logger.error('❌ Failed to login to Discord:', error);
+      process.exit(1);
     }
-  }
-
-  private startWelcomeFlowWatcher() {
-    logger.info('👀 Watching for welcome flow completion...');
-
-    const checkInterval = setInterval(async () => {
-      const welcomeCompleted = await this.checkWelcomeFlowCompleted();
-
-      if (welcomeCompleted) {
-        logger.info('✅ Welcome flow completed! Initializing Discord bot...');
-        clearInterval(checkInterval);
-
-        // Try to initialize and start the bot again
-        const initialized = await this.initialize();
-        if (initialized && this.settings?.bot_token) {
-          try {
-            await this.client.login(this.settings.bot_token);
-            logger.info('✅ Discord bot successfully connected');
-          } catch (error) {
-            logger.error('❌ Failed to login to Discord:', error);
-          }
-        }
-      }
-    }, 5000); // Check every 5 seconds
   }
 }
 

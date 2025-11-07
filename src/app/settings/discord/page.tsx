@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
@@ -13,6 +13,8 @@ interface DiscordSettings {
   guild_id?: string;
   announcement_role_id?: string;
   mention_everyone?: boolean;
+  voice_channel_category_id?: string;
+  voice_channel_cleanup_delay_minutes?: number;
 }
 
 export default function DiscordSettingsPage() {
@@ -26,6 +28,8 @@ export default function DiscordSettingsPage() {
       guild_id: '',
       announcement_role_id: '',
       mention_everyone: false,
+      voice_channel_category_id: '',
+      voice_channel_cleanup_delay_minutes: 10,
     },
   });
 
@@ -45,6 +49,8 @@ export default function DiscordSettingsPage() {
             guild_id: data.discord.guild_id || '',
             announcement_role_id: data.discord.announcement_role_id || '',
             mention_everyone: data.discord.mention_everyone || false,
+            voice_channel_category_id: data.discord.voice_channel_category_id || '',
+            voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes || 10,
           });
         }
       } catch (error) {
@@ -88,6 +94,8 @@ export default function DiscordSettingsPage() {
             guild_id: refreshedData.guild_id || '',
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
+            voice_channel_category_id: refreshedData.voice_channel_category_id || '',
+            voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes || 10,
           };
           form.setValues(sanitizedData);
         }
@@ -197,6 +205,25 @@ export default function DiscordSettingsPage() {
                 description="Right-click your Discord server and copy ID"
                 {...form.getInputProps('guild_id')}
                 disabled={loading}
+              />
+
+              <TextInput
+                label="Voice Channel Category ID"
+                placeholder="Category ID for auto-created voice channels"
+                description="Voice channels will be automatically created in this category when matches start"
+                {...form.getInputProps('voice_channel_category_id')}
+                disabled={loading}
+                error={form.values.voice_channel_category_id && !/^\d{17,19}$/.test(form.values.voice_channel_category_id) ? 'Invalid Discord category ID format' : null}
+              />
+
+              <NumberInput
+                label="Voice Channel Cleanup Delay (minutes)"
+                placeholder="10"
+                description="How long to wait after a match ends before deleting auto-created voice channels"
+                {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
+                disabled={loading}
+                min={0}
+                max={1440}
               />
 
               <Stack gap="sm">

@@ -636,7 +636,129 @@ export class QueueProcessor {
 
       for (const request of requests) {
         try {
-          if (request.type === 'voice_test') {
+          if (request.type === 'voice_channel_create') {
+            // Parse the request data
+            const requestData = JSON.parse(request.data);
+            const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
+
+            logger.debug(`Creating voice channel${isSingleTeam ? '' : 's'} for match ${matchId} in category ${categoryId} (${isSingleTeam ? 'single' : 'dual'} team)`);
+
+            // Mark as processing
+            const updateResult = await this.db.run(`
+              UPDATE discord_bot_requests
+              SET status = 'processing', updated_at = datetime('now')
+              WHERE id = ? AND status = 'pending'
+            `, [request.id]);
+
+            if (updateResult.changes === 0) {
+              continue;
+            }
+
+            try {
+              // Get guild ID from settings
+              const settings = await this.db.get<{ guild_id: string }>(`
+                SELECT guild_id FROM discord_settings LIMIT 1
+              `);
+
+              if (!settings?.guild_id) {
+                throw new Error('Guild ID not configured');
+              }
+
+              const guild = await this.client.guilds.fetch(settings.guild_id);
+
+              // Create primary voice channel (stored as "blue" for compatibility)
+              const blueChannel = await guild.channels.create({
+                name: blueChannelName,
+                type: 2, // Voice channel
+                parent: categoryId,
+              });
+
+              let redChannel;
+              if (!isSingleTeam && redChannelName) {
+                // Create red team voice channel only for dual-team matches
+                redChannel = await guild.channels.create({
+                  name: redChannelName,
+                  type: 2, // Voice channel
+                  parent: categoryId,
+                });
+                logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
+              } else {
+                logger.debug(`✅ Voice channel created: ${blueChannel.id}`);
+              }
+
+              // Update the request with the result
+              await this.db.run(`
+                UPDATE discord_bot_requests
+                SET status = 'completed', result = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `, [
+                JSON.stringify({
+                  success: true,
+                  blueChannelId: blueChannel.id,
+                  redChannelId: redChannel?.id
+                }),
+                request.id
+              ]);
+
+            } catch (error) {
+              logger.error(`❌ Error creating voice channels:`, error);
+              await this.db.run(`
+                UPDATE discord_bot_requests
+                SET status = 'failed', result = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `, [
+                JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Unknown error' }),
+                request.id
+              ]);
+            }
+          } else if (request.type === 'voice_channel_delete') {
+            // Parse the request data
+            const requestData = JSON.parse(request.data);
+            const { channelId, matchId } = requestData;
+
+            logger.debug(`Deleting voice channel ${channelId} for match ${matchId}`);
+
+            // Mark as processing
+            const updateResult = await this.db.run(`
+              UPDATE discord_bot_requests
+              SET status = 'processing', updated_at = datetime('now')
+              WHERE id = ? AND status = 'pending'
+            `, [request.id]);
+
+            if (updateResult.changes === 0) {
+              continue;
+            }
+
+            try {
+              // Fetch and delete the channel
+              const channel = await this.client.channels.fetch(channelId);
+              if (channel) {
+                await channel.delete();
+                logger.debug(`✅ Voice channel deleted: ${channelId}`);
+              }
+
+              await this.db.run(`
+                UPDATE discord_bot_requests
+                SET status = 'completed', result = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `, [
+                JSON.stringify({ success: true }),
+                request.id
+              ]);
+
+            } catch (error) {
+              // Even if deletion fails (channel already deleted, etc.), mark as completed
+              logger.warning(`⚠️ Error deleting voice channel ${channelId}:`, error instanceof Error ? error.message : 'Unknown');
+              await this.db.run(`
+                UPDATE discord_bot_requests
+                SET status = 'completed', result = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `, [
+                JSON.stringify({ success: true, message: 'Channel may already be deleted' }),
+                request.id
+              ]);
+            }
+          } else if (request.type === 'voice_test') {
             // Parse the request data
             const requestData = JSON.parse(request.data);
             const { userId, voiceId } = requestData;

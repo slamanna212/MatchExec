@@ -320,16 +320,19 @@ export class ReminderHandler {
       embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
     }
 
-    // Add team assignment if available
+    // Check if this is a single-team match (only one voice channel)
+    const isSingleTeam = matchData.blue_team_voice_channel && !matchData.red_team_voice_channel;
+
+    // Add team assignment if available (for dual-team matches)
     if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
-      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' : 
+      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' :
                        participant.team_assignment === 'red' ? '🔴' : '🟡';
       const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
-      
-      embed.addFields({ 
-        name: '👥 Your Team', 
-        value: `${teamEmoji} ${teamName} Team`, 
-        inline: true 
+
+      embed.addFields({
+        name: '👥 Your Team',
+        value: `${teamEmoji} ${teamName} Team`,
+        inline: true
       });
 
       // Add voice channel if assigned to a team with a voice channel
@@ -346,6 +349,13 @@ export class ReminderHandler {
           inline: true
         });
       }
+    } else if (isSingleTeam) {
+      // Single-team match: Show voice channel to everyone
+      embed.addFields({
+        name: '🎙️ Voice Channel',
+        value: `<#${matchData.blue_team_voice_channel}>`,
+        inline: true
+      });
     }
 
     // Add link to original announcement if available

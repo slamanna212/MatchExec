@@ -1,0 +1,107 @@
+[
+  {
+    "id": "dfh-stadium",
+    "name": "DFH Stadium",
+    "type": "Standard",
+    "location": "Urban",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "mannfield",
+    "name": "Mannfield",
+    "type": "Standard",
+    "location": "Suburban",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "champions-field",
+    "name": "Champions Field",
+    "type": "Standard",
+    "location": "Stadium",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "urban-central",
+    "name": "Urban Central",
+    "type": "Standard",
+    "location": "Urban",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "beckwith-park",
+    "name": "Beckwith Park",
+    "type": "Standard",
+    "location": "Park",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "utopia-coliseum",
+    "name": "Utopia Coliseum",
+    "type": "Standard",
+    "location": "Futuristic",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "wasteland",
+    "name": "Wasteland",
+    "type": "Non-Standard",
+    "location": "Desert",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "neo-tokyo",
+    "name": "Neo Tokyo",
+    "type": "Non-Standard",
+    "location": "Urban",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "aquadome",
+    "name": "AquaDome",
+    "type": "Standard",
+    "location": "Underwater",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "starbase-arc",
+    "name": "Starbase ARC",
+    "type": "Non-Standard",
+    "location": "Space",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "farmstead",
+    "name": "Farmstead",
+    "type": "Standard",
+    "location": "Rural",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "forbidden-temple",
+    "name": "Forbidden Temple",
+    "type": "Standard",
+    "location": "Ancient",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "salty-shores",
+    "name": "Salty Shores",
+    "type": "Standard",
+    "location": "Beach",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "farmstead-night",
+    "name": "Farmstead (Night)",
+    "type": "Standard",
+    "location": "Rural",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "rivals-arena",
+    "name": "Rivals Arena",
+    "type": "Standard",
+    "location": "Stadium",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  }
+]

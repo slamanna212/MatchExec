@@ -19,6 +19,8 @@ export interface GameMode {
   game_id: string;
   name: string;
   description: string;
+  team_size: number;
+  max_teams: number;
   scoring_type: 'Normal' | 'FFA' | 'Position';
   created_at: Date;
   updated_at: Date;
@@ -132,6 +134,8 @@ export interface DiscordSettingsDbRow {
   player_reminder_minutes?: number;
   announcer_voice?: string;
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
+  voice_channel_category_id?: string;
+  voice_channel_cleanup_delay_minutes?: number;
   [key: string]: unknown;
 }
 
@@ -245,6 +249,8 @@ export interface ModeDataJson {
   id: string;
   name: string;
   description: string;
+  teamSize?: number;
+  maxTeams?: number;
   scoringType?: 'Normal' | 'FFA' | 'Position';
 }
 

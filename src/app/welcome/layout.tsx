@@ -11,17 +11,15 @@ export default function WelcomeLayout({ children }: WelcomeLayoutProps) {
   return (
     <Box
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 1000,
+        minHeight: '100vh',
         backgroundColor: 'var(--mantine-color-dark-8)',
-        overflow: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem 1rem',
       }}
     >
-      <Container size="md" py="xl" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
+      <Container size="md" style={{ width: '100%' }}>
         <Paper
           withBorder
           shadow="md"
