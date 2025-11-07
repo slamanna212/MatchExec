@@ -17,7 +17,14 @@
     "prod:stop": "npx pm2 stop ecosystem.config.js",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
-    "version:major": "npm version major --no-git-tag-version"
+    "version:major": "npm version major --no-git-tag-version",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "bash -c 'npm run build:processes'"
+    ]
   },
   "dependencies": {
     "@discordjs/voice": "0.19.0",
@@ -55,6 +62,8 @@
     "@types/react-dom": "19",
     "eslint": "9",
     "eslint-config-next": "16.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.6",
     "tailwindcss": "4",
     "typescript": "5"
   }
