@@ -7,8 +7,10 @@ import {
   ActionIcon, Modal, Checkbox, Alert, TextInput, Progress
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { modals } from '@mantine/modals';
 import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
+import { showSuccess, showError } from '@/lib/notifications';
 
 interface DiscordChannel {
   id: string;
@@ -39,7 +41,6 @@ interface ChannelEditData {
 export default function ChannelsSetupClient() {
   const router = useRouter();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [voiceCategoryId, setVoiceCategoryId] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
 
@@ -141,13 +142,13 @@ export default function ChannelsSetupClient() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Voice channel category saved successfully!' });
+        showSuccess('Voice channel category saved successfully!');
       } else {
-        setMessage({ type: 'error', text: 'Failed to save voice channel category' });
+        showError('Failed to save voice channel category');
       }
     } catch (error) {
       logger.error('Error saving voice category ID:', error);
-      setMessage({ type: 'error', text: 'An error occurred while saving' });
+      showError('An error occurred while saving');
     } finally {
       setSavingCategory(false);
     }
@@ -180,21 +181,18 @@ export default function ChannelsSetupClient() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Channel created successfully!' });
+        showSuccess('Channel created successfully!');
         closeCreateModal();
         setCurrentStep(0);
         createForm.reset();
         await fetchChannels();
       } else {
         const errorData = await response.json();
-        setMessage({ 
-          type: 'error', 
-          text: errorData.error || 'Failed to create channel' 
-        });
+        showError(errorData.error || 'Failed to create channel');
       }
     } catch (error) {
       logger.error('Error creating channel:', error);
-      setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
+      showError('An error occurred while creating the channel');
     } finally {
       setCreateLoading(false);
     }
@@ -227,38 +225,46 @@ export default function ChannelsSetupClient() {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Notification settings updated successfully!' });
+        showSuccess('Notification settings updated successfully!');
         closeEditModal();
         await fetchChannels();
       } else {
-        setMessage({ type: 'error', text: 'Failed to update notification settings' });
+        showError('Failed to update notification settings');
       }
     } catch (error) {
       logger.error('Error updating notifications:', error);
-      setMessage({ type: 'error', text: 'An error occurred while updating settings' });
+      showError('An error occurred while updating settings');
     }
   };
 
   const handleDeleteChannel = async (channelId: string, channelName?: string) => {
-    if (!confirm(`Are you sure you want to delete ${channelName || 'this channel'}?`)) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Delete Channel',
+      children: (
+        <Text size="sm">
+          Are you sure you want to delete {channelName || 'this channel'}? This action cannot be undone.
+        </Text>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/channels/${channelId}`, {
+            method: 'DELETE'
+          });
 
-    try {
-      const response = await fetch(`/api/channels/${channelId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Channel deleted successfully!' });
-        await fetchChannels();
-      } else {
-        setMessage({ type: 'error', text: 'Failed to delete channel' });
-      }
-    } catch (error) {
-      logger.error('Error deleting channel:', error);
-      setMessage({ type: 'error', text: 'An error occurred while deleting the channel' });
-    }
+          if (response.ok) {
+            showSuccess('Channel deleted successfully!');
+            await fetchChannels();
+          } else {
+            showError('Failed to delete channel');
+          }
+        } catch (error) {
+          logger.error('Error deleting channel:', error);
+          showError('An error occurred while deleting the channel');
+        }
+      },
+    });
   };
 
   const handleCreateNext = () => {
@@ -389,12 +395,6 @@ export default function ChannelsSetupClient() {
         Add Discord text channels to receive match notifications and announcements.
         Voice channels for matches are created automatically. You can always add more channels later from the main channels page.
       </Text>
-
-      {message && (
-        <Alert color={message.type === 'success' ? 'green' : 'red'} onClose={() => setMessage(null)}>
-          {message.text}
-        </Alert>
-      )}
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" mb="md">
