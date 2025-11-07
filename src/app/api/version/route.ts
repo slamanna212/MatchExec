@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getVersionInfo } from '../../../../lib/version-server';
+import { getVersionInfo } from '@/lib/version-server';
 import { logger } from '@/lib/logger';
 
 export async function GET() {
