@@ -23,7 +23,7 @@
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --fix",
-      "npm run build:processes"
+      "bash -c 'npm run build:processes'"
     ]
   },
   "dependencies": {
