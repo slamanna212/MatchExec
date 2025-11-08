@@ -69,36 +69,52 @@ export function SimpleMapScoring({
     }
   }, [selectedGameId, matchGames, scrollToMap]);
 
+  /**
+   * Create match result from winner selection
+   */
+  const createMatchResult = (
+    selectedGame: { id: string },
+    winner: 'team1' | 'team2',
+    participantId?: string
+  ): MatchResult => ({
+    matchId,
+    gameId: selectedGame.id,
+    winner,
+    participantWinnerId: participantId,
+    isFfaMode: !!participantId,
+    completedAt: new Date()
+  });
+
+  /**
+   * Find next pending or ongoing game
+   */
+  const findNextGame = () => matchGames.find(g =>
+    g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
+  );
+
+  /**
+   * Handle post-submission navigation
+   */
+  const handlePostSubmissionNavigation = () => {
+    const nextGame = findNextGame();
+    if (nextGame) {
+      setSelectedGameId(nextGame.id);
+    } else if (onAllMapsCompleted) {
+      onAllMapsCompleted();
+    }
+  };
+
   // Unified winner handler
   const handleWinnerSubmit = async (winner: 'team1' | 'team2', participantId?: string) => {
     const selectedGame = matchGames.find(g => g.id === selectedGameId);
     if (!selectedGame) return;
 
     try {
-      const result: MatchResult = {
-        matchId,
-        gameId: selectedGame.id,
-        winner,
-        participantWinnerId: participantId,
-        isFfaMode: !!participantId,
-        completedAt: new Date()
-      };
-
+      const result = createMatchResult(selectedGame, winner, participantId);
       await onResultSubmit(result);
-
-      // Optimistic local state update
       await refetch();
 
-      // Move to next pending game
-      const nextGame = matchGames.find(g =>
-        g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
-      );
-
-      if (nextGame) {
-        setSelectedGameId(nextGame.id);
-      } else if (onAllMapsCompleted) {
-        onAllMapsCompleted();
-      }
+      handlePostSubmissionNavigation();
 
       // Background refresh to sync with server
       setTimeout(() => refetch(), 1000);

@@ -389,13 +389,107 @@ class MatchExecScheduler {
     }
   }
 
+  /**
+   * Parse announcements field into array
+   */
+  private parseAnnouncementsField(announcements: unknown, matchName: string): unknown[] | null {
+    if (typeof announcements === 'string') {
+      try {
+        return JSON.parse(announcements);
+      } catch {
+        logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not valid JSON`);
+        return null;
+      }
+    }
+
+    if (typeof announcements === 'number' || typeof announcements === 'boolean') {
+      if (announcements) {
+        return [
+          { id: 'default_1hour', value: 1, unit: 'hours' },
+          { id: 'default_30min', value: 30, unit: 'minutes' }
+        ];
+      }
+      return null;
+    }
+
+    logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not an array`);
+    return null;
+  }
+
+  /**
+   * Calculate announcement time offset
+   */
+  private calculateAnnouncementOffset(value: number, unit: 'minutes' | 'hours' | 'days'): number {
+    switch (unit) {
+      case 'minutes':
+        return value * 60 * 1000;
+      case 'hours':
+        return value * 60 * 60 * 1000;
+      case 'days':
+        return value * 24 * 60 * 60 * 1000;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Check if announcement should be sent now
+   */
+  private shouldSendAnnouncementNow(announcementTime: Date): boolean {
+    const now = new Date();
+    const checkIntervalMs = 60 * 1000; // 1 minute buffer
+    return announcementTime <= now && announcementTime >= new Date(now.getTime() - checkIntervalMs);
+  }
+
+  /**
+   * Check if announcement already exists in queue
+   */
+  private async hasExistingAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
+    const existingAnnouncement = await this.db.get(`
+      SELECT id FROM discord_announcement_queue
+      WHERE match_id = ? AND announcement_type = 'timed'
+      AND announcement_data = ?
+      AND status NOT IN ('failed')
+    `, [matchId, JSON.stringify(announcement)]);
+
+    return !!existingAnnouncement;
+  }
+
+  /**
+   * Process announcements for a single match
+   */
+  private async processMatchAnnouncements(match: { id: string; name: string; start_date: string; announcements: unknown }): Promise<void> {
+    const announcements = this.parseAnnouncementsField(match.announcements, match.name);
+    if (!announcements) return;
+
+    if (!Array.isArray(announcements)) {
+      logger.debug(`⚠️ Skipping match ${match.name} - announcements is not an array`);
+      return;
+    }
+
+    const matchStartTime = new Date(match.start_date);
+
+    for (const announcement of announcements) {
+      const { value, unit } = announcement;
+      const millisecondsOffset = this.calculateAnnouncementOffset(value, unit);
+      const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
+
+      if (this.shouldSendAnnouncementNow(announcementTime)) {
+        const exists = await this.hasExistingAnnouncement(match.id, announcement);
+        if (!exists) {
+          logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
+          await this.queueTimedAnnouncement(match.id, announcement);
+        }
+      }
+    }
+  }
+
   private async handleTimedAnnouncements() {
     try {
-      // Get matches that have announcements configured
       const matchesWithAnnouncements = await this.db.all(`
         SELECT id, name, start_date, announcements
-        FROM matches 
-        WHERE announcements IS NOT NULL 
+        FROM matches
+        WHERE announcements IS NOT NULL
         AND start_date IS NOT NULL
         AND status IN ('created', 'gather', 'assign')
         AND start_date > datetime('now')
@@ -403,83 +497,7 @@ class MatchExecScheduler {
 
       for (const match of matchesWithAnnouncements) {
         try {
-          // Handle different announcement field formats
-          let announcements;
-
-          if (typeof match.announcements === 'string') {
-            try {
-              announcements = JSON.parse(match.announcements);
-            } catch {
-              // If it's not valid JSON, skip this match
-              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
-              continue;
-            }
-          } else if (typeof match.announcements === 'number' || typeof match.announcements === 'boolean') {
-            // For tournament matches, announcements is a boolean/number flag
-            // Use default announcement schedule for tournament matches
-            if (match.announcements) {
-              announcements = [
-                { id: 'default_1hour', value: 1, unit: 'hours' },
-                { id: 'default_30min', value: 30, unit: 'minutes' }
-              ];
-            } else {
-              // announcements disabled for this tournament match
-              continue;
-            }
-          } else {
-            // If announcements is some other type, skip announcement processing
-            logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
-            continue;
-          }
-
-          // Ensure announcements is an array
-          if (!Array.isArray(announcements)) {
-            logger.debug(`⚠️ Skipping match ${match.name} - announcements is not an array`);
-            continue;
-          }
-
-          const matchStartTime = new Date(match.start_date);
-
-          for (const announcement of announcements) {
-            // Calculate when this announcement should be sent
-            const { value, unit } = announcement;
-            let millisecondsOffset = 0;
-            
-            switch (unit) {
-              case 'minutes':
-                millisecondsOffset = value * 60 * 1000;
-                break;
-              case 'hours':
-                millisecondsOffset = value * 60 * 60 * 1000;
-                break;
-              case 'days':
-                millisecondsOffset = value * 24 * 60 * 60 * 1000;
-                break;
-            }
-            
-            const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
-            const now = new Date();
-            
-            // Check if announcement should be sent now (within the last check interval)
-            const checkIntervalMs = 60 * 1000; // 1 minute buffer
-            const shouldSendNow = announcementTime <= now && 
-                                  announcementTime >= new Date(now.getTime() - checkIntervalMs);
-            
-            if (shouldSendNow) {
-              // Check if we already sent this announcement
-              const existingAnnouncement = await this.db.get(`
-                SELECT id FROM discord_announcement_queue 
-                WHERE match_id = ? AND announcement_type = 'timed'
-                AND announcement_data = ?
-                AND status NOT IN ('failed')
-              `, [match.id, JSON.stringify(announcement)]);
-              
-              if (!existingAnnouncement) {
-                logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
-                await this.queueTimedAnnouncement(match.id, announcement);
-              }
-            }
-          }
+          await this.processMatchAnnouncements(match);
         } catch (parseError) {
           logger.error(`❌ Error parsing announcements for match ${match.id}:`, parseError);
         }

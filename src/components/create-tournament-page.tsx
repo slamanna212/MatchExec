@@ -73,11 +73,18 @@ export function CreateTournamentPage() {
     updateFormData('gameId', gameId);
   };
 
+  /**
+   * Check if team name already exists (case-insensitive)
+   */
+  const isDuplicateTeamName = (teamName: string, existingTeams: string[]): boolean => {
+    const normalizedName = teamName.trim().toLowerCase();
+    return existingTeams.some(team => team.toLowerCase() === normalizedName);
+  };
+
   const handleAddTeam = (teamName: string) => {
     const currentTeams = formData.preCreatedTeams || [];
 
-    // Check for duplicate team names
-    if (currentTeams.some(team => team.toLowerCase() === teamName.trim().toLowerCase())) {
+    if (isDuplicateTeamName(teamName, currentTeams)) {
       showWarning('A team with this name already exists');
       return;
     }

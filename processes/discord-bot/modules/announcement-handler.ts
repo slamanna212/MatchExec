@@ -32,6 +32,92 @@ export class AnnouncementHandler {
     private settings: DiscordSettings | null
   ) {}
 
+  /**
+   * Get mention text based on settings
+   */
+  private getMentionText(): string {
+    if (this.settings?.mention_everyone) {
+      return '@everyone';
+    }
+    if (this.settings?.announcement_role_id) {
+      return `<@&${this.settings.announcement_role_id}>`;
+    }
+    return '';
+  }
+
+  /**
+   * Create signup button component
+   */
+  private createSignupButton(eventId: string): ActionRowBuilder<ButtonBuilder> {
+    const signupButton = new ButtonBuilder()
+      .setCustomId(`signup_${eventId}`)
+      .setLabel('🎮 Sign Up')
+      .setStyle(ButtonStyle.Primary);
+
+    return new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(signupButton);
+  }
+
+  /**
+   * Prepare announcement message options
+   */
+  private prepareAnnouncementMessageOptions(
+    embed: EmbedBuilder,
+    row: ActionRowBuilder<ButtonBuilder>,
+    attachment: AttachmentBuilder | undefined,
+    mentionText: string
+  ): {
+    content: string;
+    embeds: EmbedBuilder[];
+    components: ActionRowBuilder<ButtonBuilder>[];
+    files?: AttachmentBuilder[];
+  } {
+    const messageOptions = {
+      content: mentionText,
+      embeds: [embed],
+      components: [row],
+      ...(attachment ? { files: [attachment] } : {})
+    };
+
+    return messageOptions;
+  }
+
+  /**
+   * Send announcement to all configured channels
+   */
+  private async sendAnnouncementToChannels(
+    announcementChannels: DiscordChannel[],
+    messageOptions: {
+      content: string;
+      embeds: EmbedBuilder[];
+      components: ActionRowBuilder<ButtonBuilder>[];
+      files?: AttachmentBuilder[];
+    }
+  ): Promise<{ successCount: number; mainMessage: Message | null }> {
+    let successCount = 0;
+    let mainMessage: Message | null = null;
+
+    for (const channelConfig of announcementChannels) {
+      try {
+        const announcementChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
+
+        if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
+          const message = await announcementChannel.send(messageOptions);
+
+          if (!mainMessage) {
+            mainMessage = message;
+          }
+
+          successCount++;
+        }
+      } catch (error) {
+        logger.error(`❌ Failed to send announcement to channel ${channelConfig.discord_channel_id}:`, error);
+      }
+    }
+
+    return { successCount, mainMessage };
+  }
+
   async postEventAnnouncement(eventData: {
     id: string;
     name: string;
@@ -50,16 +136,14 @@ export class AnnouncementHandler {
       return false;
     }
 
-    // Get channels configured for announcements
     const announcementChannels = await this.getChannelsForNotificationType('announcements');
-    
+
     if (announcementChannels.length === 0) {
       logger.warning('⚠️ No channels configured for announcements');
       return false;
     }
 
     try {
-      // Create event embed with attachment  
       const { embed, attachment } = await this.createEventEmbedWithAttachment(
         eventData.name,
         eventData.description,
@@ -73,62 +157,10 @@ export class AnnouncementHandler {
         eventData.id
       );
 
-      // Create signup button
-      const signupButton = new ButtonBuilder()
-        .setCustomId(`signup_${eventData.id}`)
-        .setLabel('🎮 Sign Up')
-        .setStyle(ButtonStyle.Primary);
-
-      const row = new ActionRowBuilder<ButtonBuilder>()
-        .addComponents(signupButton);
-
-      // Determine what to mention based on settings
-      let mentionText = '';
-      if (this.settings?.mention_everyone) {
-        mentionText = '@everyone';
-      } else if (this.settings?.announcement_role_id) {
-        mentionText = `<@&${this.settings.announcement_role_id}>`;
-      }
-
-      // Prepare message options
-      const messageOptions: {
-        content: string;
-        embeds: EmbedBuilder[];
-        components: ActionRowBuilder<ButtonBuilder>[];
-        files?: AttachmentBuilder[];
-      } = {
-        content: mentionText, // Add the mention above the embed
-        embeds: [embed],
-        components: [row]
-      };
-
-      // Add attachment if image exists
-      if (attachment) {
-        messageOptions.files = [attachment];
-      }
-
-      let successCount = 0;
-      let mainMessage: Message | null = null;
-
-      // Send to all configured announcement channels
-      for (const channelConfig of announcementChannels) {
-        try {
-          const announcementChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
-
-          if (announcementChannel?.isTextBased() && 'send' in announcementChannel) {
-            // Send announcement
-            const message = await announcementChannel.send(messageOptions);
-            
-            if (!mainMessage) {
-              mainMessage = message; // Use first successful message for event creation
-            }
-            
-            successCount++;
-          }
-        } catch (error) {
-          logger.error(`❌ Failed to send announcement to channel ${channelConfig.discord_channel_id}:`, error);
-        }
-      }
+      const row = this.createSignupButton(eventData.id);
+      const mentionText = this.getMentionText();
+      const messageOptions = this.prepareAnnouncementMessageOptions(embed, row, attachment, mentionText);
+      const { successCount, mainMessage } = await this.sendAnnouncementToChannels(announcementChannels, messageOptions);
 
       if (successCount === 0) {
         logger.error('❌ Failed to send announcement to any channels');
@@ -376,123 +408,174 @@ export class AnnouncementHandler {
     return undefined;
   }
 
+  /**
+   * Fetch map data from database with fallback logic
+   */
+  private async fetchMapData(
+    gameId: string,
+    cleanMapId: string
+  ): Promise<{ name: string; image_url: string; location: string; mode_id: string } | null> {
+    // Try exact match first
+    let mapData = await this.db!.get<{
+      name: string;
+      image_url: string;
+      location: string;
+      mode_id: string;
+    }>(`
+      SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+      FROM game_maps gm
+      WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
+      LIMIT 1
+    `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+
+    if (mapData) return mapData;
+
+    // Try matching by base map name
+    return this.fetchMapDataByBaseName(gameId, cleanMapId);
+  }
+
+  /**
+   * Fetch map data by base name as fallback
+   */
+  private async fetchMapDataByBaseName(
+    gameId: string,
+    cleanMapId: string
+  ): Promise<{ name: string; image_url: string; location: string; mode_id: string } | null> {
+    const parts = cleanMapId.split('-');
+    if (parts.length < 2) return null;
+
+    const baseMapName = parts[0];
+    const remainingParts = parts.slice(1).join('-');
+
+    return this.db!.get<{
+      name: string;
+      image_url: string;
+      location: string;
+      mode_id: string;
+    }>(`
+      SELECT gm.name, gm.image_url, gm.location, gm.mode_id
+      FROM game_maps gm
+      WHERE gm.game_id = ? AND gm.id LIKE ?
+      LIMIT 1
+    `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
+  }
+
+  /**
+   * Create fallback embed for unknown maps
+   */
+  private createFallbackMapEmbed(
+    mapIdentifier: string,
+    mapNumber?: number
+  ): { embed: EmbedBuilder; attachment?: AttachmentBuilder } {
+    const title = mapNumber ? `Map ${mapNumber}: ${mapIdentifier}` : `🗺️ ${mapIdentifier}`;
+    return {
+      embed: new EmbedBuilder()
+        .setTitle(title)
+        .setDescription('Map details not available')
+        .setColor(0x95a5a6)
+    };
+  }
+
+  /**
+   * Fetch mode name for a map
+   */
+  private async fetchModeName(modeId: string, gameId: string): Promise<string> {
+    try {
+      const modeData = await this.db!.get<{ name: string }>(`
+        SELECT name FROM game_modes WHERE id = ? AND game_id = ?
+      `, [modeId, gameId]);
+      return modeData ? modeData.name : modeId;
+    } catch (error) {
+      logger.error('Error fetching mode name:', error);
+      return modeId;
+    }
+  }
+
+  /**
+   * Fetch game color for embed styling
+   */
+  private async fetchGameColor(gameId: string): Promise<number> {
+    try {
+      const gameData = await this.db!.get<{ color: string }>(`
+        SELECT color FROM games WHERE id = ?
+      `, [gameId]);
+      if (gameData?.color) {
+        return parseInt(gameData.color.replace('#', ''), 16);
+      }
+    } catch (error) {
+      logger.error('Error fetching game color for map embed:', error);
+    }
+    return 0x95a5a6; // default gray
+  }
+
+  /**
+   * Build map embed with provided data
+   */
+  private buildMapEmbed(
+    mapData: { name: string; image_url: string; location: string; mode_id: string },
+    modeName: string,
+    gameColor: number,
+    mapNumber?: number,
+    mapNote?: string
+  ): EmbedBuilder {
+    const title = mapNumber ? `Map ${mapNumber}: ${mapData.name}` : `🗺️ ${mapData.name}`;
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setColor(gameColor)
+      .addFields({ name: '🎮 Mode', value: modeName, inline: true });
+
+    if (mapData.location) {
+      embed.addFields({ name: '📍 Location', value: mapData.location, inline: true });
+    }
+
+    if (mapNote && mapNote.trim()) {
+      embed.addFields({ name: '📝 Note', value: mapNote.trim(), inline: false });
+    }
+
+    return embed;
+  }
+
+  /**
+   * Create map image attachment if available
+   */
+  private createMapImageAttachment2(
+    imageUrl: string,
+    mapName: string
+  ): { attachment: AttachmentBuilder; attachmentName: string } | null {
+    try {
+      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        const attachmentName = `${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
+        const attachment = new AttachmentBuilder(imagePath, { name: attachmentName });
+        return { attachment, attachmentName };
+      }
+    } catch (error) {
+      logger.error(`Error handling map image for ${mapName}:`, error);
+    }
+    return null;
+  }
+
   private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number, mapNote?: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
     if (!this.db) return null;
 
     try {
-      // Strip timestamp suffix from map identifier if present (e.g., "yacht-hostage-1756235829102-abc123" -> "yacht-hostage")
       const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-      
-      // Get map data from database - try exact match first
-      let mapData = await this.db.get<{
-        name: string, 
-        image_url: string, 
-        location: string,
-        mode_id: string
-      }>(`
-        SELECT gm.name, gm.image_url, gm.location, gm.mode_id
-        FROM game_maps gm
-        WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
-        LIMIT 1
-      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
-
-      // If no exact match, try matching by base map name regardless of mode/naming variations
-      if (!mapData) {
-        const parts = cleanMapId.split('-');
-        if (parts.length >= 2) {
-          const baseMapName = parts[0]; // e.g., "emerald", "bartlett"
-          const remainingParts = parts.slice(1).join('-'); // e.g., "secure-area" or "u-hostage"
-          
-          // Try to find any map with matching base name and similar remaining parts
-          mapData = await this.db.get<{
-            name: string, 
-            image_url: string, 
-            location: string,
-            mode_id: string
-          }>(`
-            SELECT gm.name, gm.image_url, gm.location, gm.mode_id
-            FROM game_maps gm
-            WHERE gm.game_id = ? AND gm.id LIKE ?
-            LIMIT 1
-          `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
-        }
-      }
+      const mapData = await this.fetchMapData(gameId, cleanMapId);
 
       if (!mapData) {
-        // Fallback embed for unknown maps
-        const title = mapNumber ? `Map ${mapNumber}: ${mapIdentifier}` : `🗺️ ${mapIdentifier}`;
-        return {
-          embed: new EmbedBuilder()
-            .setTitle(title)
-            .setDescription('Map details not available')
-            .setColor(0x95a5a6)
-        };
+        return this.createFallbackMapEmbed(mapIdentifier, mapNumber);
       }
 
-      // Get game mode name
-      let modeName = mapData.mode_id;
-      if (this.db) {
-        try {
-          const modeData = await this.db.get<{name: string}>(`
-            SELECT name FROM game_modes WHERE id = ? AND game_id = ?
-          `, [mapData.mode_id, gameId]);
-          if (modeData) {
-            modeName = modeData.name;
-          }
-        } catch (error) {
-          logger.error('Error fetching mode name:', error);
-        }
-      }
+      const modeName = await this.fetchModeName(mapData.mode_id, gameId);
+      const gameColor = await this.fetchGameColor(gameId);
+      const embed = this.buildMapEmbed(mapData, modeName, gameColor, mapNumber, mapNote);
 
-      // Get game color for consistent styling
-      let gameColor = 0x95a5a6; // default gray
-      try {
-        const gameData = await this.db.get<{color: string}>(`
-          SELECT color FROM games WHERE id = ?
-        `, [gameId]);
-        if (gameData?.color) {
-          gameColor = parseInt(gameData.color.replace('#', ''), 16);
-        }
-      } catch (error) {
-        logger.error('Error fetching game color for map embed:', error);
-      }
-
-      const title = mapNumber ? `Map ${mapNumber}: ${mapData.name}` : `🗺️ ${mapData.name}`;
-      const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setColor(gameColor)
-        .addFields(
-          { name: '🎮 Mode', value: modeName, inline: true }
-        );
-
-      if (mapData.location) {
-        embed.addFields({ name: '📍 Location', value: mapData.location, inline: true });
-      }
-
-      if (mapNote && mapNote.trim()) {
-        embed.addFields({ name: '📝 Note', value: mapNote.trim(), inline: false });
-      }
-
-      // Add image if available - use as attachment for local files
       if (mapData.image_url) {
-        try {
-          // Convert URL path to file system path for local files
-          const imagePath = path.join(process.cwd(), 'public', mapData.image_url.replace(/^\//, ''));
-          
-          if (fs.existsSync(imagePath)) {
-            // Create attachment for the map image
-            const attachment = new AttachmentBuilder(imagePath, {
-              name: `${mapData.name.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`
-            });
-            
-            // Use attachment://filename to reference the attached image
-            const attachmentName = `${mapData.name.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
-            embed.setImage(`attachment://${attachmentName}`);
-            
-            return { embed, attachment };
-          }
-        } catch (error) {
-          logger.error(`Error handling map image for ${mapData.name}:`, error);
+        const imageResult = this.createMapImageAttachment2(mapData.image_url, mapData.name);
+        if (imageResult) {
+          embed.setImage(`attachment://${imageResult.attachmentName}`);
+          return { embed, attachment: imageResult.attachment };
         }
       }
 
@@ -633,6 +716,105 @@ export class AnnouncementHandler {
     }
   }
 
+  /**
+   * Fetch game data for reminder embed
+   */
+  private async fetchReminderGameData(gameId: string, gameName?: string): Promise<{ gameName: string; gameColor: number }> {
+    if (!this.db || gameName) {
+      return {
+        gameName: gameName || gameId,
+        gameColor: 0x3498db
+      };
+    }
+
+    try {
+      const gameData = await this.db.get<{ name: string; color: string }>(`
+        SELECT name, color FROM games WHERE id = ?
+      `, [gameId]);
+
+      if (gameData) {
+        const color = gameData.color ? parseInt(gameData.color.replace('#', ''), 16) : 0x3498db;
+        return { gameName: gameData.name, gameColor: color };
+      }
+    } catch (error) {
+      logger.error('Error fetching game data for reminder:', error);
+    }
+
+    return { gameName: gameId, gameColor: 0x3498db };
+  }
+
+  /**
+   * Format time away text for reminder
+   */
+  private formatTimeAwayText(timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' }): string {
+    const { value, unit } = timingInfo;
+    return `${value} ${unit}${value > 1 ? '' : unit === 'hours' ? '' : ''}`;
+  }
+
+  /**
+   * Add time fields to reminder embed
+   */
+  private addReminderTimeFields(embed: EmbedBuilder, startDate: string): void {
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+
+    embed.addFields(
+      { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+      { name: '⏰ Starts', value: `<t:${unixTimestamp}:R>`, inline: true }
+    );
+  }
+
+  /**
+   * Try to add original announcement link to reminder
+   */
+  private async addOriginalAnnouncementLink(embed: EmbedBuilder, matchId: string): Promise<void> {
+    if (!this.db) return;
+
+    try {
+      const originalMessage = await this.db.get<{
+        message_id: string;
+        channel_id: string;
+      }>(`
+        SELECT message_id, channel_id
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+        LIMIT 1
+      `, [matchId]);
+
+      if (originalMessage) {
+        const messageLink = `https://discord.com/channels/${this.settings?.guild_id}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+        embed.addFields({
+          name: '📋 Match Details',
+          value: `[View Original Announcement](${messageLink})`,
+          inline: false
+        });
+      }
+    } catch (error) {
+      logger.error('Error finding original announcement message:', error);
+    }
+  }
+
+  /**
+   * Create reminder image attachment
+   */
+  private createReminderImageAttachment(imageUrl: string): AttachmentBuilder | undefined {
+    if (!imageUrl || !imageUrl.trim()) return undefined;
+
+    try {
+      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        return new AttachmentBuilder(imagePath, {
+          name: `reminder_image.${path.extname(imagePath).slice(1)}`
+        });
+      }
+    } catch (error) {
+      logger.error(`❌ Error handling reminder image ${imageUrl}:`, error);
+    }
+
+    return undefined;
+  }
+
   private async createTimedReminderEmbed(eventData: {
     id: string;
     name: string;
@@ -643,95 +825,26 @@ export class AnnouncementHandler {
     event_image_url?: string;
     _timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' };
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    // Get game data for color if not provided
-    let gameName = eventData.game_name || eventData.game_id;
-    let gameColor = 0x3498db; // Blue color for reminders
-    
-    if (this.db && !eventData.game_name) {
-      try {
-        const gameData = await this.db.get<{name: string, color: string}>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [eventData.game_id]);
-        
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
-          }
-        }
-      } catch (error) {
-        logger.error('Error fetching game data for reminder:', error);
-      }
-    }
+    const { gameName, gameColor } = await this.fetchReminderGameData(eventData.game_id, eventData.game_name);
+    const timeAwayText = this.formatTimeAwayText(eventData._timingInfo);
 
-    // Format the time away message
-    const { value, unit } = eventData._timingInfo;
-    const timeAwayText = `${value} ${unit}${value > 1 ? '' : unit === 'hours' ? '' : ''}`;
-    
     const embed = new EmbedBuilder()
       .setTitle(`🔔 ${eventData.name}`)
       .setDescription(`Match starting in **${timeAwayText}**!`)
       .setColor(gameColor)
       .setTimestamp()
-      .setFooter({ text: 'MatchExec • Match Reminder' });
+      .setFooter({ text: 'MatchExec • Match Reminder' })
+      .addFields({ name: '🎯 Game', value: gameName, inline: true });
 
-    // Add game info
-    embed.addFields({ name: '🎯 Game', value: gameName, inline: true });
-
-    // Add match time with Discord's time formatting
     if (eventData.start_date) {
-      const startTime = new Date(eventData.start_date);
-      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
-      
-      embed.addFields(
-        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
-        { name: '⏰ Starts', value: `<t:${unixTimestamp}:R>`, inline: true }
-      );
+      this.addReminderTimeFields(embed, eventData.start_date);
     }
 
-    // Try to find the original announcement message to link to
-    if (this.db) {
-      try {
-        const originalMessage = await this.db.get<{
-          message_id: string;
-          channel_id: string;
-        }>(`
-          SELECT message_id, channel_id 
-          FROM discord_match_messages 
-          WHERE match_id = ? AND message_type = 'announcement'
-          LIMIT 1
-        `, [eventData.id]);
+    await this.addOriginalAnnouncementLink(embed, eventData.id);
 
-        if (originalMessage) {
-          const messageLink = `https://discord.com/channels/${this.settings?.guild_id}/${originalMessage.channel_id}/${originalMessage.message_id}`;
-          embed.addFields({ 
-            name: '📋 Match Details', 
-            value: `[View Original Announcement](${messageLink})`, 
-            inline: false 
-          });
-        }
-      } catch (error) {
-        logger.error('Error finding original announcement message:', error);
-      }
-    }
-
-    let attachment: AttachmentBuilder | undefined;
-
-    // Add event image if provided
-    if (eventData.event_image_url && eventData.event_image_url.trim()) {
-      try {
-        const imagePath = path.join(process.cwd(), 'public', eventData.event_image_url.replace(/^\//, ''));
-        
-        if (fs.existsSync(imagePath)) {
-          attachment = new AttachmentBuilder(imagePath, {
-            name: `reminder_image.${path.extname(imagePath).slice(1)}`
-          });
-          
-          embed.setImage(`attachment://reminder_image.${path.extname(imagePath).slice(1)}`);
-        }
-      } catch (error) {
-        logger.error(`❌ Error handling reminder image ${eventData.event_image_url}:`, error);
-      }
+    const attachment = this.createReminderImageAttachment(eventData.event_image_url || '');
+    if (attachment && eventData.event_image_url) {
+      embed.setImage(`attachment://reminder_image.${path.extname(eventData.event_image_url).slice(1)}`);
     }
 
     return { embed, attachment };
@@ -999,6 +1112,120 @@ export class AnnouncementHandler {
     }
   }
 
+  /**
+   * Fetch map score metadata from database
+   */
+  private async fetchMapScoreMetadata(
+    gameId: string,
+    matchId: string,
+    mapId: string
+  ): Promise<{
+    gameName: string;
+    gameColor: number;
+    mapName: string;
+    mapImageUrl: string | null;
+    mapNote: string | null;
+    totalMaps: number;
+    team1Name?: string;
+    team2Name?: string;
+  }> {
+    let gameName = gameId;
+    let gameColor = 0x00d4aa;
+    let mapName = mapId;
+    let mapImageUrl: string | null = null;
+    let mapNote: string | null = null;
+    let totalMaps = 0;
+    let team1Name: string | undefined;
+    let team2Name: string | undefined;
+
+    if (!this.db) {
+      return { gameName, gameColor, mapName, mapImageUrl, mapNote, totalMaps };
+    }
+
+    try {
+      // Get game data and team names
+      const gameData = await this.db.get<{name: string, color: string}>(`
+        SELECT name, color FROM games WHERE id = ?
+      `, [gameId]);
+
+      if (gameData) {
+        gameName = gameData.name;
+        if (gameData.color) {
+          gameColor = parseInt(gameData.color.replace('#', ''), 16);
+        }
+      }
+
+      const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
+        SELECT team1_name, team2_name FROM matches WHERE id = ?
+      `, [matchId]);
+
+      if (matchData) {
+        team1Name = matchData.team1_name;
+        team2Name = matchData.team2_name;
+      }
+
+      // Get map data
+      const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      const mapData = await this.db.get<{
+        name: string;
+        image_url: string;
+      }>(`
+        SELECT gm.name, gm.image_url
+        FROM game_maps gm
+        WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
+        LIMIT 1
+      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+
+      if (mapData) {
+        mapName = mapData.name;
+        mapImageUrl = mapData.image_url;
+      }
+
+      // Get map notes
+      const mapNoteData = await this.db.get<{notes: string}>(`
+        SELECT notes
+        FROM match_games
+        WHERE match_id = ? AND map_id = ? AND notes IS NOT NULL AND notes != ''
+        LIMIT 1
+      `, [matchId, mapId]);
+
+      if (mapNoteData?.notes) {
+        mapNote = mapNoteData.notes;
+      }
+
+      // Get total maps count
+      const mapCountData = await this.db.get<{total_maps: number}>(`
+        SELECT COUNT(*) as total_maps FROM match_games WHERE match_id = ?
+      `, [matchId]);
+
+      if (mapCountData) {
+        totalMaps = mapCountData.total_maps;
+      }
+    } catch (error) {
+      logger.error('Error fetching game/map data for score notification:', error);
+    }
+
+    return { gameName, gameColor, mapName, mapImageUrl, mapNote, totalMaps, team1Name, team2Name };
+  }
+
+  /**
+   * Create map image attachment for embed
+   */
+  private createMapImageAttachment(mapImageUrl: string, mapName: string): AttachmentBuilder | undefined {
+    try {
+      const imagePath = path.join(process.cwd(), 'public', mapImageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        const attachmentName = `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
+        return new AttachmentBuilder(imagePath, { name: attachmentName });
+      }
+    } catch (error) {
+      logger.error(`❌ Error handling map image for score notification:`, error);
+    }
+
+    return undefined;
+  }
+
   private async createMapScoreEmbed(scoreData: {
     matchId: string;
     matchName: string;
@@ -1009,101 +1236,23 @@ export class AnnouncementHandler {
     winningTeamName: string;
     winningPlayers: string[];
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    // Get game data and map details
-    let gameName = scoreData.gameId;
-    let gameColor = 0x00d4aa; // Green for victory
-    let mapName = scoreData.mapId;
-    let mapImageUrl: string | null = null;
-    let mapNote: string | null = null;
-    let attachment: AttachmentBuilder | undefined;
-    let totalMaps = 0;
-    let team1Name: string | undefined;
-    let team2Name: string | undefined;
+    // Fetch metadata
+    const metadata = await this.fetchMapScoreMetadata(scoreData.gameId, scoreData.matchId, scoreData.mapId);
 
-    if (this.db) {
-      try {
-        // Get game data and team names
-        const gameData = await this.db.get<{name: string, color: string}>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [scoreData.gameId]);
-
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
-          }
-        }
-
-        // Get team names from match
-        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
-          SELECT team1_name, team2_name FROM matches WHERE id = ?
-        `, [scoreData.matchId]);
-
-        if (matchData) {
-          team1Name = matchData.team1_name;
-          team2Name = matchData.team2_name;
-        }
-
-        // Get map data (strip timestamp from map ID first)
-        const cleanMapId = scoreData.mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const mapData = await this.db.get<{
-          name: string, 
-          image_url: string,
-          location: string,
-          mode_id: string
-        }>(`
-          SELECT gm.name, gm.image_url, gm.location, gm.mode_id
-          FROM game_maps gm
-          WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
-          LIMIT 1
-        `, [scoreData.gameId, cleanMapId, `%${cleanMapId}%`]);
-
-        if (mapData) {
-          mapName = mapData.name;
-          mapImageUrl = mapData.image_url;
-        }
-
-        // Get map notes for this specific map
-        const mapNoteData = await this.db.get<{notes: string}>(`
-          SELECT notes 
-          FROM match_games 
-          WHERE match_id = ? AND map_id = ? AND notes IS NOT NULL AND notes != ''
-          LIMIT 1
-        `, [scoreData.matchId, scoreData.mapId]);
-
-        if (mapNoteData && mapNoteData.notes) {
-          mapNote = mapNoteData.notes;
-        }
-
-        // Get total number of maps in this match
-        const mapCountData = await this.db.get<{total_maps: number}>(`
-          SELECT COUNT(*) as total_maps
-          FROM match_games
-          WHERE match_id = ?
-        `, [scoreData.matchId]);
-
-        if (mapCountData) {
-          totalMaps = mapCountData.total_maps;
-        }
-      } catch (error) {
-        logger.error('Error fetching game/map data for score notification:', error);
-      }
-    }
-
-    // Create the embed
-    // Use team name if available (tournament), otherwise use scoreData.winningTeamName
-    const winningTeamDisplay = (scoreData.winner === 'team1' && team1Name) ? team1Name :
-                                (scoreData.winner === 'team2' && team2Name) ? team2Name :
+    // Determine winning team display name
+    const winningTeamDisplay = (scoreData.winner === 'team1' && metadata.team1Name) ? metadata.team1Name :
+                                (scoreData.winner === 'team2' && metadata.team2Name) ? metadata.team2Name :
                                 scoreData.winningTeamName;
 
-    const mapProgress = totalMaps > 0 ? `${scoreData.gameNumber}/${totalMaps}` : scoreData.gameNumber.toString();
+    // Build embed
+    const mapProgress = metadata.totalMaps > 0 ? `${scoreData.gameNumber}/${metadata.totalMaps}` : scoreData.gameNumber.toString();
     const embed = new EmbedBuilder()
       .setTitle(`🏆 ${winningTeamDisplay} Wins Map ${scoreData.gameNumber}!`)
-      .setDescription(`**${scoreData.matchName}** - ${mapName}`)
-      .setColor(gameColor)
+      .setDescription(`**${scoreData.matchName}** - ${metadata.mapName}`)
+      .setColor(metadata.gameColor)
       .addFields([
-        { name: '🎮 Game', value: gameName, inline: true },
-        { name: '🗺️ Map', value: mapName, inline: true },
+        { name: '🎮 Game', value: metadata.gameName, inline: true },
+        { name: '🗺️ Map', value: metadata.mapName, inline: true },
         { name: '📊 Map Progress', value: mapProgress, inline: true }
       ])
       .setTimestamp()
@@ -1120,29 +1269,21 @@ export class AnnouncementHandler {
     }
 
     // Add map note if available
-    if (mapNote && mapNote.trim()) {
-      embed.addFields([{ 
-        name: '📝 Map Note', 
-        value: mapNote.trim(), 
-        inline: false 
+    if (metadata.mapNote?.trim()) {
+      embed.addFields([{
+        name: '📝 Map Note',
+        value: metadata.mapNote.trim(),
+        inline: false
       }]);
     }
 
     // Add map image if available
-    if (mapImageUrl) {
-      try {
-        const imagePath = path.join(process.cwd(), 'public', mapImageUrl.replace(/^\//, ''));
-        
-        if (fs.existsSync(imagePath)) {
-          attachment = new AttachmentBuilder(imagePath, {
-            name: `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`
-          });
-          
-          const attachmentName = `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
-          embed.setImage(`attachment://${attachmentName}`);
-        }
-      } catch (error) {
-        logger.error(`❌ Error handling map image for score notification:`, error);
+    let attachment: AttachmentBuilder | undefined;
+    if (metadata.mapImageUrl) {
+      attachment = this.createMapImageAttachment(metadata.mapImageUrl, metadata.mapName);
+      if (attachment) {
+        const attachmentName = `map_score_${metadata.mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(metadata.mapImageUrl).slice(1)}`;
+        embed.setImage(`attachment://${attachmentName}`);
       }
     }
 
@@ -1222,6 +1363,105 @@ export class AnnouncementHandler {
     }
   }
 
+  /**
+   * Fetch game and match metadata for winner embed
+   */
+  private async fetchWinnerEmbedMetadata(gameId: string, matchId: string): Promise<{
+    gameName: string;
+    gameColor: number;
+    team1Name?: string;
+    team2Name?: string;
+  }> {
+    let gameName = gameId;
+    let gameColor = 0x00d4aa;
+    let team1Name: string | undefined;
+    let team2Name: string | undefined;
+
+    if (this.db) {
+      try {
+        const gameData = await this.db.get<{name: string, color: string}>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [gameId]);
+
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            gameColor = parseInt(gameData.color.replace('#', ''), 16);
+          }
+        }
+
+        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
+          SELECT team1_name, team2_name FROM matches WHERE id = ?
+        `, [matchId]);
+
+        if (matchData) {
+          team1Name = matchData.team1_name;
+          team2Name = matchData.team2_name;
+        }
+      } catch (error) {
+        logger.error('Error fetching game data for match winner notification:', error);
+      }
+    }
+
+    return { gameName, gameColor, team1Name, team2Name };
+  }
+
+  /**
+   * Generate title and description for winner embed
+   */
+  private generateWinnerTitleDescription(
+    winnerData: {
+      matchName: string;
+      winner: 'team1' | 'team2' | 'tie';
+      team1Score: number;
+      team2Score: number;
+    },
+    winningTeamDisplay: string
+  ): { title: string; description: string } {
+    if (winnerData.winner === 'tie') {
+      return {
+        title: `🤝 ${winnerData.matchName} - Match Tied!`,
+        description: `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`
+      };
+    }
+
+    const losingScore = winnerData.winner === 'team1' ? winnerData.team2Score : winnerData.team1Score;
+    const winningScore = winnerData.winner === 'team1' ? winnerData.team1Score : winnerData.team2Score;
+
+    return {
+      title: `🏆 ${winningTeamDisplay} Wins ${winnerData.matchName}!`,
+      description: `**${winnerData.matchName}** is complete! Final score: **${winningScore}-${losingScore}**`
+    };
+  }
+
+  /**
+   * Get link to original match announcement
+   */
+  private async getOriginalMatchLink(matchId: string): Promise<string | null> {
+    if (!this.db) return null;
+
+    try {
+      const originalMessage = await this.db.get<{
+        message_id: string;
+        channel_id: string;
+      }>(`
+        SELECT message_id, channel_id
+        FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement'
+        LIMIT 1
+      `, [matchId]);
+
+      if (originalMessage && this.client.guilds.cache.first()) {
+        const guildId = this.client.guilds.cache.first()?.id;
+        return `https://discord.com/channels/${guildId}/${originalMessage.channel_id}/${originalMessage.message_id}`;
+      }
+    } catch (error) {
+      logger.error('Error finding original announcement message for match winner:', error);
+    }
+
+    return null;
+  }
+
   private async createMatchWinnerEmbed(winnerData: {
     matchId: string;
     matchName: string;
@@ -1233,64 +1473,28 @@ export class AnnouncementHandler {
     team2Score: number;
     totalMaps: number;
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    // Get game data
-    let gameName = winnerData.gameId;
-    let gameColor = winnerData.winner === 'tie' ? 0xffa500 : 0x00d4aa; // Orange for tie, green for victory
-    let attachment: AttachmentBuilder | undefined;
-    let team1Name: string | undefined;
-    let team2Name: string | undefined;
+    // Fetch metadata
+    const { gameName, gameColor, team1Name, team2Name } = await this.fetchWinnerEmbedMetadata(
+      winnerData.gameId,
+      winnerData.matchId
+    );
 
-    if (this.db) {
-      try {
-        // Get game data
-        const gameData = await this.db.get<{name: string, color: string}>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [winnerData.gameId]);
-
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
-          }
-        }
-
-        // Get team names from match
-        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
-          SELECT team1_name, team2_name FROM matches WHERE id = ?
-        `, [winnerData.matchId]);
-
-        if (matchData) {
-          team1Name = matchData.team1_name;
-          team2Name = matchData.team2_name;
-        }
-      } catch (error) {
-        logger.error('Error fetching game data for match winner notification:', error);
-      }
-    }
-
-    // Create appropriate title and description based on winner
-    // Use team name if available (tournament), otherwise use winnerData.winningTeamName
+    // Determine winning team display name
     const winningTeamDisplay = (winnerData.winner === 'team1' && team1Name) ? team1Name :
                                 (winnerData.winner === 'team2' && team2Name) ? team2Name :
                                 winnerData.winningTeamName;
 
-    let title: string;
-    let description: string;
+    // Generate title and description
+    const { title, description } = this.generateWinnerTitleDescription(winnerData, winningTeamDisplay);
 
-    if (winnerData.winner === 'tie') {
-      title = `🤝 ${winnerData.matchName} - Match Tied!`;
-      description = `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`;
-    } else {
-      title = `🏆 ${winningTeamDisplay} Wins ${winnerData.matchName}!`;
-      const losingScore = winnerData.winner === 'team1' ? winnerData.team2Score : winnerData.team1Score;
-      const winningScore = winnerData.winner === 'team1' ? winnerData.team1Score : winnerData.team2Score;
-      description = `**${winnerData.matchName}** is complete! Final score: **${winningScore}-${losingScore}**`;
-    }
+    // Adjust color for tie
+    const embedColor = winnerData.winner === 'tie' ? 0xffa500 : gameColor;
 
+    // Build embed
     const embed = new EmbedBuilder()
       .setTitle(title)
       .setDescription(description)
-      .setColor(gameColor)
+      .setColor(embedColor)
       .addFields([
         { name: '🎮 Game', value: gameName, inline: true },
         { name: '📊 Final Score', value: `${winnerData.team1Score} - ${winnerData.team2Score}`, inline: true },
@@ -1310,33 +1514,16 @@ export class AnnouncementHandler {
     }
 
     // Add link to original match info if available
-    if (this.db) {
-      try {
-        const originalMessage = await this.db.get<{
-          message_id: string;
-          channel_id: string;
-        }>(`
-          SELECT message_id, channel_id 
-          FROM discord_match_messages 
-          WHERE match_id = ? AND message_type = 'announcement'
-          LIMIT 1
-        `, [winnerData.matchId]);
-
-        if (originalMessage && this.client.guilds.cache.first()) {
-          const guildId = this.client.guilds.cache.first()?.id;
-          const messageLink = `https://discord.com/channels/${guildId}/${originalMessage.channel_id}/${originalMessage.message_id}`;
-          embed.addFields([{ 
-            name: '🔗 Match Details', 
-            value: `[View Original Match Info](${messageLink})`, 
-            inline: false 
-          }]);
-        }
-      } catch (error) {
-        logger.error('Error finding original announcement message for match winner:', error);
-      }
+    const matchLink = await this.getOriginalMatchLink(winnerData.matchId);
+    if (matchLink) {
+      embed.addFields([{
+        name: '🔗 Match Details',
+        value: `[View Original Match Info](${matchLink})`,
+        inline: false
+      }]);
     }
 
-    return { embed, attachment };
+    return { embed };
   }
 
   async postTournamentWinnerNotification(tournamentData: {

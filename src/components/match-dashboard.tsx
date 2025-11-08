@@ -232,30 +232,39 @@ export function MatchDashboard() {
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  /**
+   * Check if a match has changed
+   */
+  const hasMatchChanged = useCallback((match: MatchWithGame, prevMatch: MatchWithGame | undefined): boolean => {
+    if (!prevMatch) return true;
+    return (
+      match.id !== prevMatch.id ||
+      match.status !== prevMatch.status ||
+      match.name !== prevMatch.name ||
+      match.created_at !== prevMatch.created_at ||
+      match.updated_at !== prevMatch.updated_at
+    );
+  }, []);
+
+  /**
+   * Compare matches arrays for changes
+   */
+  const haveMatchesChanged = useCallback((
+    data: MatchWithGame[],
+    prevMatches: MatchWithGame[]
+  ): boolean => {
+    if (prevMatches.length !== data.length) return true;
+
+    return data.some((match, index) => hasMatchChanged(match, prevMatches[index]));
+  }, [hasMatchChanged]);
+
   const fetchMatches = useCallback(async (silent = false) => {
     try {
       const response = await fetch('/api/matches');
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed to prevent unnecessary rerenders
         setMatches(prevMatches => {
-          // More efficient comparison than JSON.stringify for arrays
-          if (prevMatches.length !== data.length) {
-            return data;
-          }
-          
-          // Check if any match has changed by comparing key properties
-          const hasChanges = data.some((match: MatchWithGame, index: number) => {
-            const prevMatch = prevMatches[index];
-            return !prevMatch || 
-              match.id !== prevMatch.id ||
-              match.status !== prevMatch.status ||
-              match.name !== prevMatch.name ||
-              match.created_at !== prevMatch.created_at ||
-              match.updated_at !== prevMatch.updated_at;
-          });
-          
-          return hasChanges ? data : prevMatches;
+          return haveMatchesChanged(data, prevMatches) ? data : prevMatches;
         });
       }
     } catch (error) {
@@ -268,7 +277,7 @@ export function MatchDashboard() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [haveMatchesChanged]);
 
   // Fetch UI settings on component mount
   useEffect(() => {
@@ -436,6 +445,33 @@ export function MatchDashboard() {
     router.push('/matches/create');
   };
 
+  /**
+   * Check if participant has changed
+   */
+  const hasParticipantChanged = useCallback((
+    participant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> },
+    prevParticipant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> } | undefined
+  ): boolean => {
+    if (!prevParticipant) return true;
+    return (
+      participant.id !== prevParticipant.id ||
+      participant.username !== prevParticipant.username ||
+      participant.joined_at !== prevParticipant.joined_at
+    );
+  }, []);
+
+  /**
+   * Check if signup config has changed
+   */
+  const hasSignupConfigChanged = useCallback((
+    newConfig: SignupConfig | null,
+    prevConfig: SignupConfig | null
+  ): boolean => {
+    if (!prevConfig && !newConfig) return false;
+    if (!prevConfig || !newConfig) return true;
+    return prevConfig.fields.length !== newConfig.fields.length;
+  }, []);
+
   const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
     if (!silent) {
       setParticipantsLoading(true);
@@ -444,40 +480,25 @@ export function MatchDashboard() {
       const response = await fetch(`/api/matches/${matchId}/participants`);
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed
+
         setParticipants(prevParticipants => {
-          // More efficient comparison for participants array
           if (prevParticipants.length !== data.participants.length) {
             return data.participants;
           }
-          
+
           const hasChanges = data.participants.some((participant: {
             id: string;
             user_id: string;
             username: string;
             joined_at: string;
             signup_data: Record<string, unknown>;
-          }, index: number) => {
-            const prevParticipant = prevParticipants[index];
-            return !prevParticipant ||
-              participant.id !== prevParticipant.id ||
-              participant.username !== prevParticipant.username ||
-              participant.joined_at !== prevParticipant.joined_at;
-          });
-          
+          }, index: number) => hasParticipantChanged(participant, prevParticipants[index]));
+
           return hasChanges ? data.participants : prevParticipants;
         });
+
         setSignupConfig(prevConfig => {
-          // Simple reference check for signup config since it rarely changes
-          if (!prevConfig && !data.signupConfig) return prevConfig;
-          if (!prevConfig || !data.signupConfig) return data.signupConfig;
-          
-          // Compare field count as a quick check
-          if (prevConfig.fields.length !== data.signupConfig.fields.length) {
-            return data.signupConfig;
-          }
-          
-          return prevConfig;
+          return hasSignupConfigChanged(data.signupConfig, prevConfig) ? data.signupConfig : prevConfig;
         });
       } else {
         logger.error('Failed to fetch participants');
@@ -497,7 +518,7 @@ export function MatchDashboard() {
         setParticipantsLoading(false);
       }
     }
-  }, []);
+  }, [hasParticipantChanged, hasSignupConfigChanged]);
 
   const fetchReminders = useCallback(async (matchId: string, silent = false) => {
     if (!silent) {
