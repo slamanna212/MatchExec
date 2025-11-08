@@ -2,110 +2,38 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Text, Stack, Card, Group, Grid, Badge, TextInput, Textarea, Select, NumberInput, Container, Title, Breadcrumbs, Anchor, Progress, Avatar, FileButton, ActionIcon, Image, Box, Switch } from '@mantine/core';
-import { IconArrowLeft, IconUpload, IconTrash, IconPlus } from '@tabler/icons-react';
-import type { TournamentFormat } from '@/shared/types';
+import { Container, Stack, Group, Title, Breadcrumbs, Anchor, Progress, Button } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 
-interface GameWithIcon {
-  id: string;
-  name: string;
-  genre: string;
-  developer: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  iconUrl: string;
-  coverUrl: string;
-  mapCount: number;
-  modeCount: number;
-}
-
-interface TournamentFormData {
-  gameId: string;
-  name: string;
-  description: string;
-  date: string;
-  time: string;
-  format: TournamentFormat;
-  roundsPerMatch: number;
-  ruleset: string;
-  maxParticipants?: number;
-  eventImageUrl?: string;
-  preCreatedTeams?: string[]; // Array of team names
-  allowPlayerTeamSelection?: boolean;
-}
-
-/**
- * Builds tournament payload from form data
- */
-function buildTournamentPayload(formData: Partial<TournamentFormData>) {
-  const startDateTime = formData.date && formData.time
-    ? new Date(`${formData.date}T${formData.time}`)
-    : null;
-
-  return {
-    name: formData.name,
-    description: formData.description,
-    gameId: formData.gameId,
-    format: formData.format,
-    startDate: startDateTime?.toISOString(),
-    startTime: startDateTime?.toISOString(),
-    roundsPerMatch: formData.roundsPerMatch,
-    ruleset: formData.ruleset,
-    maxParticipants: formData.maxParticipants,
-    eventImageUrl: formData.eventImageUrl || null,
-    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
-  };
-}
-
-/**
- * Creates pre-defined teams for a tournament
- */
-async function createPreDefinedTeams(tournamentId: string, teamNames: string[]): Promise<void> {
-  if (teamNames.length === 0) return;
-
-  const teamCreationPromises = teamNames.map(teamName =>
-    fetch(`/api/tournaments/${tournamentId}/teams`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ teamName }),
-    })
-  );
-
-  await Promise.all(teamCreationPromises);
-}
-
-/**
- * Starts tournament signups by transitioning to gather stage
- */
-async function startTournamentSignups(tournamentId: string): Promise<void> {
-  await fetch(`/api/tournaments/${tournamentId}/transition`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ newStatus: 'gather' }),
-  });
-}
+import { useTournamentForm, type GameWithIcon } from './create-tournament/useTournamentForm';
+import { buildTournamentPayload, createPreDefinedTeams, startTournamentSignups } from './create-tournament/tournament-helpers';
+import { TournamentGameSelectionStep } from './create-tournament/TournamentGameSelectionStep';
+import { TournamentEventInfoStep } from './create-tournament/TournamentEventInfoStep';
+import { TournamentTeamSettingsStep } from './create-tournament/TournamentTeamSettingsStep';
+import { TournamentReviewStep } from './create-tournament/TournamentReviewStep';
 
 export function CreateTournamentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentStep = parseInt(searchParams.get('step') || '1');
-  
+
+  const {
+    formData,
+    imagePreview,
+    updateFormData,
+    clearFormData,
+    addTeam,
+    removeTeam,
+    setImagePreview,
+  } = useTournamentForm();
+
   const [games, setGames] = useState<GameWithIcon[]>([]);
-  const [formData, setFormData] = useState<Partial<TournamentFormData>>({
-    format: 'single-elimination',
-    roundsPerMatch: 3,
-    ruleset: 'casual',
-    preCreatedTeams: [],
-    allowPlayerTeamSelection: false
-  });
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
 
-  // Load games on mount and restore form data from session storage
+  // Load games on mount
   useEffect(() => {
     const fetchGames = async () => {
       try {
@@ -120,66 +48,7 @@ export function CreateTournamentPage() {
     };
 
     fetchGames();
-
-    // Restore form data from session storage
-    const savedFormData = sessionStorage.getItem('tournamentFormData');
-    if (savedFormData) {
-      try {
-        const parsedData = JSON.parse(savedFormData);
-        setFormData(parsedData);
-
-        // Restore image preview if it exists
-        if (parsedData.eventImageUrl) {
-          setImagePreview(parsedData.eventImageUrl);
-        }
-      } catch (error) {
-        logger.error('Error parsing saved form data:', error);
-      }
-    }
   }, []);
-
-  // Save form data to session storage whenever it changes
-  useEffect(() => {
-    sessionStorage.setItem('tournamentFormData', JSON.stringify(formData));
-  }, [formData]);
-
-  const updateFormData = (key: keyof TournamentFormData, value: string | number | TournamentFormat | string[] | boolean | undefined) => {
-    setFormData(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-
-  const clearFormData = () => {
-    setFormData({
-      format: 'single-elimination',
-      roundsPerMatch: 3,
-      ruleset: 'casual',
-      preCreatedTeams: [],
-      allowPlayerTeamSelection: false
-    });
-    sessionStorage.removeItem('tournamentFormData');
-  };
-
-  const handleAddTeam = () => {
-    if (!newTeamName.trim()) return;
-
-    const currentTeams = formData.preCreatedTeams || [];
-
-    // Check for duplicate team names
-    if (currentTeams.some(team => team.toLowerCase() === newTeamName.trim().toLowerCase())) {
-      showWarning('A team with this name already exists');
-      return;
-    }
-
-    updateFormData('preCreatedTeams', [...currentTeams, newTeamName.trim()]);
-    setNewTeamName('');
-  };
-
-  const handleRemoveTeam = (teamName: string) => {
-    const currentTeams = formData.preCreatedTeams || [];
-    updateFormData('preCreatedTeams', currentTeams.filter(team => team !== teamName));
-  };
 
   const navigateToStep = (step: number) => {
     const url = new URL(window.location.href);
@@ -193,7 +62,6 @@ export function CreateTournamentPage() {
 
   const handleBack = () => {
     if (currentStep === 1) {
-      // Clear form data when going back to tournaments from step 1
       clearFormData();
       router.push('/tournaments');
     } else {
@@ -201,48 +69,26 @@ export function CreateTournamentPage() {
     }
   };
 
-  const handleCreateTournament = async (shouldStartSignups = false) => {
-    try {
-      // Build tournament payload
-      const tournamentData = buildTournamentPayload(formData);
+  const handleGameSelect = (gameId: string) => {
+    updateFormData('gameId', gameId);
+  };
 
-      // Create tournament
-      const response = await fetch('/api/tournaments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tournamentData),
-      });
+  const handleAddTeam = (teamName: string) => {
+    const currentTeams = formData.preCreatedTeams || [];
 
-      if (!response.ok) {
-        const error = await response.json();
-        showError(error.error || 'Failed to create tournament');
-        return;
-      }
-
-      const tournament = await response.json();
-
-      // Create pre-defined teams if any exist
-      await createPreDefinedTeams(tournament.id, formData.preCreatedTeams || []);
-
-      // Start signups if requested
-      if (shouldStartSignups) {
-        await startTournamentSignups(tournament.id);
-      }
-
-      clearFormData();
-      showSuccess('Tournament created successfully!');
-      router.push('/tournaments');
-
-    } catch (error) {
-      logger.error('Error creating tournament:', error);
-      showError('Failed to create tournament');
+    // Check for duplicate team names
+    if (currentTeams.some(team => team.toLowerCase() === teamName.trim().toLowerCase())) {
+      showWarning('A team with this name already exists');
+      return;
     }
+
+    addTeam(teamName.trim());
+    setNewTeamName('');
   };
 
   const handleImageUpload = async (file: File | null) => {
     if (!file) return;
 
-    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
       showError('File size must be less than 5MB');
       return;
@@ -289,8 +135,38 @@ export function CreateTournamentPage() {
     setImagePreview(null);
   };
 
-  const getProgressValue = () => {
-    return (currentStep / 4) * 100;
+  const handleCreateTournament = async (shouldStartSignups: boolean) => {
+    try {
+      const tournamentData = buildTournamentPayload(formData);
+
+      const response = await fetch('/api/tournaments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tournamentData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        showError(error.error || 'Failed to create tournament');
+        return;
+      }
+
+      const tournament = await response.json();
+
+      await createPreDefinedTeams(tournament.id, formData.preCreatedTeams || []);
+
+      if (shouldStartSignups) {
+        await startTournamentSignups(tournament.id);
+      }
+
+      clearFormData();
+      showSuccess('Tournament created successfully!');
+      router.push('/tournaments');
+
+    } catch (error) {
+      logger.error('Error creating tournament:', error);
+      showError('Failed to create tournament');
+    }
   };
 
   const canProceedFromStep = (step: number): boolean => {
@@ -300,10 +176,16 @@ export function CreateTournamentPage() {
       case 2:
         return !!(formData.name && formData.format && formData.roundsPerMatch);
       case 3:
-        return true; // Team settings are optional
+        return true;
+      case 4:
+        return true;
       default:
         return true;
     }
+  };
+
+  const getProgressValue = () => {
+    return (currentStep / 4) * 100;
   };
 
   return (
@@ -326,374 +208,52 @@ export function CreateTournamentPage() {
         {/* Progress */}
         <Progress value={getProgressValue()} size="sm" />
 
-        {/* Step 1: Select Game */}
+        {/* Step Content */}
         {currentStep === 1 && (
-          <Stack>
-            <Text mb="md">Select the game for your tournament:</Text>
-            <Grid>
-              {games.map((game) => (
-                <Grid.Col key={game.id} span={{ base: 12, sm: 6 }}>
-                  <Card
-                    shadow="sm"
-                    padding="md"
-                    radius="md"
-                    withBorder
-                    style={{
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onClick={() => {
-                      updateFormData('gameId', game.id);
-                      handleNext();
-                    }}
-                  >
-                    <Group align="center">
-                      <Avatar src={game.iconUrl} alt={game.name} size="lg" />
-                      <div className="flex-1">
-                        <Text fw={500}>{game.name}</Text>
-                        <Text size="sm" c="dimmed">{game.genre}</Text>
-                        <Group gap="xs" mt="xs">
-                          <Badge size="xs" variant="light">{game.mapCount} maps</Badge>
-                          <Badge size="xs" variant="light">{game.modeCount} modes</Badge>
-                        </Group>
-                      </div>
-                    </Group>
-                  </Card>
-                </Grid.Col>
-              ))}
-            </Grid>
-            
-            <Group justify="end" mt="md">
-              <Button onClick={handleNext} disabled={!canProceedFromStep(1)}>
-                Next: Event Info
-              </Button>
-            </Group>
-          </Stack>
+          <TournamentGameSelectionStep
+            games={games}
+            onGameSelect={handleGameSelect}
+            onNext={handleNext}
+            canProceed={canProceedFromStep(1)}
+          />
         )}
 
-        {/* Step 2: Event Info */}
         {currentStep === 2 && (
-          <Stack>
-            <Text mb="md">Enter tournament information:</Text>
-            
-            <TextInput
-              label="Tournament Name"
-              placeholder="Enter tournament name"
-              required
-              value={formData.name || ''}
-              onChange={(e) => updateFormData('name', e.target.value)}
-            />
-
-            <Textarea
-              label="Description"
-              placeholder="Tournament description (optional)"
-              minRows={3}
-              value={formData.description || ''}
-              onChange={(e) => updateFormData('description', e.target.value)}
-            />
-
-            <Group grow>
-              <TextInput
-                label="Start Date"
-                type="date"
-                value={formData.date || ''}
-                onChange={(e) => updateFormData('date', e.target.value)}
-              />
-              <TextInput
-                label="Start Time"
-                type="time"
-                value={formData.time || ''}
-                onChange={(e) => updateFormData('time', e.target.value)}
-              />
-            </Group>
-
-            <Select
-              label="Tournament Format"
-              required
-              data={[
-                { value: 'single-elimination', label: 'Single Elimination' },
-                { value: 'double-elimination', label: 'Double Elimination' }
-              ]}
-              value={formData.format || 'single-elimination'}
-              onChange={(value) => updateFormData('format', (value as TournamentFormat) || 'single-elimination')}
-            />
-
-            <NumberInput
-              label="Rounds per Match"
-              description="Number of rounds to play in each tournament match"
-              required
-              min={1}
-              max={9}
-              value={formData.roundsPerMatch || 3}
-              onChange={(value) => updateFormData('roundsPerMatch', value || 3)}
-            />
-
-            <Select
-              label="Ruleset"
-              description="Tournament ruleset that will apply to all matches"
-              required
-              data={[
-                { value: 'casual', label: 'Casual' },
-                { value: 'competitive', label: 'Competitive' }
-              ]}
-              value={formData.ruleset || 'casual'}
-              onChange={(value) => updateFormData('ruleset', value || 'casual')}
-            />
-
-            <Switch
-              label="Allow Players to Select Teams"
-              description="When enabled, players can choose their team during signup (only works if teams are pre-created in Step 3)"
-              checked={formData.allowPlayerTeamSelection || false}
-              onChange={(e) => updateFormData('allowPlayerTeamSelection', e.currentTarget.checked)}
-            />
-
-            <Box>
-              <Text size="sm" fw={500} mb="xs">Tournament Image (Optional)</Text>
-              {imagePreview ? (
-                <Card withBorder padding="md">
-                  <Group justify="space-between" mb="md">
-                    <Text size="sm" c="dimmed">Current Image:</Text>
-                    <ActionIcon
-                      color="red"
-                      variant="light"
-                      onClick={handleRemoveImage}
-                      disabled={uploadingImage}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
-                  <Image
-                    src={imagePreview}
-                    alt="Tournament preview"
-                    height={200}
-                    radius="md"
-                    fit="cover"
-                  />
-                </Card>
-              ) : (
-                <FileButton
-                  onChange={handleImageUpload}
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  disabled={uploadingImage}
-                >
-                  {(props) => (
-                    <Card
-                      {...props}
-                      withBorder
-                      padding="md"
-                      className="cursor-pointer hover:shadow-md transition-shadow"
-                      style={{
-                        borderStyle: 'dashed',
-                        borderColor: 'var(--mantine-color-default-border)',
-                        backgroundColor: 'var(--mantine-color-body)'
-                      }}
-                    >
-                      <Stack align="center" justify="center" style={{ minHeight: 100 }}>
-                        <ActionIcon size="xl" variant="light" disabled={uploadingImage}>
-                          <IconUpload />
-                        </ActionIcon>
-                        <Text size="sm" c="dimmed" ta="center">
-                          {uploadingImage ? 'Uploading...' : 'Click to upload tournament image'}
-                        </Text>
-                        <Text size="xs" c="dimmed" ta="center">
-                          PNG, JPEG, WebP, GIF up to 5MB
-                        </Text>
-                      </Stack>
-                    </Card>
-                  )}
-                </FileButton>
-              )}
-            </Box>
-
-            <Group justify="space-between" mt="md">
-              <Button variant="outline" onClick={handleBack}>
-                Back
-              </Button>
-              <Button onClick={handleNext} disabled={!canProceedFromStep(2)}>
-                Next: Team Settings
-              </Button>
-            </Group>
-          </Stack>
+          <TournamentEventInfoStep
+            formData={formData}
+            imagePreview={imagePreview}
+            uploadingImage={uploadingImage}
+            updateFormData={updateFormData}
+            onImageUpload={handleImageUpload}
+            onRemoveImage={handleRemoveImage}
+            onBack={handleBack}
+            onNext={handleNext}
+            canProceed={canProceedFromStep(2)}
+            setImagePreview={setImagePreview}
+          />
         )}
 
-        {/* Step 3: Team Settings */}
         {currentStep === 3 && (
-          <Stack>
-            <Text mb="md">Configure team settings:</Text>
-
-            <NumberInput
-              label="Max Participants (Optional)"
-              description="Maximum number of players that can register (leave empty for unlimited)"
-              min={4}
-              max={256}
-              value={formData.maxParticipants || ''}
-              onChange={(value) => updateFormData('maxParticipants', value || undefined)}
-            />
-
-            <Card withBorder p="md" mt="md">
-              <Text fw={500} mb="md">Pre-Create Teams (Optional)</Text>
-              <Text size="sm" c="dimmed" mb="md">
-                Create team names ahead of time. Players can be assigned to these teams during the signup phase.
-              </Text>
-
-              <Group mb="md">
-                <TextInput
-                  placeholder="Enter team name"
-                  value={newTeamName}
-                  onChange={(e) => setNewTeamName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newTeamName.trim()) {
-                      handleAddTeam();
-                    }
-                  }}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  leftSection={<IconPlus size="1rem" />}
-                  onClick={handleAddTeam}
-                  disabled={!newTeamName.trim()}
-                >
-                  Add Team
-                </Button>
-              </Group>
-
-              {formData.preCreatedTeams && formData.preCreatedTeams.length > 0 && (
-                <Stack gap="xs">
-                  {formData.preCreatedTeams.map((teamName, index) => (
-                    <Card key={index} withBorder padding="sm">
-                      <Group justify="space-between" align="center">
-                        <Group align="center">
-                          <Badge variant="light">{index + 1}</Badge>
-                          <Text size="sm" fw={500}>{teamName}</Text>
-                        </Group>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          size="sm"
-                          onClick={() => handleRemoveTeam(teamName)}
-                        >
-                          <IconTrash size="1rem" />
-                        </ActionIcon>
-                      </Group>
-                    </Card>
-                  ))}
-                </Stack>
-              )}
-
-              {(!formData.preCreatedTeams || formData.preCreatedTeams.length === 0) && (
-                <Text size="sm" c="dimmed" ta="center" py="md">
-                  No teams created yet. Add teams using the form above.
-                </Text>
-              )}
-            </Card>
-
-            <Text size="sm" c="dimmed" mt="md">
-              <strong>Note:</strong> Maps and modes will be automatically assigned when tournament matches are generated.
-              Participants can be assigned to teams during or after the signup phase.
-            </Text>
-
-            <Group justify="space-between" mt="md">
-              <Button variant="outline" onClick={handleBack}>
-                Back
-              </Button>
-              <Button onClick={handleNext}>
-                Next: Review
-              </Button>
-            </Group>
-          </Stack>
+          <TournamentTeamSettingsStep
+            formData={formData}
+            newTeamName={newTeamName}
+            updateFormData={updateFormData}
+            onAddTeam={handleAddTeam}
+            onRemoveTeam={removeTeam}
+            onBack={handleBack}
+            onNext={handleNext}
+            setNewTeamName={setNewTeamName}
+          />
         )}
 
-        {/* Step 4: Review */}
         {currentStep === 4 && (
-          <Stack>
-            <Text mb="md">Review tournament details:</Text>
-            
-            <Card withBorder>
-              <Stack gap="md">
-                <Group>
-                  <Text fw={500}>Tournament Name:</Text>
-                  <Text>{formData.name}</Text>
-                </Group>
-                
-                {formData.description && (
-                  <Group>
-                    <Text fw={500}>Description:</Text>
-                    <Text>{formData.description}</Text>
-                  </Group>
-                )}
-
-                <Group>
-                  <Text fw={500}>Game:</Text>
-                  <Text>{games.find(g => g.id === formData.gameId)?.name}</Text>
-                </Group>
-
-                <Group>
-                  <Text fw={500}>Format:</Text>
-                  <Badge variant="light">
-                    {formData.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
-                  </Badge>
-                </Group>
-
-                <Group>
-                  <Text fw={500}>Rounds per Match:</Text>
-                  <Text>{formData.roundsPerMatch}</Text>
-                </Group>
-
-                <Group>
-                  <Text fw={500}>Ruleset:</Text>
-                  <Badge variant="light" tt="capitalize">{formData.ruleset}</Badge>
-                </Group>
-
-                {formData.maxParticipants && (
-                  <Group>
-                    <Text fw={500}>Max Participants:</Text>
-                    <Text>{formData.maxParticipants}</Text>
-                  </Group>
-                )}
-
-                {formData.date && formData.time && (
-                  <Group>
-                    <Text fw={500}>Start:</Text>
-                    <Text>{new Date(`${formData.date}T${formData.time}`).toLocaleString()}</Text>
-                  </Group>
-                )}
-
-                {formData.preCreatedTeams && formData.preCreatedTeams.length > 0 && (
-                  <div>
-                    <Text fw={500} mb="xs">Pre-Created Teams:</Text>
-                    <Group gap="xs">
-                      {formData.preCreatedTeams.map((teamName, index) => (
-                        <Badge key={index} variant="light" size="lg">
-                          {teamName}
-                        </Badge>
-                      ))}
-                    </Group>
-                  </div>
-                )}
-              </Stack>
-            </Card>
-
-            <Group justify="space-between" mt="md" align="center">
-              <Button variant="outline" onClick={handleBack}>
-                Back
-              </Button>
-              <Group align="center" gap="md">
-                <Button
-                  variant="outline"
-                  onClick={() => handleCreateTournament(false)}
-                  disabled={!canProceedFromStep(4)}
-                >
-                  Create Tournament
-                </Button>
-                <Button
-                  onClick={() => handleCreateTournament(true)}
-                  disabled={!canProceedFromStep(4)}
-                >
-                  Create & Open Signups
-                </Button>
-              </Group>
-            </Group>
-          </Stack>
+          <TournamentReviewStep
+            formData={formData}
+            games={games}
+            onBack={handleBack}
+            onCreate={handleCreateTournament}
+            canProceed={canProceedFromStep(4)}
+          />
         )}
       </Stack>
     </Container>
