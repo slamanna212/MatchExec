@@ -8,27 +8,42 @@
 
 ## Phase 1: Critical Complexity (>30) - 6 Functions
 
-### 1. MatchDetailsModal (Complexity: 42)
-- **File:** `src/app/matches/components/MatchDetailsModal.tsx:106`
+### ✅ 1. MatchDetailsModal (Complexity: 42) - COMPLETED
+- **File:** `src/components/match-details-modal.tsx:106`
 - **Type:** React Component
-- **Issues:** Massive conditional rendering, multiple state checks, complex map/round/participant rendering
-- **Refactor Strategy:**
-  - Extract `MapResultsSection` component
-  - Extract `ParticipantsList` component
-  - Extract `MatchActions` component based on state
-  - Create validation helper functions
-  - Use early returns for state checks
+- **Status:** ✅ Refactored (838 lines → 515 lines, 39% reduction)
+- **Refactor Completed:**
+  - ✅ Extracted `MapResultsSection` component to `src/components/match-details/MapResultsSection.tsx`
+  - ✅ Extracted `ParticipantsList` component to `src/components/match-details/ParticipantsList.tsx`
+  - ✅ Extracted `RemindersList` component to `src/components/match-details/RemindersList.tsx`
+  - ✅ Created helper utilities in `src/components/match-details/helpers.ts`:
+    - `getReminderStatusColor()` - Eliminated nested ternary for status colors
+    - `formatReminderStatus()` - Standardized status text formatting
+    - `getMapWinner()` - Centralized winner determination logic
+    - `extractModeNameFromMapId()` - Extracted mode name parsing
+    - `cleanMapId()` - Standardized map ID cleaning
+  - ✅ Eliminated duplicate map rendering (lines 357-429 and 628-700)
+  - ✅ Eliminated duplicate reminder rendering (lines 540-608 and 741-794)
 
-### 2. POST /api/tournaments/[id]/matches (Complexity: 41)
-- **File:** `src/app/api/tournaments/[id]/matches/route.ts:200`
+### ✅ 2. POST /api/matches/[matchId]/transition (Complexity: 41) - COMPLETED
+- **File:** `src/app/api/matches/[matchId]/transition/route.ts:200`
 - **Type:** API Route Handler
-- **Issues:** Validation, bracket generation logic, database operations, error handling all in one function
-- **Refactor Strategy:**
-  - Extract `validateTournamentMatchRequest()`
-  - Extract `generateBracketMatches()` (may already exist, use it)
-  - Extract `saveTournamentMatches()`
-  - Separate round progression logic
-  - Use early returns for validation failures
+- **Status:** ✅ Refactored (450 lines → 83 lines, 82% reduction)
+- **Refactor Completed:**
+  - ✅ Created `MapCodeService` utility class (`src/lib/map-code-service.ts`):
+    - Handles complex triple-fallback map code lookups
+    - Processes map codes with normalization and diacritics removal
+    - Queues map code PMs to Discord
+  - ✅ Created `VoiceChannelService` utility class (`src/lib/voice-channel-service.ts`):
+    - Manages voice channel creation and tracking
+    - Handles voice announcement queuing
+    - Consolidated voice setup logic
+  - ✅ Extracted transition handlers to `src/lib/transition-handlers.ts`:
+    - `handleGatherTransition()` - Discord announcement logic
+    - `handleAssignTransition()` - Status update logic
+    - `handleBattleTransition()` - Voice, announcements, games, map codes
+    - `handleStatusTransition()` - Central routing function
+  - ✅ Simplified main POST handler to validation → update → delegate pattern
 
 ### 3. createMatchStartEmbed (Complexity: 37)
 - **File:** `processes/discord-bot/modules/announcement-handler.ts:783`
