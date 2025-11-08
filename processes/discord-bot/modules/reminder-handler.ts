@@ -7,6 +7,143 @@ import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
+interface EventData {
+  id: string;
+  name: string;
+  game_id: string;
+  game_color?: string;
+  max_signups?: number;
+  [key: string]: unknown;
+}
+
+interface AnnouncementMessageData {
+  message_id: string;
+  channel_id: string;
+}
+
+/**
+ * Retrieves event data for signup notification (match or tournament)
+ */
+async function getEventDataForSignup(
+  db: Database,
+  matchId: string,
+  isTournament: boolean
+): Promise<EventData | null> {
+  const query = isTournament ? `
+    SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
+    FROM tournaments t
+    LEFT JOIN games g ON t.game_id = g.id
+    WHERE t.id = ?
+  ` : `
+    SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
+    FROM matches m
+    LEFT JOIN games g ON m.game_id = g.id
+    WHERE m.id = ?
+  `;
+
+  return await db.get<EventData>(query, [matchId]);
+}
+
+/**
+ * Builds signup notification embed
+ */
+function buildSignupEmbed(
+  signupInfo: { username: string; discordUserId: string; signupData: { [key: string]: string }; participantCount: number },
+  eventData: EventData,
+  isTournament: boolean,
+  announcementMessage: AnnouncementMessageData | null,
+  guildId: string | undefined
+): EmbedBuilder {
+  // Parse game color or use default green
+  let gameColor = 0x00ff00;
+  if (eventData.game_color) {
+    try {
+      gameColor = parseInt(eventData.game_color.replace('#', ''), 16);
+    } catch {
+      logger.warning('⚠️ Invalid game color format, using default green:', eventData.game_color);
+    }
+  }
+
+  const eventType = isTournament ? 'Tournament' : 'Match';
+  const embed = new EmbedBuilder()
+    .setTitle('🎮 New Player Signed Up!')
+    .setDescription(`**${signupInfo.username}** joined **${eventData.name}**`)
+    .setColor(gameColor)
+    .addFields(
+      {
+        name: '👤 Player',
+        value: `<@${signupInfo.discordUserId}>`,
+        inline: true
+      },
+      {
+        name: `🎯 ${eventType}`,
+        value: eventData.name,
+        inline: true
+      },
+      {
+        name: '👥 Total Players',
+        value: `${signupInfo.participantCount}${eventData.max_signups ? `/${eventData.max_signups}` : ''}`,
+        inline: true
+      }
+    )
+    .setTimestamp();
+
+  // Add key signup data fields if available
+  const displayFields: string[] = [];
+  for (const [key, value] of Object.entries(signupInfo.signupData)) {
+    if (value && displayFields.length < 3) {
+      const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      displayFields.push(`**${fieldName}:** ${value}`);
+    }
+  }
+
+  if (displayFields.length > 0) {
+    embed.addFields({
+      name: '📝 Player Info',
+      value: displayFields.join('\n'),
+      inline: false
+    });
+  }
+
+  // Add link to full match info if announcement message exists
+  if (announcementMessage?.message_id && announcementMessage?.channel_id && guildId) {
+    const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+    embed.addFields({
+      name: '🔗 View Full Match Info',
+      value: `[Click here to see the complete event details](${messageLink})`,
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
+/**
+ * Sends embed to all configured channels
+ */
+async function sendEmbedToChannels(
+  client: Client,
+  channels: DiscordChannel[],
+  embed: EmbedBuilder
+): Promise<number> {
+  let successCount = 0;
+
+  for (const channelConfig of channels) {
+    try {
+      const channel = await client.channels.fetch(channelConfig.discord_channel_id);
+
+      if (channel?.isTextBased() && 'send' in channel) {
+        await channel.send({ embeds: [embed] });
+        successCount++;
+      }
+    } catch (error) {
+      logger.error(`❌ Failed to send notification to channel ${channelConfig.discord_channel_id}:`, error);
+    }
+  }
+
+  return successCount;
+}
+
 export class ReminderHandler {
   constructor(
     private client: Client,
@@ -126,7 +263,7 @@ export class ReminderHandler {
 
     // Get channels configured for signup updates
     const signupChannels = await this.getChannelsForNotificationType('signup_updates');
-    
+
     if (signupChannels.length === 0) {
       return true; // Not an error, just no channels configured
     }
@@ -135,124 +272,28 @@ export class ReminderHandler {
       // Check if this is a tournament or match
       const isTournament = matchId.startsWith('tournament_');
 
-      // Get event data (match or tournament)
-      const matchData = await this.db?.get<{
-        id: string;
-        name: string;
-        game_id: string;
-        game_color?: string;
-        max_participants?: number;
-        [key: string]: unknown;
-      }>(isTournament ? `
-        SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
-        FROM tournaments t
-        LEFT JOIN games g ON t.game_id = g.id
-        WHERE t.id = ?
-      ` : `
-        SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
-        FROM matches m
-        LEFT JOIN games g ON m.game_id = g.id
-        WHERE m.id = ?
-      `, [matchId]);
+      // Get event data using helper function
+      const eventData = await getEventDataForSignup(this.db, matchId, isTournament);
+
+      if (!eventData) {
+        logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
+        return false;
+      }
 
       // Get announcement message info for linking
-      const announcementMessage = await this.db?.get<{
-        message_id: string;
-        channel_id: string;
-      }>(`
+      const announcementMessage = await this.db?.get<AnnouncementMessageData>(`
         SELECT message_id, channel_id
         FROM discord_match_messages
         WHERE match_id = ? AND message_type = 'announcement'
         LIMIT 1
       `, [matchId]);
 
-      if (!matchData) {
-        logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
-        return false;
-      }
+      // Build signup embed using helper function
+      const guildId = this.client.guilds.cache.first()?.id;
+      const embed = buildSignupEmbed(signupInfo, eventData, isTournament, announcementMessage || null, guildId);
 
-      // Parse game color or use default green
-      let gameColor = 0x00ff00; // default green for positive action
-      if (matchData.game_color) {
-        try {
-          gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-        } catch {
-          logger.warning('⚠️ Invalid game color format, using default green:', matchData.game_color);
-        }
-      }
-
-      // Create signup embed
-      const eventType = isTournament ? 'Tournament' : 'Match';
-      const embed = new EmbedBuilder()
-        .setTitle('🎮 New Player Signed Up!')
-        .setDescription(`**${signupInfo.username}** joined **${matchData.name}**`)
-        .setColor(gameColor)
-        .addFields(
-          {
-            name: '👤 Player',
-            value: `<@${signupInfo.discordUserId}>`,
-            inline: true
-          },
-          {
-            name: `🎯 ${eventType}`,
-            value: matchData.name,
-            inline: true
-          },
-          {
-            name: '👥 Total Players',
-            value: `${signupInfo.participantCount}${matchData.max_signups ? `/${matchData.max_signups}` : ''}`,
-            inline: true
-          }
-        )
-        .setTimestamp();
-
-      // Add key signup data fields if available
-      const displayFields: string[] = [];
-      for (const [key, value] of Object.entries(signupInfo.signupData)) {
-        if (value && displayFields.length < 3) { // Limit to 3 additional fields
-          const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          displayFields.push(`**${fieldName}:** ${value}`);
-        }
-      }
-      
-      if (displayFields.length > 0) {
-        embed.addFields({
-          name: '📝 Player Info',
-          value: displayFields.join('\n'),
-          inline: false
-        });
-      }
-
-      // Add link to full match info if announcement message exists
-      if (announcementMessage?.message_id && announcementMessage?.channel_id && this.client.guilds.cache.first()) {
-        const guildId = this.client.guilds.cache.first()?.id;
-        const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
-        embed.addFields({
-          name: '🔗 View Full Match Info',
-          value: `[Click here to see the complete event details](${messageLink})`,
-          inline: false
-        });
-      }
-
-      let successCount = 0;
-
-      // Send to all configured signup update channels
-      for (const channelConfig of signupChannels) {
-        try {
-          const signupChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
-
-          if (signupChannel?.isTextBased() && 'send' in signupChannel) {
-            // Send signup notification
-            await signupChannel.send({
-              embeds: [embed]
-            });
-            
-            successCount++;
-          }
-        } catch (error) {
-          logger.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
-        }
-      }
+      // Send to all configured channels using helper function
+      const successCount = await sendEmbedToChannels(this.client, signupChannels, embed);
 
       if (successCount === 0) {
         logger.error('❌ Failed to send signup notification to any channels');
