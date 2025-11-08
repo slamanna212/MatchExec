@@ -18,6 +18,132 @@
 5. handleButtonInteraction (27→fixed)
 6. updateTournamentMessagesForSignupClosure (27→16)
 
+---
+
+### Detailed Refactoring Information:
+
+#### 1. PUT /api/settings/discord (Complexity: 30→~10)
+- **File:** `src/app/api/settings/discord/route.ts:69`
+- **Type:** API Route Handler
+- **Problem:** 30+ branches due to 11 individual field checks and conditional updates
+- **Solution:** Field registry pattern with transformation pipeline
+
+**Extracted Components:**
+- `DISCORD_SETTINGS_FIELDS` - Configuration array defining all 11 Discord settings fields with default values and optional transformers
+- `buildDiscordSettingsUpdate()` - Constructs UPDATE query dynamically from request body using field registry
+- `restartDiscordBot()` - Handles PM2 process restart logic (dev vs prod environment detection)
+
+**Key Improvements:**
+- Eliminated 11 individual if-blocks by using field registry iteration
+- Separated concerns: validation → update building → bot restart
+- Made adding new settings fields trivial (just add to registry)
+- Reduced from 30 to ~10 complexity points
+
+---
+
+#### 2. createMatchVoiceChannels (Complexity: 30→~12)
+- **File:** `src/lib/voice-channel-manager.ts:147`
+- **Type:** Service Function
+- **Problem:** Complex nested logic for team structure, tournament matching, and polling
+- **Solution:** Extracted channel naming strategy and polling into separate focused functions
+
+**Extracted Components:**
+- `determineChannelNames()` - Routes to appropriate naming strategy based on team count
+- `determineSingleTeamChannelName()` - Handles tournament participant lookup for single-team matches
+- `determineDualTeamChannelNames()` - Handles participant lookups for dual-team matches with fallbacks
+- `waitForVoiceChannelCreation()` - Polling logic with timeout and status checking (30s timeout, 500ms intervals)
+
+**Key Improvements:**
+- Separated naming strategy from main creation flow
+- Isolated tournament data fetching into focused helpers
+- Made polling logic testable and reusable
+- Reduced nesting depth from 5 to 2 levels
+- Reduced from 30 to ~12 complexity points
+
+---
+
+#### 3. sendSignupNotification (Complexity: 29→~8)
+- **File:** `processes/discord-bot/modules/reminder-handler.ts:26`
+- **Type:** Discord Bot Notification Handler
+- **Problem:** Combined data fetching, embed building, and multi-channel sending
+- **Solution:** Separated data access, presentation, and delivery concerns
+
+**Extracted Components:**
+- `getEventDataForSignup()` - Fetches match/tournament data with game info (single query, handles both types)
+- `buildSignupEmbed()` - Constructs Discord embed with player info, event details, and signup count
+- `sendEmbedToChannels()` - Iterates through channels and sends embed (returns success count)
+
+**Key Improvements:**
+- Separated database queries from Discord API calls
+- Made embed building pure and testable
+- Isolated channel delivery logic with error handling
+- Reduced from 29 to ~8 complexity points
+- Each function has single responsibility
+
+---
+
+#### 4. processDiscordBotRequests (Complexity: 28→~6)
+- **File:** `processes/discord-bot/modules/queue-processor.ts:78`
+- **Type:** Queue Processor
+- **Problem:** Large switch statement for 3+ request types with inline handling
+- **Solution:** Registry pattern with dedicated handler functions
+
+**Extracted Components:**
+- `handleVoiceChannelCreate()` - Creates blue/red voice channels, handles single vs dual team
+- `handleVoiceChannelDelete()` - Deletes voice channel by ID
+- `handleVoiceTest()` - Tests voice announcements
+- `REQUEST_HANDLERS` - Registry object mapping request types to handler functions
+
+**Key Improvements:**
+- Eliminated switch statement entirely
+- Each handler is independently testable
+- Adding new request types requires no modification to main function
+- Reduced from 28 to ~6 complexity points (just loop + registry lookup)
+- Open/closed principle: open for extension, closed for modification
+
+---
+
+#### 5. handleButtonInteraction (Complexity: 27→~10)
+- **File:** `processes/discord-bot/modules/interaction-handler.ts:28`
+- **Type:** Discord Interaction Handler
+- **Problem:** Complex validation chains and conditional UI flows (signup checks, capacity, team selection)
+- **Solution:** Extracted validation and UI helper functions
+
+**Extracted Components:**
+- `checkExistingParticipant()` - Queries database for duplicate signups (handles match/tournament)
+- `checkEventCapacity()` - Fetches participant count and capacity limits, returns full status
+- `showTeamSelectionMenu()` - Builds and displays team selection dropdown (tournament only)
+- `showSignupModal()` - Loads game-specific signup form and displays modal
+
+**Key Improvements:**
+- Separated validation logic from UI flow
+- Made each check independently testable
+- Reduced nesting depth by using early returns in helpers
+- Reduced from 27 to ~10 complexity points
+- Clear separation: validation → decision → UI response
+
+---
+
+#### 6. updateTournamentMessagesForSignupClosure (Complexity: 27→16)
+- **File:** `processes/discord-bot/modules/queue-processor.ts:1249`
+- **Type:** Discord Message Update Handler
+- **Problem:** Combined message fetching, embed construction, and attachment handling
+- **Solution:** Extracted fetch, build, and attachment recreation into focused functions
+
+**Extracted Components:**
+- `fetchTournamentMessages()` - Retrieves all announcement messages for tournament from database
+- `buildClosedSignupEmbed()` - Updates existing embed with "Signups Closed" status field
+- `recreateAttachment()` - Handles image attachment recreation from filesystem (checks existence, creates AttachmentBuilder)
+
+**Key Improvements:**
+- Separated database access from Discord API operations
+- Made embed modification pure and predictable
+- Isolated file I/O into single helper with error handling
+- Reduced from 27 to 16 complexity points
+- Each function handles one aspect of the update process
+
+---
+
 ### ⚠️ REQUIRES FULL COMPONENT DECOMPOSITION:
 
 ### 7. CreateMatchPage (Complexity: 30) - PARTIAL
