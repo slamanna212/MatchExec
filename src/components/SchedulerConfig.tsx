@@ -28,46 +28,108 @@ interface HumanReadableSchedule {
 
 // Convert cron expression to human-readable format
 function cronToHuman(cronExpression: string): HumanReadableSchedule {
-  const parts = cronExpression.split(' ');
-  if (parts.length !== 6) {
+  const parts = parseCronParts(cronExpression);
+  if (!parts) {
     return { interval: 'custom', frequency: 1 };
   }
 
-  const [, minute, hour, day, month, dayOfWeek] = parts;
+  return (
+    matchMinutesPattern(parts) ||
+    matchHoursPattern(parts) ||
+    matchDailyPattern(parts) ||
+    matchWeeklyPattern(parts) ||
+    { interval: 'custom', frequency: 1 }
+  );
+}
 
-  // Every X minutes
+function parseCronParts(cronExpression: string) {
+  const parts = cronExpression.split(' ');
+  if (parts.length !== 6) {
+    return null;
+  }
+
+  const [, minute, hour, day, month, dayOfWeek] = parts;
+  return { minute, hour, day, month, dayOfWeek };
+}
+
+function matchMinutesPattern(parts: {
+  minute: string;
+  hour: string;
+  day: string;
+  month: string;
+  dayOfWeek: string;
+}): HumanReadableSchedule | null {
+  const { minute, hour, day, month, dayOfWeek } = parts;
+
   if (minute.includes('*/') && hour === '*' && day === '*' && month === '*' && dayOfWeek === '*') {
     const freq = parseInt(minute.split('*/')[1]);
     return { interval: 'minutes', frequency: freq };
   }
 
-  // Every X hours
+  return null;
+}
+
+function matchHoursPattern(parts: {
+  minute: string;
+  hour: string;
+  day: string;
+  month: string;
+  dayOfWeek: string;
+}): HumanReadableSchedule | null {
+  const { hour, day, month, dayOfWeek } = parts;
+
   if (hour.includes('*/') && day === '*' && month === '*' && dayOfWeek === '*') {
     const freq = parseInt(hour.split('*/')[1]);
     return { interval: 'hours', frequency: freq };
   }
 
-  // Daily at specific time
+  return null;
+}
+
+function matchDailyPattern(parts: {
+  minute: string;
+  hour: string;
+  day: string;
+  month: string;
+  dayOfWeek: string;
+}): HumanReadableSchedule | null {
+  const { minute, hour, day, month, dayOfWeek } = parts;
+
   if (!hour.includes('*') && !minute.includes('*') && day === '*' && month === '*' && dayOfWeek === '*') {
-    return { 
-      interval: 'daily', 
-      frequency: 1, 
-      timeOfDay: `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}` 
+    return {
+      interval: 'daily',
+      frequency: 1,
+      timeOfDay: `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
     };
   }
 
-  // Weekly on specific day
+  return null;
+}
+
+function matchWeeklyPattern(parts: {
+  minute: string;
+  hour: string;
+  day: string;
+  month: string;
+  dayOfWeek: string;
+}): HumanReadableSchedule | null {
+  const { minute, hour, day, month, dayOfWeek } = parts;
+
   if (!dayOfWeek.includes('*') && day === '*' && month === '*') {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return { 
-      interval: 'weekly', 
-      frequency: 1, 
+    const timeOfDay = !hour.includes('*') && !minute.includes('*')
+      ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+      : '00:00';
+
+    return {
+      interval: 'weekly',
+      frequency: 1,
       dayOfWeek: dayNames[parseInt(dayOfWeek)] || 'Sunday',
-      timeOfDay: !hour.includes('*') && !minute.includes('*') ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}` : '00:00'
+      timeOfDay
     };
   }
 
-  return { interval: 'custom', frequency: 1 };
+  return null;
 }
 
 // Convert human-readable format to cron expression

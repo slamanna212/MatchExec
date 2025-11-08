@@ -1,4 +1,4 @@
-import type { Client} from 'discord.js';
+import type { Client, Message } from 'discord.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -1318,141 +1318,14 @@ export class QueueProcessor {
     }
 
     try {
-      
-      // Get match data with image info for recreating attachments
-      const matchData = await this.db.get<{
-        event_image_url?: string;
-      }>(`
-        SELECT event_image_url
-        FROM matches
-        WHERE id = ?
-      `, [matchId]);
-      
-      // Get all announcement messages for this match
-      const messages = await this.db.all<{
-        message_id: string;
-        channel_id: string;
-        message_type: string;
-      }>(`
-        SELECT message_id, channel_id, message_type
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-      `, [matchId]);
-
+      const matchData = await this.fetchMatchImageData(matchId);
+      const messages = await this.fetchMatchAnnouncementMessages(matchId);
 
       if (messages.length === 0) {
-        // Let's check if there are ANY messages for this match
-        const allMessages = await this.db.all<{
-          message_id: string;
-          channel_id: string;
-          message_type: string;
-        }>(`
-          SELECT message_id, channel_id, message_type
-          FROM discord_match_messages
-          WHERE match_id = ?
-        `, [matchId]);
-        
-        if (allMessages.length > 0) {
-        }
-        
         return true; // Not an error if no messages exist
       }
 
-      let successCount = 0;
-
-      for (const messageRecord of messages) {
-        try {
-          // Fetch the Discord channel
-          const channel = await this.client.channels.fetch(messageRecord.channel_id);
-          
-          if (!channel?.isTextBased() || !('messages' in channel)) {
-            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
-            continue;
-          }
-
-          // Fetch the Discord message
-          const message = await channel.messages.fetch(messageRecord.message_id);
-          
-          if (!message) {
-            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
-            continue;
-          }
-
-          
-          if (message.embeds[0]) {
-          }
-          
-          if (message.attachments.size > 0) {
-          }
-
-          // Create updated embed - copy the existing embed exactly but add signups closed message
-          const updatedEmbed = message.embeds[0] ? 
-            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
-          
-          
-          // Keep the image in the embed - don't remove it
-          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
-          if (updatedEmbed.data.image?.url) {
-          } else {
-          }
-          
-          // Just add a simple signups closed message at the bottom, don't change anything else
-          const existingFields = updatedEmbed.data.fields || [];
-          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
-          
-          if (signupStatusFieldIndex === -1) {
-            // Add new field at the bottom
-            updatedEmbed.addFields([{
-              name: '📋 Signup Status',
-              value: '🔒 **Signups are now closed**',
-              inline: false
-            }]);
-          } else {
-          }
-
-
-          // Recreate attachment if there's an event image to prevent Discord from stripping it
-          let attachment: AttachmentBuilder | undefined;
-          if (matchData?.event_image_url && matchData.event_image_url.trim()) {
-            try {
-              // Convert URL path to file system path for local files
-              const imagePath = path.join(process.cwd(), 'public', matchData.event_image_url.replace(/^\//, ''));
-              
-              if (fs.existsSync(imagePath)) {
-                // Create attachment for the event image
-                attachment = new AttachmentBuilder(imagePath, {
-                  name: `event_image.${path.extname(imagePath).slice(1)}`
-                });
-                
-                // Update embed to use attachment://filename to reference the reattached image
-                updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
-                
-              } else {
-                logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
-              }
-            } catch (error) {
-              logger.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
-            }
-          }
-
-          const editOptions: Record<string, unknown> = {
-            content: null, // Explicitly clear any content that might cause image display
-            embeds: [updatedEmbed],
-            components: [], // This removes all buttons
-            files: attachment ? [attachment] : [] // Include recreated attachment if available
-          };
-          
-
-          // Remove all action rows (signup buttons) but keep everything else the same
-          await message.edit(editOptions);
-          
-
-          successCount++;
-
-        } catch (error) {
-          logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
-        }
-      }
+      const successCount = await this.updateMessagesForClosure(messages, matchData?.event_image_url);
 
       if (successCount === 0) {
         logger.error(`❌ Failed to update any Discord messages for match ${matchId}`);
@@ -1460,11 +1333,120 @@ export class QueueProcessor {
       }
 
       return true;
-
     } catch (error) {
       logger.error(`❌ Error updating Discord messages for signup closure:`, error);
       return false;
     }
+  }
+
+  private async fetchMatchImageData(matchId: string): Promise<{ event_image_url?: string } | undefined> {
+    return await this.db!.get<{ event_image_url?: string }>(`
+      SELECT event_image_url
+      FROM matches
+      WHERE id = ?
+    `, [matchId]);
+  }
+
+  private async fetchMatchAnnouncementMessages(matchId: string): Promise<Array<{ message_id: string; channel_id: string; message_type: string }>> {
+    return await this.db!.all<{
+      message_id: string;
+      channel_id: string;
+      message_type: string;
+    }>(`
+      SELECT message_id, channel_id, message_type
+      FROM discord_match_messages
+      WHERE match_id = ? AND message_type = 'announcement'
+    `, [matchId]);
+  }
+
+  private async updateMessagesForClosure(
+    messages: Array<{ message_id: string; channel_id: string; message_type: string }>,
+    eventImageUrl?: string
+  ): Promise<number> {
+    let successCount = 0;
+
+    for (const messageRecord of messages) {
+      try {
+        const channel = await this.fetchTextChannel(messageRecord.channel_id);
+        if (!channel) continue;
+
+        const message = await channel.messages.fetch(messageRecord.message_id);
+        if (!message) {
+          logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+          continue;
+        }
+
+        const updatedEmbed = this.createClosedSignupEmbed(message);
+        const attachment = this.createEventAttachment(eventImageUrl, updatedEmbed);
+
+        await message.edit({
+          content: null,
+          embeds: [updatedEmbed],
+          components: [],
+          files: attachment ? [attachment] : []
+        });
+
+        successCount++;
+      } catch (error) {
+        logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
+      }
+    }
+
+    return successCount;
+  }
+
+  private async fetchTextChannel(channelId: string) {
+    const channel = await this.client.channels.fetch(channelId);
+
+    if (!channel?.isTextBased() || !('messages' in channel)) {
+      logger.warning(`⚠️ Channel ${channelId} is not a text channel`);
+      return null;
+    }
+
+    return channel;
+  }
+
+  private createClosedSignupEmbed(message: Message): EmbedBuilder {
+    const updatedEmbed = message.embeds[0] ?
+      EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+
+    const existingFields = updatedEmbed.data.fields || [];
+    const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+
+    if (signupStatusFieldIndex === -1) {
+      updatedEmbed.addFields([{
+        name: '📋 Signup Status',
+        value: '🔒 **Signups are now closed**',
+        inline: false
+      }]);
+    }
+
+    return updatedEmbed;
+  }
+
+  private createEventAttachment(eventImageUrl: string | undefined, embed: EmbedBuilder): AttachmentBuilder | undefined {
+    if (!eventImageUrl || !eventImageUrl.trim()) {
+      return undefined;
+    }
+
+    try {
+      const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        const extension = path.extname(imagePath).slice(1);
+        const fileName = `event_image.${extension}`;
+
+        embed.setImage(`attachment://${fileName}`);
+
+        return new AttachmentBuilder(imagePath, { name: fileName });
+      } 
+        logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
+      
+    } catch (error) {
+      logger.error(`❌ Error recreating attachment for ${eventImageUrl}:`, error);
+    }
+
+    return undefined;
   }
 
   private async updateTournamentMessagesForSignupClosure(tournamentId: string): Promise<boolean> {

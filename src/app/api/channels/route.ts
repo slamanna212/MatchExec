@@ -61,98 +61,33 @@ export async function POST(request: NextRequest) {
   try {
     const db = await getDbInstance();
     const body = await request.json();
-    
-    const {
-      discord_channel_id,
-      channel_type,
-      send_announcements = false,
-      send_reminders = false,
-      send_match_start = false,
-      send_signup_updates = false
-    } = body;
 
-    if (!discord_channel_id || !channel_type) {
-      return NextResponse.json(
-        { error: 'Channel ID and type are required' },
-        { status: 400 }
-      );
+    const channelData = extractChannelData(body);
+    const validationError = validateChannelInput(channelData);
+
+    if (validationError) {
+      return validationError;
     }
 
-    if (!['text', 'voice'].includes(channel_type)) {
-      return NextResponse.json(
-        { error: 'Channel type must be text or voice' },
-        { status: 400 }
-      );
+    const existenceError = await checkChannelExistence(db, channelData.discord_channel_id);
+    if (existenceError) {
+      return existenceError;
     }
 
-    // Block voice channel creation - voice channels are auto-created
-    if (channel_type === 'voice') {
-      return NextResponse.json(
-        { error: 'Voice channels are automatically created and cannot be manually added' },
-        { status: 400 }
-      );
-    }
-
-    // Check if channel already exists
-    const existing = await db.get(
-      'SELECT id FROM discord_channels WHERE discord_channel_id = ?',
-      [discord_channel_id]
-    );
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Channel already exists' },
-        { status: 409 }
-      );
-    }
-
-    // Get guild_id from discord_settings
-    const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1') as { guild_id?: string } | undefined;
-    
-    if (!discordSettings?.guild_id) {
+    const guildId = await fetchGuildId(db);
+    if (!guildId) {
       return NextResponse.json(
         { error: 'Discord guild not configured' },
         { status: 400 }
       );
     }
 
-    // Generate unique ID
-    const channelId = `discord_channel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const channelId = await createDiscordChannel(db, channelData, guildId);
 
-    // Map channel_type to Discord integer type
-    const discordType = channel_type === 'text' ? 0 : 2; // 0=text, 2=voice
-
-    await db.run(`
-      INSERT INTO discord_channels (
-        id, 
-        guild_id,
-        discord_channel_id, 
-        name,
-        type,
-        channel_type,
-        send_announcements,
-        send_reminders,
-        send_match_start,
-        send_signup_updates
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      channelId,
-      discordSettings.guild_id,
-      discord_channel_id,
-      `Channel ${discord_channel_id}`, // Default name, will be updated when names are refreshed
-      discordType,
-      channel_type,
-      channel_type === 'text' ? (send_announcements ? 1 : 0) : 0,
-      channel_type === 'text' ? (send_reminders ? 1 : 0) : 0,
-      channel_type === 'text' ? (send_match_start ? 1 : 0) : 0,
-      channel_type === 'text' ? (send_signup_updates ? 1 : 0) : 0
-    ]);
-
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       id: channelId,
-      message: 'Channel created successfully' 
+      message: 'Channel created successfully'
     });
   } catch (error) {
     logger.error('Error creating Discord channel:', error);
@@ -161,4 +96,101 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function extractChannelData(body: any) {
+  return {
+    discord_channel_id: body.discord_channel_id,
+    channel_type: body.channel_type,
+    send_announcements: body.send_announcements ?? false,
+    send_reminders: body.send_reminders ?? false,
+    send_match_start: body.send_match_start ?? false,
+    send_signup_updates: body.send_signup_updates ?? false
+  };
+}
+
+function validateChannelInput(data: ReturnType<typeof extractChannelData>) {
+  if (!data.discord_channel_id || !data.channel_type) {
+    return NextResponse.json(
+      { error: 'Channel ID and type are required' },
+      { status: 400 }
+    );
+  }
+
+  if (!['text', 'voice'].includes(data.channel_type)) {
+    return NextResponse.json(
+      { error: 'Channel type must be text or voice' },
+      { status: 400 }
+    );
+  }
+
+  if (data.channel_type === 'voice') {
+    return NextResponse.json(
+      { error: 'Voice channels are automatically created and cannot be manually added' },
+      { status: 400 }
+    );
+  }
+
+  return null;
+}
+
+async function checkChannelExistence(db: any, discordChannelId: string) {
+  const existing = await db.get(
+    'SELECT id FROM discord_channels WHERE discord_channel_id = ?',
+    [discordChannelId]
+  );
+
+  if (existing) {
+    return NextResponse.json(
+      { error: 'Channel already exists' },
+      { status: 409 }
+    );
+  }
+
+  return null;
+}
+
+async function fetchGuildId(db: any): Promise<string | null> {
+  const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1') as { guild_id?: string } | undefined;
+  return discordSettings?.guild_id || null;
+}
+
+async function createDiscordChannel(
+  db: any,
+  data: ReturnType<typeof extractChannelData>,
+  guildId: string
+): Promise<string> {
+  const channelId = `discord_channel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const discordType = data.channel_type === 'text' ? 0 : 2;
+
+  const getFlag = (flag: boolean) => (data.channel_type === 'text' && flag) ? 1 : 0;
+
+  await db.run(`
+    INSERT INTO discord_channels (
+      id,
+      guild_id,
+      discord_channel_id,
+      name,
+      type,
+      channel_type,
+      send_announcements,
+      send_reminders,
+      send_match_start,
+      send_signup_updates
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    channelId,
+    guildId,
+    data.discord_channel_id,
+    `Channel ${data.discord_channel_id}`,
+    discordType,
+    data.channel_type,
+    getFlag(data.send_announcements),
+    getFlag(data.send_reminders),
+    getFlag(data.send_match_start),
+    getFlag(data.send_signup_updates)
+  ]);
+
+  return channelId;
 }
