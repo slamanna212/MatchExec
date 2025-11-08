@@ -1,6 +1,6 @@
 'use client'
 
-import { Text, Stack, Grid, Button, Group, Checkbox } from '@mantine/core';
+import { Text, Stack, Button, Group, Checkbox } from '@mantine/core';
 import type { SelectedMapCard, GameMode, GameMapWithMode } from './useMatchForm';
 import { SelectedMapsList } from './SelectedMapsList';
 import { MapSelector } from './MapSelector';

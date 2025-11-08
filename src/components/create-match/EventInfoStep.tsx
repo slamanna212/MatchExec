@@ -1,6 +1,6 @@
 'use client'
 
-import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Box, Button } from '@mantine/core';
+import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button } from '@mantine/core';
 import type { MatchFormData } from './useMatchForm';
 import { EventImageUpload } from './EventImageUpload';
 
@@ -13,7 +13,6 @@ interface EventInfoStepProps {
   onImageUpload: (file: File | null) => Promise<void>;
   onRemoveImage: () => Promise<void>;
   uploadingImage: boolean;
-  setImagePreview: (url: string | null) => void;
 }
 
 export function EventInfoStep({
@@ -24,8 +23,7 @@ export function EventInfoStep({
   onNext,
   onImageUpload,
   onRemoveImage,
-  uploadingImage,
-  setImagePreview
+  uploadingImage
 }: EventInfoStepProps) {
   return (
     <Stack>

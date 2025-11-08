@@ -1,7 +1,8 @@
 'use client'
 
-import { Text, Stack, TextInput, Textarea, Group, Select, NumberInput, Switch, Box, Button } from '@mantine/core';
-import type { TournamentFormat, TournamentFormData } from '../create-tournament/useTournamentForm';
+import { Text, Stack, TextInput, Textarea, Group, Select, NumberInput, Switch, Button } from '@mantine/core';
+import type { TournamentFormData } from '../create-tournament/useTournamentForm';
+import type { TournamentFormat } from '@/shared/types';
 import { EventImageUpload } from '../create-match/EventImageUpload';
 
 interface TournamentEventInfoStepProps {
@@ -14,7 +15,6 @@ interface TournamentEventInfoStepProps {
   onBack: () => void;
   onNext: () => void;
   canProceed: boolean;
-  setImagePreview: (url: string | null) => void;
 }
 
 export function TournamentEventInfoStep({
@@ -26,8 +26,7 @@ export function TournamentEventInfoStep({
   onRemoveImage,
   onBack,
   onNext,
-  canProceed,
-  setImagePreview
+  canProceed
 }: TournamentEventInfoStepProps) {
   return (
     <Stack>

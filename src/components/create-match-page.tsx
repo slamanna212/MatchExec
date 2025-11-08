@@ -302,7 +302,7 @@ export function CreateMatchPage() {
 
       try {
         await saveMapNotes(newMatch.id, selectedMaps);
-      } catch (noteError) {
+      } catch {
         showError('Failed to save map notes.');
       }
 
@@ -376,7 +376,6 @@ export function CreateMatchPage() {
             onImageUpload={handleImageUpload}
             onRemoveImage={handleRemoveImage}
             uploadingImage={uploadingImage}
-            setImagePreview={setImagePreview}
           />
         )}
 

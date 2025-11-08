@@ -33,7 +33,7 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
     if (body[field.key] !== undefined) {
       updateFields.push(`${field.key} = ?`);
       const value = body[field.key] || field.default;
-      updateValues.push(field.transform ? field.transform(value as boolean) : value);
+      updateValues.push('transform' in field ? field.transform(value as boolean) : value);
     }
   }
 

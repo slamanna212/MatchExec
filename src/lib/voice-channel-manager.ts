@@ -1,6 +1,6 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
-import type { Database } from 'sqlite3';
+import type { Database } from '../../lib/database/connection';
 
 interface VoiceChannelCreationResult {
   success: boolean;

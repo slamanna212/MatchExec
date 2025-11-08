@@ -81,7 +81,7 @@ async function checkEventCapacity(
 
   const isFull = (participantCount?.count ?? 0) >= (eventData?.max_signups || 16);
 
-  return { isFull, eventData };
+  return { isFull, eventData: eventData ?? null };
 }
 
 /**

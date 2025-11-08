@@ -76,28 +76,32 @@ export function useMatchForm() {
 
   // Load from session storage on mount
   useEffect(() => {
-    const savedFormData = sessionStorage.getItem('createMatchFormData');
-    if (savedFormData) {
-      try {
-        const parsedData = JSON.parse(savedFormData);
-        setFormData(parsedData);
-        if (parsedData.eventImageUrl) {
-          setImagePreview(parsedData.eventImageUrl);
+    const loadSavedData = () => {
+      const savedFormData = sessionStorage.getItem('createMatchFormData');
+      if (savedFormData) {
+        try {
+          const parsedData = JSON.parse(savedFormData);
+          setFormData(parsedData);
+          if (parsedData.eventImageUrl) {
+            setImagePreview(parsedData.eventImageUrl);
+          }
+        } catch {
+          // Failed to parse saved form data
         }
-      } catch (error) {
-        console.error('Error parsing saved form data:', error);
       }
-    }
 
-    const savedMaps = sessionStorage.getItem('createMatchSelectedMaps');
-    if (savedMaps) {
-      try {
-        const parsedMaps = JSON.parse(savedMaps);
-        setSelectedMaps(parsedMaps);
-      } catch (error) {
-        console.error('Error parsing saved maps:', error);
+      const savedMaps = sessionStorage.getItem('createMatchSelectedMaps');
+      if (savedMaps) {
+        try {
+          const parsedMaps = JSON.parse(savedMaps);
+          setSelectedMaps(parsedMaps);
+        } catch {
+          // Failed to parse saved maps
+        }
       }
-    }
+    };
+
+    loadSavedData();
   }, []);
 
   // Save to session storage on changes

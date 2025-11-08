@@ -46,19 +46,23 @@ export function useTournamentForm() {
 
   // Load from session storage on mount
   useEffect(() => {
-    const savedFormData = sessionStorage.getItem('tournamentFormData');
-    if (savedFormData) {
-      try {
-        const parsedData = JSON.parse(savedFormData);
-        setFormData(parsedData);
+    const loadSavedData = () => {
+      const savedFormData = sessionStorage.getItem('tournamentFormData');
+      if (savedFormData) {
+        try {
+          const parsedData = JSON.parse(savedFormData);
+          setFormData(parsedData);
 
-        if (parsedData.eventImageUrl) {
-          setImagePreview(parsedData.eventImageUrl);
+          if (parsedData.eventImageUrl) {
+            setImagePreview(parsedData.eventImageUrl);
+          }
+        } catch {
+          // Failed to parse saved form data
         }
-      } catch (error) {
-        console.error('Error parsing saved form data:', error);
       }
-    }
+    };
+
+    loadSavedData();
   }, []);
 
   // Save to session storage on changes
@@ -66,7 +70,7 @@ export function useTournamentForm() {
     sessionStorage.setItem('tournamentFormData', JSON.stringify(formData));
   }, [formData]);
 
-  const updateFormData = (key: keyof TournamentFormData, value: string | number | TournamentFormat | string[] | boolean | undefined) => {
+  const updateFormData = (key: keyof TournamentFormData, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [key]: value

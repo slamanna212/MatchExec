@@ -229,7 +229,6 @@ export function CreateTournamentPage() {
             onBack={handleBack}
             onNext={handleNext}
             canProceed={canProceedFromStep(2)}
-            setImagePreview={setImagePreview}
           />
         )}
 

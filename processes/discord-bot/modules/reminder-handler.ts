@@ -41,7 +41,8 @@ async function getEventDataForSignup(
     WHERE m.id = ?
   `;
 
-  return await db.get<EventData>(query, [matchId]);
+  const result = await db.get<EventData>(query, [matchId]);
+  return result ?? null;
 }
 
 /**
