@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDbInstance } from './database-init';
+import type { Database } from '../../lib/database/connection';
 
 interface GameMode {
   id: string;
@@ -140,149 +141,196 @@ export async function generateSingleEliminationMatches(
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
-  // Get tournament info for ruleset and description
-  const tournament = await db.get('SELECT ruleset, description FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null } | undefined;
-  const tournamentRuleset = tournament?.ruleset || 'casual';
-  const tournamentDescription = tournament?.description || null;
+  const { tournamentRuleset, tournamentDescription } = await fetchTournamentInfo(db, tournamentId);
+  const { gameModes, gameMaps } = await fetchGameData(db, gameId);
 
-  // Get game modes and maps for the game (exclude workshop/custom modes for tournaments)
+  const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
+  const tournamentMaps = filterTournamentMaps(gameMaps);
+
+  return await generateMatchesFromPairings(
+    db,
+    sortedAssignments,
+    tournamentId,
+    gameId,
+    roundsPerMatch,
+    tournamentRuleset,
+    tournamentDescription,
+    gameModes,
+    tournamentMaps
+  );
+}
+
+async function fetchTournamentInfo(db: Database, tournamentId: string) {
+  const tournament = await db.get('SELECT ruleset, description FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null } | undefined;
+  return {
+    tournamentRuleset: tournament?.ruleset || 'casual',
+    tournamentDescription: tournament?.description || null
+  };
+}
+
+async function fetchGameData(db: Database, gameId: string) {
   const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"', [gameId]) as GameMode[];
   const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
-  
+
   if (gameModes.length === 0 || gameMaps.length === 0) {
     throw new Error('No game modes or maps found for this game');
   }
-  
-  // Sort bracket assignments by position to ensure proper pairing
-  const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
-  
+
+  return { gameModes, gameMaps };
+}
+
+function filterTournamentMaps(gameMaps: GameMap[]): GameMap[] {
+  return gameMaps.filter(m => {
+    const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
+                               !m.id.toLowerCase().includes('workshop') &&
+                               !m.name.toLowerCase().includes('custom') &&
+                               !m.name.toLowerCase().includes('workshop');
+    return notCustomOrWorkshop;
+  });
+}
+
+async function generateMatchesFromPairings(
+  db: Database,
+  sortedAssignments: BracketAssignment[],
+  tournamentId: string,
+  gameId: string,
+  roundsPerMatch: number,
+  tournamentRuleset: string,
+  tournamentDescription: string | null,
+  gameModes: GameMode[],
+  tournamentMaps: GameMap[]
+): Promise<GeneratedMatch[]> {
   const matches: GeneratedMatch[] = [];
-  const tournamentMatches: TournamentMatchInfo[] = [];
-  
-  // Pair teams for first round (position 0 vs 1, 2 vs 3, etc.)
+
   for (let i = 0; i < sortedAssignments.length; i += 2) {
     const team1Assignment = sortedAssignments[i];
     const team2Assignment = sortedAssignments[i + 1];
-    
+
     if (!team2Assignment) {
-      // Odd number of teams - give bye to last team (handle later in progression)
-      continue;
+      continue; // Odd number of teams - give bye
     }
-    
+
     const matchId = uuidv4();
-    const matchOrder = Math.floor(i / 2) + 1;
-    
-    // Get team names
+
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
 
-    // Filter out custom and workshop maps from all maps
-    const tournamentMaps = gameMaps.filter(m => {
-      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
-                                 !m.id.toLowerCase().includes('workshop') &&
-                                 !m.name.toLowerCase().includes('custom') &&
-                                 !m.name.toLowerCase().includes('workshop');
-      return notCustomOrWorkshop;
-    });
-
-    // Select different modes for each round
-    const selectedMaps: string[] = [];
-    const selectedModes: string[] = [];
-
-    for (let round = 0; round < roundsPerMatch; round++) {
-      let selectedMode: GameMode | null = null;
-      let availableMapPool: GameMap[] = [];
-
-      // Try to find a mode that has unused maps
-      const modestoTry = [...gameModes];
-
-      // Shuffle modes to ensure randomness
-      for (let i = modestoTry.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [modestoTry[i], modestoTry[j]] = [modestoTry[j], modestoTry[i]];
-      }
-
-      for (const mode of modestoTry) {
-        // Get maps for this specific mode
-        const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
-
-        if (mapsForMode.length === 0) {
-          continue; // No maps for this mode, try next
-        }
-
-        // Check if there are unused maps for this mode
-        const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
-
-        if (unusedMaps.length > 0) {
-          selectedMode = mode;
-          availableMapPool = unusedMaps;
-          break;
-        }
-      }
-
-      // If no mode has unused maps, fall back to any available map (should be very rare)
-      if (!selectedMode || availableMapPool.length === 0) {
-        const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
-        if (allAvailableMaps.length === 0) {
-          throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
-        }
-        const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
-        selectedMaps.push(randomMap.id);
-
-        // Find the mode for this map
-        const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
-        selectedModes.push(mapMode.id);
-      } else {
-        const randomMap = availableMapPool[Math.floor(Math.random() * availableMapPool.length)];
-        selectedMaps.push(randomMap.id);
-        selectedModes.push(selectedMode.id);
-      }
-    }
-
-    // Use the first selected mode for compatibility (legacy field)
+    const { selectedMaps, selectedModes } = selectMapsForMatch(roundsPerMatch, gameModes, tournamentMaps);
     const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
 
-    // Create match record
-    const generatedMatch: GeneratedMatch = {
-      id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
-      description: tournamentDescription || undefined,
-      game_id: gameId,
-      game_mode_id: primaryMode!.id,
-      map_id: selectedMaps[0], // First map for compatibility
-      maps: selectedMaps, // All maps for the match
-      rounds_per_match: roundsPerMatch,
-      max_participants: 12, // Default for team matches
-      status: 'assign',
-      match_type: 'tournament',
-      tournament_id: tournamentId,
-      tournament_round: 1,
-      tournament_bracket_type: 'winners',
-      rules: tournamentRuleset,
-      scheduled_time: undefined, // Tournament matches should not auto-start
-      team1_name: team1?.team_name,
-      team2_name: team2?.team_name,
-      team1_id: team1Assignment.teamId, // Red team
-      team2_id: team2Assignment.teamId  // Blue team
-    };
-    
+    const generatedMatch: GeneratedMatch = createMatchRecord(
+      matchId,
+      team1,
+      team2,
+      tournamentId,
+      gameId,
+      roundsPerMatch,
+      tournamentRuleset,
+      tournamentDescription,
+      selectedMaps,
+      primaryMode!,
+      team1Assignment,
+      team2Assignment
+    );
+
     matches.push(generatedMatch);
-    
-    // Create tournament match info
-    const tournamentMatch: TournamentMatchInfo = {
-      id: matchId,
-      tournament_id: tournamentId,
-      round: 1,
-      bracket_type: 'winners',
-      team1_id: team1Assignment.teamId,
-      team2_id: team2Assignment.teamId,
-      match_order: matchOrder
-    };
-    
-    tournamentMatches.push(tournamentMatch);
   }
-  
+
   return matches;
+}
+
+function selectMapsForMatch(
+  roundsPerMatch: number,
+  gameModes: GameMode[],
+  tournamentMaps: GameMap[]
+): { selectedMaps: string[]; selectedModes: string[] } {
+  const selectedMaps: string[] = [];
+  const selectedModes: string[] = [];
+
+  for (let round = 0; round < roundsPerMatch; round++) {
+    const { mapId, modeId } = selectMapForRound(selectedMaps, gameModes, tournamentMaps, round);
+    selectedMaps.push(mapId);
+    selectedModes.push(modeId);
+  }
+
+  return { selectedMaps, selectedModes };
+}
+
+function selectMapForRound(
+  selectedMaps: string[],
+  gameModes: GameMode[],
+  tournamentMaps: GameMap[],
+  round: number
+): { mapId: string; modeId: string } {
+  const shuffledModes = shuffleArray([...gameModes]);
+
+  for (const mode of shuffledModes) {
+    const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
+    const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
+
+    if (unusedMaps.length > 0) {
+      const randomMap = unusedMaps[Math.floor(Math.random() * unusedMaps.length)];
+      return { mapId: randomMap.id, modeId: mode.id };
+    }
+  }
+
+  // Fallback: use any available map
+  const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
+  if (allAvailableMaps.length === 0) {
+    throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
+  }
+
+  const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
+  const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
+
+  return { mapId: randomMap.id, modeId: mapMode.id };
+}
+
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function createMatchRecord(
+  matchId: string,
+  team1: TeamRecord | undefined,
+  team2: TeamRecord | undefined,
+  tournamentId: string,
+  gameId: string,
+  roundsPerMatch: number,
+  tournamentRuleset: string,
+  tournamentDescription: string | null,
+  selectedMaps: string[],
+  primaryMode: GameMode,
+  team1Assignment: BracketAssignment,
+  team2Assignment: BracketAssignment
+): GeneratedMatch {
+  return {
+    id: matchId,
+    name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+    description: tournamentDescription || undefined,
+    game_id: gameId,
+    game_mode_id: primaryMode.id,
+    map_id: selectedMaps[0],
+    maps: selectedMaps,
+    rounds_per_match: roundsPerMatch,
+    max_participants: 12,
+    status: 'assign',
+    match_type: 'tournament',
+    tournament_id: tournamentId,
+    tournament_round: 1,
+    tournament_bracket_type: 'winners',
+    rules: tournamentRuleset,
+    scheduled_time: undefined,
+    team1_name: team1?.team_name,
+    team2_name: team2?.team_name,
+    team1_id: team1Assignment.teamId,
+    team2_id: team2Assignment.teamId
+  };
 }
 
 /**
@@ -296,7 +344,29 @@ export async function generateNextRoundMatches(
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
-  // Get tournament info
+  const tournament = await fetchTournamentForNextRound(db, tournamentId);
+  const previousRoundMatches = await fetchPreviousRoundMatches(db, tournamentId, currentRound, bracketType);
+
+  if (shouldEndTournament(previousRoundMatches, bracketType)) {
+    return [];
+  }
+
+  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id);
+  const tournamentMaps = filterTournamentMaps(gameMaps);
+
+  return await generateNextRoundMatchesFromWinners(
+    db,
+    previousRoundMatches,
+    tournament,
+    tournamentId,
+    currentRound,
+    bracketType,
+    gameModes,
+    tournamentMaps
+  );
+}
+
+async function fetchTournamentForNextRound(db: Database, tournamentId: string) {
   const tournament = await db.get(`
     SELECT t.*, g.id as game_id
     FROM tournaments t
@@ -307,9 +377,17 @@ export async function generateNextRoundMatches(
   if (!tournament) {
     throw new Error('Tournament not found');
   }
-  
-  // Get completed matches from previous round
-  const previousRoundMatches = await db.all(`
+
+  return tournament;
+}
+
+async function fetchPreviousRoundMatches(
+  db: Database,
+  tournamentId: string,
+  currentRound: number,
+  bracketType: string
+): Promise<MatchResult[]> {
+  const matches = await db.all(`
     SELECT m.*, tm.team1_id, tm.team2_id, tm.bracket_type, tm.match_order
     FROM matches m
     JOIN tournament_matches tm ON m.id = tm.match_id
@@ -320,121 +398,58 @@ export async function generateNextRoundMatches(
       AND m.winner_team IS NOT NULL
     ORDER BY tm.match_order
   `, [tournamentId, currentRound, bracketType]) as MatchResult[];
-  
-  if (previousRoundMatches.length === 0) {
+
+  if (matches.length === 0) {
     throw new Error('No completed matches found for previous round');
   }
-  
-  // If only one match remains, this might be the final
-  if (previousRoundMatches.length === 1 && bracketType === 'winners') {
-    // This was the final match, tournament should be complete
-    return [];
-  }
-  
-  // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
-  
+
+  return matches;
+}
+
+function shouldEndTournament(previousRoundMatches: MatchResult[], bracketType: string): boolean {
+  return previousRoundMatches.length === 1 && bracketType === 'winners';
+}
+
+async function generateNextRoundMatchesFromWinners(
+  db: Database,
+  previousRoundMatches: MatchResult[],
+  tournament: TournamentRecord & { description?: string | null },
+  tournamentId: string,
+  currentRound: number,
+  bracketType: 'winners' | 'losers' | 'final',
+  gameModes: GameMode[],
+  tournamentMaps: GameMap[]
+): Promise<GeneratedMatch[]> {
   const matches: GeneratedMatch[] = [];
-  const tournamentMatches: TournamentMatchInfo[] = [];
-  
-  // Pair winners for next round
+  const nextRound = currentRound + 1;
+
   for (let i = 0; i < previousRoundMatches.length; i += 2) {
     const match1 = previousRoundMatches[i];
     const match2 = previousRoundMatches[i + 1];
-    
+
     if (!match2) {
-      // Odd number of matches - winner gets bye to next round
-      continue;
+      continue; // Odd number - bye
     }
-    
+
     const matchId = uuidv4();
-    const nextRound = currentRound + 1;
-    const matchOrder = Math.floor(i / 2) + 1;
-    
-    // Get winner team IDs
+
     const winner1TeamId = match1.winner_team;
     const winner2TeamId = match2.winner_team;
-    
-    // Get team names
+
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
 
-    // Filter out custom and workshop maps from all maps
-    const tournamentMaps = gameMaps.filter(m => {
-      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
-                                 !m.id.toLowerCase().includes('workshop') &&
-                                 !m.name.toLowerCase().includes('custom') &&
-                                 !m.name.toLowerCase().includes('workshop');
-      return notCustomOrWorkshop;
-    });
-
-    // Select maps for each round, trying different modes to avoid duplicates
-    const selectedMaps: string[] = [];
-    const selectedModes: string[] = [];
-
-    for (let round = 0; round < tournament.rounds_per_match; round++) {
-      let selectedMode: GameMode | null = null;
-      let availableMapPool: GameMap[] = [];
-
-      // Try to find a mode that has unused maps
-      const modestoTry = [...gameModes];
-
-      // Shuffle modes to ensure randomness
-      for (let i = modestoTry.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [modestoTry[i], modestoTry[j]] = [modestoTry[j], modestoTry[i]];
-      }
-
-      for (const mode of modestoTry) {
-        // Get maps for this specific mode
-        const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
-
-        if (mapsForMode.length === 0) {
-          continue; // No maps for this mode, try next
-        }
-
-        // Check if there are unused maps for this mode
-        const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
-
-        if (unusedMaps.length > 0) {
-          selectedMode = mode;
-          availableMapPool = unusedMaps;
-          break;
-        }
-      }
-
-      // If no mode has unused maps, fall back to any available map (should be very rare)
-      if (!selectedMode || availableMapPool.length === 0) {
-        const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
-        if (allAvailableMaps.length === 0) {
-          throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
-        }
-        const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
-        selectedMaps.push(randomMap.id);
-
-        // Find the mode for this map
-        const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
-        selectedModes.push(mapMode.id);
-      } else {
-        const randomMap = availableMapPool[Math.floor(Math.random() * availableMapPool.length)];
-        selectedMaps.push(randomMap.id);
-        selectedModes.push(selectedMode.id);
-      }
-    }
-
-    // Use the first selected mode for compatibility (legacy field)
+    const { selectedMaps, selectedModes } = selectMapsForMatch(tournament.rounds_per_match, gameModes, tournamentMaps);
     const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
 
-    // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Winner 1'} vs ${team2?.team_name || 'Winner 2'}`,
       description: tournament.description || undefined,
       game_id: tournament.game_id,
       game_mode_id: primaryMode!.id,
-      map_id: selectedMaps[0], // First map for compatibility
-      maps: selectedMaps, // All maps for the match
+      map_id: selectedMaps[0],
+      maps: selectedMaps,
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
       status: 'assign',
@@ -445,33 +460,19 @@ export async function generateNextRoundMatches(
       rules: tournament.ruleset,
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
-      team1_id: winner1TeamId, // Red team
-      team2_id: winner2TeamId  // Blue team
-    };
-    
-    matches.push(generatedMatch);
-    
-    // Create tournament match info
-    const tournamentMatch: TournamentMatchInfo = {
-      id: matchId,
-      tournament_id: tournamentId,
-      round: nextRound,
-      bracket_type: bracketType,
       team1_id: winner1TeamId,
-      team2_id: winner2TeamId,
-      match_order: matchOrder,
-      parent_match1_id: match1.id,
-      parent_match2_id: match2.id
+      team2_id: winner2TeamId
     };
-    
-    tournamentMatches.push(tournamentMatch);
+
+    matches.push(generatedMatch);
   }
-  
+
   return matches;
 }
 
 /**
  * Generate first round matches for double elimination tournament
+ * This is the same as single elimination for the first round (winners bracket)
  */
 export async function generateDoubleEliminationMatches(
   tournamentId: string,
@@ -480,149 +481,15 @@ export async function generateDoubleEliminationMatches(
   roundsPerMatch: number,
   _startTime?: Date
 ): Promise<GeneratedMatch[]> {
-  const db = await getDbInstance();
-
-  // Get tournament info for description
-  const tournament = await db.get('SELECT description FROM tournaments WHERE id = ?', [tournamentId]) as { description: string | null } | undefined;
-  const tournamentDescription = tournament?.description || null;
-
-  // Get game modes and maps for the game
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [gameId]) as GameMode[];
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
-  
-  if (gameModes.length === 0 || gameMaps.length === 0) {
-    throw new Error('No game modes or maps found for this game');
-  }
-  
-  // Sort bracket assignments by position to ensure proper pairing
-  const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
-  
-  const matches: GeneratedMatch[] = [];
-  const tournamentMatches: TournamentMatchInfo[] = [];
-  
-  // Generate winner's bracket first round (same as single elimination)
-  for (let i = 0; i < sortedAssignments.length; i += 2) {
-    const team1Assignment = sortedAssignments[i];
-    const team2Assignment = sortedAssignments[i + 1];
-    
-    if (!team2Assignment) {
-      // Odd number of teams - give bye to last team
-      continue;
-    }
-    
-    const matchId = uuidv4();
-    const matchOrder = Math.floor(i / 2) + 1;
-    
-    // Get team names
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Assignment.teamId]) as TeamRecord | undefined;
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Assignment.teamId]) as TeamRecord | undefined;
-
-    // Filter out custom and workshop maps from all maps
-    const tournamentMaps = gameMaps.filter(m => {
-      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
-                                 !m.id.toLowerCase().includes('workshop') &&
-                                 !m.name.toLowerCase().includes('custom') &&
-                                 !m.name.toLowerCase().includes('workshop');
-      return notCustomOrWorkshop;
-    });
-
-    // Select maps for each round, trying different modes to avoid duplicates
-    const selectedMaps: string[] = [];
-    const selectedModes: string[] = [];
-
-    for (let round = 0; round < roundsPerMatch; round++) {
-      let selectedMode: GameMode | null = null;
-      let availableMapPool: GameMap[] = [];
-
-      // Try to find a mode that has unused maps
-      const modestoTry = [...gameModes];
-
-      // Shuffle modes to ensure randomness
-      for (let i = modestoTry.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [modestoTry[i], modestoTry[j]] = [modestoTry[j], modestoTry[i]];
-      }
-
-      for (const mode of modestoTry) {
-        // Get maps for this specific mode
-        const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
-
-        if (mapsForMode.length === 0) {
-          continue; // No maps for this mode, try next
-        }
-
-        // Check if there are unused maps for this mode
-        const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
-
-        if (unusedMaps.length > 0) {
-          selectedMode = mode;
-          availableMapPool = unusedMaps;
-          break;
-        }
-      }
-
-      // If no mode has unused maps, fall back to any available map (should be very rare)
-      if (!selectedMode || availableMapPool.length === 0) {
-        const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
-        if (allAvailableMaps.length === 0) {
-          throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
-        }
-        const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
-        selectedMaps.push(randomMap.id);
-
-        // Find the mode for this map
-        const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
-        selectedModes.push(mapMode.id);
-      } else {
-        const randomMap = availableMapPool[Math.floor(Math.random() * availableMapPool.length)];
-        selectedMaps.push(randomMap.id);
-        selectedModes.push(selectedMode.id);
-      }
-    }
-
-    // Use the first selected mode for compatibility (legacy field)
-    const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
-
-    // Create match record
-    const generatedMatch: GeneratedMatch = {
-      id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
-      description: tournamentDescription || undefined,
-      game_id: gameId,
-      game_mode_id: primaryMode!.id,
-      map_id: selectedMaps[0], // First map for compatibility
-      maps: selectedMaps, // All maps for the match
-      rounds_per_match: roundsPerMatch,
-      max_participants: 12,
-      status: 'assign',
-      match_type: 'tournament',
-      tournament_id: tournamentId,
-      tournament_round: 1,
-      tournament_bracket_type: 'winners',
-      scheduled_time: undefined, // Tournament matches should not auto-start
-      team1_name: team1?.team_name,
-      team2_name: team2?.team_name,
-      team1_id: team1Assignment.teamId, // Red team
-      team2_id: team2Assignment.teamId  // Blue team
-    };
-    
-    matches.push(generatedMatch);
-    
-    // Create tournament match info
-    const tournamentMatch: TournamentMatchInfo = {
-      id: matchId,
-      tournament_id: tournamentId,
-      round: 1,
-      bracket_type: 'winners',
-      team1_id: team1Assignment.teamId,
-      team2_id: team2Assignment.teamId,
-      match_order: matchOrder
-    };
-    
-    tournamentMatches.push(tournamentMatch);
-  }
-  
-  return matches;
+  // Double elimination first round is identical to single elimination
+  // Both create the initial winners bracket matches
+  return generateSingleEliminationMatches(
+    tournamentId,
+    bracketAssignments,
+    gameId,
+    roundsPerMatch,
+    _startTime
+  );
 }
 
 /**
@@ -633,36 +500,41 @@ export async function generateLosersBracketMatches(
   eliminatedFromWinnersRound: number,
   eliminatedTeamIds: string[]
 ): Promise<GeneratedMatch[]> {
-  const db = await getDbInstance();
-
   if (eliminatedTeamIds.length === 0) {
     return [];
   }
 
-  // Get tournament info
-  const tournament = await db.get(`
-    SELECT t.*, g.id as game_id
-    FROM tournaments t
-    JOIN games g ON t.game_id = g.id
-    WHERE t.id = ?
-  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
+  const db = await getDbInstance();
 
-  if (!tournament) {
-    throw new Error('Tournament not found');
-  }
-  
-  // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
-  
-  const matches: GeneratedMatch[] = [];
-  const tournamentMatches: TournamentMatchInfo[] = [];
-  
-  // Calculate loser's bracket round number
+  const tournament = await fetchTournamentForNextRound(db, tournamentId);
+  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id);
+  const tournamentMaps = filterTournamentMaps(gameMaps);
+
+  const losersBracketRound = calculateLosersBracketRound(eliminatedFromWinnersRound);
+  const allTeamsInRound = await mergeTeamsForLosersBracket(db, tournamentId, losersBracketRound, eliminatedTeamIds);
+
+  return await generateLosersBracketMatchesFromTeams(
+    db,
+    allTeamsInRound,
+    tournament,
+    tournamentId,
+    losersBracketRound,
+    gameModes,
+    tournamentMaps
+  );
+}
+
+function calculateLosersBracketRound(eliminatedFromWinnersRound: number): number {
   // In double elimination, teams from WB round N go to LB round (2*N-1) if N=1, or (2*N-2) if N>1
-  const losersBracketRound = eliminatedFromWinnersRound === 1 ? 1 : (eliminatedFromWinnersRound * 2) - 2;
-  
-  // Get existing teams already in this loser's bracket round
+  return eliminatedFromWinnersRound === 1 ? 1 : (eliminatedFromWinnersRound * 2) - 2;
+}
+
+async function mergeTeamsForLosersBracket(
+  db: Database,
+  tournamentId: string,
+  losersBracketRound: number,
+  eliminatedTeamIds: string[]
+): Promise<string[]> {
   const existingTeamsInRound = await db.all(`
     SELECT tm.team1_id, tm.team2_id, tm.match_order
     FROM tournament_matches tm
@@ -670,8 +542,7 @@ export async function generateLosersBracketMatches(
     WHERE tm.tournament_id = ? AND tm.bracket_type = 'losers' AND tm.round = ?
     ORDER BY tm.match_order
   `, [tournamentId, losersBracketRound]) as TeamMatchInfo[];
-  
-  // Merge eliminated teams with existing teams in this round
+
   const allTeamsInRound = [...eliminatedTeamIds];
   existingTeamsInRound.forEach(match => {
     if (match.team1_id && !allTeamsInRound.includes(match.team1_id)) {
@@ -681,99 +552,45 @@ export async function generateLosersBracketMatches(
       allTeamsInRound.push(match.team2_id);
     }
   });
-  
-  // Pair teams for matches
+
+  return allTeamsInRound;
+}
+
+async function generateLosersBracketMatchesFromTeams(
+  db: Database,
+  allTeamsInRound: string[],
+  tournament: TournamentRecord & { description?: string | null },
+  tournamentId: string,
+  losersBracketRound: number,
+  gameModes: GameMode[],
+  tournamentMaps: GameMap[]
+): Promise<GeneratedMatch[]> {
+  const matches: GeneratedMatch[] = [];
+
   for (let i = 0; i < allTeamsInRound.length; i += 2) {
     const team1Id = allTeamsInRound[i];
     const team2Id = allTeamsInRound[i + 1];
-    
+
     if (!team2Id) {
-      // Odd number - this team gets a bye to next round
-      continue;
+      continue; // Odd number - bye
     }
-    
+
     const matchId = uuidv4();
-    const matchOrder = Math.floor(i / 2) + 1;
-    
-    // Get team names
+
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
 
-    // Filter out custom and workshop maps from all maps
-    const tournamentMaps = gameMaps.filter(m => {
-      const notCustomOrWorkshop = !m.id.toLowerCase().includes('custom') &&
-                                 !m.id.toLowerCase().includes('workshop') &&
-                                 !m.name.toLowerCase().includes('custom') &&
-                                 !m.name.toLowerCase().includes('workshop');
-      return notCustomOrWorkshop;
-    });
-
-    // Select maps for each round, trying different modes to avoid duplicates
-    const selectedMaps: string[] = [];
-    const selectedModes: string[] = [];
-
-    for (let round = 0; round < tournament.rounds_per_match; round++) {
-      let selectedMode: GameMode | null = null;
-      let availableMapPool: GameMap[] = [];
-
-      // Try to find a mode that has unused maps
-      const modestoTry = [...gameModes];
-
-      // Shuffle modes to ensure randomness
-      for (let i = modestoTry.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [modestoTry[i], modestoTry[j]] = [modestoTry[j], modestoTry[i]];
-      }
-
-      for (const mode of modestoTry) {
-        // Get maps for this specific mode
-        const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
-
-        if (mapsForMode.length === 0) {
-          continue; // No maps for this mode, try next
-        }
-
-        // Check if there are unused maps for this mode
-        const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
-
-        if (unusedMaps.length > 0) {
-          selectedMode = mode;
-          availableMapPool = unusedMaps;
-          break;
-        }
-      }
-
-      // If no mode has unused maps, fall back to any available map (should be very rare)
-      if (!selectedMode || availableMapPool.length === 0) {
-        const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
-        if (allAvailableMaps.length === 0) {
-          throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
-        }
-        const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
-        selectedMaps.push(randomMap.id);
-
-        // Find the mode for this map
-        const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
-        selectedModes.push(mapMode.id);
-      } else {
-        const randomMap = availableMapPool[Math.floor(Math.random() * availableMapPool.length)];
-        selectedMaps.push(randomMap.id);
-        selectedModes.push(selectedMode.id);
-      }
-    }
-
-    // Use the first selected mode for compatibility (legacy field)
+    const { selectedMaps, selectedModes } = selectMapsForMatch(tournament.rounds_per_match, gameModes, tournamentMaps);
     const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
 
-    // Create match record
     const generatedMatch: GeneratedMatch = {
       id: matchId,
       name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
       description: tournament.description || undefined,
       game_id: tournament.game_id,
       game_mode_id: primaryMode!.id,
-      map_id: selectedMaps[0], // First map for compatibility
-      maps: selectedMaps, // All maps for the match
+      map_id: selectedMaps[0],
+      maps: selectedMaps,
       rounds_per_match: tournament.rounds_per_match,
       max_participants: 12,
       status: 'assign',
@@ -783,26 +600,13 @@ export async function generateLosersBracketMatches(
       tournament_bracket_type: 'losers',
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
-      team1_id: team1Id, // Red team
-      team2_id: team2Id  // Blue team
-    };
-    
-    matches.push(generatedMatch);
-    
-    // Create tournament match info
-    const tournamentMatch: TournamentMatchInfo = {
-      id: matchId,
-      tournament_id: tournamentId,
-      round: losersBracketRound,
-      bracket_type: 'losers',
       team1_id: team1Id,
-      team2_id: team2Id,
-      match_order: matchOrder
+      team2_id: team2Id
     };
-    
-    tournamentMatches.push(tournamentMatch);
+
+    matches.push(generatedMatch);
   }
-  
+
   return matches;
 }
 

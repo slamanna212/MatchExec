@@ -218,31 +218,7 @@ export class AnnouncementHandler {
     startDate?: string,
     _matchId?: string
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    // Get game data from database for nice name and color
-    let gameName = gameId;
-    let gameColor = type === 'competitive' ? 0xff6b35 : 0x4caf50; // fallback colors
-    
-    if (this.db) {
-      try {
-        const gameData = await this.db.get<{name: string, color: string}>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [gameId]);
-        
-        
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            // Convert hex string to number (remove # and parse as hex)
-            const colorHex = gameData.color.replace('#', '');
-            gameColor = parseInt(colorHex, 16);
-          } else {
-          }
-        } else {
-        }
-      } catch (error) {
-        logger.error('Error fetching game data:', error);
-      }
-    }
+    const { gameName, gameColor } = await this.fetchGameDisplayData(gameId, type);
 
     const embed = new EmbedBuilder()
       .setTitle(name)
@@ -251,72 +227,117 @@ export class AnnouncementHandler {
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Sign up to participate!' });
 
-    // Add game field
+    this.addBasicFields(embed, gameName, type, _matchId);
+    this.addTimeFields(embed, startDate);
+    await this.addMapFields(embed, maps, gameId);
+    this.addLivestreamField(embed, livestreamLink);
+
+    const attachment = await this.createEventImageAttachment(eventImageUrl, embed);
+
+    return { embed, attachment };
+  }
+
+  private async fetchGameDisplayData(
+    gameId: string,
+    type: string
+  ): Promise<{ gameName: string; gameColor: number }> {
+    let gameName = gameId;
+    let gameColor = type === 'competitive' ? 0xff6b35 : 0x4caf50;
+
+    if (this.db) {
+      try {
+        const gameData = await this.db.get<{ name: string; color: string }>(`
+          SELECT name, color FROM games WHERE id = ?
+        `, [gameId]);
+
+        if (gameData) {
+          gameName = gameData.name;
+          if (gameData.color) {
+            const colorHex = gameData.color.replace('#', '');
+            gameColor = parseInt(colorHex, 16);
+          }
+        }
+      } catch (error) {
+        logger.error('Error fetching game data:', error);
+      }
+    }
+
+    return { gameName, gameColor };
+  }
+
+  private addBasicFields(embed: EmbedBuilder, gameName: string, type: string, matchId?: string): void {
     embed.addFields({ name: '🎯 Game', value: gameName, inline: true });
 
-    // Only add ruleset for matches, not tournaments
-    const isTournament = _matchId?.startsWith('tournament_');
+    const isTournament = matchId?.startsWith('tournament_');
     if (!isTournament) {
-      embed.addFields({ name: '🏆 Ruleset', value: type === 'competitive' ? 'Competitive' : 'Casual', inline: true });
-    }
-
-    // Add match time and countdown if start date is provided
-    if (startDate) {
-      const startTime = new Date(startDate);
-      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
-      
-      // Add match time in EDT and countdown
-      embed.addFields(
-        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
-        { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true }
-      );
-    }
-
-    // Add maps with notes if provided
-    if (maps.length > 0) {
-      let mapDisplay = '';
-      
-      // Get map names from database for better display (without notes)
-      if (this.db) {
-        try {
-          const mapNames: string[] = [];
-          for (const mapId of maps) {
-            // Strip timestamp from map ID if present
-            const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-            
-            try {
-              const mapData = await this.db.get<{name: string}>(`
-                SELECT name FROM game_maps 
-                WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
-                LIMIT 1
-              `, [gameId, cleanMapId, `%${cleanMapId}%`]);
-              
-              const displayName = mapData ? mapData.name : cleanMapId;
-              mapNames.push(`**${displayName}**`);
-            } catch (error) {
-              logger.error(`Error fetching map name for ${mapId}:`, error);
-              mapNames.push(`**${cleanMapId}**`);
-            }
-          }
-          
-          mapDisplay = mapNames.join('\n');
-        } catch (error) {
-          logger.error('Error fetching map names for Discord:', error);
-          mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
-        }
-      } else {
-        mapDisplay = `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
-      }
-      
-      // Add maps to embed
       embed.addFields({
-        name: '🗺️ Maps',
-        value: mapDisplay || 'Maps will be announced',
-        inline: false
+        name: '🏆 Ruleset',
+        value: type === 'competitive' ? 'Competitive' : 'Casual',
+        inline: true
       });
     }
+  }
 
-    // Add livestream link if provided
+  private addTimeFields(embed: EmbedBuilder, startDate?: string): void {
+    if (!startDate) return;
+
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+
+    embed.addFields(
+      { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+      { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true }
+    );
+  }
+
+  private async addMapFields(embed: EmbedBuilder, maps: string[], gameId: string): Promise<void> {
+    if (maps.length === 0) return;
+
+    const mapDisplay = await this.buildMapDisplay(maps, gameId);
+
+    embed.addFields({
+      name: '🗺️ Maps',
+      value: mapDisplay || 'Maps will be announced',
+      inline: false
+    });
+  }
+
+  private async buildMapDisplay(maps: string[], gameId: string): Promise<string> {
+    if (!this.db) {
+      return `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+    }
+
+    try {
+      const mapNames: string[] = [];
+      for (const mapId of maps) {
+        const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const displayName = await this.fetchMapName(gameId, cleanMapId);
+        mapNames.push(`**${displayName}**`);
+      }
+
+      return mapNames.join('\n');
+    } catch (error) {
+      logger.error('Error fetching map names for Discord:', error);
+      return `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
+    }
+  }
+
+  private async fetchMapName(gameId: string, cleanMapId: string): Promise<string> {
+    try {
+      const mapData = await this.db!.get<{ name: string }>(`
+        SELECT name FROM game_maps
+        WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
+        LIMIT 1
+      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+
+      return mapData ? mapData.name : cleanMapId;
+    } catch (error) {
+      logger.error(`Error fetching map name for ${cleanMapId}:`, error);
+      return cleanMapId;
+    }
+  }
+
+  private addLivestreamField(embed: EmbedBuilder, livestreamLink?: string): void {
     if (livestreamLink && livestreamLink.trim()) {
       embed.addFields({
         name: '📺 Livestream',
@@ -324,33 +345,35 @@ export class AnnouncementHandler {
         inline: true
       });
     }
+  }
 
-    let attachment: AttachmentBuilder | undefined;
-
-    // Add event image if provided - use as attachment like map images
-    if (eventImageUrl && eventImageUrl.trim()) {
-      try {
-        // Convert URL path to file system path for local files
-        const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
-        
-        if (fs.existsSync(imagePath)) {
-          // Create attachment for the event image
-          attachment = new AttachmentBuilder(imagePath, {
-            name: `event_image.${path.extname(imagePath).slice(1)}`
-          });
-          
-          // Use attachment://filename to reference the attached image
-          embed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
-          
-        } else {
-          logger.warning(`⚠️ Event image not found: ${imagePath}`);
-        }
-      } catch (error) {
-        logger.error(`❌ Error handling event image ${eventImageUrl}:`, error);
-      }
+  private async createEventImageAttachment(
+    eventImageUrl: string | undefined,
+    embed: EmbedBuilder
+  ): Promise<AttachmentBuilder | undefined> {
+    if (!eventImageUrl || !eventImageUrl.trim()) {
+      return undefined;
     }
 
-    return { embed, attachment };
+    try {
+      const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        const extension = path.extname(imagePath).slice(1);
+        const fileName = `event_image.${extension}`;
+
+        const attachment = new AttachmentBuilder(imagePath, { name: fileName });
+        embed.setImage(`attachment://${fileName}`);
+
+        return attachment;
+      } 
+        logger.warning(`⚠️ Event image not found: ${imagePath}`);
+      
+    } catch (error) {
+      logger.error(`❌ Error handling event image ${eventImageUrl}:`, error);
+    }
+
+    return undefined;
   }
 
   private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number, mapNote?: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {

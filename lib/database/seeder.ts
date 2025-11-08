@@ -241,85 +241,87 @@ export class DatabaseSeeder {
 
     // Check if any map has supportedModes array
     const hasSupportedModes = mapsData.some(map => Array.isArray((map as MapData & { supportedModes?: string[] }).supportedModes));
-    
+
     if (hasSupportedModes) {
-      // New approach: maps define their supported modes via supportedModes array
-      for (const map of mapsData) {
-        const mapWithModes = map as MapData & { supportedModes?: string[] };
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
-
-        if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
-          // Create an entry for each supported mode
-          for (const modeId of mapWithModes.supportedModes) {
-            const mapIdWithMode = `${map.id}-${modeId}`;
-            await this.db.run(`
-              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `, [mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null]);
-          }
-        } else {
-          // Fallback: create with null mode_id
-          await this.db.run(`
-            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
-        }
-      }
+      await this.seedMapsWithSupportedModesArray(gameId, mapsData);
     } else if (supportsAllModes) {
-      // For games that support all modes on all maps (like Valorant)
-      // Get all modes for this game first
-      const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
-      
-      for (const map of mapsData) {
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
-
-        if (modes.length > 0) {
-          // Create an entry for each map-mode combination
-          for (const mode of modes) {
-            const mapIdWithMode = `${map.id}-${mode.id}`;
-            await this.db.run(`
-              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `, [mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null]);
-          }
-        } else {
-          // Fallback: create with null mode_id
-          await this.db.run(`
-            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
-        }
-      }
+      await this.seedMapsForAllModes(gameId, mapsData);
     } else {
-      // Traditional approach: map type defines the mode
-      for (const map of mapsData) {
-        // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
-        // Special handling for "Doom Match" -> "doommatch"
-        let modeId = map.type.toLowerCase();
-        if (modeId === 'doom match') {
-          modeId = 'doommatch';
-        }
-        
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
+      await this.seedMapsTraditional(gameId, mapsData);
+    }
+  }
 
-        await this.db.run(`
-          INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
+  private fixImageUrl(imageUrl: string | undefined): string | null {
+    if (!imageUrl) return null;
+    if (imageUrl.startsWith('/public/')) {
+      return imageUrl.replace('/public/', '/');
+    }
+    return imageUrl;
+  }
+
+  private async seedMapsWithSupportedModesArray(gameId: string, mapsData: MapData[]): Promise<void> {
+    for (const map of mapsData) {
+      const mapWithModes = map as MapData & { supportedModes?: string[] };
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
+        // Create an entry for each supported mode
+        for (const modeId of mapWithModes.supportedModes) {
+          const mapIdWithMode = `${map.id}-${modeId}`;
+          await this.insertMap(mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null);
+        }
+      } else {
+        // Fallback: create with null mode_id
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
       }
     }
+  }
+
+  private async seedMapsForAllModes(gameId: string, mapsData: MapData[]): Promise<void> {
+    const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
+
+    for (const map of mapsData) {
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      if (modes.length > 0) {
+        // Create an entry for each map-mode combination
+        for (const mode of modes) {
+          const mapIdWithMode = `${map.id}-${mode.id}`;
+          await this.insertMap(mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null);
+        }
+      } else {
+        // Fallback: create with null mode_id
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
+      }
+    }
+  }
+
+  private async seedMapsTraditional(gameId: string, mapsData: MapData[]): Promise<void> {
+    for (const map of mapsData) {
+      const modeId = this.convertMapTypeToModeId(map.type);
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      await this.insertMap(map.id, gameId, map.name, modeId, imageUrl, map.location || null);
+    }
+  }
+
+  private convertMapTypeToModeId(type: string): string {
+    const modeId = type.toLowerCase();
+    return modeId === 'doom match' ? 'doommatch' : modeId;
+  }
+
+  private async insertMap(
+    id: string,
+    gameId: string,
+    name: string,
+    modeId: string | null,
+    imageUrl: string | null,
+    location: string | null
+  ): Promise<void> {
+    await this.db.run(`
+      INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [id, gameId, name, modeId, imageUrl, location]);
   }
 
   private async updateDataVersion(gameId: string, dataVersion: string): Promise<void> {
