@@ -67,6 +67,88 @@ interface SelectedMapCard {
   note?: string;
 }
 
+/**
+ * Converts local date/time to UTC
+ */
+function convertToUTC(date: string, time: string): Date {
+  const localDateTime = new Date(`${date}T${time}`);
+  return localDateTime;
+}
+
+/**
+ * Builds match payload from form data
+ */
+function buildMatchPayload(formData: Partial<MatchFormData>) {
+  if (!formData.name || !formData.date || !formData.time || !formData.gameId) {
+    throw new Error('Missing required fields');
+  }
+
+  const utcDateTime = convertToUTC(formData.date, formData.time);
+
+  return {
+    name: formData.name,
+    description: formData.description || '',
+    gameId: formData.gameId,
+    startDate: utcDateTime.toISOString(),
+    livestreamLink: formData.livestreamLink || '',
+    rules: formData.rules,
+    rounds: (formData.maps || []).length || 1,
+    maps: formData.maps || [],
+    eventImageUrl: formData.eventImageUrl || null,
+    playerNotifications: formData.playerNotifications ?? true,
+    announcementVoiceChannel: formData.announcementVoiceChannel || null,
+    announcements: formData.announcements || []
+  };
+}
+
+/**
+ * Saves map notes for a match
+ */
+async function saveMapNotes(matchId: string, selectedMaps: SelectedMapCard[]): Promise<void> {
+  const mapNotesToSave = selectedMaps
+    .filter(map => map.note && map.note.trim())
+    .map(map => ({ mapId: map.id, note: map.note!.trim() }));
+
+  if (mapNotesToSave.length === 0) return;
+
+  try {
+    for (const mapNote of mapNotesToSave) {
+      await fetch(`/api/matches/${matchId}/map-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mapNote),
+      });
+    }
+  } catch (error) {
+    logger.error('Error saving map notes:', error);
+    throw error;
+  }
+}
+
+/**
+ * Starts match signups by transitioning to gather stage
+ */
+async function startMatchSignups(matchId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/matches/${matchId}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newStatus: 'gather' }),
+    });
+
+    if (response.ok) {
+      logger.info(`✅ Match created and moved to gather stage`);
+      return true;
+    }
+
+    logger.warning('Match created but failed to start signups automatically');
+    return false;
+  } catch (error) {
+    logger.error('Error transitioning match to gather stage:', error);
+    return false;
+  }
+}
+
 export function CreateMatchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -477,99 +559,47 @@ export function CreateMatchPage() {
     setFlexibleModeSelects({});
   };
 
-  const convertToUTC = (date: string, time: string): Date => {
-    const localDateTime = new Date(`${date}T${time}`);
-    return localDateTime;
-  };
-
   const handleCreateMatch = async () => {
-    if (!formData.name || !formData.date || !formData.time || !formData.gameId) {
-      return;
-    }
-
     try {
-      const utcDateTime = convertToUTC(formData.date, formData.time);
-      
-      const matchData = {
-        name: formData.name,
-        description: formData.description || '',
-        gameId: formData.gameId,
-        startDate: utcDateTime.toISOString(),
-        livestreamLink: formData.livestreamLink || '',
-        rules: formData.rules,
-        rounds: (formData.maps || []).length || 1,
-        maps: formData.maps || [],
-        eventImageUrl: formData.eventImageUrl || null,
-        playerNotifications: formData.playerNotifications ?? true,
-        announcementVoiceChannel: formData.announcementVoiceChannel || null,
-        announcements: formData.announcements || []
-      };
+      // Build and validate match payload
+      const matchData = buildMatchPayload(formData);
 
-
+      // Create the match
       const response = await fetch('/api/matches', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(matchData),
       });
 
-      if (response.ok) {
-        const newMatch = await response.json();
-        
-        // Save map notes if any exist
-        const mapNotesToSave = selectedMaps.filter(map => map.note && map.note.trim()).map(map => ({
-          mapId: map.id,
-          note: map.note!.trim()
-        }));
-        
-        if (mapNotesToSave.length > 0) {
-          try {
-            for (const mapNote of mapNotesToSave) {
-              await fetch(`/api/matches/${newMatch.id}/map-notes`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(mapNote),
-              });
-            }
-          } catch (noteError) {
-            logger.error('Error saving map notes:', noteError);
-            showError('Failed to save map notes.');
-          }
-        }
-        
-        // If "Start Signups" is checked, automatically transition to gather stage
-        if (startSignups) {
-          try {
-            const transitionResponse = await fetch(`/api/matches/${newMatch.id}/transition`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ newStatus: 'gather' }),
-            });
-
-            if (transitionResponse.ok) {
-              logger.info(`✅ Match created and moved to gather stage - Discord announcement will be posted`);
-            } else {
-              logger.warning('Match created but failed to start signups automatically');
-            }
-          } catch (transitionError) {
-            logger.error('Error transitioning match to gather stage:', transitionError);
-          }
-        }
-
-        clearFormData();
-        showSuccess('Match created successfully!');
-        router.push('/matches');
-      } else {
+      if (!response.ok) {
         const errorData = await response.json();
         logger.error('Failed to create match:', errorData.error);
         showError(errorData.error || 'Failed to create match. Please try again.');
+        return;
       }
+
+      const newMatch = await response.json();
+
+      // Save map notes if any exist
+      try {
+        await saveMapNotes(newMatch.id, selectedMaps);
+      } catch (noteError) {
+        showError('Failed to save map notes.');
+      }
+
+      // Start signups if requested
+      if (startSignups) {
+        await startMatchSignups(newMatch.id);
+      }
+
+      clearFormData();
+      showSuccess('Match created successfully!');
+      router.push('/matches');
+
     } catch (error) {
+      if (error instanceof Error && error.message === 'Missing required fields') {
+        return;
+      }
       logger.error('Error creating match:', error);
       showError('An error occurred while creating the match.');
     }

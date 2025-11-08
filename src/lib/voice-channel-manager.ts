@@ -1,11 +1,142 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
+import type { Database } from 'sqlite3';
 
 interface VoiceChannelCreationResult {
   success: boolean;
   blueChannelId?: string;
   redChannelId?: string;
   message?: string;
+}
+
+interface ChannelNames {
+  blueChannelName: string;
+  redChannelName?: string;
+}
+
+interface MatchData {
+  id: string;
+  name: string;
+  tournament_id?: string;
+  game_mode_id: string;
+}
+
+/**
+ * Determines channel names based on match type and team structure
+ */
+async function determineChannelNames(
+  db: Database,
+  match: MatchData,
+  isSingleTeam: boolean
+): Promise<ChannelNames> {
+  if (isSingleTeam) {
+    return determineSingleTeamChannelName(db, match);
+  }
+  return determineDualTeamChannelNames(db, match);
+}
+
+/**
+ * Determines channel name for single-team matches
+ */
+async function determineSingleTeamChannelName(
+  db: Database,
+  match: MatchData
+): Promise<ChannelNames> {
+  if (!match.tournament_id) {
+    return { blueChannelName: match.name };
+  }
+
+  // Try to get team name from tournament data
+  const tournamentMatch = await db.get<{ participant1_id: string }>(`
+    SELECT participant1_id FROM tournament_matches WHERE match_id = ?
+  `, [match.id]);
+
+  if (!tournamentMatch) {
+    return { blueChannelName: match.name };
+  }
+
+  const team = await db.get<{ team_name: string }>(`
+    SELECT team_name FROM tournament_participants WHERE id = ?
+  `, [tournamentMatch.participant1_id]);
+
+  return { blueChannelName: team?.team_name || match.name };
+}
+
+/**
+ * Determines channel names for dual-team matches
+ */
+async function determineDualTeamChannelNames(
+  db: Database,
+  match: MatchData
+): Promise<ChannelNames> {
+  if (!match.tournament_id) {
+    return {
+      blueChannelName: `${match.name} - Blue Team`,
+      redChannelName: `${match.name} - Red Team`
+    };
+  }
+
+  // Get team names from tournament data
+  const tournamentMatch = await db.get<{
+    participant1_id: string;
+    participant2_id: string;
+  }>(`SELECT participant1_id, participant2_id FROM tournament_matches WHERE match_id = ?`, [match.id]);
+
+  if (!tournamentMatch) {
+    return {
+      blueChannelName: `${match.name} - Blue Team`,
+      redChannelName: `${match.name} - Red Team`
+    };
+  }
+
+  const [team1, team2] = await Promise.all([
+    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_participants WHERE id = ?`, [tournamentMatch.participant1_id]),
+    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_participants WHERE id = ?`, [tournamentMatch.participant2_id])
+  ]);
+
+  const vsName = `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`;
+  return { blueChannelName: vsName, redChannelName: vsName };
+}
+
+/**
+ * Waits for voice channel creation request to complete
+ */
+async function waitForVoiceChannelCreation(
+  db: Database,
+  requestId: string,
+  matchId: string
+): Promise<VoiceChannelCreationResult> {
+  const maxWaitTime = 30000; // 30 seconds
+  const pollInterval = 500; // 500ms
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitTime) {
+    const request = await db.get<{ status: string; result?: string }>(
+      'SELECT status, result FROM discord_bot_requests WHERE id = ?',
+      [requestId]
+    );
+
+    if (request?.status === 'completed') {
+      if (request.result) {
+        const result = JSON.parse(request.result);
+        logger.debug(`Voice channels created successfully for match ${matchId}`);
+        return result;
+      }
+    }
+
+    if (request?.status === 'failed') {
+      const result = request.result ? JSON.parse(request.result) : {};
+      logger.error(`Voice channel creation failed: ${result.message || 'Unknown error'}`);
+      return { success: false, message: result.message || 'Failed to create voice channels' };
+    }
+
+    // Wait before polling again
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  // Timeout
+  logger.error(`Voice channel creation request timed out for match ${matchId}`);
+  return { success: false, message: 'Voice channel creation timed out' };
 }
 
 /**
@@ -28,12 +159,10 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     }
 
     // Get match data including game mode
-    const match = await db.get<{
-      id: string;
-      name: string;
-      tournament_id?: string;
-      game_mode_id: string;
-    }>('SELECT id, name, tournament_id, game_mode_id FROM matches WHERE id = ?', [matchId]);
+    const match = await db.get<MatchData>(
+      'SELECT id, name, tournament_id, game_mode_id FROM matches WHERE id = ?',
+      [matchId]
+    );
 
     if (!match) {
       logger.error('Match not found for voice channel creation:', matchId);
@@ -41,83 +170,16 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     }
 
     // Get game mode to determine team structure
-    const gameMode = await db.get<{
-      max_teams: number;
-    }>('SELECT max_teams FROM game_modes WHERE id = ?', [match.game_mode_id]);
+    const gameMode = await db.get<{ max_teams: number }>(
+      'SELECT max_teams FROM game_modes WHERE id = ?',
+      [match.game_mode_id]
+    );
 
     const isSingleTeam = gameMode?.max_teams === 1;
     logger.debug(`Match ${matchId} is ${isSingleTeam ? 'single-team' : 'dual-team'} mode (max_teams=${gameMode?.max_teams})`);
 
-
-    // Determine channel naming based on match type and team structure
-    let blueChannelName: string;
-    let redChannelName: string | undefined;
-
-    if (isSingleTeam) {
-      // Single-team match: Create one channel for all participants
-      if (match.tournament_id) {
-        // Tournament match: Try to get team name
-        const tournamentMatch = await db.get<{
-          participant1_id: string;
-        }>(`
-          SELECT participant1_id
-          FROM tournament_matches
-          WHERE match_id = ?
-        `, [matchId]);
-
-        if (tournamentMatch) {
-          const team = await db.get<{ team_name: string }>(`
-            SELECT team_name FROM tournament_participants WHERE id = ?
-          `, [tournamentMatch.participant1_id]);
-
-          blueChannelName = team?.team_name || match.name;
-        } else {
-          blueChannelName = match.name;
-        }
-      } else {
-        // Standalone match: Just use match name
-        blueChannelName = match.name;
-      }
-      // No second channel for single-team matches
-      redChannelName = undefined;
-    } else {
-      // Dual-team match: Create two channels (blue and red)
-      if (match.tournament_id) {
-        // Tournament match: Get team names from tournament_matches
-        const tournamentMatch = await db.get<{
-          participant1_id: string;
-          participant2_id: string;
-        }>(`
-          SELECT participant1_id, participant2_id
-          FROM tournament_matches
-          WHERE match_id = ?
-        `, [matchId]);
-
-        if (tournamentMatch) {
-          const team1 = await db.get<{ team_name: string }>(`
-            SELECT team_name FROM tournament_participants WHERE id = ?
-          `, [tournamentMatch.participant1_id]);
-
-          const team2 = await db.get<{ team_name: string }>(`
-            SELECT team_name FROM tournament_participants WHERE id = ?
-          `, [tournamentMatch.participant2_id]);
-
-          const team1Name = team1?.team_name || 'Team 1';
-          const team2Name = team2?.team_name || 'Team 2';
-          const vsName = `${team1Name} vs ${team2Name}`;
-          blueChannelName = vsName;
-          redChannelName = vsName;
-        } else {
-          // Fallback if tournament match data not available
-          blueChannelName = `${match.name} - Blue Team`;
-          redChannelName = `${match.name} - Red Team`;
-        }
-      } else {
-        // Standalone match: Use match title + team colors
-        blueChannelName = `${match.name} - Blue Team`;
-        redChannelName = `${match.name} - Red Team`;
-      }
-    }
+    // Determine channel names using helper function
+    const { blueChannelName, redChannelName } = await determineChannelNames(db, match, isSingleTeam);
 
     // Queue a Discord bot request to create the channels
     const requestId = `voice_create_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -131,43 +193,15 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
         matchId,
         categoryId: settings.voice_channel_category_id,
         blueChannelName,
-        redChannelName, // May be undefined for single-team matches
+        redChannelName,
         isSingleTeam
       })
     ]);
 
     logger.debug(`Voice channel creation request queued: ${requestId} (${isSingleTeam ? 'single' : 'dual'} team)`);
 
-    // Wait for the bot to process the request (poll with timeout)
-    const maxWaitTime = 30000; // 30 seconds
-    const pollInterval = 500; // 500ms
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < maxWaitTime) {
-      const request = await db.get<{
-        status: string;
-        result?: string;
-      }>('SELECT status, result FROM discord_bot_requests WHERE id = ?', [requestId]);
-
-      if (request?.status === 'completed') {
-        if (request.result) {
-          const result = JSON.parse(request.result);
-          logger.debug(`Voice channels created successfully for match ${matchId}`);
-          return result;
-        }
-      } else if (request?.status === 'failed') {
-        const result = request.result ? JSON.parse(request.result) : {};
-        logger.error(`Voice channel creation failed: ${result.message || 'Unknown error'}`);
-        return { success: false, message: result.message || 'Failed to create voice channels' };
-      }
-
-      // Wait before polling again
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    // Timeout
-    logger.error(`Voice channel creation request timed out for match ${matchId}`);
-    return { success: false, message: 'Voice channel creation timed out' };
+    // Wait for the bot to process the request
+    return await waitForVoiceChannelCreation(db, requestId, matchId);
 
   } catch (error) {
     logger.error('Error creating voice channels:', error);

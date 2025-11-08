@@ -37,6 +37,57 @@ interface TournamentFormData {
   allowPlayerTeamSelection?: boolean;
 }
 
+/**
+ * Builds tournament payload from form data
+ */
+function buildTournamentPayload(formData: Partial<TournamentFormData>) {
+  const startDateTime = formData.date && formData.time
+    ? new Date(`${formData.date}T${formData.time}`)
+    : null;
+
+  return {
+    name: formData.name,
+    description: formData.description,
+    gameId: formData.gameId,
+    format: formData.format,
+    startDate: startDateTime?.toISOString(),
+    startTime: startDateTime?.toISOString(),
+    roundsPerMatch: formData.roundsPerMatch,
+    ruleset: formData.ruleset,
+    maxParticipants: formData.maxParticipants,
+    eventImageUrl: formData.eventImageUrl || null,
+    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
+  };
+}
+
+/**
+ * Creates pre-defined teams for a tournament
+ */
+async function createPreDefinedTeams(tournamentId: string, teamNames: string[]): Promise<void> {
+  if (teamNames.length === 0) return;
+
+  const teamCreationPromises = teamNames.map(teamName =>
+    fetch(`/api/tournaments/${tournamentId}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamName }),
+    })
+  );
+
+  await Promise.all(teamCreationPromises);
+}
+
+/**
+ * Starts tournament signups by transitioning to gather stage
+ */
+async function startTournamentSignups(tournamentId: string): Promise<void> {
+  await fetch(`/api/tournaments/${tournamentId}/transition`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newStatus: 'gather' }),
+  });
+}
+
 export function CreateTournamentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -152,71 +203,36 @@ export function CreateTournamentPage() {
 
   const handleCreateTournament = async (shouldStartSignups = false) => {
     try {
-      // Combine date and time into proper datetime format
-      const startDateTime = formData.date && formData.time
-        ? new Date(`${formData.date}T${formData.time}`)
-        : null;
+      // Build tournament payload
+      const tournamentData = buildTournamentPayload(formData);
 
-      const tournamentData = {
-        name: formData.name,
-        description: formData.description,
-        gameId: formData.gameId,
-        format: formData.format,
-        startDate: startDateTime?.toISOString(),
-        startTime: startDateTime?.toISOString(),
-        roundsPerMatch: formData.roundsPerMatch,
-        ruleset: formData.ruleset,
-        maxParticipants: formData.maxParticipants,
-        eventImageUrl: formData.eventImageUrl || null,
-        allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
-      };
-
+      // Create tournament
       const response = await fetch('/api/tournaments', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tournamentData),
       });
 
-      if (response.ok) {
-        const tournament = await response.json();
-
-        // Create pre-defined teams if any exist
-        if (formData.preCreatedTeams && formData.preCreatedTeams.length > 0) {
-          const teamCreationPromises = formData.preCreatedTeams.map(teamName =>
-            fetch(`/api/tournaments/${tournament.id}/teams`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ teamName }),
-            })
-          );
-
-          await Promise.all(teamCreationPromises);
-        }
-
-        // Clear form data on successful creation
-        clearFormData();
-
-        // Transition to gather stage if signups should be started
-        if (shouldStartSignups) {
-          await fetch(`/api/tournaments/${tournament.id}/transition`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ newStatus: 'gather' }),
-          });
-        }
-
-        showSuccess('Tournament created successfully!');
-        router.push('/tournaments');
-      } else {
+      if (!response.ok) {
         const error = await response.json();
         showError(error.error || 'Failed to create tournament');
+        return;
       }
+
+      const tournament = await response.json();
+
+      // Create pre-defined teams if any exist
+      await createPreDefinedTeams(tournament.id, formData.preCreatedTeams || []);
+
+      // Start signups if requested
+      if (shouldStartSignups) {
+        await startTournamentSignups(tournament.id);
+      }
+
+      clearFormData();
+      showSuccess('Tournament created successfully!');
+      router.push('/tournaments');
+
     } catch (error) {
       logger.error('Error creating tournament:', error);
       showError('Failed to create tournament');
