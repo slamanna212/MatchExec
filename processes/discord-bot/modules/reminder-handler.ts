@@ -309,76 +309,68 @@ export class ReminderHandler {
     }
   }
 
-  private async createPlayerReminderEmbed(
-    matchData: {
-      name: string;
-      description?: string;
-      start_date?: string;
-      game_name?: string;
-      game_color?: string;
-      blue_team_voice_channel?: string;
-      red_team_voice_channel?: string;
-      [key: string]: unknown;
-    }, 
-    participant: {
-      username: string;
-      team_assignment?: string;
-      signup_data?: string;
-    },
-    announcementMessage?: {
-      message_id: string;
-      channel_id: string;
+  /**
+   * Parse game color from match data
+   */
+  private parseGameColor(gameColor?: string): number {
+    if (!gameColor) return 0x4caf50;
+
+    try {
+      return parseInt(gameColor.replace('#', ''), 16);
+    } catch (error) {
+      logger.error('Error parsing game color:', error);
+      return 0x4caf50;
     }
-  ): Promise<EmbedBuilder> {
-    // Parse game color or use default
-    let gameColor = 0x4caf50; // default green for reminder
-    if (matchData.game_color) {
-      try {
-        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-      } catch (error) {
-        logger.error('Error parsing game color:', error);
-      }
-    }
+  }
 
-    const embed = new EmbedBuilder()
-      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
-      .setDescription(matchData.description || 'Your match is starting soon!')
-      .setColor(gameColor)
-      .setTimestamp()
-      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
+  /**
+   * Add match time fields to embed
+   */
+  private addMatchTimeFields(embed: EmbedBuilder, startDate: string): void {
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+    embed.addFields(
+      { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+      { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
+      { name: '\u200b', value: '\u200b', inline: true }
+    );
+  }
 
-    // Add match time if available
-    if (matchData.start_date) {
-      const startTime = new Date(matchData.start_date);
-      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
-      embed.addFields(
-        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
-        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
-        { name: '\u200b', value: '\u200b', inline: true } // Empty field to force new line
-      );
-    }
+  /**
+   * Check if match is single-team configuration
+   */
+  private isSingleTeamMatch(blueChannel?: string, redChannel?: string): boolean {
+    return !!blueChannel && !redChannel;
+  }
 
-    // Add game info
-    if (matchData.game_name) {
-      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
-    }
+  /**
+   * Get team display info
+   */
+  private getTeamDisplayInfo(teamAssignment: string): { emoji: string; name: string } {
+    const emoji = teamAssignment === 'blue' ? '🔵' : teamAssignment === 'red' ? '🔴' : '🟡';
+    const name = teamAssignment.charAt(0).toUpperCase() + teamAssignment.slice(1);
+    return { emoji, name };
+  }
 
-    // Check if this is a single-team match (only one voice channel)
-    const isSingleTeam = matchData.blue_team_voice_channel && !matchData.red_team_voice_channel;
+  /**
+   * Add team and voice channel fields
+   */
+  private addTeamAndVoiceFields(
+    embed: EmbedBuilder,
+    participant: { team_assignment?: string },
+    matchData: { blue_team_voice_channel?: string; red_team_voice_channel?: string }
+  ): void {
+    const isSingleTeam = this.isSingleTeamMatch(matchData.blue_team_voice_channel, matchData.red_team_voice_channel);
 
-    // Add team assignment if available (for dual-team matches)
     if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
-      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' :
-                       participant.team_assignment === 'red' ? '🔴' : '🟡';
-      const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
+      const { emoji, name } = this.getTeamDisplayInfo(participant.team_assignment);
 
       embed.addFields({
         name: '👥 Your Team',
-        value: `${teamEmoji} ${teamName} Team`,
+        value: `${emoji} ${name} Team`,
         inline: true
       });
 
-      // Add voice channel if assigned to a team with a voice channel
       if (participant.team_assignment === 'blue' && matchData.blue_team_voice_channel) {
         embed.addFields({
           name: '🎙️ Voice Channel',
@@ -393,24 +385,72 @@ export class ReminderHandler {
         });
       }
     } else if (isSingleTeam) {
-      // Single-team match: Show voice channel to everyone
       embed.addFields({
         name: '🎙️ Voice Channel',
         value: `<#${matchData.blue_team_voice_channel}>`,
         inline: true
       });
     }
+  }
 
-    // Add link to original announcement if available
-    if (announcementMessage && this.client.guilds.cache.first()) {
-      const guildId = this.client.guilds.cache.first()?.id;
-      const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
-      embed.addFields({
-        name: '🔗 Match Details',
-        value: `[View Full Match Info](${messageLink})`,
-        inline: false
-      });
+  /**
+   * Add announcement link to embed
+   */
+  private addAnnouncementLink(
+    embed: EmbedBuilder,
+    announcementMessage?: { message_id: string; channel_id: string }
+  ): void {
+    if (!announcementMessage || !this.client.guilds.cache.first()) return;
+
+    const guildId = this.client.guilds.cache.first()?.id;
+    const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+    embed.addFields({
+      name: '🔗 Match Details',
+      value: `[View Full Match Info](${messageLink})`,
+      inline: false
+    });
+  }
+
+  private async createPlayerReminderEmbed(
+    matchData: {
+      name: string;
+      description?: string;
+      start_date?: string;
+      game_name?: string;
+      game_color?: string;
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+      [key: string]: unknown;
+    },
+    participant: {
+      username: string;
+      team_assignment?: string;
+      signup_data?: string;
+    },
+    announcementMessage?: {
+      message_id: string;
+      channel_id: string;
     }
+  ): Promise<EmbedBuilder> {
+    const gameColor = this.parseGameColor(matchData.game_color);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
+      .setDescription(matchData.description || 'Your match is starting soon!')
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
+
+    if (matchData.start_date) {
+      this.addMatchTimeFields(embed, matchData.start_date);
+    }
+
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    this.addTeamAndVoiceFields(embed, participant, matchData);
+    this.addAnnouncementLink(embed, announcementMessage);
 
     return embed;
   }

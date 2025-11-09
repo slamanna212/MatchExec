@@ -523,6 +523,95 @@ export class QueueProcessor {
     }
   }
 
+  /**
+   * Delete a Discord message
+   */
+  private async deleteDiscordMessage(messageId: string, channelId: string): Promise<void> {
+    const channel = await this.client.channels.fetch(channelId);
+    if (channel?.isTextBased() && 'messages' in channel) {
+      await channel.messages.delete(messageId);
+    }
+  }
+
+  /**
+   * Delete a Discord thread
+   */
+  private async deleteDiscordThread(threadId: string): Promise<void> {
+    try {
+      const thread = await this.client.channels.fetch(threadId);
+      if (thread?.isThread()) {
+        await thread.delete();
+      }
+    } catch (error) {
+      logger.warning(`⚠️ Could not delete thread ${threadId}:`, (error as Error)?.message);
+    }
+  }
+
+  /**
+   * Process a single match message record deletion
+   */
+  private async processMatchMessageDeletion(record: {
+    message_id: string;
+    channel_id: string;
+    thread_id: string | null;
+    discord_event_id: string | null;
+    message_type: string;
+  }): Promise<void> {
+    try {
+      // Delete the Discord message
+      await this.deleteDiscordMessage(record.message_id, record.channel_id);
+
+      // Delete thread if exists
+      if (record.thread_id) {
+        await this.deleteDiscordThread(record.thread_id);
+      }
+
+      // Delete Discord event if exists
+      if (record.discord_event_id && this.eventHandler) {
+        await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
+      }
+    } catch (error) {
+      logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
+    }
+  }
+
+  /**
+   * Process deletion for a single match
+   */
+  private async processSingleDeletion(deletion: QueuedDeletion): Promise<void> {
+    if (!this.db) return;
+
+    const matchId = deletion.match_id;
+
+    // Get all Discord messages for this match
+    const messages = await this.db.all<{
+      message_id: string;
+      channel_id: string;
+      thread_id: string | null;
+      discord_event_id: string | null;
+      message_type: string;
+    }>(`
+      SELECT message_id, channel_id, thread_id, discord_event_id, message_type
+      FROM discord_match_messages
+      WHERE match_id = ?
+    `, [matchId]);
+
+    // Delete each message
+    for (const record of messages) {
+      await this.processMatchMessageDeletion(record);
+    }
+
+    // Clean up message tracking records
+    await this.db.run('DELETE FROM discord_match_messages WHERE match_id = ?', [matchId]);
+
+    // Mark deletion as completed
+    await this.db.run(`
+      UPDATE discord_deletion_queue
+      SET status = 'completed', processed_at = datetime('now')
+      WHERE id = ?
+    `, [deletion.id]);
+  }
+
   async processDeletionQueue() {
     if (!this.client.isReady() || !this.db) return;
 
@@ -537,73 +626,13 @@ export class QueueProcessor {
 
       for (const deletion of deletions) {
         try {
-          const matchId = deletion.match_id;
-
-          // Get all Discord messages for this match
-          const messages = await this.db.all<{
-            message_id: string;
-            channel_id: string;
-            thread_id: string | null;
-            discord_event_id: string | null;
-            message_type: string;
-          }>(`
-            SELECT message_id, channel_id, thread_id, discord_event_id, message_type
-            FROM discord_match_messages
-            WHERE match_id = ?
-          `, [matchId]);
-
-
-          for (const record of messages) {
-            try {
-              // Delete the Discord message
-              const channel = await this.client.channels.fetch(record.channel_id);
-              if (channel?.isTextBased() && 'messages' in channel) {
-                await channel.messages.delete(record.message_id);
-              }
-
-              // Delete thread if exists
-              if (record.thread_id) {
-                try {
-                  const thread = await this.client.channels.fetch(record.thread_id);
-                  if (thread?.isThread()) {
-                    await thread.delete();
-                  }
-                } catch (error) {
-                  logger.warning(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
-                }
-              }
-
-              // Delete Discord event if exists
-              if (record.discord_event_id && this.eventHandler) {
-                const success = await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
-                if (success) {
-                }
-              }
-
-            } catch (error) {
-              logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
-            }
-          }
-
-          // Clean up message tracking records
-          await this.db.run(`
-            DELETE FROM discord_match_messages WHERE match_id = ?
-          `, [matchId]);
-
-          // Mark deletion as completed
-          await this.db.run(`
-            UPDATE discord_deletion_queue 
-            SET status = 'completed', processed_at = datetime('now')
-            WHERE id = ?
-          `, [deletion.id]);
-
-
+          await this.processSingleDeletion(deletion);
         } catch (error) {
           logger.error(`❌ Error processing deletion ${deletion.id}:`, error);
-          
+
           // Mark as failed
           await this.db.run(`
-            UPDATE discord_deletion_queue 
+            UPDATE discord_deletion_queue
             SET status = 'failed', processed_at = datetime('now')
             WHERE id = ?
           `, [deletion.id]);
