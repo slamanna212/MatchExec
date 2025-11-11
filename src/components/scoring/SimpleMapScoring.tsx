@@ -18,6 +18,31 @@ interface SimpleMapScoringProps {
   onAllMapsCompleted?: () => void;
 }
 
+function LoadingState() {
+  return (
+    <Group justify="center" p="xl">
+      <Loader size="md" />
+      <Text>Loading match maps...</Text>
+    </Group>
+  );
+}
+
+function ErrorState({ error }: { error: string }) {
+  return (
+    <Alert color="red" icon={<IconMap size={16} />}>
+      {error}
+    </Alert>
+  );
+}
+
+function EmptyState() {
+  return (
+    <Alert color="yellow" icon={<IconMap size={16} />}>
+      No maps found for this match. Please check the match configuration.
+    </Alert>
+  );
+}
+
 export function SimpleMapScoring({
   matchId,
   gameType,
@@ -69,209 +94,226 @@ export function SimpleMapScoring({
     }
   }, [selectedGameId, matchGames, scrollToMap]);
 
-  /**
-   * Create match result from winner selection
-   */
-  const createMatchResult = (
-    selectedGame: { id: string },
-    winner: 'team1' | 'team2',
-    participantId?: string
-  ): MatchResult => ({
+  const handleWinnerSubmit = useWinnerSubmit({
     matchId,
-    gameId: selectedGame.id,
-    winner,
-    participantWinnerId: participantId,
-    isFfaMode: !!participantId,
-    completedAt: new Date()
+    matchGames,
+    selectedGameId,
+    onResultSubmit,
+    refetch,
+    setError,
+    setSelectedGameId,
+    onAllMapsCompleted
   });
 
-  /**
-   * Find next pending or ongoing game
-   */
-  const findNextGame = () => matchGames.find(g =>
-    g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
+  const handleTeamWin = (winner: 'team1' | 'team2') => handleWinnerSubmit(winner);
+  const handleParticipantWin = (participantId: string) => handleWinnerSubmit('team1', participantId);
+
+  // Early returns for different states
+  if (loading) return <LoadingState />;
+  if (fetchError || error) return <ErrorState error={fetchError || error || ''} />;
+  if (matchGames.length === 0) return <EmptyState />;
+
+  const selectedGame = matchGames.find(g => g.id === selectedGameId);
+
+  return (
+    <Stack gap="md">
+      <MapSelectionCarousel
+        matchGames={matchGames}
+        gameType={gameType}
+        selectedGameId={selectedGameId}
+        setSelectedGameId={setSelectedGameId}
+        submitting={submitting}
+        scrollPosition={scrollPosition}
+        containerRef={containerRef}
+        handleScrollLeft={handleScrollLeft}
+        handleScrollRight={handleScrollRight}
+        getMaxScroll={getMaxScroll}
+      />
+
+      {selectedGame && (
+        <WinnerSelectionCard
+          selectedGame={selectedGame}
+          participants={participants}
+          team1Name={team1Name}
+          team2Name={team2Name}
+          handleTeamWin={handleTeamWin}
+          handleParticipantWin={handleParticipantWin}
+          submitting={submitting}
+        />
+      )}
+    </Stack>
   );
+}
 
-  /**
-   * Handle post-submission navigation
-   */
-  const handlePostSubmissionNavigation = () => {
-    const nextGame = findNextGame();
-    if (nextGame) {
-      setSelectedGameId(nextGame.id);
-    } else if (onAllMapsCompleted) {
-      onAllMapsCompleted();
-    }
-  };
+// Hook for winner submission logic
+function useWinnerSubmit(deps: any) {
+  const {
+    matchId,
+    matchGames,
+    selectedGameId,
+    onResultSubmit,
+    refetch,
+    setError,
+    setSelectedGameId,
+    onAllMapsCompleted
+  } = deps;
 
-  // Unified winner handler
-  const handleWinnerSubmit = async (winner: 'team1' | 'team2', participantId?: string) => {
-    const selectedGame = matchGames.find(g => g.id === selectedGameId);
+  return async (winner: 'team1' | 'team2', participantId?: string) => {
+    const selectedGame = matchGames.find((g: any) => g.id === selectedGameId);
     if (!selectedGame) return;
 
     try {
-      const result = createMatchResult(selectedGame, winner, participantId);
+      const result: MatchResult = {
+        matchId,
+        gameId: selectedGame.id,
+        winner,
+        participantWinnerId: participantId,
+        isFfaMode: !!participantId,
+        completedAt: new Date()
+      };
+
       await onResultSubmit(result);
       await refetch();
 
-      handlePostSubmissionNavigation();
+      // Navigate to next game
+      const nextGame = matchGames.find((g: any) =>
+        g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
+      );
 
-      // Background refresh to sync with server
+      if (nextGame) {
+        setSelectedGameId(nextGame.id);
+      } else if (onAllMapsCompleted) {
+        onAllMapsCompleted();
+      }
+
+      // Background refresh
       setTimeout(() => refetch(), 1000);
     } catch (err) {
       logger.error('Error submitting winner:', err);
       setError(err instanceof Error ? err.message : 'Failed to save result');
     }
   };
+}
 
-  const handleTeamWin = (winner: 'team1' | 'team2') => handleWinnerSubmit(winner);
-  const handleParticipantWin = (participantId: string) => handleWinnerSubmit('team1', participantId);
+// Map selection carousel component
+function MapSelectionCarousel({ matchGames, gameType, selectedGameId, setSelectedGameId, submitting, scrollPosition, containerRef, handleScrollLeft, handleScrollRight, getMaxScroll }: any) {
+  return (
+    <Card withBorder p="md">
+      <Stack gap="sm">
+        <Text fw={600} size="sm">Match Schedule</Text>
 
-  // Loading state
-  if (loading) {
-    return (
-      <Group justify="center" p="xl">
-        <Loader size="md" />
-        <Text>Loading match maps...</Text>
-      </Group>
-    );
-  }
+        <Box pos="relative">
+          <Group gap="xs" align="center">
+            <ActionIcon
+              variant="light"
+              size="lg"
+              onClick={handleScrollLeft}
+              disabled={scrollPosition <= 0}
+              style={{ flexShrink: 0 }}
+            >
+              <IconChevronLeft size={16} />
+            </ActionIcon>
 
-  // Error state
-  if (fetchError || error) {
-    return (
-      <Alert color="red" icon={<IconMap size={16} />}>
-        {fetchError || error}
-      </Alert>
-    );
-  }
+            <Box
+              ref={containerRef}
+              style={{
+                flex: 1,
+                overflow: 'hidden',
+                position: 'relative'
+              }}
+            >
+              <Group gap="md" style={{ flexWrap: 'nowrap' }}>
+                {matchGames.map((game: any) => (
+                  <MapCard
+                    key={game.id}
+                    mapId={game.map_id}
+                    mapName={game.map_name}
+                    gameType={gameType}
+                    round={game.round}
+                    status={game.status}
+                    selected={selectedGameId === game.id}
+                    onClick={() => setSelectedGameId(game.id)}
+                    disabled={submitting}
+                    imageUrl={game.image_url}
+                  />
+                ))}
+              </Group>
+            </Box>
 
-  // Empty state
-  if (matchGames.length === 0) {
-    return (
-      <Alert color="yellow" icon={<IconMap size={16} />}>
-        No maps found for this match. Please check the match configuration.
-      </Alert>
-    );
-  }
+            <ActionIcon
+              variant="light"
+              size="lg"
+              onClick={handleScrollRight}
+              disabled={scrollPosition >= getMaxScroll()}
+              style={{ flexShrink: 0 }}
+            >
+              <IconChevronRight size={16} />
+            </ActionIcon>
+          </Group>
+        </Box>
 
-  const selectedGame = matchGames.find(g => g.id === selectedGameId);
+        <Group gap="xs" justify="center">
+          <Badge color="gray" size="sm">
+            {matchGames.filter((g: any) => g.status === 'pending').length} Pending
+          </Badge>
+          <Badge color="blue" size="sm">
+            {matchGames.filter((g: any) => g.status === 'ongoing').length} Ongoing
+          </Badge>
+          <Badge color="green" size="sm">
+            {matchGames.filter((g: any) => g.status === 'completed').length} Completed
+          </Badge>
+        </Group>
+      </Stack>
+    </Card>
+  );
+}
+
+// Winner selection card component
+function WinnerSelectionCard({ selectedGame, participants, team1Name, team2Name, handleTeamWin, handleParticipantWin, submitting }: any) {
+  const getWinnerText = () => {
+    if (selectedGame.winner_id) {
+      const winnerName = selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team');
+      return ` Winner: ${winnerName}`;
+    }
+
+    if (selectedGame.participant_winner_id) {
+      const winner = participants.find((p: any) => p.id === selectedGame.participant_winner_id);
+      return winner ? ` Winner: ${winner.username}` : '';
+    }
+
+    return '';
+  };
 
   return (
-    <Stack gap="md">
-      {/* Map Selection Carousel */}
-      <Card withBorder p="md">
-        <Stack gap="sm">
-          <Text fw={600} size="sm">Match Schedule</Text>
+    <Card withBorder p="md">
+      <Stack gap="md">
+        <Group justify="space-between">
+          <Text fw={600}>Map {selectedGame.round} - Score</Text>
+          <Badge color={selectedGame.status === 'completed' ? 'green' : 'blue'}>
+            {selectedGame.status}
+          </Badge>
+        </Group>
 
-          <Box pos="relative">
-            <Group gap="xs" align="center">
-              {/* Left Arrow */}
-              <ActionIcon
-                variant="light"
-                size="lg"
-                onClick={handleScrollLeft}
-                disabled={scrollPosition <= 0}
-                style={{ flexShrink: 0 }}
-              >
-                <IconChevronLeft size={16} />
-              </ActionIcon>
+        <Divider />
 
-              {/* Scrollable Map Container */}
-              <Box
-                ref={containerRef}
-                style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  position: 'relative'
-                }}
-              >
-                <Group
-                  gap="md"
-                  style={{
-                    flexWrap: 'nowrap'
-                  }}
-                >
-                  {matchGames.map((game) => (
-                    <MapCard
-                      key={game.id}
-                      mapId={game.map_id}
-                      mapName={game.map_name}
-                      gameType={gameType}
-                      round={game.round}
-                      status={game.status}
-                      selected={selectedGameId === game.id}
-                      onClick={() => setSelectedGameId(game.id)}
-                      disabled={submitting}
-                      imageUrl={game.image_url}
-                    />
-                  ))}
-                </Group>
-              </Box>
+        {selectedGame.status !== 'completed' && (
+          <WinnerSelection
+            mode={selectedGame.mode_scoring_type}
+            participants={participants}
+            team1Name={team1Name}
+            team2Name={team2Name}
+            onTeamWin={handleTeamWin}
+            onParticipantWin={handleParticipantWin}
+            submitting={submitting}
+          />
+        )}
 
-              {/* Right Arrow */}
-              <ActionIcon
-                variant="light"
-                size="lg"
-                onClick={handleScrollRight}
-                disabled={scrollPosition >= getMaxScroll()}
-                style={{ flexShrink: 0 }}
-              >
-                <IconChevronRight size={16} />
-              </ActionIcon>
-            </Group>
-          </Box>
-
-          {/* Status Summary */}
-          <Group gap="xs" justify="center">
-            <Badge color="gray" size="sm">
-              {matchGames.filter(g => g.status === 'pending').length} Pending
-            </Badge>
-            <Badge color="blue" size="sm">
-              {matchGames.filter(g => g.status === 'ongoing').length} Ongoing
-            </Badge>
-            <Badge color="green" size="sm">
-              {matchGames.filter(g => g.status === 'completed').length} Completed
-            </Badge>
-          </Group>
-        </Stack>
-      </Card>
-
-      {/* Winner Selection */}
-      {selectedGame && (
-        <Card withBorder p="md">
-          <Stack gap="md">
-            <Group justify="space-between">
-              <Text fw={600}>Map {selectedGame.round} - Score</Text>
-              <Badge color={selectedGame.status === 'completed' ? 'green' : 'blue'}>
-                {selectedGame.status}
-              </Badge>
-            </Group>
-
-            <Divider />
-
-            {selectedGame.status !== 'completed' && (
-              <WinnerSelection
-                mode={selectedGame.mode_scoring_type}
-                participants={participants}
-                team1Name={team1Name}
-                team2Name={team2Name}
-                onTeamWin={handleTeamWin}
-                onParticipantWin={handleParticipantWin}
-                submitting={submitting}
-              />
-            )}
-
-            {selectedGame.status === 'completed' && (
-              <Alert color="green" icon={<IconMap size={16} />}>
-                This map has been completed.
-                {selectedGame.winner_id && ` Winner: ${selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')}`}
-                {selectedGame.participant_winner_id && participants.find(p => p.id === selectedGame.participant_winner_id) && ` Winner: ${participants.find(p => p.id === selectedGame.participant_winner_id)?.username}`}
-              </Alert>
-            )}
-          </Stack>
-        </Card>
-      )}
-    </Stack>
+        {selectedGame.status === 'completed' && (
+          <Alert color="green" icon={<IconMap size={16} />}>
+            This map has been completed.{getWinnerText()}
+          </Alert>
+        )}
+      </Stack>
+    </Card>
   );
 }

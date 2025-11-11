@@ -33,6 +33,59 @@ export function getStatusIcon(status: string) {
   }
 }
 
+function getCardCursor(disabled: boolean, hasOnClick: boolean): string {
+  if (disabled) return 'not-allowed';
+  if (hasOnClick) return 'pointer';
+  return 'default';
+}
+
+function getBackgroundGradient(selected: boolean): string {
+  return selected
+    ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)'
+    : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)';
+}
+
+function getBackgroundImage(selected: boolean, imageUrl: string): string {
+  return `linear-gradient(${getBackgroundGradient(selected)}), url('${imageUrl}')`;
+}
+
+function getCardBorder(selected: boolean, statusColor: string): string {
+  return selected ? `2px solid var(--mantine-color-${statusColor}-6)` : 'none';
+}
+
+function getCardBoxShadow(selected: boolean, statusColor: string): string | undefined {
+  return selected ? `0 0 0 1px var(--mantine-color-${statusColor}-6)` : undefined;
+}
+
+function getCardOpacity(disabled: boolean): number {
+  return disabled ? 0.6 : 1;
+}
+
+function getCardStyle(
+  disabled: boolean,
+  onClick: (() => void) | undefined,
+  selected: boolean,
+  statusColor: string,
+  imageUrl: string
+) {
+  return {
+    cursor: getCardCursor(disabled, !!onClick),
+    minWidth: 180,
+    height: 120,
+    backgroundImage: getBackgroundImage(selected, imageUrl),
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundColor: '#1a1b1e',
+    border: getCardBorder(selected, statusColor),
+    boxShadow: getCardBoxShadow(selected, statusColor),
+    opacity: getCardOpacity(disabled),
+    position: 'relative' as const
+  };
+}
+
+const TEXT_SHADOW = '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)';
+
 export function MapCard({
   mapId,
   mapName,
@@ -48,29 +101,13 @@ export function MapCard({
 }: MapCardProps) {
   const finalImageUrl = imageUrl || getMapImageUrl(gameType, mapId);
   const statusColor = getStatusColor(status);
+  const cardStyle = getCardStyle(disabled, onClick, selected, statusColor, finalImageUrl);
 
   return (
     <Card
       withBorder
       onClick={disabled ? undefined : onClick}
-      style={{
-        cursor: disabled ? 'not-allowed' : (onClick ? 'pointer' : 'default'),
-        minWidth: 180,
-        height: 120,
-        backgroundImage: `linear-gradient(${
-          selected
-            ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)'
-            : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'
-        }), url('${finalImageUrl}')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#1a1b1e',
-        border: selected ? `2px solid var(--mantine-color-${statusColor}-6)` : 'none',
-        boxShadow: selected ? `0 0 0 1px var(--mantine-color-${statusColor}-6)` : undefined,
-        opacity: disabled ? 0.6 : 1,
-        position: 'relative'
-      }}
+      style={cardStyle}
       p="sm"
     >
       <Stack gap="xs" h="100%" justify="space-between">
@@ -93,7 +130,7 @@ export function MapCard({
             fw={600}
             c="white"
             style={{
-              textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+              textShadow: TEXT_SHADOW,
               lineHeight: 1.2,
               fontWeight: 700
             }}
@@ -104,7 +141,7 @@ export function MapCard({
             size="xs"
             c="white"
             style={{
-              textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
+              textShadow: TEXT_SHADOW,
               lineHeight: 1.1,
               fontWeight: 600
             }}
