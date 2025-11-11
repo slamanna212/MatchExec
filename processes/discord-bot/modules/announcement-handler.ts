@@ -416,7 +416,7 @@ export class AnnouncementHandler {
     cleanMapId: string
   ): Promise<{ name: string; image_url: string; location: string; mode_id: string } | null> {
     // Try exact match first
-    let mapData = await this.db!.get<{
+    const mapData = await this.db!.get<{
       name: string;
       image_url: string;
       location: string;
@@ -447,7 +447,7 @@ export class AnnouncementHandler {
     const baseMapName = parts[0];
     const remainingParts = parts.slice(1).join('-');
 
-    return this.db!.get<{
+    const result = await this.db!.get<{
       name: string;
       image_url: string;
       location: string;
@@ -458,6 +458,8 @@ export class AnnouncementHandler {
       WHERE gm.game_id = ? AND gm.id LIKE ?
       LIMIT 1
     `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
+
+    return result || null;
   }
 
   /**

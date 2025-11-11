@@ -611,66 +611,6 @@ async function generateLosersBracketMatchesFromTeams(
 }
 
 /**
- * Filter out custom and workshop maps
- */
-function filterTournamentMaps(gameMaps: GameMap[]): GameMap[] {
-  return gameMaps.filter(m => {
-    const idLower = m.id.toLowerCase();
-    const nameLower = m.name.toLowerCase();
-    return !idLower.includes('custom') &&
-           !idLower.includes('workshop') &&
-           !nameLower.includes('custom') &&
-           !nameLower.includes('workshop');
-  });
-}
-
-/**
- * Shuffle an array using Fisher-Yates algorithm
- */
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
-/**
- * Select a map for a tournament round
- */
-function selectMapForRound(
-  gameModes: GameMode[],
-  tournamentMaps: GameMap[],
-  selectedMaps: string[],
-  round: number
-): { mapId: string; modeId: string } {
-  // Try to find a mode that has unused maps
-  const shuffledModes = shuffleArray(gameModes);
-
-  for (const mode of shuffledModes) {
-    const mapsForMode = tournamentMaps.filter(m => m.mode_id === mode.id);
-    if (mapsForMode.length === 0) continue;
-
-    const unusedMaps = mapsForMode.filter(m => !selectedMaps.includes(m.id));
-    if (unusedMaps.length > 0) {
-      const randomMap = unusedMaps[Math.floor(Math.random() * unusedMaps.length)];
-      return { mapId: randomMap.id, modeId: mode.id };
-    }
-  }
-
-  // Fallback: use any available map not yet selected
-  const allAvailableMaps = tournamentMaps.filter(m => !selectedMaps.includes(m.id));
-  if (allAvailableMaps.length === 0) {
-    throw new Error(`All available maps have been used. Cannot avoid duplicate maps in round ${round + 1}`);
-  }
-
-  const randomMap = allAvailableMaps[Math.floor(Math.random() * allAvailableMaps.length)];
-  const mapMode = gameModes.find(m => m.id === randomMap.mode_id) || gameModes[0];
-  return { mapId: randomMap.id, modeId: mapMode.id };
-}
-
-/**
  * Generate grand finals match (winner's bracket winner vs loser's bracket winner)
  */
 export async function generateGrandFinalsMatch(
@@ -708,7 +648,7 @@ export async function generateGrandFinalsMatch(
   const selectedModes: string[] = [];
 
   for (let round = 0; round < tournament.rounds_per_match; round++) {
-    const { mapId, modeId } = selectMapForRound(gameModes, tournamentMaps, selectedMaps, round);
+    const { mapId, modeId } = selectMapForRound(selectedMaps, gameModes, tournamentMaps, round);
     selectedMaps.push(mapId);
     selectedModes.push(modeId);
   }
