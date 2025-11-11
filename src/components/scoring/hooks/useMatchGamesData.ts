@@ -45,6 +45,113 @@ export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchGamesData = async (): Promise<MatchGame[]> => {
+    const url = `/api/matches/${matchId}/games?t=${Date.now()}`;
+    logger.debug('useMatchGamesData: Fetching from URL:', url);
+
+    let response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+    });
+
+    logger.debug('useMatchGamesData: Response received:', response.status, response.statusText);
+
+    if (!response.ok) {
+      response = await handleFailedGamesResponse(response);
+    }
+
+    const responseData = await response.json();
+    logger.debug('useMatchGamesData: Response data:', responseData);
+
+    return responseData.games || [];
+  };
+
+  const handleFailedGamesResponse = async (response: Response): Promise<Response> => {
+    const errorMessage = await extractErrorMessage(response);
+
+    if (response.status === 405) {
+      return await retryGamesRequest(errorMessage);
+    }
+
+    throw new Error(errorMessage);
+  };
+
+  const extractErrorMessage = async (response: Response): Promise<string> => {
+    let errorMessage = `HTTP ${response.status}: Failed to load match games`;
+
+    try {
+      const responseText = await response.text();
+      logger.debug('useMatchGamesData: Error response body:', responseText);
+
+      if (responseText.trim()) {
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.error || errorMessage;
+      }
+    } catch (jsonError) {
+      logger.error('Failed to parse error response as JSON:', jsonError);
+    }
+
+    return errorMessage;
+  };
+
+  const retryGamesRequest = async (fallbackError: string): Promise<Response> => {
+    logger.debug('useMatchGamesData: Got 405, retrying after delay...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const retryResponse = await fetch(`/api/matches/${matchId}/games?retry=${Date.now()}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+    });
+
+    if (retryResponse.ok) {
+      logger.debug('useMatchGamesData: Retry successful');
+      return retryResponse;
+    }
+
+    throw new Error(fallbackError);
+  };
+
+  const fetchParticipantsData = async (): Promise<MatchParticipant[]> => {
+    const participantsResponse = await fetch(`/api/matches/${matchId}/participants`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!participantsResponse.ok) {
+      return [];
+    }
+
+    const participantsData = await participantsResponse.json();
+    return participantsData.participants || [];
+  };
+
+  const fetchTeamNames = async (): Promise<{ team1: string | null; team2: string | null }> => {
+    const matchResponse = await fetch(`/api/matches/${matchId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!matchResponse.ok) {
+      return { team1: null, team2: null };
+    }
+
+    const matchData = await matchResponse.json();
+    return {
+      team1: matchData.team1_name || null,
+      team2: matchData.team2_name || null
+    };
+  };
+
   const fetchMatchData = async () => {
     if (!matchId || matchId.trim() === '') {
       logger.debug('useMatchGamesData: Waiting for valid matchId');
@@ -53,96 +160,19 @@ export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
       return;
     }
 
-    let response: Response | undefined;
-
     try {
       setLoading(true);
       setError(null);
 
-      const url = `/api/matches/${matchId}/games?t=${Date.now()}`;
-      logger.debug('useMatchGamesData: Fetching from URL:', url);
+      const games = await fetchGamesData();
+      setMatchGames(games);
 
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-      });
+      const participants = await fetchParticipantsData();
+      setParticipants(participants);
 
-      logger.debug('useMatchGamesData: Response received:', response.status, response.statusText);
-
-      if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: Failed to load match games`;
-
-        try {
-          const responseText = await response.text();
-          logger.debug('useMatchGamesData: Error response body:', responseText);
-
-          if (responseText.trim()) {
-            const errorData = JSON.parse(responseText);
-            errorMessage = errorData.error || errorMessage;
-          }
-        } catch (jsonError) {
-          logger.error('Failed to parse error response as JSON:', jsonError);
-        }
-
-        // Retry on 405 error
-        if (response.status === 405) {
-          logger.debug('useMatchGamesData: Got 405, retrying after delay...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const retryResponse = await fetch(`/api/matches/${matchId}/games?retry=${Date.now()}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
-            },
-          });
-
-          if (retryResponse.ok) {
-            logger.debug('useMatchGamesData: Retry successful');
-            response = retryResponse;
-          } else {
-            throw new Error(errorMessage);
-          }
-        } else {
-          throw new Error(errorMessage);
-        }
-      }
-
-      const responseData = await response.json();
-      logger.debug('useMatchGamesData: Response data:', responseData);
-
-      setMatchGames(responseData.games || []);
-
-      // Fetch participants for FFA mode
-      const participantsResponse = await fetch(`/api/matches/${matchId}/participants`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (participantsResponse.ok) {
-        const participantsData = await participantsResponse.json();
-        setParticipants(participantsData.participants || []);
-      }
-
-      // Fetch match details for team names
-      const matchResponse = await fetch(`/api/matches/${matchId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (matchResponse.ok) {
-        const matchData = await matchResponse.json();
-        setTeam1Name(matchData.team1_name || null);
-        setTeam2Name(matchData.team2_name || null);
-      }
-
+      const { team1, team2 } = await fetchTeamNames();
+      setTeam1Name(team1);
+      setTeam2Name(team2);
     } catch (err) {
       logger.error('useMatchGamesData: Error fetching match data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load match data');

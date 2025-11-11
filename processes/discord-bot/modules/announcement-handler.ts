@@ -938,20 +938,34 @@ export class AnnouncementHandler {
     event_image_url?: string;
     start_date?: string;
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
-    let attachment: AttachmentBuilder | undefined;
+    const matchData = await this.fetchMatchStartDataSafe(eventData);
+    const embed = this.createBaseMatchStartEmbed(eventData, matchData);
 
-    // Fetch match start data
-    const matchData = this.db
-      ? await fetchMatchStartData(this.db, eventData.id, eventData.game_id)
-      : {
-          gameName: eventData.game_id,
-          gameColor: 0xe74c3c,
-          blueTeamVoiceChannel: null,
-          redTeamVoiceChannel: null
-        };
+    await this.addMapsFieldIfNeeded(embed, eventData);
+    await this.addTeamFieldsIfNeeded(embed, eventData, matchData);
+    await this.addMatchLinkIfNeeded(embed, eventData);
+    this.addLivestreamFieldIfNeeded(embed, eventData);
 
-    // Create the embed
-    const embed = new EmbedBuilder()
+    const attachment = this.attachEventImageIfNeeded(embed, eventData);
+
+    return { embed, attachment };
+  }
+
+  private async fetchMatchStartDataSafe(eventData: any) {
+    if (!this.db) {
+      return {
+        gameName: eventData.game_id,
+        gameColor: 0xe74c3c,
+        blueTeamVoiceChannel: null,
+        redTeamVoiceChannel: null
+      };
+    }
+
+    return await fetchMatchStartData(this.db, eventData.id, eventData.game_id);
+  }
+
+  private createBaseMatchStartEmbed(eventData: any, matchData: any): EmbedBuilder {
+    return new EmbedBuilder()
       .setTitle(`🚀 ${eventData.name} - MATCH STARTING NOW!`)
       .setDescription(eventData.description || `The ${eventData.name} match is beginning!`)
       .setColor(matchData.gameColor)
@@ -962,82 +976,99 @@ export class AnnouncementHandler {
       ])
       .setTimestamp()
       .setFooter({ text: 'Match Starting' });
+  }
 
-    // Add maps if available
-    if (eventData.maps && eventData.maps.length > 0 && this.db) {
-      const mapList = await buildMapListField(this.db, eventData.maps, eventData.game_id);
-      embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
-    }
+  private async addMapsFieldIfNeeded(embed: EmbedBuilder, eventData: any): Promise<void> {
+    const hasMaps = eventData.maps && eventData.maps.length > 0 && this.db;
+    if (!hasMaps) return;
 
-    // Get team assignments and add them to the embed
-    if (this.db) {
-      const teams = await fetchTeamAssignments(this.db, eventData.id);
+    const mapList = await buildMapListField(this.db!, eventData.maps, eventData.game_id);
+    embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
+  }
 
-      // Add blue team
-      if (teams.blueTeam.length > 0) {
-        const blueFieldValue = buildTeamFieldValue(teams.blueTeam, matchData.blueTeamVoiceChannel);
-        const blueTeamHeader = matchData.team1Name ? `🔵 ${matchData.team1Name}` : '🔵 Blue Team';
+  private async addTeamFieldsIfNeeded(embed: EmbedBuilder, eventData: any, matchData: any): Promise<void> {
+    if (!this.db) return;
 
-        embed.addFields([{
-          name: blueTeamHeader,
-          value: blueFieldValue,
-          inline: true
-        }]);
-      }
+    const teams = await fetchTeamAssignments(this.db, eventData.id);
 
-      // Add red team
-      if (teams.redTeam.length > 0) {
-        const redFieldValue = buildTeamFieldValue(teams.redTeam, matchData.redTeamVoiceChannel);
-        const redTeamHeader = matchData.team2Name ? `🔴 ${matchData.team2Name}` : '🔴 Red Team';
+    this.addBlueTeamField(embed, teams.blueTeam, matchData);
+    this.addRedTeamField(embed, teams.redTeam, matchData);
+    this.addReservesField(embed, teams.reserves);
+  }
 
-        embed.addFields([{
-          name: redTeamHeader,
-          value: redFieldValue,
-          inline: true
-        }]);
-      }
+  private addBlueTeamField(embed: EmbedBuilder, blueTeam: any[], matchData: any): void {
+    if (blueTeam.length === 0) return;
 
-      // Add reserves
-      if (teams.reserves.length > 0) {
-        const reserveList = teams.reserves
-          .map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)
-          .join('\n');
+    const blueFieldValue = buildTeamFieldValue(blueTeam, matchData.blueTeamVoiceChannel);
+    const blueTeamHeader = matchData.team1Name ? `🔵 ${matchData.team1Name}` : '🔵 Blue Team';
 
-        embed.addFields([{
-          name: '🟡 Reserves',
-          value: reserveList,
-          inline: true
-        }]);
-      }
-    }
+    embed.addFields([{
+      name: blueTeamHeader,
+      value: blueFieldValue,
+      inline: true
+    }]);
+  }
 
-    // Add link to original match info if available
-    if (this.db) {
-      const matchLink = await getMatchLink(this.db, eventData.id, this.client);
-      if (matchLink) {
-        embed.addFields([{
-          name: '🔗 Match Details',
-          value: `[View Full Match Info](${matchLink})`,
-          inline: false
-        }]);
-      }
-    }
+  private addRedTeamField(embed: EmbedBuilder, redTeam: any[], matchData: any): void {
+    if (redTeam.length === 0) return;
 
-    // Add livestream link if available
-    if (eventData.livestream_link) {
-      embed.addFields([{ name: '📺 Livestream', value: `[Watch Live](${eventData.livestream_link})`, inline: false }]);
-    }
+    const redFieldValue = buildTeamFieldValue(redTeam, matchData.redTeamVoiceChannel);
+    const redTeamHeader = matchData.team2Name ? `🔴 ${matchData.team2Name}` : '🔴 Red Team';
 
-    // Add event image if provided
-    if (eventData.event_image_url) {
-      attachment = attachEventImage(eventData.event_image_url);
-      if (attachment) {
-        const imageName = getImageAttachmentName(eventData.event_image_url);
-        embed.setImage(`attachment://${imageName}`);
-      }
-    }
+    embed.addFields([{
+      name: redTeamHeader,
+      value: redFieldValue,
+      inline: true
+    }]);
+  }
 
-    return { embed, attachment };
+  private addReservesField(embed: EmbedBuilder, reserves: any[]): void {
+    if (reserves.length === 0) return;
+
+    const reserveList = reserves
+      .map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)
+      .join('\n');
+
+    embed.addFields([{
+      name: '🟡 Reserves',
+      value: reserveList,
+      inline: true
+    }]);
+  }
+
+  private async addMatchLinkIfNeeded(embed: EmbedBuilder, eventData: any): Promise<void> {
+    if (!this.db) return;
+
+    const matchLink = await getMatchLink(this.db, eventData.id, this.client);
+    if (!matchLink) return;
+
+    embed.addFields([{
+      name: '🔗 Match Details',
+      value: `[View Full Match Info](${matchLink})`,
+      inline: false
+    }]);
+  }
+
+  private addLivestreamFieldIfNeeded(embed: EmbedBuilder, eventData: any): void {
+    if (!eventData.livestream_link) return;
+
+    embed.addFields([{
+      name: '📺 Livestream',
+      value: `[Watch Live](${eventData.livestream_link})`,
+      inline: false
+    }]);
+  }
+
+  private attachEventImageIfNeeded(embed: EmbedBuilder, eventData: any): AttachmentBuilder | undefined {
+    if (!eventData.event_image_url) return undefined;
+
+    const attachment = attachEventImage(eventData.event_image_url);
+    if (!attachment) return undefined;
+
+    const imageName = getImageAttachmentName(eventData.event_image_url);
+    embed.setImage(`attachment://${imageName}`);
+
+    return attachment;
   }
 
   async postMapScoreNotification(scoreData: {
