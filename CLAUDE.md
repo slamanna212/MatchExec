@@ -44,6 +44,57 @@ npm run dev:stop
 npm run dev:restart
 ```
 
+## Debugging Workflow
+
+When debugging issues in this project, follow this collaborative approach for speed and efficiency:
+
+### Process
+
+1. **User provides context**: Share error messages, logs, symptoms, what broke, and any theories about the cause
+2. **Claude provides diagnostic commands**: Specific commands to run for targeted investigation
+3. **User runs commands and pastes output**: Creates a fast feedback loop
+4. **Claude analyzes and provides fix**: Or requests more specific info if needed
+
+This workflow is strongly preferred over extensive autonomous exploration with numerous tool calls. It maintains speed while avoiding risky assumptions.
+
+### Common Diagnostic Commands
+
+```bash
+# View recent logs from all processes
+npm run dev:logs | tail -100
+
+# Check Discord bot logs
+tail -50 ./app_data/data/logs/discord-bot.log
+
+# Check scheduler logs
+tail -50 ./app_data/data/logs/scheduler.log
+
+# Check PM2 process status
+npx pm2 status
+
+# Query database directly
+sqlite3 ./app_data/data/matchexec.db "SELECT * FROM matches ORDER BY id DESC LIMIT 5;"
+
+# Check for errors in logs
+npm run dev:logs | grep -i error
+
+# Monitor logs in real-time
+npm run dev:logs --lines 0
+```
+
+### Example Interaction
+
+**User**: "Match creation is broken, getting a 500 error"
+
+**Claude**: "Can you run these commands and paste the output?
+1. `npm run dev:logs | grep -A 5 'error'`
+2. `tail -50 ./app_data/data/logs/discord-bot.log`
+3. Check browser console for any errors"
+
+**User**: [pastes results]
+
+**Claude**: "I see the issue on line X. Here's the fix..."
+
 ## Production Using Docker
 
 The production Docker container uses s6-overlay as the init system to manage all processes.
