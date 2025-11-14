@@ -24,6 +24,7 @@ export abstract class BaseLogger {
   protected levelCache: { level: LogLevel; timestamp: number } | null = null;
   protected cacheDuration = 5000; // 5 seconds
   protected supportsColor: boolean;
+  protected reloadInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // Detect if terminal supports colors
@@ -32,6 +33,14 @@ export abstract class BaseLogger {
       process.stdout &&
       process.stdout.isTTY !== false &&
       process.env.TERM !== 'dumb';
+
+    // Load initial level from database (async, completes in background)
+    this.loadLogLevel();
+
+    // Set up periodic reload every 5 seconds
+    this.reloadInterval = setInterval(() => {
+      this.loadLogLevel();
+    }, this.cacheDuration);
   }
 
   // Abstract method - subclasses must implement
@@ -56,9 +65,6 @@ export abstract class BaseLogger {
   }
 
   protected log(level: LogLevel, args: unknown[]): void {
-    // Reload level from cache/db periodically
-    this.loadLogLevel();
-
     if (!this.shouldLog(level)) {
       return;
     }
@@ -114,5 +120,13 @@ export abstract class BaseLogger {
   // Get current log level
   public getCurrentLevel(): LogLevel {
     return this.currentLevel;
+  }
+
+  // Cleanup method to stop the reload interval
+  public destroy(): void {
+    if (this.reloadInterval) {
+      clearInterval(this.reloadInterval);
+      this.reloadInterval = null;
+    }
   }
 }

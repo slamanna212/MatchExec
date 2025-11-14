@@ -31,9 +31,9 @@ export function parseModalCustomId(customId: string): ParsedModalId | null {
       }
     } else {
       // Format: signup_form_<eventId>
-      const lastUnderscoreIndex = customId.lastIndexOf('_');
-      if (lastUnderscoreIndex !== -1) {
-        eventId = customId.substring(lastUnderscoreIndex + 1);
+      const prefix = 'signup_form_';
+      if (customId.startsWith(prefix)) {
+        eventId = customId.substring(prefix.length);
       }
     }
 

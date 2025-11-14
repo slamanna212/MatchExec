@@ -315,6 +315,8 @@ export class InteractionHandler {
   async handleModalSubmit(interaction: ModalSubmitInteraction) {
     if (!interaction.customId.startsWith('signup_form_')) return;
 
+    logger.debug('Processing signup modal:', interaction.customId);
+
     // Parse modal custom ID
     const parsedId = parseModalCustomId(interaction.customId);
     if (!parsedId) {
@@ -322,14 +324,19 @@ export class InteractionHandler {
       return;
     }
 
+    logger.debug('Parsed signup modal ID:', { eventId: parsedId.eventId, isTournament: parsedId.isTournament, teamId: parsedId.selectedTeamId });
+
     try {
       if (!this.db) {
         throw new Error('Database not available');
       }
 
       // Get game ID to load the signup form structure
+      const tableName = parsedId.isTournament ? 'tournaments' : 'matches';
+      logger.debug(`Querying ${tableName} for event ID:`, parsedId.eventId);
+
       const eventData = await this.db.get<{ game_id: string }>(
-        `SELECT game_id FROM ${parsedId.isTournament ? 'tournaments' : 'matches'} WHERE id = ?`,
+        `SELECT game_id FROM ${tableName} WHERE id = ?`,
         [parsedId.eventId]
       );
 
