@@ -231,6 +231,7 @@ export function MatchDashboard() {
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [processingMatchId, setProcessingMatchId] = useState<string | null>(null);
 
   /**
    * Check if a match has changed
@@ -592,6 +593,7 @@ export function MatchDashboard() {
   };
 
   const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
+    setProcessingMatchId(matchId);
     try {
       const response = await fetch(`/api/matches/${matchId}/transition`, {
         method: 'POST',
@@ -604,10 +606,10 @@ export function MatchDashboard() {
       if (response.ok) {
         const updatedMatch = await response.json();
         // Update the match in the list
-        setMatches(prev => prev.map(match => 
+        setMatches(prev => prev.map(match =>
           match.id === matchId ? updatedMatch : match
         ));
-        
+
         if (newStatus === 'gather') {
           logger.info(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
         }
@@ -618,6 +620,8 @@ export function MatchDashboard() {
     } catch (error) {
       logger.error('Error transitioning match status:', error);
       showError('An error occurred while updating the match status.');
+    } finally {
+      setProcessingMatchId(null);
     }
   }, []);
 
@@ -625,8 +629,9 @@ export function MatchDashboard() {
     switch (match.status) {
       case 'created':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
+            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'gather');
@@ -638,9 +643,10 @@ export function MatchDashboard() {
         );
       case 'gather':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             color="orange"
+            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               modals.openConfirmModal({
@@ -662,9 +668,10 @@ export function MatchDashboard() {
         );
       case 'assign':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             color="green"
+            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'battle');
@@ -688,9 +695,10 @@ export function MatchDashboard() {
             >
               Scoring
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               color="red"
+              loading={processingMatchId === match.id}
               onClick={(e) => {
                 e.stopPropagation();
                 modals.openConfirmModal({
