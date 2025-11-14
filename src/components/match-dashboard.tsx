@@ -25,7 +25,7 @@ import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
 import { MatchDetailsModal } from './match-details-modal';
-import { showError } from '@/lib/notifications';
+import { showError, notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -231,7 +231,6 @@ export function MatchDashboard() {
   const [reminders, setReminders] = useState<ReminderData[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [processingMatchId, setProcessingMatchId] = useState<string | null>(null);
 
   /**
    * Check if a match has changed
@@ -593,7 +592,27 @@ export function MatchDashboard() {
   };
 
   const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
-    setProcessingMatchId(matchId);
+    const notificationId = `match-transition-${matchId}`;
+
+    // Determine the action message based on the new status
+    const actionMessages: Record<string, { loading: string; success: string }> = {
+      gather: { loading: 'Opening signups...', success: 'Signups opened successfully!' },
+      assign: { loading: 'Closing signups...', success: 'Signups closed successfully!' },
+      battle: { loading: 'Starting match...', success: 'Match started successfully!' },
+      complete: { loading: 'Ending match...', success: 'Match ended successfully!' },
+    };
+
+    const messages = actionMessages[newStatus] || {
+      loading: 'Processing...',
+      success: 'Status updated successfully!'
+    };
+
+    // Show loading notification
+    notificationHelper.loading({
+      id: notificationId,
+      message: messages.loading
+    });
+
     try {
       const response = await fetch(`/api/matches/${matchId}/transition`, {
         method: 'POST',
@@ -613,15 +632,30 @@ export function MatchDashboard() {
         if (newStatus === 'gather') {
           logger.info(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
         }
+
+        // Update notification to success
+        notificationHelper.update(notificationId, {
+          type: 'success',
+          message: messages.success
+        });
       } else {
-        logger.error('Failed to transition match status');
-        showError('Failed to update match status. Please try again.');
+        const error = await response.json();
+        logger.error('Failed to transition match status:', error);
+
+        // Update notification to error
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          message: error.error || 'Failed to update match status'
+        });
       }
     } catch (error) {
       logger.error('Error transitioning match status:', error);
-      showError('An error occurred while updating the match status.');
-    } finally {
-      setProcessingMatchId(null);
+
+      // Update notification to error
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while updating the match status'
+      });
     }
   }, []);
 
@@ -631,7 +665,6 @@ export function MatchDashboard() {
         return (
           <Button
             size="sm"
-            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'gather');
@@ -646,7 +679,6 @@ export function MatchDashboard() {
           <Button
             size="sm"
             color="orange"
-            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               modals.openConfirmModal({
@@ -671,7 +703,6 @@ export function MatchDashboard() {
           <Button
             size="sm"
             color="green"
-            loading={processingMatchId === match.id}
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'battle');
@@ -698,7 +729,6 @@ export function MatchDashboard() {
             <Button
               size="sm"
               color="red"
-              loading={processingMatchId === match.id}
               onClick={(e) => {
                 e.stopPropagation();
                 modals.openConfirmModal({
