@@ -48,8 +48,8 @@ async function determineSingleTeamChannelName(
   }
 
   // Try to get team name from tournament data
-  const tournamentMatch = await db.get<{ participant1_id: string }>(`
-    SELECT participant1_id FROM tournament_matches WHERE match_id = ?
+  const tournamentMatch = await db.get<{ team1_id: string }>(`
+    SELECT team1_id FROM tournament_matches WHERE match_id = ?
   `, [match.id]);
 
   if (!tournamentMatch) {
@@ -57,8 +57,8 @@ async function determineSingleTeamChannelName(
   }
 
   const team = await db.get<{ team_name: string }>(`
-    SELECT team_name FROM tournament_participants WHERE id = ?
-  `, [tournamentMatch.participant1_id]);
+    SELECT team_name FROM tournament_teams WHERE id = ?
+  `, [tournamentMatch.team1_id]);
 
   return { blueChannelName: team?.team_name || match.name };
 }
@@ -79,9 +79,9 @@ async function determineDualTeamChannelNames(
 
   // Get team names from tournament data
   const tournamentMatch = await db.get<{
-    participant1_id: string;
-    participant2_id: string;
-  }>(`SELECT participant1_id, participant2_id FROM tournament_matches WHERE match_id = ?`, [match.id]);
+    team1_id: string;
+    team2_id: string;
+  }>(`SELECT team1_id, team2_id FROM tournament_matches WHERE match_id = ?`, [match.id]);
 
   if (!tournamentMatch) {
     return {
@@ -91,12 +91,15 @@ async function determineDualTeamChannelNames(
   }
 
   const [team1, team2] = await Promise.all([
-    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_participants WHERE id = ?`, [tournamentMatch.participant1_id]),
-    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_participants WHERE id = ?`, [tournamentMatch.participant2_id])
+    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_teams WHERE id = ?`, [tournamentMatch.team1_id]),
+    db.get<{ team_name: string }>(`SELECT team_name FROM tournament_teams WHERE id = ?`, [tournamentMatch.team2_id])
   ]);
 
   const vsName = `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`;
-  return { blueChannelName: vsName, redChannelName: vsName };
+  return {
+    blueChannelName: `${vsName} - Blue Team`,
+    redChannelName: `${vsName} - Red Team`
+  };
 }
 
 /**

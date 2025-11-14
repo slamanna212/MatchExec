@@ -39,8 +39,8 @@ export function parseModalCustomId(customId: string): ParsedModalId | null {
 
     if (!eventId) return null;
 
-    // Determine if it's a tournament (starts with 'T') or match (starts with 'M')
-    const isTournament = eventId.startsWith('T');
+    // Determine if it's a tournament (starts with 'tournament_') or match (starts with 'match_')
+    const isTournament = eventId.startsWith('tournament_');
 
     return {
       eventId,

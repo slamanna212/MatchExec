@@ -361,6 +361,14 @@ export function TournamentDashboard() {
   }, [fetchTournaments]);
 
   const handleGenerateBracket = useCallback(async (tournamentId: string) => {
+    const notificationId = `bracket-generation-${tournamentId}`;
+
+    // Show loading notification
+    notificationHelper.loading({
+      id: notificationId,
+      message: 'Generating tournament bracket...'
+    });
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/generate-matches`, {
         method: 'POST',
@@ -370,7 +378,9 @@ export function TournamentDashboard() {
         const result = await response.json();
         logger.info('Bracket generated:', result.message);
 
-        notificationHelper.success({
+        // Update to success notification
+        notificationHelper.update(notificationId, {
+          type: 'success',
           title: 'Bracket Generated',
           message: result.message
         });
@@ -379,14 +389,20 @@ export function TournamentDashboard() {
         fetchTournaments(true);
       } else {
         const error = await response.json();
-        notificationHelper.error({
+
+        // Update to error notification
+        notificationHelper.update(notificationId, {
+          type: 'error',
           title: 'Bracket Generation Failed',
           message: error.error || 'Failed to generate bracket'
         });
       }
     } catch (error) {
       logger.error('Error generating bracket:', error);
-      notificationHelper.error({
+
+      // Update to error notification
+      notificationHelper.update(notificationId, {
+        type: 'error',
         title: 'Connection Error',
         message: 'Failed to generate bracket'
       });

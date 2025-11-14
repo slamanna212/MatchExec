@@ -9,7 +9,8 @@ module.exports = {
       autorestart: false,
       env: {
         NODE_ENV: 'development',
-        DATABASE_PATH: './app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db',
+        TZ: 'UTC'
       }
     },
     {
@@ -18,7 +19,8 @@ module.exports = {
       args: 'run dev',
       env: {
         NODE_ENV: 'development',
-        PORT: 3000
+        PORT: 3000,
+        TZ: 'UTC'
       }
     },
     {
@@ -28,7 +30,8 @@ module.exports = {
       interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'development',
-        DATABASE_PATH: './app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db',
+        TZ: 'UTC'
       },
       watch: ['./processes/discord-bot', './shared', './lib']
     },
@@ -39,7 +42,8 @@ module.exports = {
       interpreter_args: 'tsx',
       env: {
         NODE_ENV: 'development',
-        DATABASE_PATH: './app_data/data/matchexec.db'
+        DATABASE_PATH: './app_data/data/matchexec.db',
+        TZ: 'UTC'
       },
       watch: ['./processes/scheduler', './shared', './lib']
     }

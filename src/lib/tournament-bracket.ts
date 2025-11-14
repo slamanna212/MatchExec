@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDbInstance } from './database-init';
 import type { Database } from '../../lib/database/connection';
+import { VoiceChannelService } from './voice-channel-service';
+import { logger } from './logger';
 
 interface GameMode {
   id: string;
@@ -137,7 +139,7 @@ export async function generateSingleEliminationMatches(
   bracketAssignments: BracketAssignment[],
   gameId: string,
   roundsPerMatch: number,
-  _startTime?: Date
+  startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
@@ -156,7 +158,8 @@ export async function generateSingleEliminationMatches(
     tournamentRuleset,
     tournamentDescription,
     gameModes,
-    tournamentMaps
+    tournamentMaps,
+    startTime
   );
 }
 
@@ -198,7 +201,8 @@ async function generateMatchesFromPairings(
   tournamentRuleset: string,
   tournamentDescription: string | null,
   gameModes: GameMode[],
-  tournamentMaps: GameMap[]
+  tournamentMaps: GameMap[],
+  startTime?: Date
 ): Promise<GeneratedMatch[]> {
   const matches: GeneratedMatch[] = [];
 
@@ -230,7 +234,8 @@ async function generateMatchesFromPairings(
       selectedMaps,
       primaryMode!,
       team1Assignment,
-      team2Assignment
+      team2Assignment,
+      startTime
     );
 
     matches.push(generatedMatch);
@@ -307,7 +312,8 @@ function createMatchRecord(
   selectedMaps: string[],
   primaryMode: GameMode,
   team1Assignment: BracketAssignment,
-  team2Assignment: BracketAssignment
+  team2Assignment: BracketAssignment,
+  startTime?: Date
 ): GeneratedMatch {
   return {
     id: matchId,
@@ -325,7 +331,7 @@ function createMatchRecord(
     tournament_round: 1,
     tournament_bracket_type: 'winners',
     rules: tournamentRuleset,
-    scheduled_time: undefined,
+    scheduled_time: startTime,
     team1_name: team1?.team_name,
     team2_name: team2?.team_name,
     team1_id: team1Assignment.teamId,
@@ -783,6 +789,16 @@ export async function saveGeneratedMatches(
     }
 
     await db.run('COMMIT');
+
+    // Create voice channels for all tournament matches
+    for (const match of matches) {
+      try {
+        await VoiceChannelService.setupMatchVoiceChannels(match.id);
+      } catch (error) {
+        // Log error but don't fail the entire operation
+        logger.error(`Failed to create voice channels for tournament match ${match.id}:`, error);
+      }
+    }
   } catch (error) {
     await db.run('ROLLBACK');
     throw error;
