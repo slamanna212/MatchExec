@@ -18,7 +18,8 @@ interface MatchData {
   id: string;
   name: string;
   tournament_id?: string;
-  game_mode_id: string;
+  game_id: string;
+  mode_id: string;
 }
 
 /**
@@ -160,7 +161,7 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
 
     // Get match data including game mode
     const match = await db.get<MatchData>(
-      'SELECT id, name, tournament_id, game_mode_id FROM matches WHERE id = ?',
+      'SELECT id, name, tournament_id, game_id, mode_id FROM matches WHERE id = ?',
       [matchId]
     );
 
@@ -171,8 +172,8 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
 
     // Get game mode to determine team structure
     const gameMode = await db.get<{ max_teams: number }>(
-      'SELECT max_teams FROM game_modes WHERE id = ?',
-      [match.game_mode_id]
+      'SELECT max_teams FROM game_modes WHERE id = ? AND game_id = ?',
+      [match.mode_id, match.game_id]
     );
 
     const isSingleTeam = gameMode?.max_teams === 1;
