@@ -1111,10 +1111,37 @@ export class QueueProcessor {
             continue;
           }
 
+          // Check if this is a welcome announcement and if delay should be applied
+          if (announcement.announcement_type === 'welcome') {
+            // Get match start delay setting from discord_settings
+            const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`
+              SELECT match_start_delay_seconds FROM discord_settings LIMIT 1
+            `);
+
+            const delaySecs = settings?.match_start_delay_seconds ?? 45;
+
+            // Calculate if delay has elapsed
+            const createdAt = new Date(announcement.created_at).getTime();
+            const now = Date.now();
+            const elapsedSecs = (now - createdAt) / 1000;
+
+            if (elapsedSecs < delaySecs) {
+              // Delay hasn't elapsed yet, mark back as pending
+              await this.db.run(`
+                UPDATE discord_voice_announcement_queue
+                SET status = 'pending', updated_at = datetime('now')
+                WHERE id = ?
+              `, [announcement.id]);
+
+              logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
+              continue;
+            }
+          }
+
           if (!this.voiceHandler) {
             logger.error('❌ VoiceHandler not available');
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, ['VoiceHandler not available', announcement.id]);

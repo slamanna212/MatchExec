@@ -119,7 +119,7 @@ export async function handleGatherTransition(matchId: string): Promise<void> {
 
 /**
  * Handles match transition to "assign" status
- * Queues Discord status update to close signups
+ * Queues Discord status update to close signups and creates voice channels
  */
 export async function handleAssignTransition(matchId: string): Promise<void> {
   try {
@@ -134,18 +134,25 @@ export async function handleAssignTransition(matchId: string): Promise<void> {
     logger.error('❌ Error handling assign transition:', error);
     // Don't throw - just log the error
   }
+
+  // Create voice channels so they're ready when match starts
+  try {
+    await VoiceChannelService.setupMatchVoiceChannels(matchId);
+  } catch (error) {
+    logger.error('❌ Error setting up voice channels:', error);
+  }
 }
 
 /**
  * Handles match transition to "battle" status
- * Creates voice channels, queues announcements, initializes games, sends map codes
+ * Queues welcome voice announcement, match start announcements, initializes games, sends map codes
  */
 export async function handleBattleTransition(matchId: string): Promise<void> {
-  // Set up voice channels and welcome announcement
+  // Queue welcome voice announcement (voice channels already created in assign transition)
   try {
-    await VoiceChannelService.setupBattleVoice(matchId);
+    await VoiceChannelService.queueVoiceAnnouncement(matchId, 'welcome');
   } catch (error) {
-    logger.error('❌ Error setting up battle voice:', error);
+    logger.error('❌ Error queuing welcome voice announcement:', error);
   }
 
   // Queue Discord match start announcement

@@ -137,14 +137,4 @@ export class VoiceChannelService {
     }
   }
 
-  /**
-   * Sets up voice channels and queues welcome announcement for a match entering battle
-   */
-  public static async setupBattleVoice(matchId: string): Promise<void> {
-    // Create voice channels
-    await this.setupMatchVoiceChannels(matchId);
-
-    // Queue welcome announcement
-    await this.queueVoiceAnnouncement(matchId, 'welcome');
-  }
 }

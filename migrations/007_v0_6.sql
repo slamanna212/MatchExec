@@ -5,6 +5,9 @@
 -- Note: voice_channel_category_id already exists from migration 002
 ALTER TABLE discord_settings ADD COLUMN voice_channel_cleanup_delay_minutes INTEGER DEFAULT 10;
 
+-- Add match start delay for voice announcements
+ALTER TABLE discord_settings ADD COLUMN match_start_delay_seconds INTEGER DEFAULT 45;
+
 -- Create table to track auto-created voice channels for cleanup
 CREATE TABLE IF NOT EXISTS auto_voice_channels (
   id TEXT PRIMARY KEY,

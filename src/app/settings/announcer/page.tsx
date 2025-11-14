@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Checkbox, Box, Grid } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, Checkbox, Box, Grid, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2 } from '@tabler/icons-react';
@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger/client';
 interface AnnouncerSettings {
   announcer_voice?: string;
   voice_announcements_enabled?: boolean;
+  match_start_delay_seconds?: number;
 }
 
 interface Voice {
@@ -42,6 +43,7 @@ export default function AnnouncerSettingsPage() {
     initialValues: {
       announcer_voice: 'wrestling-announcer',
       voice_announcements_enabled: false,
+      match_start_delay_seconds: 45,
     },
   });
 
@@ -137,6 +139,14 @@ export default function AnnouncerSettingsPage() {
 
               {form.values.voice_announcements_enabled && (
                 <>
+                  <NumberInput
+                    label="Match Start Delay"
+                    description="Time in seconds between when a match starts and the announcer plays its match start message"
+                    min={0}
+                    max={300}
+                    {...form.getInputProps('match_start_delay_seconds')}
+                    disabled={loading}
+                  />
                   <Box>
                     <Text size="sm" fw={500} mb="xs">Announcer Voice</Text>
                     <Text size="xs" c="dimmed" mb="md">Select the voice style for match announcements</Text>
