@@ -1121,7 +1121,7 @@ export class QueueProcessor {
             const delaySecs = settings?.match_start_delay_seconds ?? 45;
 
             // Calculate if delay has elapsed
-            const createdAt = new Date(announcement.created_at).getTime();
+            const createdAt = new Date(`${announcement.created_at  }Z`).getTime();
             const now = Date.now();
             const elapsedSecs = (now - createdAt) / 1000;
 
