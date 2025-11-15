@@ -103,5 +103,54 @@
     "type": "Standard",
     "location": "Stadium",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "deadeye-canyon",
+    "name": "Deadeye Canyon",
+    "type": "Standard",
+    "location": "Desert",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "sovereign-heights",
+    "name": "Sovereign Heights",
+    "type": "Standard",
+    "location": "Futuristic",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "neon-fields",
+    "name": "Neon Fields",
+    "type": "Standard",
+    "location": "Futuristic",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "beckwith-park-midnight",
+    "name": "Beckwith Park (Midnight)",
+    "type": "Standard",
+    "location": "Park",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "tokyo-underpass",
+    "name": "Tokyo Underpass",
+    "type": "Standard",
+    "location": "Urban",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "utopia-retro",
+    "name": "Utopia Retro",
+    "type": "Standard",
+    "location": "Futuristic",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
+  },
+  {
+    "id": "champions-field-day",
+    "name": "Champions Field (Day)",
+    "type": "Standard",
+    "location": "Stadium",
+    "supportedModes": ["duel", "doubles", "standard", "chaos"]
   }
 ]

@@ -1,0 +1,24 @@
+{
+  "fields": [
+    {
+      "id": "epic_username",
+      "type": "text",
+      "label": "Epic Games / Steam Username",
+      "placeholder": "YourUsername",
+      "required": true,
+      "helpText": "Your in-game username for Rocket League"
+    },
+    {
+      "id": "current_rank",
+      "type": "text",
+      "label": "Current Competitive Rank",
+      "placeholder": "e.g., Diamond 2, Champion 1, or Unranked",
+      "required": true,
+      "helpText": "Your current rank in competitive playlists"
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}
