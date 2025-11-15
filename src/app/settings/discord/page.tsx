@@ -167,7 +167,7 @@ export default function DiscordSettingsPage() {
                             message: 'Application ID saved! Opening Discord authorization...'
                           });
                           // Open Discord authorization URL
-                          const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=17929378196480&scope=bot%20applications.commands`;
+                          const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=2551204168592720&scope=bot%20applications.commands`;
                           window.open(url, '_blank');
                         } else {
                           notificationHelper.error({

@@ -121,7 +121,7 @@ export default function DiscordSetupClient() {
               disabled={!form.values.application_id || loading}
               onClick={async () => {
                 if (form.values.application_id) {
-                  const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=581636017618000&scope=bot%20applications.commands`;
+                  const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=2551204168592720&scope=bot%20applications.commands`;
                   window.open(url, '_blank');
                 }
               }}
