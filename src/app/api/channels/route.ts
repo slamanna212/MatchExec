@@ -12,6 +12,7 @@ export interface DiscordChannel {
   send_reminders?: boolean;
   send_match_start?: boolean;
   send_signup_updates?: boolean;
+  send_health_alerts?: boolean;
   last_name_refresh?: string;
   created_at: string;
   updated_at: string;
@@ -22,7 +23,7 @@ export async function GET() {
     const db = await getDbInstance();
     
     const channels = await db.all<DiscordChannel>(`
-      SELECT 
+      SELECT
         id,
         discord_channel_id,
         channel_name,
@@ -31,10 +32,11 @@ export async function GET() {
         send_reminders,
         send_match_start,
         send_signup_updates,
+        send_health_alerts,
         last_name_refresh,
         created_at,
         updated_at
-      FROM discord_channels 
+      FROM discord_channels
       ORDER BY channel_type, channel_name
     `);
 
@@ -44,7 +46,8 @@ export async function GET() {
       send_announcements: Boolean(channel.send_announcements),
       send_reminders: Boolean(channel.send_reminders),
       send_match_start: Boolean(channel.send_match_start),
-      send_signup_updates: Boolean(channel.send_signup_updates)
+      send_signup_updates: Boolean(channel.send_signup_updates),
+      send_health_alerts: Boolean(channel.send_health_alerts)
     }));
 
     return NextResponse.json(formattedChannels);
@@ -105,7 +108,8 @@ function extractChannelData(body: any) {
     send_announcements: body.send_announcements ?? false,
     send_reminders: body.send_reminders ?? false,
     send_match_start: body.send_match_start ?? false,
-    send_signup_updates: body.send_signup_updates ?? false
+    send_signup_updates: body.send_signup_updates ?? false,
+    send_health_alerts: body.send_health_alerts ?? false
   };
 }
 
@@ -176,9 +180,10 @@ async function createDiscordChannel(
       send_announcements,
       send_reminders,
       send_match_start,
-      send_signup_updates
+      send_signup_updates,
+      send_health_alerts
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     channelId,
     guildId,
@@ -189,7 +194,8 @@ async function createDiscordChannel(
     getFlag(data.send_announcements),
     getFlag(data.send_reminders),
     getFlag(data.send_match_start),
-    getFlag(data.send_signup_updates)
+    getFlag(data.send_signup_updates),
+    getFlag(data.send_health_alerts)
   ]);
 
   return channelId;

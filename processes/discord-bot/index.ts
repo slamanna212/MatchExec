@@ -14,6 +14,7 @@ import { SettingsManager } from './modules/settings-manager';
 import { QueueProcessor } from './modules/queue-processor';
 import { ReminderHandler } from './modules/reminder-handler';
 import { InteractionHandler } from './modules/interaction-handler';
+import { HealthMonitor } from './modules/health-monitor';
 
 class MatchExecBot {
   private client: Client;
@@ -29,6 +30,7 @@ class MatchExecBot {
   private reminderHandler: ReminderHandler | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private interactionHandler: InteractionHandler | null = null;
+  private healthMonitor: HealthMonitor | null = null;
 
   constructor() {
     this.client = new Client({
@@ -166,6 +168,7 @@ class MatchExecBot {
         this.eventHandler,
         this.voiceHandler
       );
+      this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
 
 
       // Start periodic tasks
@@ -201,6 +204,11 @@ class MatchExecBot {
     setInterval(async () => {
       await this.processQueues();
     }, 5000);
+
+    // Start health monitoring
+    if (this.healthMonitor) {
+      this.healthMonitor.start();
+    }
   }
 
   // Process all queues using the QueueProcessor
@@ -285,15 +293,19 @@ class MatchExecBot {
   }
 
   private async shutdown() {
-    
+
+    if (this.healthMonitor) {
+      this.healthMonitor.stop();
+    }
+
     if (this.voiceHandler) {
       await this.voiceHandler.disconnectFromAllVoiceChannels();
     }
-    
+
     if (this.client) {
       this.client.destroy();
     }
-    
+
     process.exit(0);
   }
 

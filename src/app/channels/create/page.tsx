@@ -24,6 +24,7 @@ interface CreateChannelForm {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
 }
 
 export default function CreateChannelPage() {
@@ -38,6 +39,7 @@ export default function CreateChannelPage() {
       send_reminders: false,
       send_match_start: false,
       send_signup_updates: false,
+      send_health_alerts: false,
     },
     validate: {
       discord_channel_id: (value) => {
@@ -93,7 +95,10 @@ export default function CreateChannelPage() {
       const response = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form.values),
+        body: JSON.stringify({
+          ...form.values,
+          channel_type: 'text'
+        }),
       });
 
       if (response.ok) {
@@ -164,6 +169,11 @@ export default function CreateChannelPage() {
                 description="Send updates when players sign up or leave matches"
                 {...form.getInputProps('send_signup_updates', { type: 'checkbox' })}
               />
+              <Checkbox
+                label="Health Alerts"
+                description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
+                {...form.getInputProps('send_health_alerts', { type: 'checkbox' })}
+              />
             </Stack>
           </Stack>
         );
@@ -201,10 +211,14 @@ export default function CreateChannelPage() {
             {form.values.send_signup_updates && (
               <Text size="sm">✓ Signup Updates</Text>
             )}
+            {form.values.send_health_alerts && (
+              <Text size="sm">✓ Health Alerts</Text>
+            )}
             {!form.values.send_announcements &&
              !form.values.send_reminders &&
              !form.values.send_match_start &&
-             !form.values.send_signup_updates && (
+             !form.values.send_signup_updates &&
+             !form.values.send_health_alerts && (
               <Text size="sm" c="dimmed">No notifications enabled</Text>
             )}
           </Stack>

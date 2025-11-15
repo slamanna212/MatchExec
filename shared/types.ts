@@ -148,6 +148,7 @@ export interface DiscordChannel {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
   last_name_refresh?: string;
   created_at: string;
   updated_at: string;

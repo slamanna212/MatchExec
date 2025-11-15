@@ -16,9 +16,22 @@ class MatchExecScheduler {
       // Wait for database to be ready (migrated and seeded)
       logger.debug('⏳ Waiting for database to be ready...');
       this.db = await waitForDatabaseReady();
-      
+
       this.isRunning = true;
-      
+
+      // Send initial heartbeat for health monitoring
+      try {
+        const now = new Date().toISOString();
+        await this.db.run(
+          `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE setting_key = ?`,
+          [now, 'scheduler_last_heartbeat']
+        );
+        logger.debug('💓 Initial scheduler heartbeat sent');
+      } catch (error) {
+        logger.error('Failed to send initial scheduler heartbeat:', error);
+      }
+
       // Load and start cron jobs
       await this.loadSchedulerSettings();
       
@@ -548,10 +561,22 @@ class MatchExecScheduler {
 
 
   private keepAlive() {
-    // Keep the process alive
-    setInterval(() => {
+    // Keep the process alive and persist heartbeat for health monitoring
+    setInterval(async () => {
       if (this.isRunning) {
         logger.debug('🕐 Scheduler heartbeat');
+
+        // Persist heartbeat timestamp to database for health monitoring
+        try {
+          const now = new Date().toISOString();
+          await this.db.run(
+            `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE setting_key = ?`,
+            [now, 'scheduler_last_heartbeat']
+          );
+        } catch (error) {
+          logger.error('Failed to persist scheduler heartbeat:', error);
+        }
       }
     }, 300000); // Every 5 minutes
   }

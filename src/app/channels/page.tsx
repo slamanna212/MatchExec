@@ -15,6 +15,7 @@ interface ChannelEditData {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
 }
 
 export default function ChannelsPage() {
@@ -29,7 +30,8 @@ export default function ChannelsPage() {
     send_announcements: false,
     send_reminders: false,
     send_match_start: false,
-    send_signup_updates: false
+    send_signup_updates: false,
+    send_health_alerts: false
   });
 
   useEffect(() => {
@@ -82,7 +84,8 @@ export default function ChannelsPage() {
       send_announcements: channel.send_announcements || false,
       send_reminders: channel.send_reminders || false,
       send_match_start: channel.send_match_start || false,
-      send_signup_updates: channel.send_signup_updates || false
+      send_signup_updates: channel.send_signup_updates || false,
+      send_health_alerts: channel.send_health_alerts || false
     });
     openEditModal();
   };
@@ -148,7 +151,8 @@ export default function ChannelsPage() {
     announcements: textChannels.some(ch => ch.send_announcements),
     reminders: textChannels.some(ch => ch.send_reminders),
     live_updates: textChannels.some(ch => ch.send_match_start),
-    signup_updates: textChannels.some(ch => ch.send_signup_updates)
+    signup_updates: textChannels.some(ch => ch.send_signup_updates),
+    health_alerts: textChannels.some(ch => ch.send_health_alerts)
   };
 
   if (loading) {
@@ -185,51 +189,51 @@ export default function ChannelsPage() {
         </div>
 
         {/* Notification Status Indicators */}
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Text size="md" fw={600} mb="xs">Notification Status</Text>
-          <Text size="sm" c="dimmed" mb="md">Green indicates at least one channel is configured for this notification type</Text>
-          <Grid>
-            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
-              <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
-                  style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
-                  fill="currentColor"
-                />
-                <Text size="sm">Announcements</Text>
-              </Group>
-            </Grid.Col>
-            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
-              <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
-                  style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
-                  fill="currentColor"
-                />
-                <Text size="sm">Reminders</Text>
-              </Group>
-            </Grid.Col>
-            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
-              <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
-                  style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
-                  fill="currentColor"
-                />
-                <Text size="sm">Live Updates</Text>
-              </Group>
-            </Grid.Col>
-            <Grid.Col span={{ base: 6, sm: 6, md: 3 }}>
-              <Group gap="xs" align="center">
-                <IconCircle 
-                  size="0.8rem" 
-                  style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
-                  fill="currentColor"
-                />
-                <Text size="sm">Signup Updates</Text>
-              </Group>
-            </Grid.Col>
-          </Grid>
+        <Card shadow="sm" padding="lg" radius="md" withBorder style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <Text size="md" fw={600} mb="xs" ta="center">Notification Status</Text>
+          <Text size="sm" c="dimmed" mb="md" ta="center">Green indicates at least one channel is configured for this notification type</Text>
+          <Group gap="lg" justify="center" wrap="wrap">
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Announcements</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Reminders</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Live Updates</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Signup Updates</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Health Alerts</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.health_alerts ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
+          </Group>
         </Card>
 
         {/* Channels Section */}
@@ -286,7 +290,8 @@ export default function ChannelsPage() {
                         {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
                         {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                         {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
-                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && (
+                        {channel.send_health_alerts && <Badge size="xs" color="red">Health Alerts</Badge>}
+                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && !channel.send_health_alerts && (
                           <Badge size="xs" color="gray" variant="light">No notifications</Badge>
                         )}
                       </Group>
@@ -355,6 +360,13 @@ export default function ChannelsPage() {
                 description="Send updates when players sign up or leave"
                 checked={editData.send_signup_updates}
                 onChange={(e) => setEditData(prev => ({ ...prev, send_signup_updates: e.target.checked }))}
+              />
+
+              <Checkbox
+                label="Health Alerts"
+                description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
+                checked={editData.send_health_alerts}
+                onChange={(e) => setEditData(prev => ({ ...prev, send_health_alerts: e.target.checked }))}
               />
             </Stack>
 

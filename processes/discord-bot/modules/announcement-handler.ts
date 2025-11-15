@@ -589,7 +589,7 @@ export class AnnouncementHandler {
     }
   }
 
-  private async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates'): Promise<DiscordChannel[]> {
+  private async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates' | 'health_alerts'): Promise<DiscordChannel[]> {
     if (!this.db) {
       return [];
     }
@@ -597,9 +597,10 @@ export class AnnouncementHandler {
     try {
       const columnMap = {
         'announcements': 'send_announcements',
-        'reminders': 'send_reminders', 
+        'reminders': 'send_reminders',
         'match_start': 'send_match_start',
-        'signup_updates': 'send_signup_updates'
+        'signup_updates': 'send_signup_updates',
+        'health_alerts': 'send_health_alerts'
       };
 
       const column = columnMap[notificationType];
@@ -617,13 +618,14 @@ export class AnnouncementHandler {
         send_reminders: number;
         send_match_start: number;
         send_signup_updates: number;
+        send_health_alerts: number;
         created_at: string;
         updated_at: string;
       }>(`
-        SELECT id, discord_channel_id, channel_name, channel_type, 
-               send_announcements, send_reminders, send_match_start, send_signup_updates,
+        SELECT id, discord_channel_id, channel_name, channel_type,
+               send_announcements, send_reminders, send_match_start, send_signup_updates, send_health_alerts,
                created_at, updated_at
-        FROM discord_channels 
+        FROM discord_channels
         WHERE ${column} = 1
       `);
 
@@ -636,6 +638,7 @@ export class AnnouncementHandler {
         send_reminders: Boolean(channel.send_reminders),
         send_match_start: Boolean(channel.send_match_start),
         send_signup_updates: Boolean(channel.send_signup_updates),
+        send_health_alerts: Boolean(channel.send_health_alerts),
         created_at: channel.created_at,
         updated_at: channel.updated_at
       }));
@@ -1703,6 +1706,48 @@ export class AnnouncementHandler {
     });
 
     return { embed, attachment };
+  }
+
+  async postHealthAlert(alertData: {
+    severity: 'critical' | 'warning';
+    title: string;
+    description: string;
+  }): Promise<void> {
+    try {
+      const channels = await this.getChannelsForNotificationType('health_alerts');
+
+      if (channels.length === 0) {
+        logger.warning('No channels configured for health alerts');
+        return;
+      }
+
+      // Create embed based on severity
+      const color = alertData.severity === 'critical' ? 0xFF0000 : 0xFFFF00; // Red or Yellow
+      const icon = alertData.severity === 'critical' ? '🚨' : '⚠️';
+
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`${icon} ${alertData.title}`)
+        .setDescription(alertData.description)
+        .setTimestamp()
+        .setFooter({ text: `Severity: ${alertData.severity.toUpperCase()}` });
+
+      // Send to all configured channels
+      for (const channel of channels) {
+        try {
+          const discordChannel = await this.client.channels.fetch(channel.discord_channel_id);
+
+          if (discordChannel?.isTextBased() && 'send' in discordChannel) {
+            await discordChannel.send({ embeds: [embed] });
+            logger.info(`Health alert sent to channel ${channel.channel_name || channel.discord_channel_id}`);
+          }
+        } catch (error) {
+          logger.error(`Failed to send health alert to channel ${channel.discord_channel_id}:`, error);
+        }
+      }
+    } catch (error) {
+      logger.error('Error posting health alert:', error);
+    }
   }
 
   updateSettings(settings: DiscordSettings | null) {

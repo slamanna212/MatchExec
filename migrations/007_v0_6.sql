@@ -61,3 +61,22 @@ ALTER TABLE discord_bot_requests_new RENAME TO discord_bot_requests;
 
 -- Recreate the index
 CREATE INDEX IF NOT EXISTS idx_discord_bot_requests_status ON discord_bot_requests(status);
+
+-- Health Alerts Feature
+-- Add health alerts notification type to discord channels
+ALTER TABLE discord_channels ADD COLUMN send_health_alerts BOOLEAN DEFAULT 0;
+
+-- Create table to track health alert rate limiting (one alert per issue per hour)
+CREATE TABLE IF NOT EXISTS health_alerts_sent (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  alert_type TEXT NOT NULL,
+  last_sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(alert_type)
+);
+
+-- Index for faster rate limit checks
+CREATE INDEX IF NOT EXISTS idx_health_alerts_sent_alert_type ON health_alerts_sent(alert_type);
+
+-- Add scheduler heartbeat tracking to app_settings
+INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type, metadata) VALUES
+('scheduler_last_heartbeat', '', 'string', '{"description": "ISO timestamp of the last scheduler heartbeat for health monitoring"}');

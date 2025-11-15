@@ -33,13 +33,14 @@ export class Utils {
         send_reminders: number;
         send_match_start: number;
         send_signup_updates: number;
+        send_health_alerts: number;
         created_at: string;
         updated_at: string;
       }>(`
-        SELECT id, discord_channel_id, channel_name, channel_type, 
-               send_announcements, send_reminders, send_match_start, send_signup_updates,
+        SELECT id, discord_channel_id, channel_name, channel_type,
+               send_announcements, send_reminders, send_match_start, send_signup_updates, send_health_alerts,
                created_at, updated_at
-        FROM discord_channels 
+        FROM discord_channels
         WHERE ${column} = 1
       `);
 
@@ -52,6 +53,7 @@ export class Utils {
         send_reminders: Boolean(channel.send_reminders),
         send_match_start: Boolean(channel.send_match_start),
         send_signup_updates: Boolean(channel.send_signup_updates),
+        send_health_alerts: Boolean(channel.send_health_alerts),
         created_at: channel.created_at,
         updated_at: channel.updated_at
       }));
