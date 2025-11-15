@@ -9,6 +9,61 @@ updates:
       time: "09:00"
     target-branch: "dev"
     open-pull-requests-limit: 10
+    groups:
+      # Group all patch updates together
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Group Mantine UI updates
+      mantine:
+        patterns:
+          - "@mantine/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group Next.js and React updates
+      nextjs-react:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group Discord.js updates
+      discord:
+        patterns:
+          - "discord.js"
+          - "@discordjs/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group TypeScript type definitions
+      typescript-types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group Tailwind CSS updates
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group ESLint updates
+      eslint:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+        update-types:
+          - "minor"
+          - "patch"
     assignees:
       - "slamanna212"
     commit-message:
