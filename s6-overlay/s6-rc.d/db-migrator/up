@@ -1,13 +1,9 @@
 #!/command/with-contenv bash
 
-echo "📊 Starting database migrations and seeding in background..."
+echo "📊 Running database migrations and seeding..."
 
-# Ensure database directory exists and has correct permissions
-mkdir -p /app/app_data/data
-chown -R abc:abc /app/app_data
-
-# Run migrations in background as the abc user
+# Run migrations as the abc user (blocking until complete)
 cd /app
-s6-setuidgid abc tsx scripts/migrate-background.ts &
+s6-setuidgid abc tsx scripts/migrate-background.ts
 
-echo "✅ Database initialization started in background"
+echo "✅ Database initialization completed"
