@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Title, Text, Button, Stack, Alert } from '@mantine/core';
+import { Title, Text, Button, Stack, Alert, Group } from '@mantine/core';
 import { IconInfoCircle, IconRocket, IconSettings } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 
@@ -50,12 +50,11 @@ export default function WelcomePageClient() {
         announcements, player management, and score tracking.
       </Text>
 
-      <Stack gap="md">
+      <Group gap="md" grow>
         <Button
           size="lg"
           leftSection={<IconRocket size={20} />}
           onClick={handleGetStarted}
-          fullWidth
         >
           Get Started
         </Button>
@@ -65,11 +64,10 @@ export default function WelcomePageClient() {
           variant="outline"
           leftSection={<IconSettings size={20} />}
           onClick={handleProMode}
-          fullWidth
         >
           Pro Mode
         </Button>
-      </Stack>
+      </Group>
 
       <Alert
         icon={<IconInfoCircle size={16} />}

@@ -19,13 +19,13 @@ export default function WelcomeLayout({ children }: WelcomeLayoutProps) {
         padding: '2rem 1rem',
       }}
     >
-      <Container size="md" style={{ width: '100%' }}>
+      <Container size="xl" style={{ width: '100%' }}>
         <Paper
           withBorder
           shadow="md"
           p="xl"
           radius="md"
-          style={{ width: '100%', maxWidth: '600px', margin: '0 auto' }}
+          style={{ width: '100%', maxWidth: '1000px', margin: '0 auto' }}
         >
           {children}
         </Paper>

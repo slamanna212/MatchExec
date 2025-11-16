@@ -8,7 +8,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
-import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck } from '@tabler/icons-react';
+import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck, IconCircle } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
 
@@ -21,6 +21,7 @@ interface DiscordChannel {
   send_reminders?: boolean;
   send_match_start?: boolean;
   send_signup_updates?: boolean;
+  send_health_alerts?: boolean;
 }
 
 interface CreateChannelForm {
@@ -29,6 +30,7 @@ interface CreateChannelForm {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
 }
 
 interface ChannelEditData {
@@ -36,6 +38,7 @@ interface ChannelEditData {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
 }
 
 export default function ChannelsSetupClient() {
@@ -70,7 +73,8 @@ export default function ChannelsSetupClient() {
     send_announcements: false,
     send_reminders: false,
     send_match_start: false,
-    send_signup_updates: false
+    send_signup_updates: false,
+    send_health_alerts: false
   });
 
   const createForm = useForm<CreateChannelForm>({
@@ -80,6 +84,7 @@ export default function ChannelsSetupClient() {
       send_reminders: false,
       send_match_start: false,
       send_signup_updates: false,
+      send_health_alerts: false,
     },
     validate: {
       discord_channel_id: (value) => {
@@ -204,7 +209,8 @@ export default function ChannelsSetupClient() {
       send_announcements: channel.send_announcements || false,
       send_reminders: channel.send_reminders || false,
       send_match_start: channel.send_match_start || false,
-      send_signup_updates: channel.send_signup_updates || false
+      send_signup_updates: channel.send_signup_updates || false,
+      send_health_alerts: channel.send_health_alerts || false
     });
     setEditModalOpened(true);
   };
@@ -337,6 +343,11 @@ export default function ChannelsSetupClient() {
                 description="Send updates when players sign up or leave matches"
                 {...createForm.getInputProps('send_signup_updates', { type: 'checkbox' })}
               />
+              <Checkbox
+                label="Health Alerts"
+                description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
+                {...createForm.getInputProps('send_health_alerts', { type: 'checkbox' })}
+              />
             </Stack>
           </Stack>
         );
@@ -366,10 +377,12 @@ export default function ChannelsSetupClient() {
             {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
             {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
             {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
+            {createForm.values.send_health_alerts && <Text size="sm">✓ Health Alerts</Text>}
             {!createForm.values.send_announcements &&
              !createForm.values.send_reminders &&
              !createForm.values.send_match_start &&
-             !createForm.values.send_signup_updates && (
+             !createForm.values.send_signup_updates &&
+             !createForm.values.send_health_alerts && (
               <Text size="sm" c="dimmed">No notifications enabled</Text>
             )}
           </Stack>
@@ -379,6 +392,15 @@ export default function ChannelsSetupClient() {
   );
 
   const textChannels = channels.filter(ch => ch.channel_type === 'text');
+
+  // Calculate notification status
+  const notificationStatus = {
+    announcements: textChannels.some(ch => ch.send_announcements),
+    reminders: textChannels.some(ch => ch.send_reminders),
+    live_updates: textChannels.some(ch => ch.send_match_start),
+    signup_updates: textChannels.some(ch => ch.send_signup_updates),
+    health_alerts: textChannels.some(ch => ch.send_health_alerts)
+  };
 
   return (
     <Stack gap="lg">
@@ -395,6 +417,54 @@ export default function ChannelsSetupClient() {
         Add Discord text channels to receive match notifications and announcements.
         Voice channels for matches are created automatically. You can always add more channels later from the main channels page.
       </Text>
+
+      {/* Notification Status Indicators */}
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Text size="md" fw={600} mb="xs" ta="center">Notification Status</Text>
+        <Text size="sm" c="dimmed" mb="md" ta="center">Green indicates at least one channel is configured for this notification type</Text>
+        <Group gap="xl" justify="center" wrap="wrap">
+          <Stack gap="xs" align="center">
+            <Text size="sm" fw={500}>Announcements</Text>
+            <IconCircle
+              size="1rem"
+              style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
+              fill="currentColor"
+            />
+          </Stack>
+          <Stack gap="xs" align="center">
+            <Text size="sm" fw={500}>Reminders</Text>
+            <IconCircle
+              size="1rem"
+              style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
+              fill="currentColor"
+            />
+          </Stack>
+          <Stack gap="xs" align="center">
+            <Text size="sm" fw={500}>Live Updates</Text>
+            <IconCircle
+              size="1rem"
+              style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
+              fill="currentColor"
+            />
+          </Stack>
+          <Stack gap="xs" align="center">
+            <Text size="sm" fw={500}>Signup Updates</Text>
+            <IconCircle
+              size="1rem"
+              style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
+              fill="currentColor"
+            />
+          </Stack>
+          <Stack gap="xs" align="center">
+            <Text size="sm" fw={500}>Health Alerts</Text>
+            <IconCircle
+              size="1rem"
+              style={{ color: notificationStatus.health_alerts ? '#51cf66' : '#ff6b6b' }}
+              fill="currentColor"
+            />
+          </Stack>
+        </Group>
+      </Card>
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" mb="md">
@@ -430,6 +500,7 @@ export default function ChannelsSetupClient() {
                       {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
                       {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                       {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
+                      {channel.send_health_alerts && <Badge size="xs" color="red">Health Alerts</Badge>}
                     </Group>
                   </div>
                   <Group gap="xs">
@@ -507,7 +578,7 @@ export default function ChannelsSetupClient() {
         opened={createModalOpened}
         onClose={closeCreateModal}
         title="Add Discord Channel"
-        size="lg"
+        size="xl"
         zIndex={1001}
       >
         <Stack gap="lg">
@@ -599,6 +670,13 @@ export default function ChannelsSetupClient() {
               description="Send updates when players sign up or leave"
               checked={editData.send_signup_updates}
               onChange={(e) => setEditData(prev => ({ ...prev, send_signup_updates: e.target.checked }))}
+            />
+
+            <Checkbox
+              label="Health Alerts"
+              description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
+              checked={editData.send_health_alerts}
+              onChange={(e) => setEditData(prev => ({ ...prev, send_health_alerts: e.target.checked }))}
             />
           </Stack>
 
