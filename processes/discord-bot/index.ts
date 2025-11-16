@@ -5,6 +5,7 @@ import type { Database } from '../../lib/database';
 import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 import { logger } from '../../src/lib/logger/server';
+import { SignupFormLoader } from '../../lib/signup-forms';
 
 // Import our modules
 import { VoiceHandler } from './modules/voice-handler';
@@ -113,17 +114,44 @@ class MatchExecBot {
 
   private async checkWelcomeFlowCompleted(): Promise<boolean> {
     if (!this.db) return false;
-    
+
     try {
       const result = await this.db.get<{ setting_value: string }>(
         'SELECT setting_value FROM app_settings WHERE setting_key = ?',
         ['welcome_flow_completed']
       );
-      
+
       return result?.setting_value === 'true';
     } catch (error) {
       logger.error('❌ Error checking welcome flow status:', error);
       return false;
+    }
+  }
+
+  private async preloadSignupForms() {
+    if (!this.db) return;
+
+    try {
+      // Get all games from the database
+      const games = await this.db.all<{ id: string, name: string }>('SELECT id, name FROM games');
+
+      logger.info(`📋 Pre-loading signup forms for ${games.length} games...`);
+
+      // Pre-load signup forms for all games
+      const loadPromises = games.map(async (game) => {
+        try {
+          await SignupFormLoader.loadSignupForm(game.id);
+          logger.debug(`✅ Pre-loaded signup form for: ${game.name}`);
+        } catch (error) {
+          logger.warning(`⚠️ Failed to pre-load signup form for ${game.name}:`, error);
+        }
+      });
+
+      await Promise.all(loadPromises);
+      logger.info('✅ All signup forms pre-loaded successfully');
+    } catch (error) {
+      logger.error('❌ Error pre-loading signup forms:', error);
+      // Don't crash if pre-loading fails, forms will be loaded on-demand
     }
   }
 
@@ -147,6 +175,9 @@ class MatchExecBot {
         logger.warning('⚠️ Bot token not configured');
         return false;
       }
+
+      // Pre-load signup forms for all games
+      await this.preloadSignupForms();
 
       // Initialize modules
       this.voiceHandler = new VoiceHandler(this.client, this.db, this.settings);

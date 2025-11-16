@@ -264,6 +264,12 @@ export class InteractionHandler {
     try {
       if (!this.db) return;
 
+      // NOTE: We cannot defer this interaction because it may show a modal,
+      // and showModal() must be the immediate response to an interaction.
+      // Instead, we rely on signup form pre-loading at bot startup to make
+      // loadSignupForm() instant (cache hit), avoiding file I/O during interaction.
+      // This keeps the total processing time well under Discord's 3-second limit.
+
       // Check if user is already signed up
       const isAlreadySignedUp = await checkExistingParticipant(this.db, eventId, interaction.user.id, isTournament);
 
