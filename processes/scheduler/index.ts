@@ -185,12 +185,9 @@ class MatchExecScheduler {
   private async handleMatchReminders() {
     // Check for matches that need reminder queue entries created
     await this.queueMatchReminders();
-    
+
     // Check for matches that need player reminder DMs
     await this.queuePlayerReminders();
-    
-    // Process existing reminder queue
-    await this.processReminderQueue();
   }
 
 
@@ -201,7 +198,7 @@ class MatchExecScheduler {
       const discordSettings = await this.db.get(
         'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
       );
-      
+
       if (!discordSettings?.match_reminder_minutes) {
         logger.debug('⚠️ No Discord reminder settings found, skipping reminder queue');
         return;
@@ -213,90 +210,55 @@ class MatchExecScheduler {
       const upcomingMatches = await this.db.all(
         `SELECT m.id, m.name, m.start_date
          FROM matches m
-         WHERE m.start_date IS NOT NULL 
+         WHERE m.start_date IS NOT NULL
          AND m.status IN ('created', 'gather', 'assign', 'battle')
          AND datetime(m.start_date) > datetime('now')
          AND NOT EXISTS (
-           SELECT 1 FROM discord_reminder_queue drq 
-           WHERE drq.match_id = m.id 
+           SELECT 1 FROM discord_reminder_queue drq
+           WHERE drq.match_id = m.id
            AND drq.status != 'failed'
          )`
       );
 
+      if (upcomingMatches.length === 0) {
+        logger.debug('ℹ️ No matches need reminder queue entries');
+        return;
+      }
+
+      logger.debug(`🔍 Found ${upcomingMatches.length} match(es) that need reminders`);
+
+      let queuedCount = 0;
+      let skippedCount = 0;
+
       for (const match of upcomingMatches) {
         const startDate = new Date(match.start_date);
         const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
-        
+
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
           const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
+
           // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
             INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
           `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
-          
+
           logger.debug(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
+          queuedCount++;
+        } else {
+          logger.debug(`⏭️ Skipped match ${match.name} - reminder time ${reminderTime.toISOString()} is in the past`);
+          skippedCount++;
         }
       }
+
+      logger.debug(`✅ Queued ${queuedCount} reminder(s), skipped ${skippedCount}`);
     } catch (error) {
       logger.error('❌ Error queueing match reminders:', error);
     }
   }
 
-  private async processReminderQueue() {
-    try {
-      // Get reminders that are due - fix datetime comparison for ISO format
-      const dueReminders = await this.db.all(`
-        SELECT drq.id, drq.match_id, drq.reminder_time
-        FROM discord_reminder_queue drq
-        WHERE drq.status = 'pending'
-        AND datetime(drq.reminder_time) <= datetime('now')
-        LIMIT 5
-      `);
-
-      for (const reminder of dueReminders) {
-        try {
-          // Queue the Discord reminder - similar to how announcements work
-          const success = await this.queueDiscordReminder(reminder.match_id);
-          
-          if (success) {
-            // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-              UPDATE discord_reminder_queue 
-              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [reminder.id]);
-            
-            logger.debug(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
-          } else {
-            // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-              UPDATE discord_reminder_queue 
-              SET status = 'failed', error_message = 'Failed to queue Discord reminder'
-              WHERE id = ?
-            `, [reminder.id]);
-          }
-        } catch (error) {
-          logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-          
-          // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-            UPDATE discord_reminder_queue 
-            SET status = 'failed', error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
-        }
-      }
-    } catch (error) {
-      logger.error('❌ Error processing reminder queue:', error);
-    }
-  }
 
   private async queuePlayerReminders() {
     try {
@@ -360,26 +322,6 @@ class MatchExecScheduler {
     }
   }
 
-  private async queueDiscordReminder(matchId: string): Promise<boolean> {
-    try {
-      // Generate unique ID for the queue entry
-      const reminderId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Add to Discord reminder queue that the bot will process
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-        INSERT INTO discord_match_reminder_queue (id, match_id, reminder_type, scheduled_for, status)
-        VALUES (?, ?, 'general_reminder', datetime('now'), 'pending')
-      `, [reminderId, matchId]);
-      
-      logger.debug('📢 Discord match reminder queued for match:', matchId);
-      return true;
-    } catch (error) {
-      logger.error('❌ Error queuing Discord match reminder:', error);
-      return false;
-    }
-  }
 
   private async queueMatchStartNotification(matchId: string): Promise<boolean> {
     try {

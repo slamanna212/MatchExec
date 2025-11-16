@@ -768,13 +768,20 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
+      if (reminders.length === 0) {
+        logger.debug('ℹ️ No reminders ready to send');
+        return;
+      }
+
+      logger.debug(`📬 Processing ${reminders.length} reminder(s)`);
+
       for (const reminder of reminders) {
         try {
 
           if (!this.announcementHandler) {
             logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
-              UPDATE discord_reminder_queue 
+              UPDATE discord_reminder_queue
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, ['AnnouncementHandler not available', reminder.id]);
@@ -798,14 +805,16 @@ export class QueueProcessor {
             throw new Error('Match not found');
           }
 
+          logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
+
           // Calculate actual time difference for display
           const now = new Date();
           const matchStart = new Date(matchData.start_date);
           const timeDiffMs = matchStart.getTime() - now.getTime();
           const timeDiffMinutes = Math.round(timeDiffMs / (1000 * 60));
-          
+
           let timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' } = { value: timeDiffMinutes, unit: 'minutes' };
-          
+
           // Convert to hours if more than 90 minutes
           if (timeDiffMinutes > 90) {
             const hours = Math.round(timeDiffMinutes / 60);
@@ -817,11 +826,17 @@ export class QueueProcessor {
             ...matchData,
             _timingInfo: timingInfo
           });
-          
+
+          if (success) {
+            logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
+          } else {
+            logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
+          }
+
           // Mark as completed or failed based on result
           const status = success ? 'completed' : 'failed';
           await this.db.run(`
-            UPDATE discord_reminder_queue 
+            UPDATE discord_reminder_queue
             SET status = ?, sent_at = datetime('now')
             WHERE id = ?
           `, [status, reminder.id]);
@@ -829,9 +844,9 @@ export class QueueProcessor {
 
         } catch (error) {
           logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-          
+
           await this.db.run(`
-            UPDATE discord_reminder_queue 
+            UPDATE discord_reminder_queue
             SET status = 'failed', sent_at = datetime('now'), error_message = ?
             WHERE id = ?
           `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
