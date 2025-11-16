@@ -11,6 +11,7 @@ import { useTournamentForm, type GameWithIcon } from './create-tournament/useTou
 import { buildTournamentPayload, createPreDefinedTeams, startTournamentSignups } from './create-tournament/tournament-helpers';
 import { TournamentGameSelectionStep } from './create-tournament/TournamentGameSelectionStep';
 import { TournamentEventInfoStep } from './create-tournament/TournamentEventInfoStep';
+import { TournamentFormatStep } from './create-tournament/TournamentFormatStep';
 import { TournamentTeamSettingsStep } from './create-tournament/TournamentTeamSettingsStep';
 import { TournamentReviewStep } from './create-tournament/TournamentReviewStep';
 
@@ -181,10 +182,12 @@ export function CreateTournamentPage() {
       case 1:
         return !!formData.gameId;
       case 2:
-        return !!(formData.name && formData.format && formData.roundsPerMatch);
+        return !!(formData.name && formData.roundsPerMatch);
       case 3:
-        return true;
+        return !!(formData.format && formData.gameModeId);
       case 4:
+        return true;
+      case 5:
         return true;
       default:
         return true;
@@ -192,7 +195,7 @@ export function CreateTournamentPage() {
   };
 
   const getProgressValue = () => {
-    return (currentStep / 4) * 100;
+    return (currentStep / 5) * 100;
   };
 
   return (
@@ -240,6 +243,16 @@ export function CreateTournamentPage() {
         )}
 
         {currentStep === 3 && (
+          <TournamentFormatStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onBack={handleBack}
+            onNext={handleNext}
+            canProceed={canProceedFromStep(3)}
+          />
+        )}
+
+        {currentStep === 4 && (
           <TournamentTeamSettingsStep
             formData={formData}
             newTeamName={newTeamName}
@@ -252,13 +265,13 @@ export function CreateTournamentPage() {
           />
         )}
 
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <TournamentReviewStep
             formData={formData}
             games={games}
             onBack={handleBack}
             onCreate={handleCreateTournament}
-            canProceed={canProceedFromStep(4)}
+            canProceed={canProceedFromStep(5)}
           />
         )}
       </Stack>

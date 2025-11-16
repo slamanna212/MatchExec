@@ -3,42 +3,50 @@
     "id": "normal",
     "name": "Normal",
     "description": "Standard Plant/Defuse mode. Teams play multiple rounds on Attack or Defense, then swap sides for the rest.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "swiftplay",
     "name": "Swiftplay",
     "description": "Best-of-nine mode with similar gameplay rules to Unrated, but adapted for shorter match length.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "spike-rush",
     "name": "Spike Rush",
     "description": "Best-of-seven mode where all players start with the same random weapon. Random orbs provide buffs/debuffs.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "premier",
     "name": "Premier",
     "description": "Tournament mode using Competitive rules, focused on top-tier competition with map pick/ban phases.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "deathmatch",
     "name": "Deathmatch",
     "description": "12-player free-for-all mode to practice gunplay. First to 40 kills or 9 minutes wins.",
-    "scoringType": "FFA"
+    "scoringType": "FFA",
+    "teamSize": null,
+    "maxPlayers": 12
   },
   {
     "id": "escalation",
     "name": "Escalation",
     "description": "5v5 team mode racing through weapon/ability levels. First team to finish level 12 or furthest along in 10 minutes wins.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "team-deathmatch",
     "name": "Team Deathmatch",
     "description": "5v5 mode where first team to 100 kills wins. Includes weapon spawners and recovery orbs.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   }
 ]

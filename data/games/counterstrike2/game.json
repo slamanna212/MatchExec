@@ -6,7 +6,7 @@
   "developer": "Valve Corporation",
   "releaseDate": "2023-09-27",
   "patch": "2024-12-10",
-  "dataVersion": "1.0.6",
+  "dataVersion": "1.0.8",
   "minPlayers": 2,
   "maxPlayers": 20,
   "maxSignups": 30,

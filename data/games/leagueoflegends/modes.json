@@ -3,12 +3,14 @@
     "id": "normal-game",
     "name": "Normal Game",
     "description": "Classic 5v5 game on Summoner's Rift. Teams compete to destroy the enemy Nexus through strategic gameplay and teamfights.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "aram",
     "name": "ARAM",
     "description": "All Random, All Mid - 5v5 mode on Howling Abyss where players get random champions and fight in a single lane.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   }
 ]

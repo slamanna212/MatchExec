@@ -80,3 +80,11 @@ CREATE INDEX IF NOT EXISTS idx_health_alerts_sent_alert_type ON health_alerts_se
 -- Add scheduler heartbeat tracking to app_settings
 INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type, metadata) VALUES
 ('scheduler_last_heartbeat', '', 'string', '{"description": "ISO timestamp of the last scheduler heartbeat for health monitoring"}');
+
+-- Tournament Game Mode Selection
+-- Allows tournaments to specify a game mode (e.g., 1v1, 2v2, 3v3) for consistent team sizes
+ALTER TABLE tournaments ADD COLUMN game_mode_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tournaments_game_mode_id ON tournaments(game_mode_id);
+
+-- Add max_players column to game_modes for FFA display
+ALTER TABLE game_modes ADD COLUMN max_players INTEGER;

@@ -33,8 +33,9 @@ interface ModeData {
   id: string;
   name: string;
   description: string;
-  teamSize?: number;
+  teamSize?: number | null;
   maxTeams?: number;
+  maxPlayers?: number;
   scoringType?: string; // FFA or Normal
   scoring?: Record<string, unknown>; // Flexible scoring configuration
 }
@@ -226,12 +227,14 @@ export class DatabaseSeeder {
 
     for (const mode of modesData) {
       const scoringType = mode.scoringType || 'Normal';
-      const teamSize = mode.teamSize || 1;
+      // Properly handle NULL teamSize - don't convert to 1
+      const teamSize = mode.teamSize !== undefined ? mode.teamSize : null;
       const maxTeams = mode.maxTeams || 2;
+      const maxPlayers = mode.maxPlayers || null;
       await this.db.run(`
-        INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, scoring_type, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, scoringType]);
+        INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType]);
     }
   }
 

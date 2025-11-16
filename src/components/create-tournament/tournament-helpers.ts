@@ -12,6 +12,7 @@ export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
     name: formData.name,
     description: formData.description,
     gameId: formData.gameId,
+    gameModeId: formData.gameModeId,
     format: formData.format,
     startDate: startDateTime?.toISOString(),
     startTime: startDateTime?.toISOString(),

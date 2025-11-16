@@ -2,7 +2,6 @@
 
 import { Text, Stack, TextInput, Textarea, Group, Select, NumberInput, Switch, Button } from '@mantine/core';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
-import type { TournamentFormat } from '@/shared/types';
 import { EventImageUpload } from '../create-match/EventImageUpload';
 
 interface TournamentEventInfoStepProps {
@@ -63,17 +62,6 @@ export function TournamentEventInfoStep({
         />
       </Group>
 
-      <Select
-        label="Tournament Format"
-        required
-        data={[
-          { value: 'single-elimination', label: 'Single Elimination' },
-          { value: 'double-elimination', label: 'Double Elimination' }
-        ]}
-        value={formData.format || 'single-elimination'}
-        onChange={(value) => updateFormData('format', (value as TournamentFormat) || 'single-elimination')}
-      />
-
       <NumberInput
         label="Rounds per Match"
         description="Number of rounds to play in each tournament match"
@@ -115,7 +103,7 @@ export function TournamentEventInfoStep({
           Back
         </Button>
         <Button onClick={onNext} disabled={!canProceed}>
-          Next: Team Settings
+          Next: Tournament Format
         </Button>
       </Group>
     </Stack>

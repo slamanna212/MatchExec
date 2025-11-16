@@ -17,6 +17,7 @@ export interface GameWithIcon {
 
 export interface TournamentFormData {
   gameId: string;
+  gameModeId: string;
   name: string;
   description: string;
   date: string;

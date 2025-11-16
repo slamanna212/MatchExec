@@ -6,6 +6,7 @@ import { logger } from './logger';
 
 interface GameMode {
   id: string;
+  team_size: number | null;
 }
 
 interface GameMap {
@@ -21,6 +22,7 @@ interface TeamRecord {
 interface TournamentRecord {
   id: string;
   game_id: string;
+  game_mode_id: string;
   rounds_per_match: number;
   ruleset: string;
 }
@@ -143,8 +145,13 @@ export async function generateSingleEliminationMatches(
 ): Promise<GeneratedMatch[]> {
   const db = await getDbInstance();
 
+  const tournament = await db.get<TournamentRecord>('SELECT * FROM tournaments WHERE id = ?', [tournamentId]);
+  if (!tournament) {
+    throw new Error('Tournament not found');
+  }
+
   const { tournamentRuleset, tournamentDescription } = await fetchTournamentInfo(db, tournamentId);
-  const { gameModes, gameMaps } = await fetchGameData(db, gameId);
+  const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
 
   const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
   const tournamentMaps = filterTournamentMaps(gameMaps);
@@ -171,12 +178,70 @@ async function fetchTournamentInfo(db: Database, tournamentId: string) {
   };
 }
 
-async function fetchGameData(db: Database, gameId: string) {
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"', [gameId]) as GameMode[];
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [gameId]) as GameMap[];
+async function fetchGameData(db: Database, gameId: string, gameModeId: string) {
+  // Special handling for Overwatch 2 team size options
+  if (gameId === 'overwatch2' && gameModeId?.startsWith('ow2-')) {
+    // OW2 team size is determined by the mode ID (ow2-5v5 or ow2-6v6)
+    // Not used in current implementation but kept for future reference
+    const _teamSize = gameModeId === 'ow2-5v5' ? 5 : 6;
+
+    // Fetch all non-workshop modes
+    const gameModes = await db.all(
+      'SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%"',
+      [gameId]
+    ) as GameMode[];
+
+    // Fetch maps from all non-workshop modes
+    const modeIds = gameModes.map(m => m.id);
+    let gameMaps: GameMap[];
+    if (modeIds.length > 0) {
+      const placeholders = modeIds.map(() => '?').join(',');
+      gameMaps = await db.all(
+        `SELECT * FROM game_maps WHERE game_id = ? AND mode_id IN (${placeholders})`,
+        [gameId, ...modeIds]
+      ) as GameMap[];
+    } else {
+      gameMaps = [];
+    }
+
+    if (gameModes.length === 0 || gameMaps.length === 0) {
+      throw new Error('No game modes or maps found for Overwatch 2');
+    }
+
+    return { gameModes, gameMaps };
+  }
+
+  // Regular handling for other games
+  // Fetch the selected game mode to get its team size
+  const selectedMode = await db.get('SELECT * FROM game_modes WHERE id = ?', [gameModeId]) as GameMode | undefined;
+
+  if (!selectedMode) {
+    throw new Error(`Game mode ${gameModeId} not found`);
+  }
+
+  // Fetch all modes with the same team size
+  const gameModes = await db.all(
+    'SELECT * FROM game_modes WHERE game_id = ? AND team_size = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"',
+    [gameId, selectedMode.team_size]
+  ) as GameMode[];
+
+  // Get all mode IDs for map filtering
+  const modeIds = gameModes.map(m => m.id);
+
+  // Fetch maps from all modes with the same team size
+  let gameMaps: GameMap[];
+  if (modeIds.length > 0) {
+    const placeholders = modeIds.map(() => '?').join(',');
+    gameMaps = await db.all(
+      `SELECT * FROM game_maps WHERE game_id = ? AND mode_id IN (${placeholders})`,
+      [gameId, ...modeIds]
+    ) as GameMap[];
+  } else {
+    gameMaps = [];
+  }
 
   if (gameModes.length === 0 || gameMaps.length === 0) {
-    throw new Error('No game modes or maps found for this game');
+    throw new Error('No game modes or maps found for this game and team size');
   }
 
   return { gameModes, gameMaps };
@@ -357,7 +422,7 @@ export async function generateNextRoundMatches(
     return [];
   }
 
-  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id);
+  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
   const tournamentMaps = filterTournamentMaps(gameMaps);
 
   return await generateNextRoundMatchesFromWinners(
@@ -513,7 +578,7 @@ export async function generateLosersBracketMatches(
   const db = await getDbInstance();
 
   const tournament = await fetchTournamentForNextRound(db, tournamentId);
-  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id);
+  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
   const tournamentMaps = filterTournamentMaps(gameMaps);
 
   const losersBracketRound = calculateLosersBracketRound(eliminatedFromWinnersRound);
