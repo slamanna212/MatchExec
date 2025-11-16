@@ -4,6 +4,7 @@
     "name": "DFH Stadium",
     "type": "Standard",
     "location": "Urban",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/DFH_Stadium.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -11,6 +12,7 @@
     "name": "Mannfield",
     "type": "Standard",
     "location": "Suburban",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Mannfield.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -18,6 +20,7 @@
     "name": "Champions Field",
     "type": "Standard",
     "location": "Stadium",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Champions_Field.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -25,6 +28,7 @@
     "name": "Urban Central",
     "type": "Standard",
     "location": "Urban",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Urban_Central.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -32,6 +36,7 @@
     "name": "Beckwith Park",
     "type": "Standard",
     "location": "Park",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Beckwith_Park.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -39,6 +44,7 @@
     "name": "Utopia Coliseum",
     "type": "Standard",
     "location": "Futuristic",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Utopia_Coliseum.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -46,6 +52,7 @@
     "name": "Wasteland",
     "type": "Non-Standard",
     "location": "Desert",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Wasteland-Standard.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -53,6 +60,7 @@
     "name": "Neo Tokyo",
     "type": "Non-Standard",
     "location": "Urban",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Neo_Tokyo_std1.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -60,6 +68,7 @@
     "name": "AquaDome",
     "type": "Standard",
     "location": "Underwater",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/AquaDome2.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -67,6 +76,7 @@
     "name": "Starbase ARC",
     "type": "Non-Standard",
     "location": "Space",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Starbase_ARC.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -74,6 +84,7 @@
     "name": "Farmstead",
     "type": "Standard",
     "location": "Rural",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Farmstead_RL_std.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -81,6 +92,7 @@
     "name": "Forbidden Temple",
     "type": "Standard",
     "location": "Ancient",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Forbidden_Temple.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -88,27 +100,7 @@
     "name": "Salty Shores",
     "type": "Standard",
     "location": "Beach",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "farmstead-night",
-    "name": "Farmstead (Night)",
-    "type": "Standard",
-    "location": "Rural",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "rivals-arena",
-    "name": "Rivals Arena",
-    "type": "Standard",
-    "location": "Stadium",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "deadeye-canyon",
-    "name": "Deadeye Canyon",
-    "type": "Standard",
-    "location": "Desert",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Salty_Shores_RL_std.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -116,6 +108,7 @@
     "name": "Sovereign Heights",
     "type": "Standard",
     "location": "Futuristic",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Sovereign_Heights.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   },
   {
@@ -123,34 +116,7 @@
     "name": "Neon Fields",
     "type": "Standard",
     "location": "Futuristic",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "beckwith-park-midnight",
-    "name": "Beckwith Park (Midnight)",
-    "type": "Standard",
-    "location": "Park",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "tokyo-underpass",
-    "name": "Tokyo Underpass",
-    "type": "Standard",
-    "location": "Urban",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "utopia-retro",
-    "name": "Utopia Retro",
-    "type": "Standard",
-    "location": "Futuristic",
-    "supportedModes": ["duel", "doubles", "standard", "chaos"]
-  },
-  {
-    "id": "champions-field-day",
-    "name": "Champions Field (Day)",
-    "type": "Standard",
-    "location": "Stadium",
+    "thumbnailUrl": "/assets/games/rocketleague/maps/Neon_Fields.jpg",
     "supportedModes": ["duel", "doubles", "standard", "chaos"]
   }
 ]
