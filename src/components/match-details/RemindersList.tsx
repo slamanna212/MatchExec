@@ -1,7 +1,7 @@
 'use client'
 
-import { Stack, Card, Group, Badge, Text, Loader } from '@mantine/core';
-import { getReminderStatusColor, formatReminderStatus } from './helpers';
+import { Stack, Text, Loader, Group } from '@mantine/core';
+import { ReminderCard } from './ReminderCard';
 
 interface ReminderData {
   id: string;
@@ -52,62 +52,12 @@ export function RemindersList({
   return (
     <Stack gap="xs">
       {reminders.map((reminder) => (
-        <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder>
-          <Group justify="space-between" align="flex-start">
-            <Stack gap="xs" style={{ flex: 1 }}>
-              <Group gap="xs">
-                <Badge
-                  size="xs"
-                  variant="light"
-                  color={getReminderStatusColor(reminder.status)}
-                  style={{ textTransform: showDescription ? 'none' : undefined }}
-                >
-                  {formatReminderStatus(reminder.status)}
-                </Badge>
-              </Group>
-
-              {showDescription && reminder.type === 'timed_announcement' && reminder.description && (
-                <Text size="sm" fw={500}>
-                  {reminder.description}
-                </Text>
-              )}
-
-              {reminder.reminder_time && reminder.reminder_time !== 'N/A' && (
-                <Text size="xs" c="dimmed">
-                  {showDescription && reminder.type === 'timed_announcement' ? 'Announcement Time' : 'Reminder Time'}:{' '}
-                  {parseDbTimestamp(reminder.reminder_time)?.toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                  }) || 'N/A'}
-                </Text>
-              )}
-
-              {(reminder.sent_at || reminder.processed_at) && (
-                <Text size="xs" c="dimmed">
-                  Sent:{' '}
-                  {parseDbTimestamp(reminder.sent_at || reminder.processed_at || '')?.toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                  }) || 'N/A'}
-                </Text>
-              )}
-
-              {reminder.error_message && (
-                <Text size="xs" c="red">
-                  Error: {reminder.error_message}
-                </Text>
-              )}
-            </Stack>
-          </Group>
-        </Card>
+        <ReminderCard
+          key={reminder.id}
+          reminder={reminder}
+          parseDbTimestamp={parseDbTimestamp}
+          showDescription={showDescription}
+        />
       ))}
     </Stack>
   );

@@ -66,9 +66,14 @@ export async function POST(
     `, [matchId]);
 
     // Parse maps for the returned match
+    let maps = [];
+    if (updatedMatch?.maps) {
+      maps = typeof updatedMatch.maps === 'string' ? JSON.parse(updatedMatch.maps) : updatedMatch.maps;
+    }
+
     const parsedMatch = {
       ...(updatedMatch || {}),
-      maps: updatedMatch?.maps ? (typeof updatedMatch.maps === 'string' ? JSON.parse(updatedMatch.maps) : updatedMatch.maps) : []
+      maps
     };
 
     return NextResponse.json(parsedMatch);

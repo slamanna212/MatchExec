@@ -1,7 +1,6 @@
 'use client'
 
-import { logger } from '@/lib/logger/client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Modal,
   Stack,
@@ -23,6 +22,8 @@ import classes from './gradient-segmented-control.module.css';
 import { ParticipantsList } from './match-details/ParticipantsList';
 import { RemindersList } from './match-details/RemindersList';
 import { MapResultsSection } from './match-details/MapResultsSection';
+import { useMatchGames } from './match-details/useMatchGames';
+import { useMapCodes } from './match-details/useMapCodes';
 
 interface ReminderData {
   id: string;
@@ -71,16 +72,6 @@ interface SignupConfig {
   fields: SignupField[];
 }
 
-interface MatchGameResult {
-  id: string;
-  match_id: string;
-  round: number;
-  map_id: string;
-  map_name: string;
-  winner_id?: string;
-  status: 'pending' | 'ongoing' | 'completed';
-}
-
 interface MatchDetailsModalProps {
   opened: boolean;
   onClose: () => void;
@@ -122,89 +113,10 @@ export function MatchDetailsModal({
   onAssign
 }: MatchDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'mapcodes'>('participants');
-  const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
-  const [gamesLoading, setGamesLoading] = useState(false);
-  const [mapCodes, setMapCodes] = useState<Record<string, string>>({});
-  const [mapCodesSaving, setMapCodesSaving] = useState(false);
 
-  // Fetch match games for battle/complete status matches
-  useEffect(() => {
-    if (!selectedMatch || !opened) return;
-    if (selectedMatch.status !== 'battle' && selectedMatch.status !== 'complete') return;
-
-    const fetchMatchGames = async () => {
-      try {
-        setGamesLoading(true);
-        const response = await fetch(`/api/matches/${selectedMatch.id}/games`);
-        if (response.ok) {
-          const data = await response.json();
-          setMatchGames(data.games || []);
-        }
-      } catch (error) {
-        logger.error('Failed to fetch match games:', error);
-      } finally {
-        setGamesLoading(false);
-      }
-    };
-
-    fetchMatchGames();
-  }, [selectedMatch, opened]);
-
-  // Load map codes when modal opens
-  useEffect(() => {
-    if (!selectedMatch || !opened) return;
-    
-    // Initialize map codes from selected match data
-    if (selectedMatch.map_codes) {
-      setMapCodes(selectedMatch.map_codes);
-    } else {
-      // Initialize empty map codes for all maps
-      const initialMapCodes: Record<string, string> = {};
-      selectedMatch.maps?.forEach(mapId => {
-        initialMapCodes[mapId] = '';
-      });
-      setMapCodes(initialMapCodes);
-    }
-  }, [selectedMatch, opened]);
-
-  // Function to save map codes
-  const saveMapCodes = async () => {
-    if (!selectedMatch) return;
-    
-    try {
-      setMapCodesSaving(true);
-      const response = await fetch(`/api/matches/${selectedMatch.id}/map-codes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ mapCodes }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save map codes');
-      }
-      
-      // Update the selected match with new map codes
-      if (selectedMatch) {
-        selectedMatch.map_codes = mapCodes;
-      }
-    } catch (error) {
-      logger.error('Failed to save map codes:', error);
-    } finally {
-      setMapCodesSaving(false);
-    }
-  };
-
-  // Function to update a specific map code
-  const updateMapCode = (mapId: string, code: string) => {
-    // Limit to 24 characters
-    const trimmedCode = code.slice(0, 24);
-    setMapCodes(prev => ({
-      ...prev,
-      [mapId]: trimmedCode
-    }));
-  };
+  // Use custom hooks to manage match games and map codes
+  const { matchGames, gamesLoading } = useMatchGames(selectedMatch, opened);
+  const { mapCodes, mapCodesSaving, saveMapCodes, updateMapCode } = useMapCodes(selectedMatch, opened);
 
 
   if (!selectedMatch) return null;

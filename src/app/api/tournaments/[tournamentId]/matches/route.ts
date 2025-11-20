@@ -38,6 +38,12 @@ interface BracketMatch {
   match_order: number;
 }
 
+function getMatchStatus(status: string): 'ongoing' | 'complete' | 'pending' {
+  if (status === 'battle') return 'ongoing';
+  if (status === 'complete') return 'complete';
+  return 'pending';
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
@@ -109,8 +115,7 @@ export async function GET(
         name: match.team2_name || 'Team 2'
       } : undefined,
       winner: match.winner_team || undefined,
-      status: match.status === 'battle' ? 'ongoing' :
-              match.status === 'complete' ? 'complete' : 'pending',
+      status: getMatchStatus(match.status),
       match_order: match.match_order
     }));
 

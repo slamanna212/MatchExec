@@ -47,11 +47,19 @@ export async function GET(request: NextRequest) {
     const matches = await db.all<MatchDbRow>(query, params);
 
     // Parse maps and map codes JSON for each match
-    const parsedMatches = matches.map(match => ({
-      ...match,
-      maps: match.maps ? safeJSONParse(typeof match.maps === 'string' ? match.maps : null, match.map_id ? [match.map_id] : []) : (match.map_id ? [match.map_id] : []),
-      map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {})
-    }));
+    const parsedMatches = matches.map(match => {
+      let maps = match.map_id ? [match.map_id] : [];
+      if (match.maps) {
+        const mapsString = typeof match.maps === 'string' ? match.maps : null;
+        maps = safeJSONParse(mapsString, maps);
+      }
+
+      return {
+        ...match,
+        maps,
+        map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {})
+      };
+    });
 
     return NextResponse.json(parsedMatches);
   } catch (error) {

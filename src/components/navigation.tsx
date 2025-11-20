@@ -32,7 +32,7 @@ import {
   IconSwords
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
-import { getVersionInfo } from '@/lib/version-client'
+import { getVersionInfo } from '@/lib/version-client';
 
 interface NavigationProps {
   children: React.ReactNode
@@ -216,24 +216,30 @@ export function Navigation({ children }: NavigationProps) {
 
         <AppShell.Section grow>
           {navigationItems.map((item) => {
-            // If item has links, don't handle click on parent (let it toggle)
-            // const hasChildren = item.links && item.links.length > 0;
+            const isActive = mounted && (
+              pathname === item.href ||
+              (item.href === '/settings' && pathname?.startsWith('/settings')) ||
+              (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
+              (item.href === '/matches' && pathname?.startsWith('/matches'))
+            );
+
             const isSettingsPage = pathname?.startsWith('/settings');
             const isTournamentsPage = pathname?.startsWith('/tournaments');
             const isMatchesPage = pathname?.startsWith('/matches');
-            
+
+            const shouldShowLinks = item.links && (
+              (item.href === '/settings' && isSettingsPage) ||
+              (item.href === '/tournaments' && isTournamentsPage) ||
+              (item.href === '/matches' && isMatchesPage)
+            );
+
             return (
               <div key={item.href}>
                 <NavLink
                   href={item.href}
                   label={item.label}
                   leftSection={React.createElement(getIcon(item.iconName), { size: "1rem" })}
-                  active={mounted && (
-                    pathname === item.href ||
-                    (item.href === '/settings' && pathname?.startsWith('/settings')) ||
-                    (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
-                    (item.href === '/matches' && pathname?.startsWith('/matches'))
-                  )}
+                  active={isActive}
                   childrenOffset={0}
                   c="#F5F5F5"
                   styles={{
@@ -247,17 +253,12 @@ export function Navigation({ children }: NavigationProps) {
                     }
                   }}
                   onClick={(event) => {
-                    event.preventDefault()
-                    router.push(item.href)
-                    if (opened) toggle() // Close mobile menu after navigation only if open
+                    event.preventDefault();
+                    router.push(item.href);
+                    if (opened) toggle();
                   }}
                 />
-                {/* Show nested links based on current page */}
-                {item.links && (
-                  (item.href === '/settings' && isSettingsPage) ||
-                  (item.href === '/tournaments' && isTournamentsPage) ||
-                  (item.href === '/matches' && isMatchesPage)
-                ) && item.links.map((link) => (
+                {shouldShowLinks && item.links?.map((link) => (
                   <NavLink
                     key={link.href}
                     href={link.href}
@@ -277,9 +278,9 @@ export function Navigation({ children }: NavigationProps) {
                       }
                     }}
                     onClick={(event) => {
-                      event.preventDefault()
-                      router.push(link.href)
-                      if (opened) toggle() // Close mobile menu after navigation only if open
+                      event.preventDefault();
+                      router.push(link.href);
+                      if (opened) toggle();
                     }}
                   />
                 ))}
