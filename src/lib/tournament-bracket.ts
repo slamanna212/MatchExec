@@ -796,7 +796,7 @@ async function addTeamParticipants(
   `, [teamId]) as { user_id: string; discord_user_id: string | null; username: string }[];
 
   for (const member of teamMembers) {
-    const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     await db.run(`
       INSERT INTO match_participants (
         id, match_id, user_id, discord_user_id, username, team, team_assignment, joined_at

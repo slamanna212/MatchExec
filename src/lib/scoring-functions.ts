@@ -473,7 +473,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
       
       if (mapCode) {
         // Generate unique ID for the queue entry
-        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         
         // Get the actual map name from database instead of using potentially raw mapName
         let displayMapName = mapName; // Fallback to passed mapName

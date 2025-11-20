@@ -186,7 +186,7 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     const { blueChannelName, redChannelName } = await determineChannelNames(db, match, isSingleTeam);
 
     // Queue a Discord bot request to create the channels
-    const requestId = `voice_create_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const requestId = `voice_create_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     await db.run(`
       INSERT INTO discord_bot_requests (id, type, data, status)
@@ -237,7 +237,7 @@ export async function deleteMatchVoiceChannels(matchId: string): Promise<boolean
 
     // Queue deletion requests for each channel
     for (const channel of channels) {
-      const requestId = `voice_delete_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `voice_delete_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
       await db.run(`
         INSERT INTO discord_bot_requests (id, type, data, status)
@@ -279,8 +279,8 @@ export async function trackVoiceChannels(
 
     if (redChannelId) {
       // Dual-team match: Track both channels
-      const blueId = `auto_voice_${Date.now()}_blue_${Math.random().toString(36).substr(2, 9)}`;
-      const redId = `auto_voice_${Date.now()}_red_${Math.random().toString(36).substr(2, 9)}`;
+      const blueId = `auto_voice_${Date.now()}_blue_${Math.random().toString(36).substring(2, 11)}`;
+      const redId = `auto_voice_${Date.now()}_red_${Math.random().toString(36).substring(2, 11)}`;
 
       await db.run(`
         INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
@@ -290,7 +290,7 @@ export async function trackVoiceChannels(
       logger.debug(`Voice channels tracked for match ${matchId} (dual-team)`);
     } else {
       // Single-team match: Track only one channel
-      const channelId = `auto_voice_${Date.now()}_all_${Math.random().toString(36).substr(2, 9)}`;
+      const channelId = `auto_voice_${Date.now()}_all_${Math.random().toString(36).substring(2, 11)}`;
 
       await db.run(`
         INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)

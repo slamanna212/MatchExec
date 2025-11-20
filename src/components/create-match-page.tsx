@@ -232,7 +232,7 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === selectedMode);
     if (!mode) return;
 
-    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const selectedMap: SelectedMapCard = {
       id: timestampedId,
       name: map.name,
@@ -255,7 +255,7 @@ export function CreateMatchPage() {
     }
 
     const baseMapId = map.id.includes('-') ? map.id.replace(/-[^-]+$/, '') : map.id;
-    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
     const selectedMap: SelectedMapCard = {
       id: combinedId,

@@ -123,8 +123,8 @@ export class VoiceChannelService {
         announcementId,
         matchId,
         announcementType,
-        match.blue_team_voice_channel,
-        match.red_team_voice_channel,
+        blueChannelId,
+        redChannelId,
         firstTeam
       ]);
 

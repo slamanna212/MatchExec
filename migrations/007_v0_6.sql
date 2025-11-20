@@ -88,3 +88,10 @@ CREATE INDEX IF NOT EXISTS idx_tournaments_game_mode_id ON tournaments(game_mode
 
 -- Add max_players column to game_modes for FFA display
 ALTER TABLE game_modes ADD COLUMN max_players INTEGER;
+
+-- Reminder Queue Race Condition Prevention
+-- Add unique constraint to prevent duplicate reminders for the same match
+-- Excludes failed reminders since those might need to be retried
+CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_reminder_queue_unique_match_reminder
+ON discord_reminder_queue(match_id, reminder_type)
+WHERE status NOT IN ('failed');

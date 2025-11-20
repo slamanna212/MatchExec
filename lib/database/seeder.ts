@@ -222,19 +222,29 @@ export class DatabaseSeeder {
   }
 
   private async seedModes(gameId: string, modesData: ModeData[]): Promise<void> {
-    // Clear existing modes for this game
-    await this.db.run('DELETE FROM game_modes WHERE game_id = ?', [gameId]);
+    // Use a transaction to ensure atomicity
+    try {
+      await this.db.run('BEGIN TRANSACTION');
 
-    for (const mode of modesData) {
-      const scoringType = mode.scoringType || 'Normal';
-      // Properly handle NULL teamSize - don't convert to 1
-      const teamSize = mode.teamSize !== undefined ? mode.teamSize : null;
-      const maxTeams = mode.maxTeams || 2;
-      const maxPlayers = mode.maxPlayers || null;
-      await this.db.run(`
-        INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType]);
+      // Clear existing modes for this game
+      await this.db.run('DELETE FROM game_modes WHERE game_id = ?', [gameId]);
+
+      for (const mode of modesData) {
+        const scoringType = mode.scoringType || 'Normal';
+        // Properly handle NULL teamSize - don't convert to 1
+        const teamSize = mode.teamSize !== undefined ? mode.teamSize : null;
+        const maxTeams = mode.maxTeams || 2;
+        const maxPlayers = mode.maxPlayers || null;
+        await this.db.run(`
+          INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType]);
+      }
+
+      await this.db.run('COMMIT');
+    } catch (error) {
+      await this.db.run('ROLLBACK');
+      throw error;
     }
   }
 

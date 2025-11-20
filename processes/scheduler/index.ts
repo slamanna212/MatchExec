@@ -236,12 +236,11 @@ class MatchExecScheduler {
 
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
-          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
           // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-            INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
+          await this.db.run(`
+            INSERT OR IGNORE INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
           `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
 
@@ -304,7 +303,7 @@ class MatchExecScheduler {
           
           // Create reminder queue entry for each participant
           for (const participant of participants) {
-            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
             
             // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -326,7 +325,7 @@ class MatchExecScheduler {
   private async queueMatchStartNotification(matchId: string): Promise<boolean> {
     try {
       // Generate unique ID for the queue entry  
-      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // Add to Discord match start notification queue that the bot will process
       // @ts-expect-error - Database run method typed as unknown
@@ -465,7 +464,7 @@ class MatchExecScheduler {
   private async queueTimedAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
-      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -576,16 +575,20 @@ class MatchExecScheduler {
 
       const cleanupDelayMinutes = discordSettings?.voice_channel_cleanup_delay_minutes || 10;
 
+      // Calculate the threshold time in JavaScript to avoid SQL injection
+      const thresholdTime = new Date();
+      thresholdTime.setMinutes(thresholdTime.getMinutes() - cleanupDelayMinutes);
+
       // Find matches that completed/cancelled and are past the cleanup delay
       // @ts-expect-error - Database all method typed as unknown
       const matchesForCleanup = await this.db.all(`
         SELECT DISTINCT m.id, m.name, m.status, m.updated_at
         FROM matches m
         INNER JOIN auto_voice_channels avc ON m.id = avc.match_id
-        WHERE m.status IN ('completed', 'cancelled')
-        AND datetime(m.updated_at, '+${cleanupDelayMinutes} minutes') <= datetime('now')
+        WHERE m.status IN ('complete', 'cancelled')
+        AND datetime(m.updated_at) <= datetime(?)
         LIMIT 10
-      `);
+      `, [thresholdTime.toISOString()]);
 
       if (matchesForCleanup.length === 0) {
         logger.debug('ℹ️ No voice channels ready for cleanup');

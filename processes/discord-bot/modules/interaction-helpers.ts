@@ -65,7 +65,7 @@ export async function insertParticipant(
   displayUsername: string,
   signupData: Record<string, string>
 ): Promise<string> {
-  const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   if (parsedId.isTournament) {
     // Insert tournament participant
@@ -84,7 +84,7 @@ export async function insertParticipant(
 
     // If team was selected, also add to tournament_team_members
     if (parsedId.selectedTeamId) {
-      const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       await db.run(`
         INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
         VALUES (?, ?, ?, ?, ?)

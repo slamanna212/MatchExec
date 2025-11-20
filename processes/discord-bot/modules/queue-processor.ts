@@ -497,7 +497,7 @@ export class QueueProcessor {
 
   private async storeDiscordMessageTracking(announcement: any, result: any, eventData: Record<string, unknown>) {
     try {
-      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       const threadId = await this.createMapsThreadIfNeeded(result.mainMessage, eventData);
       const discordEventId = await this.createDiscordEventIfNeeded(eventData, result.mainMessage);
 

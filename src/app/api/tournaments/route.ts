@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;
     const startTimeOnly = startTime ? new Date(startTime).toISOString() : null;

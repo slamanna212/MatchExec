@@ -44,7 +44,7 @@ export async function prepareMatchData(
   body: MatchRequestBody,
   db: Database
 ): Promise<PreparedMatchData> {
-  const matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   // Get the game's max signups setting
   const game = await db.get<{ max_signups?: number }>('SELECT max_signups FROM games WHERE id = ?', [body.gameId]);

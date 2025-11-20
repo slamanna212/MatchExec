@@ -124,7 +124,7 @@ export async function POST(
       );
     }
     
-    const teamId = `team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     await db.run(`
       INSERT INTO tournament_teams (id, tournament_id, team_name)
@@ -195,7 +195,7 @@ export async function PUT(
     for (const team of teams) {
       if (team.members && team.members.length > 0) {
         for (const member of team.members) {
-          const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
           // Get discord_user_id from tournament_participants
           const participant = await db.get<{ discord_user_id: string }>(`

@@ -11,7 +11,7 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
     const db = await getDbInstance();
 
     // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Add to main announcement queue with match_start type
     await db.run(`
@@ -44,7 +44,7 @@ async function queueDiscordTournamentAnnouncement(tournamentId: string): Promise
     }
 
     // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Add to announcement queue with 'tournament' type
     await db.run(`
@@ -66,7 +66,7 @@ async function queueDiscordTournamentStatusUpdate(tournamentId: string, newStatu
     const db = await getDbInstance();
 
     // Generate unique ID for the queue entry
-    const updateId = `discord_tournament_update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const updateId = `discord_tournament_update_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Add to status update queue
     await db.run(`
@@ -99,7 +99,7 @@ async function queueDiscordEventDeletion(tournamentId: string): Promise<boolean>
     }
 
     // Generate unique ID for the deletion queue entry
-    const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Add to deletion queue
     await db.run(`
@@ -236,8 +236,8 @@ export async function POST(
                 logger.debug(`🤖 Auto-creating solo teams for ${participants.length} participants`);
 
                 for (const participant of participants) {
-                  const teamId = `team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                  const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+                  const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
                   // Create team with participant's name
                   await db.run(`
