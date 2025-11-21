@@ -101,3 +101,75 @@ WHERE status NOT IN ('failed');
 ALTER TABLE discord_voice_announcement_queue ADD COLUMN retry_count INTEGER DEFAULT 0;
 ALTER TABLE discord_voice_announcement_queue ADD COLUMN timeout_at DATETIME;
 ALTER TABLE discord_voice_announcement_queue ADD COLUMN first_attempted_at DATETIME;
+
+-- Foreign Key Support and Tournament Match Cleanup
+-- Recreate matches table with proper ON DELETE CASCADE for tournament_id
+-- This enables automatic cleanup of Discord messages when tournaments are deleted
+
+-- Disable foreign keys temporarily for migration
+PRAGMA foreign_keys = OFF;
+
+-- Create new matches table with correct foreign key constraints
+CREATE TABLE IF NOT EXISTS matches_new (
+  id TEXT PRIMARY KEY,
+  game_id TEXT NOT NULL,
+  mode_id TEXT,
+  name TEXT NOT NULL,
+  description TEXT,
+  start_date DATETIME NOT NULL,
+  start_time DATETIME NOT NULL,
+  end_time DATETIME,
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'gather', 'assign', 'battle', 'complete', 'cancelled')),
+  max_participants INTEGER,
+  current_participants INTEGER DEFAULT 0,
+  winner_team TEXT,
+  map_codes TEXT,
+  guild_id TEXT,
+  channel_id TEXT,
+  match_format TEXT DEFAULT 'casual',
+  maps TEXT,
+  rules TEXT,
+  rounds INTEGER,
+  livestream_link TEXT,
+  tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE,
+  bracket_type TEXT CHECK (bracket_type IN ('winners', 'losers', 'final')),
+  bracket_round INTEGER,
+  red_team_id TEXT REFERENCES tournament_teams(id),
+  blue_team_id TEXT REFERENCES tournament_teams(id),
+  tournament_round INTEGER,
+  tournament_bracket_type TEXT,
+  team1_name TEXT,
+  team2_name TEXT,
+  map_id TEXT REFERENCES game_maps(id)
+);
+
+-- Copy all existing data from old table to new table (explicitly listing columns)
+INSERT INTO matches_new (
+  id, game_id, mode_id, name, description, start_date, start_time, end_time, status,
+  max_participants, current_participants, winner_team, map_codes, guild_id, channel_id,
+  match_format, maps, rules, rounds, livestream_link, tournament_id, bracket_type,
+  bracket_round, red_team_id, blue_team_id, tournament_round, tournament_bracket_type,
+  team1_name, team2_name, map_id
+)
+SELECT
+  id, game_id, mode_id, name, description, start_date, start_time, end_time, status,
+  max_participants, current_participants, winner_team, map_codes, guild_id, channel_id,
+  match_format, maps, rules, rounds, livestream_link, tournament_id, bracket_type,
+  bracket_round, red_team_id, blue_team_id, tournament_round, tournament_bracket_type,
+  team1_name, team2_name, map_id
+FROM matches;
+
+-- Drop old table
+DROP TABLE matches;
+
+-- Rename new table to original name
+ALTER TABLE matches_new RENAME TO matches;
+
+-- Recreate indexes for matches table
+CREATE INDEX IF NOT EXISTS idx_matches_game_id ON matches(game_id);
+CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
+CREATE INDEX IF NOT EXISTS idx_matches_start_time ON matches(start_time);
+CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
+
+-- Re-enable foreign keys (will be enabled by connection.ts going forward)
+PRAGMA foreign_keys = ON;

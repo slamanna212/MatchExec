@@ -190,6 +190,49 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
 }
 
 /**
+ * Handles tournament transition to "assign" status
+ * Queues Discord status updates for all tournament matches to close signups
+ */
+export async function handleTournamentAssignTransition(tournamentId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    // Get all matches for this tournament
+    const matches = await db.all<{ id: string }>(`
+      SELECT id FROM matches WHERE tournament_id = ?
+    `, [tournamentId]);
+
+    if (matches.length === 0) {
+      logger.debug(`No matches found for tournament: ${tournamentId}`);
+      return;
+    }
+
+    logger.debug(`Queueing Discord status updates for ${matches.length} tournament matches`);
+
+    // Queue Discord status update for each match
+    for (const match of matches) {
+      try {
+        const discordUpdateSuccess = await queueDiscordStatusUpdate(match.id, 'assign');
+
+        if (discordUpdateSuccess) {
+          logger.debug(`🔄 Discord status update queued for tournament match: ${match.id}`);
+        } else {
+          logger.warning(`⚠️ Failed to queue Discord status update for tournament match: ${match.id}`);
+        }
+      } catch (error) {
+        logger.error(`❌ Error queuing Discord status update for tournament match ${match.id}:`, error);
+        // Continue processing other matches even if one fails
+      }
+    }
+
+    logger.info(`✅ Queued Discord status updates for ${matches.length} tournament matches`);
+  } catch (error) {
+    logger.error('❌ Error handling tournament assign transition:', error);
+    // Don't throw - just log the error
+  }
+}
+
+/**
  * Routes match status transitions to the appropriate handler
  */
 export async function handleStatusTransition(matchId: string, newStatus: string): Promise<void> {

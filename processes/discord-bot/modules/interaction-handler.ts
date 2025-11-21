@@ -264,6 +264,21 @@ export class InteractionHandler {
     try {
       if (!this.db) return;
 
+      // Check if this is a tournament match (participants come from bracket, no signups allowed)
+      if (!isTournament) {
+        const matchData = await this.db.get<{ tournament_id: string | null }>(`
+          SELECT tournament_id FROM matches WHERE id = ?
+        `, [eventId]);
+
+        if (matchData?.tournament_id) {
+          await interaction.reply({
+            content: '❌ This is a tournament match - participants are assigned from the tournament bracket. You cannot sign up directly.',
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+      }
+
       // NOTE: We cannot defer this interaction because it may show a modal,
       // and showModal() must be the immediate response to an interaction.
       // Instead, we rely on signup form pre-loading at bot startup to make

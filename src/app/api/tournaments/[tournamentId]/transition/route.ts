@@ -10,6 +10,7 @@ import {
   handleBattleTransition,
   handleEndTransition
 } from '../../../../../lib/tournament-transition-handlers';
+import { handleTournamentAssignTransition } from '../../../../../lib/transition-handlers';
 
 export async function POST(
   request: NextRequest,
@@ -96,6 +97,8 @@ export async function POST(
 
       case 'assign':
         await handleAssignTransition(db, tournamentId);
+        // Queue Discord status updates for all tournament matches to close signups
+        await handleTournamentAssignTransition(tournamentId);
         break;
 
       case 'battle':

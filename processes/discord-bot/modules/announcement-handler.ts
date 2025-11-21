@@ -144,6 +144,15 @@ export class AnnouncementHandler {
     }
 
     try {
+      // Check if this is a tournament match
+      let isTournamentMatch = false;
+      if (this.db) {
+        const matchData = await this.db.get<{ tournament_id: string | null }>(`
+          SELECT tournament_id FROM matches WHERE id = ?
+        `, [eventData.id]);
+        isTournamentMatch = !!matchData?.tournament_id;
+      }
+
       const { embed, attachment } = await this.createEventEmbedWithAttachment(
         eventData.name,
         eventData.description,
@@ -154,12 +163,26 @@ export class AnnouncementHandler {
         eventData.livestream_link,
         eventData.event_image_url,
         eventData.start_date,
-        eventData.id
+        eventData.id,
+        isTournamentMatch
       );
 
-      const row = this.createSignupButton(eventData.id);
+      // Only add signup button for non-tournament matches
       const mentionText = this.getMentionText();
-      const messageOptions = this.prepareAnnouncementMessageOptions(embed, row, attachment, mentionText);
+      let messageOptions;
+      if (isTournamentMatch) {
+        // No signup button for tournament matches
+        messageOptions = {
+          content: mentionText,
+          embeds: [embed],
+          components: [],
+          ...(attachment ? { files: [attachment] } : {})
+        };
+      } else {
+        const row = this.createSignupButton(eventData.id);
+        messageOptions = this.prepareAnnouncementMessageOptions(embed, row, attachment, mentionText);
+      }
+
       const { successCount, mainMessage } = await this.sendAnnouncementToChannels(announcementChannels, messageOptions);
 
       if (successCount === 0) {
@@ -248,16 +271,21 @@ export class AnnouncementHandler {
     livestreamLink?: string,
     eventImageUrl?: string,
     startDate?: string,
-    _matchId?: string
+    _matchId?: string,
+    isTournamentMatch?: boolean
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     const { gameName, gameColor } = await this.fetchGameDisplayData(gameId, type);
+
+    const footerText = isTournamentMatch
+      ? 'MatchExec • Participants assigned from tournament bracket'
+      : 'MatchExec • Sign up to participate!';
 
     const embed = new EmbedBuilder()
       .setTitle(name)
       .setDescription(description)
       .setColor(gameColor)
       .setTimestamp()
-      .setFooter({ text: 'MatchExec • Sign up to participate!' });
+      .setFooter({ text: footerText });
 
     this.addBasicFields(embed, gameName, type, _matchId);
     this.addTimeFields(embed, startDate);

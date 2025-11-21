@@ -32,8 +32,15 @@ export class Database {
         if (err) {
           reject(err);
         } else {
-          // Don't log here to avoid circular dependency with logger
-          resolve();
+          // Enable foreign key constraints
+          this.db!.run('PRAGMA foreign_keys = ON', (pragmaErr) => {
+            if (pragmaErr) {
+              reject(new Error(`Failed to enable foreign keys: ${pragmaErr}`));
+            } else {
+              // Don't log here to avoid circular dependency with logger
+              resolve();
+            }
+          });
         }
       });
     });
