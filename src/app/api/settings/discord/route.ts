@@ -50,38 +50,54 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
 }
 
 /**
- * Restarts the Discord bot process via PM2
+ * Restarts the Discord bot process
+ * Development: Uses PM2 for instant restart
+ * Production: Kills process, s6-overlay auto-restarts it
  */
 async function restartDiscordBot(): Promise<void> {
   try {
     const { exec } = await import('child_process');
     const isDev = process.env.NODE_ENV === 'development';
-    const processName = isDev ? 'discord-bot-dev' : 'discord-bot';
 
-    // Check if process exists first
-    exec(`npx pm2 describe ${processName}`, (error) => {
-      if (error) {
-        // Process doesn't exist, start it
-        logger.debug(`🚀 Starting ${processName} process (not currently running)`);
-        exec(`npx pm2 start ecosystem${isDev ? '.dev' : ''}.config.js --only ${processName}`, (startError) => {
-          if (startError) {
-            logger.error(`❌ Error starting ${processName}:`, startError.message);
-          } else {
-            logger.debug(`✅ Successfully started ${processName} process`);
-          }
-        });
-      } else {
-        // Process exists, restart it
-        logger.debug(`🔄 Restarting ${processName} process due to Discord settings change`);
-        exec(`npx pm2 restart ${processName}`, (restartError) => {
-          if (restartError) {
-            logger.error(`❌ Error restarting ${processName}:`, restartError.message);
-          } else {
-            logger.debug(`✅ Successfully restarted ${processName} process`);
-          }
-        });
-      }
-    });
+    if (isDev) {
+      // Development: Use PM2
+      const processName = 'discord-bot-dev';
+
+      // Check if process exists first
+      exec(`npx pm2 describe ${processName}`, (error) => {
+        if (error) {
+          // Process doesn't exist, start it
+          logger.debug(`🚀 Starting ${processName} process (not currently running)`);
+          exec(`npx pm2 start ecosystem.config.js --only ${processName}`, (startError) => {
+            if (startError) {
+              logger.error(`❌ Error starting ${processName}:`, startError.message);
+            } else {
+              logger.debug(`✅ Successfully started ${processName} process`);
+            }
+          });
+        } else {
+          // Process exists, restart it
+          logger.debug(`🔄 Restarting ${processName} process due to Discord settings change`);
+          exec(`npx pm2 restart ${processName}`, (restartError) => {
+            if (restartError) {
+              logger.error(`❌ Error restarting ${processName}:`, restartError.message);
+            } else {
+              logger.debug(`✅ Successfully restarted ${processName} process`);
+            }
+          });
+        }
+      });
+    } else {
+      // Production: Kill the process, s6-overlay will restart it automatically
+      logger.debug('🔄 Restarting Discord bot process due to Discord settings change');
+      exec('pkill -TERM -f "tsx processes/discord-bot/index.ts"', (error) => {
+        if (error) {
+          logger.error('❌ Error restarting Discord bot:', error.message);
+        } else {
+          logger.debug('✅ Discord bot restart triggered, s6-overlay will restart it');
+        }
+      });
+    }
   } catch (error) {
     logger.error('❌ Error managing Discord bot process:', error);
   }

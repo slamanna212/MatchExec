@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import {
   Title, Text, Button, Stack, Group, Card, Badge,
@@ -43,7 +42,6 @@ interface ChannelEditData {
 }
 
 export default function ChannelsSetupClient() {
-  const router = useRouter();
   const { colorScheme } = useMantineColorScheme();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [voiceCategoryId, setVoiceCategoryId] = useState('');
@@ -162,9 +160,10 @@ export default function ChannelsSetupClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ setupType: 'get_started' }),
       });
-      
+
       if (response.ok) {
-        router.push('/');
+        // Force full page reload to completely bypass client-side router cache
+        window.location.href = '/';
       }
     } catch (error) {
       logger.error('Error completing welcome flow:', error);

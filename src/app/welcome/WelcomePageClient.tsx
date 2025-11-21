@@ -22,7 +22,8 @@ export default function WelcomePageClient() {
       });
 
       if (response.ok) {
-        router.push('/');
+        // Force full page reload to completely bypass client-side router cache
+        window.location.href = '/';
       }
     } catch (error) {
       logger.error('Error completing welcome flow:', error);

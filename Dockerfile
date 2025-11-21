@@ -69,7 +69,7 @@ COPY --from=builder /app/processes ./processes
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/data ./data
+COPY --from=builder --chown=abc:abc /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
@@ -89,9 +89,8 @@ COPY --chmod=755 s6-overlay/cont-init.d /etc/cont-init.d/
 RUN mkdir -p /app/app_data/data /app/logs && \
     chown -R abc:abc /app/app_data /app/logs
 
-# Set default PUID/PGID for Unraid compatibility
-ENV PUID=99
-ENV PGID=100
+# Note: PUID/PGID can be set at runtime (defaults to 1001:1001 in cont-init.d/10-adduser)
+# Unraid users should set -e PUID=99 -e PGID=100 when running the container
 
 EXPOSE 3000
 

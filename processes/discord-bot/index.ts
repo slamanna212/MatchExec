@@ -344,14 +344,18 @@ class MatchExecBot {
 
   async start() {
     // Initialize database and settings first
-    const initialized = await this.initialize();
+    let initialized = await this.initialize();
 
-    if (!initialized) {
-      // Welcome flow not complete or settings missing
-      // Exit cleanly - PM2/s6 will keep process alive but idle
-      logger.info('⏸️  Discord bot will start after welcome flow is completed');
+    // Wait for welcome flow to complete instead of exiting
+    while (!initialized) {
+      logger.info('⏸️  Waiting for welcome flow to be completed...');
       logger.info('💡 Complete the setup wizard at the web interface to activate the bot');
-      process.exit(0);
+
+      // Wait 30 seconds before checking again
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // Try to initialize again
+      initialized = await this.initialize();
     }
 
     if (!this.settings?.bot_token) {
