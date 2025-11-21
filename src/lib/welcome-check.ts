@@ -11,24 +11,18 @@ export async function isWelcomeComplete(): Promise<boolean> {
   try {
     // Check if database is ready first
     const dbStatus = readDbStatus();
-    logger.error(`[PAGE-DEBUG] DB status: ${JSON.stringify(dbStatus)}`);
     if (!dbStatus.ready) {
-      logger.error('[PAGE-DEBUG] Database not ready yet, returning false');
       return false; // Default to not complete if DB isn't ready
     }
 
     const db = await getDbInstance();
-    logger.error('[PAGE-DEBUG] Got database instance');
     const result = await db.get<{ setting_value: string }>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ?',
       ['welcome_flow_completed']
     );
-    logger.error(`[PAGE-DEBUG] Query result: ${JSON.stringify(result)}`);
-    const isComplete = result?.setting_value === 'true';
-    logger.error(`[PAGE-DEBUG] Returning: ${isComplete}`);
-    return isComplete;
+    return result?.setting_value === 'true';
   } catch (error) {
-    logger.error('[PAGE-DEBUG] Error checking welcome status:', error);
+    logger.error('Error checking welcome status:', error);
     return false; // Default to not complete on error (safer)
   }
 }

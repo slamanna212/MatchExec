@@ -26,24 +26,18 @@ async function isWelcomeComplete(): Promise<boolean> {
   try {
     // Check if database is ready first
     const dbStatus = readDbStatus();
-    logger.error(`[PROXY-DEBUG] DB status: ${JSON.stringify(dbStatus)}`);
     if (!dbStatus.ready) {
-      logger.error('[PROXY-DEBUG] Database not ready yet, returning false');
       return false; // Default to not complete if DB isn't ready
     }
 
     const db = await getDbInstance();
-    logger.error('[PROXY-DEBUG] Got database instance');
     const result = await db.get<{ setting_value: string }>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ?',
       ['welcome_flow_completed']
     );
-    logger.error(`[PROXY-DEBUG] Query result: ${JSON.stringify(result)}`);
-    const isComplete = result?.setting_value === 'true';
-    logger.error(`[PROXY-DEBUG] Returning: ${isComplete}`);
-    return isComplete;
+    return result?.setting_value === 'true';
   } catch (error) {
-    logger.error('[PROXY-DEBUG] Error checking welcome status:', error);
+    logger.error('Error checking welcome status:', error);
     return false;
   }
 }
@@ -51,44 +45,35 @@ async function isWelcomeComplete(): Promise<boolean> {
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
-  logger.error(`[PROXY-DEBUG] === NEW REQUEST === Pathname: ${pathname}`);
-
   // Allow static/API public routes first
   if (PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
-    logger.error(`[PROXY-DEBUG] Public route, allowing: ${pathname}`);
     return NextResponse.next();
   }
 
   // Check welcome flow status
   const welcomeComplete = await isWelcomeComplete();
-  logger.error(`[PROXY-DEBUG] Pathname: ${pathname}, Welcome complete: ${welcomeComplete}`);
 
   // Handle /welcome specifically
   if (pathname.startsWith('/welcome')) {
     if (welcomeComplete) {
       // Welcome is complete, redirect away from /welcome to home
-      logger.error(`[PROXY-DEBUG] Redirecting ${pathname} -> / (welcome complete)`);
       const url = request.nextUrl.clone();
       url.pathname = '/';
       return NextResponse.redirect(url);
-    } 
-      // Welcome not complete, allow access to /welcome
-      logger.error(`[PROXY-DEBUG] Allowing ${pathname} (welcome not complete)`);
-      return NextResponse.next();
-    
+    }
+    // Welcome not complete, allow access to /welcome
+    return NextResponse.next();
   }
 
   // For all other routes, check if welcome is complete
   if (!welcomeComplete) {
     // Welcome not complete, redirect to /welcome
-    logger.error(`[PROXY-DEBUG] Redirecting ${pathname} -> /welcome (not complete)`);
     const url = request.nextUrl.clone();
     url.pathname = '/welcome';
     return NextResponse.redirect(url);
   }
 
   // Welcome is complete, allow access to protected route
-  logger.error(`[PROXY-DEBUG] Allowing request to: ${pathname}`);
   return NextResponse.next();
 }
 
