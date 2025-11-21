@@ -3,7 +3,7 @@
 import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
-import { markDbNotReady } from '../lib/database/status';
+import { markDbNotReady, markDbReady } from '../lib/database/status';
 import { logger } from '../src/lib/logger/server';
 
 async function runMigrationsInBackground() {
@@ -26,6 +26,8 @@ async function runMigrationsInBackground() {
     const seeder = new DatabaseSeeder(db);
     await seeder.seedDatabase();
 
+    // Mark database as ready
+    markDbReady();
     logger.debug('✅ Background database initialization completed');
   } catch (error) {
     logger.error('❌ Error during database initialization:', error);

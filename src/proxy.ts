@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { readDbStatus } from '@/lib/database/status';
 
 // Routes that should be accessible before welcome flow completes
 const PUBLIC_ROUTES = [
@@ -24,6 +25,13 @@ const WELCOME_ROUTES = ['/welcome'];
  */
 async function isWelcomeComplete(): Promise<boolean> {
   try {
+    // Check if database is ready first
+    const dbStatus = readDbStatus();
+    if (!dbStatus.ready) {
+      logger.debug('Proxy: Database not ready yet, skipping welcome check');
+      return false; // Default to not complete if DB isn't ready
+    }
+
     const db = await getDbInstance();
     const result = await db.get<{ setting_value: string }>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ?',

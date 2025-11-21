@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger/server';
+import { readDbStatus } from '@/lib/database/status';
 
 /**
  * Server-side utility to check if welcome flow is complete
@@ -8,6 +9,13 @@ import { logger } from '@/lib/logger/server';
  */
 export async function isWelcomeComplete(): Promise<boolean> {
   try {
+    // Check if database is ready first
+    const dbStatus = readDbStatus();
+    if (!dbStatus.ready) {
+      logger.debug('Database not ready yet, skipping welcome check');
+      return false; // Default to not complete if DB isn't ready
+    }
+
     const db = await getDbInstance();
     const result = await db.get<{ setting_value: string }>(
       'SELECT setting_value FROM app_settings WHERE setting_key = ?',
