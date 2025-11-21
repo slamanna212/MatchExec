@@ -776,7 +776,7 @@ async function insertMatch(
     match.max_participants, match.status, match.tournament_id,
     match.tournament_round, match.tournament_bracket_type, scheduledDate,
     scheduledDateTime, match.team1_name, match.team2_name,
-    match.team1_id, match.team2_id, 1, match.rules || 'casual'
+    match.team2_id, match.team1_id, 1, match.rules || 'casual'
   ]);
 }
 
@@ -837,11 +837,11 @@ export async function saveGeneratedMatches(
 
       // Add team members as match participants
       if (tournamentMatch.team1_id) {
-        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team1_id, 'red');
+        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team1_id, 'blue');
       }
 
       if (tournamentMatch.team2_id) {
-        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team2_id, 'blue');
+        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team2_id, 'red');
       }
     }
 
