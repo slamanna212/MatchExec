@@ -11,6 +11,11 @@ export class Database {
   }
 
   async connect(): Promise<void> {
+    // If already connected, return immediately to prevent creating duplicate connections
+    if (this.db) {
+      return Promise.resolve();
+    }
+
     return new Promise((resolve, reject) => {
       // Ensure the directory exists before creating the database file
       const dbDir = path.dirname(this.dbPath);
