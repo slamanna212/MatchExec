@@ -1,0 +1,38 @@
+{
+  "fields": [
+    {
+      "id": "steam_id",
+      "type": "text",
+      "label": "Steam Name or ID",
+      "placeholder": "PlayerName or Steam ID",
+      "required": true
+    },
+    {
+      "id": "competitive_rank",
+      "type": "text",
+      "label": "Competitive Rank",
+      "placeholder": "e.g., Silver Elite, Gold Nova II, Legendary Eagle",
+      "required": true,
+      "helpText": "Enter your current CS2 competitive rank or Premier rating."
+    },
+    {
+      "id": "preferred_role",
+      "type": "text",
+      "label": "Preferred Role",
+      "placeholder": "Entry Fragger, AWPer, Support, IGL, Lurker",
+      "required": false,
+      "helpText": "What role do you prefer to play?"
+    },
+    {
+      "id": "notes",
+      "type": "largetext",
+      "label": "Additional Notes (Optional)",
+      "placeholder": "Any additional information, map preferences, or playstyle notes",
+      "required": false
+    }
+  ],
+  "submitButton": {
+    "text": "Sign Up",
+    "loadingText": "Joining..."
+  }
+}

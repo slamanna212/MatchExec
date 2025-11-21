@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import {
   Title, Text, Button, Stack, Group, Card, Badge,
-  ActionIcon, Modal, Checkbox, Alert, TextInput, Progress
+  ActionIcon, Modal, Checkbox, Alert, TextInput, Progress,
+  useMantineColorScheme
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
@@ -43,28 +44,27 @@ interface ChannelEditData {
 
 export default function ChannelsSetupClient() {
   const router = useRouter();
+  const { colorScheme } = useMantineColorScheme();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [voiceCategoryId, setVoiceCategoryId] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
 
-  // Create channel modal
-  const [createModalOpened, setCreateModalOpened] = useState(false);
+  // Create channel form state
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [createLoading, setCreateLoading] = useState(false);
 
-  // Debug function to test modal opening
-  const handleOpenCreateModal = () => {
-    logger.debug('Add Channel button clicked');
-    logger.debug('Current modal state:', createModalOpened);
-    setCreateModalOpened(true);
-    logger.debug('Modal should now be open');
-  };
-
-  const closeCreateModal = () => {
-    setCreateModalOpened(false);
+  const handleOpenCreateForm = () => {
+    setShowCreateForm(true);
     setCurrentStep(0);
     createForm.reset();
   };
-  const [currentStep, setCurrentStep] = useState(0);
-  const [createLoading, setCreateLoading] = useState(false);
+
+  const closeCreateForm = () => {
+    setShowCreateForm(false);
+    setCurrentStep(0);
+    createForm.reset();
+  };
 
   // Edit channel modal
   const [editModalOpened, setEditModalOpened] = useState(false);
@@ -108,10 +108,6 @@ export default function ChannelsSetupClient() {
     fetchChannels();
     fetchVoiceCategoryId();
   }, []);
-
-  useEffect(() => {
-    logger.debug('Modal state changed:', createModalOpened);
-  }, [createModalOpened]);
 
   const fetchChannels = async () => {
     try {
@@ -190,9 +186,7 @@ export default function ChannelsSetupClient() {
 
       if (response.ok) {
         showSuccess('Channel created successfully!');
-        closeCreateModal();
-        setCurrentStep(0);
-        createForm.reset();
+        closeCreateForm();
         await fetchChannels();
       } else {
         const errorData = await response.json();
@@ -469,66 +463,159 @@ export default function ChannelsSetupClient() {
         </Group>
       </Card>
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" mb="md">
-          <Group>
-            <IconMessage size="1.2rem" />
-            <Text size="lg" fw={600}>Channels</Text>
-            <Badge color="blue" variant="light">{textChannels.length}</Badge>
-          </Group>
-          <Button
-            leftSection={<IconPlus size="1rem" />}
-            onClick={handleOpenCreateModal}
-          >
-            Add Channel
-          </Button>
-        </Group>
+      {/* Create Channel Form */}
+      {showCreateForm ? (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="lg">
+            {/* Progress Bar */}
+            <div>
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" fw={500}>
+                  Step {currentStep + 1} of {totalSteps}: {steps[currentStep].title}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {Math.round(progressValue)}%
+                </Text>
+              </Group>
+              <Progress value={progressValue} size="sm" mb="sm" />
+              <Text size="xs" c="dimmed">
+                {steps[currentStep].description}
+              </Text>
+            </div>
 
-        <Stack gap="sm">
-          {textChannels.length === 0 ? (
-            <Text c="dimmed" ta="center" py="md" size="sm">No channels added yet</Text>
-          ) : (
-            textChannels.map((channel) => (
-              <Card key={channel.id} p="sm" withBorder>
-                <Group justify="space-between">
-                  <div>
-                    <Text fw={500} size="sm">
-                      {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      ID: {channel.discord_channel_id}
-                    </Text>
-                    <Group gap="xs" mt="xs">
+            {/* Step Content */}
+            <div>
+              {renderCreateStepContent()}
+            </div>
+
+            {/* Navigation Buttons */}
+            <Group justify="space-between" mt="lg">
+              <Button
+                variant="outline"
+                onClick={handleCreatePrevious}
+                disabled={currentStep === 0}
+              >
+                Previous
+              </Button>
+
+              {currentStep === totalSteps - 1 ? (
+                <Button
+                  onClick={handleCreateChannel}
+                  loading={createLoading}
+                  leftSection={<IconCheck size="1rem" />}
+                >
+                  Create Channel
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleCreateNext}
+                  rightSection={<IconArrowRight size="1rem" />}
+                >
+                  Next
+                </Button>
+              )}
+            </Group>
+
+            {/* Cancel Button */}
+            <Group justify="center">
+              <Button variant="subtle" onClick={closeCreateForm}>
+                Cancel
+              </Button>
+            </Group>
+          </Stack>
+        </Card>
+      ) : (
+        <div>
+          <Group justify="space-between" mb="md">
+            <Group>
+              <IconMessage size="1.2rem" />
+              <Text size="lg" fw={600}>Channels</Text>
+              <Badge color="blue" variant="light">{textChannels.length}</Badge>
+            </Group>
+            <Button
+              leftSection={<IconPlus size="1rem" />}
+              onClick={handleOpenCreateForm}
+            >
+              Add Channel
+            </Button>
+          </Group>
+
+          <Stack gap="md">
+            {textChannels.length === 0 ? (
+              <Card shadow="sm" padding="lg" radius="md" withBorder>
+                <Text c="dimmed" ta="center" py="xl">No channels added yet</Text>
+              </Card>
+            ) : (
+              textChannels.map((channel) => (
+                <Card
+                  key={channel.id}
+                  shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+                  padding="lg"
+                  radius="md"
+                  withBorder
+                  bg={colorScheme === 'light' ? 'white' : undefined}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
+                    height: '100%'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = colorScheme === 'light'
+                      ? '0 8px 16px rgba(0,0,0,0.15)'
+                      : '0 4px 12px rgba(0,0,0,0.3)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '';
+                  }}
+                >
+                  <Stack gap="md" h="100%">
+                    <div>
+                      <Text fw={600} size="md" mb="xs">
+                        {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        ID: {channel.discord_channel_id}
+                      </Text>
+                    </div>
+
+                    <Group gap="xs" wrap="wrap">
                       {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
                       {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
                       {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                       {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
                       {channel.send_health_alerts && <Badge size="xs" color="red">Health Alerts</Badge>}
+                      {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && !channel.send_health_alerts && (
+                        <Badge size="xs" color="gray" variant="light">No notifications</Badge>
+                      )}
                     </Group>
-                  </div>
-                  <Group gap="xs">
-                    <ActionIcon
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditChannel(channel)}
-                    >
-                      <IconSettings size="0.8rem" />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="outline"
-                      color="red"
-                      size="sm"
-                      onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
-                    >
-                      <IconTrash size="0.8rem" />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </Card>
-            ))
-          )}
-        </Stack>
-      </Card>
+
+                    <Group gap="xs" mt="auto" justify="flex-end">
+                      <ActionIcon
+                        variant="outline"
+                        size="lg"
+                        onClick={() => handleEditChannel(channel)}
+                      >
+                        <IconSettings size="1rem" />
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="outline"
+                        color="red"
+                        size="lg"
+                        onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
+                      >
+                        <IconTrash size="1rem" />
+                      </ActionIcon>
+                    </Group>
+                  </Stack>
+                </Card>
+              ))
+            )}
+          </Stack>
+        </div>
+      )}
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group mb="md">
@@ -575,63 +662,6 @@ export default function ChannelsSetupClient() {
           Finish Setup
         </Button>
       </Group>
-
-      {/* Create Channel Modal */}
-      <Modal
-        opened={createModalOpened}
-        onClose={closeCreateModal}
-        title="Add Discord Channel"
-        size="xl"
-        zIndex={1001}
-      >
-        <Stack gap="lg">
-          <div>
-            <Group justify="space-between" mb="xs">
-              <Text size="sm" fw={500}>
-                Step {currentStep + 1} of {totalSteps}: {steps[currentStep].title}
-              </Text>
-              <Text size="sm" c="dimmed">
-                {Math.round(progressValue)}%
-              </Text>
-            </Group>
-            <Progress value={progressValue} size="sm" mb="sm" />
-            <Text size="xs" c="dimmed">
-              {steps[currentStep].description}
-            </Text>
-          </div>
-
-          <div>
-            {renderCreateStepContent()}
-          </div>
-
-          <Group justify="space-between" mt="lg">
-            <Button
-              variant="outline"
-              onClick={handleCreatePrevious}
-              disabled={currentStep === 0}
-            >
-              Previous
-            </Button>
-
-            {currentStep === totalSteps - 1 ? (
-              <Button
-                onClick={handleCreateChannel}
-                loading={createLoading}
-                leftSection={<IconCheck size="1rem" />}
-              >
-                Create Channel
-              </Button>
-            ) : (
-              <Button
-                onClick={handleCreateNext}
-                rightSection={<IconArrowRight size="1rem" />}
-              >
-                Next
-              </Button>
-            )}
-          </Group>
-        </Stack>
-      </Modal>
 
       {/* Edit Notifications Modal */}
       <Modal
