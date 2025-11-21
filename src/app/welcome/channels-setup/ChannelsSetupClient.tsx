@@ -177,12 +177,15 @@ export default function ChannelsSetupClient() {
 
   const handleCreateChannel = async () => {
     setCreateLoading(true);
-    
+
     try {
       const response = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm.values),
+        body: JSON.stringify({
+          ...createForm.values,
+          channel_type: 'text' // Text channels only (voice channels are auto-created)
+        }),
       });
 
       if (response.ok) {
