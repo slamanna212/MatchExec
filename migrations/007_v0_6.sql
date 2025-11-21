@@ -14,8 +14,7 @@ CREATE TABLE IF NOT EXISTS auto_voice_channels (
   match_id TEXT NOT NULL,
   channel_id TEXT NOT NULL,
   team_name TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Index for faster cleanup queries
@@ -96,80 +95,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_reminder_queue_unique_match_remind
 ON discord_reminder_queue(match_id, reminder_type)
 WHERE status NOT IN ('failed');
 
--- Voice Announcement Timeout and Retry Support
--- Adds columns to track retries and timeouts for voice announcements
-ALTER TABLE discord_voice_announcement_queue ADD COLUMN retry_count INTEGER DEFAULT 0;
-ALTER TABLE discord_voice_announcement_queue ADD COLUMN timeout_at DATETIME;
-ALTER TABLE discord_voice_announcement_queue ADD COLUMN first_attempted_at DATETIME;
+-- Remove Foreign Key Constraints from Discord Voice Announcement Queue
+-- For databases upgrading from v0.5, remove the foreign key constraint that causes issues
+-- SQLite doesn't support dropping constraints, so we recreate the table
 
--- Foreign Key Support and Tournament Match Cleanup
--- Recreate matches table with proper ON DELETE CASCADE for tournament_id
--- This enables automatic cleanup of Discord messages when tournaments are deleted
-
--- Disable foreign keys temporarily for migration
-PRAGMA foreign_keys = OFF;
-
--- Create new matches table with correct foreign key constraints
-CREATE TABLE IF NOT EXISTS matches_new (
+CREATE TABLE IF NOT EXISTS discord_voice_announcement_queue_new (
   id TEXT PRIMARY KEY,
-  game_id TEXT NOT NULL,
-  mode_id TEXT,
-  name TEXT NOT NULL,
-  description TEXT,
-  start_date DATETIME NOT NULL,
-  start_time DATETIME NOT NULL,
-  end_time DATETIME,
-  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'gather', 'assign', 'battle', 'complete', 'cancelled')),
-  max_participants INTEGER,
-  current_participants INTEGER DEFAULT 0,
-  winner_team TEXT,
-  map_codes TEXT,
-  guild_id TEXT,
-  channel_id TEXT,
-  match_format TEXT DEFAULT 'casual',
-  maps TEXT,
-  rules TEXT,
-  rounds INTEGER,
-  livestream_link TEXT,
-  tournament_id TEXT REFERENCES tournaments(id) ON DELETE CASCADE,
-  bracket_type TEXT CHECK (bracket_type IN ('winners', 'losers', 'final')),
-  bracket_round INTEGER,
-  red_team_id TEXT REFERENCES tournament_teams(id),
-  blue_team_id TEXT REFERENCES tournament_teams(id),
-  tournament_round INTEGER,
-  tournament_bracket_type TEXT,
-  team1_name TEXT,
-  team2_name TEXT,
-  map_id TEXT REFERENCES game_maps(id)
+  match_id TEXT NOT NULL,
+  announcement_type TEXT NOT NULL,
+  blue_team_voice_channel TEXT,
+  red_team_voice_channel TEXT,
+  first_team TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  retry_count INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  processed_at DATETIME,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME,
+  error_message TEXT,
+  timeout_at DATETIME,
+  first_attempted_at DATETIME
 );
 
--- Copy all existing data from old table to new table (explicitly listing columns)
-INSERT INTO matches_new (
-  id, game_id, mode_id, name, description, start_date, start_time, end_time, status,
-  max_participants, current_participants, winner_team, map_codes, guild_id, channel_id,
-  match_format, maps, rules, rounds, livestream_link, tournament_id, bracket_type,
-  bracket_round, red_team_id, blue_team_id, tournament_round, tournament_bracket_type,
-  team1_name, team2_name, map_id
-)
-SELECT
-  id, game_id, mode_id, name, description, start_date, start_time, end_time, status,
-  max_participants, current_participants, winner_team, map_codes, guild_id, channel_id,
-  match_format, maps, rules, rounds, livestream_link, tournament_id, bracket_type,
-  bracket_round, red_team_id, blue_team_id, tournament_round, tournament_bracket_type,
-  team1_name, team2_name, map_id
-FROM matches;
+-- Copy existing data
+INSERT INTO discord_voice_announcement_queue_new
+  (id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel,
+   first_team, status, retry_count, created_at, processed_at, updated_at, completed_at, error_message)
+SELECT id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel,
+       first_team, status, retry_count, created_at, processed_at, updated_at, completed_at, error_message
+FROM discord_voice_announcement_queue;
 
--- Drop old table
-DROP TABLE matches;
-
--- Rename new table to original name
-ALTER TABLE matches_new RENAME TO matches;
-
--- Recreate indexes for matches table
-CREATE INDEX IF NOT EXISTS idx_matches_game_id ON matches(game_id);
-CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
-CREATE INDEX IF NOT EXISTS idx_matches_start_time ON matches(start_time);
-CREATE INDEX IF NOT EXISTS idx_matches_tournament_id ON matches(tournament_id);
-
--- Re-enable foreign keys (will be enabled by connection.ts going forward)
-PRAGMA foreign_keys = ON;
+-- Drop old table and rename
+DROP TABLE discord_voice_announcement_queue;
+ALTER TABLE discord_voice_announcement_queue_new RENAME TO discord_voice_announcement_queue;
