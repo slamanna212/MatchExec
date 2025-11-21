@@ -231,10 +231,10 @@ class MatchExecBot {
       }
     }, 30000);
 
-    // Queue processing every 5 seconds (simplified)
+    // Queue processing every 3 seconds (faster pickup for tournament matches)
     setInterval(async () => {
       await this.processQueues();
-    }, 5000);
+    }, 3000);
 
     // Start health monitoring
     if (this.healthMonitor) {

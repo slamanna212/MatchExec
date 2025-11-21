@@ -95,3 +95,9 @@ ALTER TABLE game_modes ADD COLUMN max_players INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_discord_reminder_queue_unique_match_reminder
 ON discord_reminder_queue(match_id, reminder_type)
 WHERE status NOT IN ('failed');
+
+-- Voice Announcement Timeout and Retry Support
+-- Adds columns to track retries and timeouts for voice announcements
+ALTER TABLE discord_voice_announcement_queue ADD COLUMN retry_count INTEGER DEFAULT 0;
+ALTER TABLE discord_voice_announcement_queue ADD COLUMN timeout_at DATETIME;
+ALTER TABLE discord_voice_announcement_queue ADD COLUMN first_attempted_at DATETIME;

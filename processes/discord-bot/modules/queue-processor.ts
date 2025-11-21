@@ -53,6 +53,9 @@ interface QueuedVoiceAnnouncement {
   red_team_voice_channel: string | null;
   first_team: 'blue' | 'red';
   created_at: string;
+  retry_count: number;
+  timeout_at: string | null;
+  first_attempted_at: string | null;
 }
 
 interface QueuedMapCode {
@@ -1104,9 +1107,55 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
+      // First, handle timeouts for announcements stuck in 'processing'
+      const timedOutAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
+        SELECT id, match_id, announcement_type, retry_count
+        FROM discord_voice_announcement_queue
+        WHERE status = 'processing'
+          AND timeout_at IS NOT NULL
+          AND datetime(timeout_at) < datetime('now')
+      `);
+
+      for (const announcement of timedOutAnnouncements) {
+        const maxRetries = 3;
+        if (announcement.retry_count < maxRetries) {
+          // Reset to pending for retry
+          await this.db.run(`
+            UPDATE discord_voice_announcement_queue
+            SET status = 'pending',
+                retry_count = retry_count + 1,
+                timeout_at = NULL,
+                updated_at = datetime('now')
+            WHERE id = ?
+          `, [announcement.id]);
+
+          logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
+        } else {
+          // Max retries reached, mark as failed
+          await this.db.run(`
+            UPDATE discord_voice_announcement_queue
+            SET status = 'failed',
+                completed_at = datetime('now'),
+                error_message = 'Exceeded maximum retry attempts after timeout'
+            WHERE id = ?
+          `, [announcement.id]);
+
+          logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
+        }
+      }
+
+      // Clean up old completed/failed announcements (older than 1 hour)
+      await this.db.run(`
+        DELETE FROM discord_voice_announcement_queue
+        WHERE status IN ('completed', 'failed')
+          AND datetime(updated_at, '+1 hour') < datetime('now')
+      `);
+
+      // Now process pending announcements
       const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
-        SELECT id, match_id, announcement_type, blue_team_voice_channel, 
-               red_team_voice_channel, first_team, created_at
+        SELECT id, match_id, announcement_type, blue_team_voice_channel,
+               red_team_voice_channel, first_team, created_at, retry_count,
+               timeout_at, first_attempted_at
         FROM discord_voice_announcement_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -1116,12 +1165,16 @@ export class QueueProcessor {
       for (const announcement of voiceAnnouncements) {
         try {
           // Immediately mark as processing to prevent duplicate processing
+          // Set timeout to 2 minutes from now
           const updateResult = await this.db.run(`
             UPDATE discord_voice_announcement_queue
-            SET status = 'processing', updated_at = datetime('now')
+            SET status = 'processing',
+                timeout_at = datetime('now', '+2 minutes'),
+                first_attempted_at = COALESCE(first_attempted_at, datetime('now')),
+                updated_at = datetime('now')
             WHERE id = ? AND status = 'pending'
           `, [announcement.id]);
-          
+
           if (updateResult.changes === 0) {
             continue;
           }
@@ -1141,10 +1194,12 @@ export class QueueProcessor {
             const elapsedSecs = (now - createdAt) / 1000;
 
             if (elapsedSecs < delaySecs) {
-              // Delay hasn't elapsed yet, mark back as pending
+              // Delay hasn't elapsed yet, mark back as pending and clear timeout
               await this.db.run(`
                 UPDATE discord_voice_announcement_queue
-                SET status = 'pending', updated_at = datetime('now')
+                SET status = 'pending',
+                    timeout_at = NULL,
+                    updated_at = datetime('now')
                 WHERE id = ?
               `, [announcement.id]);
 
@@ -1163,7 +1218,7 @@ export class QueueProcessor {
             continue;
           }
 
-          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
+          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
 
           // Play the team announcements sequentially
           const result = await this.voiceHandler.playTeamAnnouncements(
@@ -1188,7 +1243,7 @@ export class QueueProcessor {
           } else {
             // Mark as failed
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, [result.message, announcement.id]);
@@ -1197,7 +1252,7 @@ export class QueueProcessor {
           }
         } catch (error) {
           logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
-          
+
           // Mark as failed
           await this.db.run(`
             UPDATE discord_voice_announcement_queue
