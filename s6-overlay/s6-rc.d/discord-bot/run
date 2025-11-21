@@ -1,6 +1,6 @@
 #!/command/with-contenv bash
 
-echo "🤖 Starting Discord bot..."
+echo "Starting Discord bot..."
 
 cd /app
 exec s6-setuidgid abc tsx processes/discord-bot/index.ts

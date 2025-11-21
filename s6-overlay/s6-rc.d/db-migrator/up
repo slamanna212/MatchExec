@@ -1,9 +1,1 @@
-#!/command/with-contenv bash
-
-echo "📊 Running database migrations and seeding..."
-
-# Run migrations as the abc user (blocking until complete)
-cd /app
-s6-setuidgid abc tsx scripts/migrate-background.ts
-
-echo "✅ Database initialization completed"
+s6-setuidgid abc /bin/bash /app/scripts/run-migrations.sh

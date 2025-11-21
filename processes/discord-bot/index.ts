@@ -208,7 +208,9 @@ class MatchExecBot {
       return true;
 
     } catch (error) {
-      logger.error('❌ Failed to initialize bot:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error('❌ Failed to initialize bot:', { message: errorMessage, stack: errorStack });
       return false;
     }
   }

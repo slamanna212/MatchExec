@@ -38,9 +38,11 @@ class MatchExecScheduler {
       logger.debug('✅ Scheduler started successfully');
       
       this.keepAlive();
-      
+
     } catch (error) {
-      logger.error('❌ Failed to start scheduler:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error('❌ Failed to start scheduler:', { message: errorMessage, stack: errorStack });
       process.exit(1);
     }
   }

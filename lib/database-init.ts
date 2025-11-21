@@ -19,10 +19,6 @@ export function getDbInstance() {
   return dbPromise;
 }
 
-// Initialize database when module is loaded
-if (typeof window === 'undefined') {
-  getDbInstance().catch((error) => {
-    // Use console.error here as logger may not be ready yet during initialization
-    console.error('Failed to initialize database:', error);
-  });
-}
+// Note: Auto-initialization removed to prevent conflicts during startup
+// Database initialization is handled by the migration script (scripts/migrate-background.ts)
+// which runs as a oneshot service before other processes start

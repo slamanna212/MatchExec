@@ -73,6 +73,9 @@ COPY --from=builder /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
+# Copy migration runner script directly from host with execute permissions
+COPY --chmod=755 scripts/run-migrations.sh ./scripts/
+
 # Copy production node_modules from builder (already pruned and includes ARM-compiled binaries)
 # Next.js standalone has its own optimized subset, this adds the missing process deps
 COPY --from=builder /app/package.json /app/package-lock.json ./

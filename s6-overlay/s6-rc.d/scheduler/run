@@ -1,6 +1,6 @@
 #!/command/with-contenv bash
 
-echo "⏰ Starting scheduler..."
+echo "Starting scheduler..."
 
 cd /app
 exec s6-setuidgid abc tsx processes/scheduler/index.ts
