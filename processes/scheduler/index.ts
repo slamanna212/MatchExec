@@ -617,6 +617,47 @@ class MatchExecScheduler {
       }
 
       logger.debug(`✅ Voice channel cleanup completed`);
+
+      // Also check for orphaned voice channels (match was manually deleted)
+      // @ts-expect-error - Database all method typed as unknown
+      const orphanedChannels = await this.db.all(`
+        SELECT avc.id, avc.match_id, avc.channel_id, avc.team_name
+        FROM auto_voice_channels avc
+        WHERE avc.match_id NOT IN (SELECT id FROM matches)
+      `);
+
+      if (orphanedChannels.length > 0) {
+        logger.info(`🗑️ Found ${orphanedChannels.length} orphaned voice channels (from deleted matches)`);
+
+        // Import voice channel manager for cleanup
+        const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
+
+        // Group orphaned channels by match_id
+        const orphanedByMatch = orphanedChannels.reduce((acc: Map<string, typeof orphanedChannels>, channel) => {
+          if (!acc.has(channel.match_id)) {
+            acc.set(channel.match_id, []);
+          }
+          acc.get(channel.match_id)!.push(channel);
+          return acc;
+        }, new Map());
+
+        // Clean up each orphaned match's voice channels
+        for (const [matchId, channels] of orphanedByMatch.entries()) {
+          try {
+            const success = await deleteMatchVoiceChannels(matchId);
+            if (success) {
+              logger.info(`✅ Cleaned up ${channels.length} orphaned voice channel(s) for deleted match: ${matchId}`);
+            } else {
+              logger.warning(`⚠️ Failed to cleanup orphaned voice channels for match: ${matchId}`);
+            }
+          } catch (error) {
+            logger.error(`❌ Error cleaning up orphaned voice channels for match ${matchId}:`, error);
+          }
+        }
+      } else {
+        logger.debug('ℹ️ No orphaned voice channels found');
+      }
+
     } catch (error) {
       logger.error('❌ Error during voice channel cleanup:', error);
     }

@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
-import { deleteMatchVoiceChannels } from '@/lib/voice-channel-manager';
 
 export async function GET(
   request: NextRequest,
@@ -99,16 +98,8 @@ export async function DELETE(
       }
     }
 
-    // Clean up auto-created voice channels before deleting the match
-    try {
-      await deleteMatchVoiceChannels(matchId);
-      logger.debug(`✅ Voice channels queued for deletion for match: ${matchId}`);
-    } catch (error) {
-      logger.error('Error cleaning up voice channels:', error);
-      // Continue with match deletion even if voice cleanup fails
-    }
-
     // Delete the match (CASCADE will handle related records)
+    // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
     await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
     
     return NextResponse.json({ success: true });
