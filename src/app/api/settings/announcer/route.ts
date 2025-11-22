@@ -6,7 +6,6 @@ import { logger } from '@/lib/logger';
 interface AnnouncerSettings {
   announcer_voice?: string;
   voice_announcements_enabled?: boolean;
-  announcement_voice_channel?: string;
   match_start_delay_seconds?: number;
 }
 
@@ -32,7 +31,6 @@ export async function GET() {
     const settings: AnnouncerSettings = {
       announcer_voice: result?.announcer_voice || 'wrestling-announcer',
       voice_announcements_enabled: Boolean(result?.voice_announcements_enabled),
-      announcement_voice_channel: '', // Not implemented yet
       match_start_delay_seconds: result?.match_start_delay_seconds ?? 45
     };
 

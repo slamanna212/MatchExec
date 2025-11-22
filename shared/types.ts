@@ -100,7 +100,6 @@ export interface MatchDbRow extends Match {
   rounds?: number;
   livestream_link?: string;
   player_notifications?: number; // SQLite stores booleans as integers
-  announcement_voice_channel?: string;
 }
 
 export interface ParticipantDbRow {
