@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build",
+    "build": "npm run build:all-processes && next build",
+    "build:discord-bot": "node esbuild.discord-bot.config.mjs",
+    "build:scheduler": "node esbuild.scheduler.config.mjs",
+    "build:all-processes": "npm run build:discord-bot && npm run build:scheduler",
     "start": "next start",
     "lint": "eslint .",
     "migrate": "npx tsx scripts/migrate-background.ts",
@@ -12,7 +15,7 @@
     "dev:stop": "NODE_ENV=development npx pm2 stop ecosystem.config.js",
     "dev:restart": "NODE_ENV=development npx pm2 restart ecosystem.config.js",
     "dev:logs": "npx pm2 logs",
-    "build:processes": "npx tsc --noEmit --project tsconfig.json",
+    "typecheck": "npx tsc --noEmit --project tsconfig.json",
     "prod:start": "npx pm2 start ecosystem.config.js",
     "prod:stop": "npx pm2 stop ecosystem.config.js",
     "version:patch": "npm version patch --no-git-tag-version",
@@ -23,7 +26,7 @@
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --fix",
-      "bash -c 'npm run build:processes'"
+      "bash -c 'npm run typecheck'"
     ]
   },
   "dependencies": {
@@ -36,12 +39,9 @@
     "@mantine/notifications": "8.3.6",
     "@snazzah/davey": "^0.1.7",
     "@tabler/icons-react": "3.35.0",
-    "@types/express": "5.0.5",
-    "@types/node-cron": "3.0.11",
     "bufferutil": "4.0.9",
     "discord.js": "14.24.2",
     "express": "5.1.0",
-    "ffmpeg-static": "5.2.0",
     "framer-motion": "12.23.24",
     "lucide-react": "0.552.0",
     "next": "16.0.1",
@@ -51,20 +51,23 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "sqlite3": "5.1.7",
-    "tsx": "4.20.6",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3",
     "@tailwindcss/postcss": "4",
+    "@types/express": "5.0.5",
     "@types/node": "24",
+    "@types/node-cron": "3.0.11",
     "@types/react": "19",
     "@types/react-dom": "19",
+    "esbuild": "^0.24.2",
     "eslint": "9",
     "eslint-config-next": "16.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.6",
     "tailwindcss": "4",
+    "tsx": "4.20.6",
     "typescript": "5"
   }
 }

@@ -90,7 +90,7 @@ async function restartDiscordBot(): Promise<void> {
     } else {
       // Production: Kill the process, s6-overlay will restart it automatically
       logger.debug('🔄 Restarting Discord bot process due to Discord settings change');
-      exec('pkill -TERM -f "tsx processes/discord-bot/index.ts"', (error) => {
+      exec('pkill -TERM -f "node dist/discord-bot.js"', (error) => {
         if (error) {
           logger.error('❌ Error restarting Discord bot:', error.message);
         } else {

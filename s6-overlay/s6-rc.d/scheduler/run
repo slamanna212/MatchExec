@@ -3,4 +3,4 @@
 echo "Starting scheduler..."
 
 cd /app
-exec s6-setuidgid abc tsx processes/scheduler/index.ts
+exec s6-setuidgid abc node dist/scheduler.js

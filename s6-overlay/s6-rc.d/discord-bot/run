@@ -3,4 +3,4 @@
 echo "Starting Discord bot..."
 
 cd /app
-exec s6-setuidgid abc tsx processes/discord-bot/index.ts
+exec s6-setuidgid abc node dist/discord-bot.js
