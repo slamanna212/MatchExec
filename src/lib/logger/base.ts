@@ -57,9 +57,22 @@ export abstract class BaseLogger {
   protected formatMessage(level: LogLevel, args: unknown[]): string {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const levelStr = `[${level.toUpperCase()}]`;
-    const message = args.map(arg =>
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ');
+    const message = args.map(arg => {
+      if (arg instanceof Error) {
+        // Serialize Error objects with message, stack, and other properties
+        const errorObj: Record<string, unknown> = {
+          message: arg.message,
+          name: arg.name,
+          stack: arg.stack,
+        };
+        // Include any additional enumerable properties
+        Object.keys(arg).forEach(key => {
+          errorObj[key] = (arg as unknown as Record<string, unknown>)[key];
+        });
+        return JSON.stringify(errorObj);
+      }
+      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+    }).join(' ');
 
     return `[${timestamp}] ${levelStr} ${message}`;
   }

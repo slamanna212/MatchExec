@@ -239,9 +239,19 @@ export class VoiceHandler {
       this.voiceConnections.set(channelId, connection);
 
       // Wait for connection to be ready
-      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+      logger.debug(`🔊 Waiting for voice connection to channel ${channelId} (guild: ${channel.guild.id}) to be ready. Current state: ${connection.state.status}`);
+      try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+        logger.debug(`✅ Voice connection to channel ${channelId} is ready`);
+      } catch (error) {
+        logger.error(`❌ Voice connection failed for channel ${channelId} (guild: ${channel.guild.id}). Final state: ${connection.state.status}`, error);
+        connection.destroy();
+        this.voiceConnections.delete(channelId);
+        throw error;
+      }
 
       // Create audio player and resource
+      logger.debug(`🎵 Creating audio resource from: ${audioFilePath}`);
       const player = createAudioPlayer();
       const resource = createAudioResource(audioFilePath);
 
@@ -305,9 +315,9 @@ export class VoiceHandler {
           }
         });
       });
-      
+
     } catch (error) {
-      logger.error('❌ Error connecting to voice channel and playing audio:', error);
+      logger.error(`❌ Error connecting to voice channel ${channelId} and playing audio from ${audioFilePath}:`, error);
       this.playbackStatus.set(channelId, false);
       this.activeAudioPlayers.delete(channelId);
       return false;
