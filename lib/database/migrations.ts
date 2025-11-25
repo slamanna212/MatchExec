@@ -1,13 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { Database } from './connection';
-import { logger } from '../../src/lib/logger/server';
+import type { Database } from './connection';
 
 export class MigrationRunner {
   private db: Database;
   private migrationsDir: string;
 
-  constructor(db: Database, migrationsDir: string = './migrations') {
+  constructor(db: Database, migrationsDir = './migrations') {
     this.db = db;
     this.migrationsDir = migrationsDir;
   }
@@ -62,7 +61,7 @@ export class MigrationRunner {
   }
 
   private async executeMigration(filename: string): Promise<void> {
-    
+
     const migrationPath = path.join(this.migrationsDir, filename);
     const sql = fs.readFileSync(migrationPath, 'utf8');
 
@@ -70,7 +69,7 @@ export class MigrationRunner {
       await this.db.exec(sql);
       await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
     } catch (error) {
-      logger.error(`Migration ${filename} failed:`, error);
+      console.error(`Migration ${filename} failed:`, error);
       throw error;
     }
   }

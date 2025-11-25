@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -18,7 +19,8 @@ import {
   Badge
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Tournament, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
+import type { Tournament} from '@/shared/types';
+import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
@@ -34,7 +36,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   }
   
   // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(timestamp + 'Z');
+  return new Date(`${timestamp  }Z`);
 };
 
 interface TournamentWithGame extends Tournament {
@@ -188,7 +190,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching tournaments:', error);
+      logger.error('Error fetching tournaments:', error);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -206,7 +208,7 @@ export function TournamentDashboard() {
           setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
         }
       } catch (error) {
-        console.error('Error fetching UI settings:', error);
+        logger.error('Error fetching UI settings:', error);
       }
     };
 
@@ -233,6 +235,27 @@ export function TournamentDashboard() {
   }, []);
 
   const handleStatusTransition = async (tournamentId: string, newStatus: string) => {
+    const notificationId = `tournament-transition-${tournamentId}`;
+
+    // Determine the action message based on the new status
+    const actionMessages: Record<string, { loading: string; success: string }> = {
+      gather: { loading: 'Opening signups...', success: 'Signups opened successfully!' },
+      assign: { loading: 'Closing signups...', success: 'Signups closed successfully!' },
+      battle: { loading: 'Starting tournament...', success: 'Tournament started successfully!' },
+      complete: { loading: 'Ending tournament...', success: 'Tournament ended successfully!' },
+    };
+
+    const messages = actionMessages[newStatus] || {
+      loading: 'Processing...',
+      success: 'Status updated successfully!'
+    };
+
+    // Show loading notification
+    notificationHelper.loading({
+      id: notificationId,
+      message: messages.loading
+    });
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/transition`, {
         method: 'POST',
@@ -244,21 +267,31 @@ export function TournamentDashboard() {
 
       if (response.ok) {
         const updatedTournament = await response.json();
-        setTournaments(prev => prev.map(tournament => 
+        setTournaments(prev => prev.map(tournament =>
           tournament.id === tournamentId ? { ...tournament, ...updatedTournament } : tournament
         ));
+
+        // Update notification to success
+        notificationHelper.update(notificationId, {
+          type: 'success',
+          message: messages.success
+        });
       } else {
         const error = await response.json();
-        console.error('Failed to transition tournament status:', error);
-        notificationHelper.error({
-          title: 'Status Update Failed',
+        logger.error('Failed to transition tournament status:', error);
+
+        // Update notification to error
+        notificationHelper.update(notificationId, {
+          type: 'error',
           message: error.error || 'Failed to update tournament status'
         });
       }
     } catch (error) {
-      console.error('Error transitioning tournament status:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
+      logger.error('Error transitioning tournament status:', error);
+
+      // Update notification to error
+      notificationHelper.update(notificationId, {
+        type: 'error',
         message: 'Failed to update tournament status'
       });
     }
@@ -281,7 +314,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error deleting tournament:', error);
+      logger.error('Error deleting tournament:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to delete tournament'
@@ -302,7 +335,7 @@ export function TournamentDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Tournament progressed:', result.message);
+        logger.info('Tournament progressed:', result.message);
 
         notificationHelper.success({
           title: 'Round Advanced',
@@ -319,7 +352,7 @@ export function TournamentDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error progressing tournament:', error);
+      logger.error('Error progressing tournament:', error);
       notificationHelper.error({
         title: 'Connection Error',
         message: 'Failed to progress tournament'
@@ -328,6 +361,14 @@ export function TournamentDashboard() {
   }, [fetchTournaments]);
 
   const handleGenerateBracket = useCallback(async (tournamentId: string) => {
+    const notificationId = `bracket-generation-${tournamentId}`;
+
+    // Show loading notification
+    notificationHelper.loading({
+      id: notificationId,
+      message: 'Generating tournament bracket...'
+    });
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/generate-matches`, {
         method: 'POST',
@@ -335,9 +376,11 @@ export function TournamentDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Bracket generated:', result.message);
+        logger.info('Bracket generated:', result.message);
 
-        notificationHelper.success({
+        // Update to success notification
+        notificationHelper.update(notificationId, {
+          type: 'success',
           title: 'Bracket Generated',
           message: result.message
         });
@@ -346,14 +389,20 @@ export function TournamentDashboard() {
         fetchTournaments(true);
       } else {
         const error = await response.json();
-        notificationHelper.error({
+
+        // Update to error notification
+        notificationHelper.update(notificationId, {
+          type: 'error',
           title: 'Bracket Generation Failed',
           message: error.error || 'Failed to generate bracket'
         });
       }
     } catch (error) {
-      console.error('Error generating bracket:', error);
-      notificationHelper.error({
+      logger.error('Error generating bracket:', error);
+
+      // Update to error notification
+      notificationHelper.update(notificationId, {
+        type: 'error',
         title: 'Connection Error',
         message: 'Failed to generate bracket'
       });

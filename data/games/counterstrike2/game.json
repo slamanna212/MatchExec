@@ -1,16 +1,17 @@
 {
-  "id": "cs2",
+  "id": "counterstrike2",
   "name": "Counter-Strike 2",
   "color": "#FF6600",
   "genre": "Tactical FPS",
   "developer": "Valve Corporation",
   "releaseDate": "2023-09-27",
   "patch": "2024-12-10",
-  "dataVersion": "1.0.6",
+  "dataVersion": "1.0.11",
   "minPlayers": 2,
   "maxPlayers": 20,
   "maxSignups": 30,
   "mapCodesSupported": false,
+  "supportsAllModes": true,
   "assets": {
     "iconUrl": "/assets/games/cs2/cs2icon.png",
     "coverUrl": "/assets/games/cs2/cs2cover.png"

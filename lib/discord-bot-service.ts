@@ -1,4 +1,4 @@
-import { Database } from './database/connection';
+import type { Database } from './database/connection';
 import { logger } from '../src/lib/logger/server';
 
 interface VoiceTestRequest {
@@ -84,7 +84,7 @@ export class DiscordBotService {
     };
   }
 
-  async waitForRequestCompletion(requestId: string, timeoutMs: number = 45000): Promise<VoiceTestRequest> {
+  async waitForRequestCompletion(requestId: string, timeoutMs = 45000): Promise<VoiceTestRequest> {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeoutMs) {

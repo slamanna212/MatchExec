@@ -9,9 +9,10 @@ import {
   getVoiceConnection,
   entersState
 } from '@discordjs/voice';
-import { ChannelType, Client, VoiceBasedChannel } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import type { Client, VoiceBasedChannel } from 'discord.js';
+import { ChannelType } from 'discord.js';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class VoiceHandler {
@@ -54,9 +55,9 @@ export class VoiceHandler {
           message: `Successfully played voice line in user's channel`,
           channelId: channelId
         };
-      } else {
+      } 
         return { success: false, message: 'Failed to play voice line' };
-      }
+      
 
     } catch (error) {
       logger.error('Error testing voice line for user:', error);
@@ -76,12 +77,8 @@ export class VoiceHandler {
       }
 
       if (!this.settings.announcer_voice) {
-        logger.error('❌ No announcer voice selected in settings:', {
-          voice_announcements_enabled: this.settings.voice_announcements_enabled,
-          announcer_voice: this.settings.announcer_voice,
-          guild_id: this.settings.guild_id
-        });
-        
+        logger.info('ℹ️ No announcer voice configured, using fallback voice');
+
         // Try to get the first available voice as fallback
         if (this.db) {
           try {
@@ -238,9 +235,19 @@ export class VoiceHandler {
       this.voiceConnections.set(channelId, connection);
 
       // Wait for connection to be ready
-      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+      logger.debug(`🔊 Waiting for voice connection to channel ${channelId} (guild: ${channel.guild.id}) to be ready. Current state: ${connection.state.status}`);
+      try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+        logger.debug(`✅ Voice connection to channel ${channelId} is ready`);
+      } catch (error) {
+        logger.error(`❌ Voice connection failed for channel ${channelId} (guild: ${channel.guild.id}). Final state: ${connection.state.status}`, error);
+        connection.destroy();
+        this.voiceConnections.delete(channelId);
+        throw error;
+      }
 
       // Create audio player and resource
+      logger.debug(`🎵 Creating audio resource from: ${audioFilePath}`);
       const player = createAudioPlayer();
       const resource = createAudioResource(audioFilePath);
 
@@ -304,9 +311,9 @@ export class VoiceHandler {
           }
         });
       });
-      
+
     } catch (error) {
-      logger.error('❌ Error connecting to voice channel and playing audio:', error);
+      logger.error(`❌ Error connecting to voice channel ${channelId} and playing audio from ${audioFilePath}:`, error);
       this.playbackStatus.set(channelId, false);
       this.activeAudioPlayers.delete(channelId);
       return false;

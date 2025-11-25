@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { Database } from './connection';
-import { markDbNotReady, markDbReady } from './status';
-import { logger } from '../../src/lib/logger/server';
+import type { Database } from './connection';
+import { markDbNotReady } from './status';
 
 interface GameData {
   id: string;
@@ -33,6 +32,9 @@ interface ModeData {
   id: string;
   name: string;
   description: string;
+  teamSize?: number | null;
+  maxTeams?: number;
+  maxPlayers?: number;
   scoringType?: string; // FFA or Normal
   scoring?: Record<string, unknown>; // Flexible scoring configuration
 }
@@ -58,18 +60,18 @@ export class DatabaseSeeder {
   private db: Database;
   private dataDir: string;
 
-  constructor(db: Database, dataDir: string = './data/games') {
+  constructor(db: Database, dataDir = './data/games') {
     this.db = db;
     this.dataDir = dataDir;
   }
 
   async seedDatabase(): Promise<void> {
-    logger.debug('🌱 Starting database seeding...');
+    console.log('🌱 Starting database seeding...');
     markDbNotReady('Starting database seeding...');
 
     // Seed games first
     const gameDirectories = this.getGameDirectories();
-    logger.debug(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
+    console.log(`📁 Found ${gameDirectories.length} game directories: ${gameDirectories.join(', ')}`);
 
     for (let i = 0; i < gameDirectories.length; i++) {
       const gameDir = gameDirectories[i];
@@ -81,61 +83,61 @@ export class DatabaseSeeder {
     markDbNotReady('Seeding voice data...');
     await this.seedVoices();
 
-    logger.debug('✅ Database seeding completed');
-    markDbReady();
+    console.log('✅ Database seeding completed');
+    // Note: markDbReady() is called by the migration script after seeding completes
   }
 
   private getGameDirectories(): string[] {
-    logger.debug(`🔍 Checking for game data directory: ${this.dataDir}`);
-    
+    console.log(`🔍 Checking for game data directory: ${this.dataDir}`);
+
     if (!fs.existsSync(this.dataDir)) {
-      logger.debug(`❌ Game data directory not found: ${this.dataDir}`);
+      console.log(`❌ Game data directory not found: ${this.dataDir}`);
       return [];
     }
 
     const directories = fs.readdirSync(this.dataDir)
       .filter(dir => fs.statSync(path.join(this.dataDir, dir)).isDirectory());
-    
-    logger.debug(`📂 Found directories: ${directories.join(', ')}`);
+
+    console.log(`📂 Found directories: ${directories.join(', ')}`);
     return directories;
   }
 
   private async seedGame(gameDir: string): Promise<void> {
-    logger.debug(`\n🎮 Processing game: ${gameDir}`);
+    console.log(`\n🎮 Processing game: ${gameDir}`);
     const gamePath = path.join(this.dataDir, gameDir);
     const gameJsonPath = path.join(gamePath, 'game.json');
 
     if (!fs.existsSync(gameJsonPath)) {
-      logger.debug(`❌ No game.json found for ${gameDir}`);
+      console.log(`❌ No game.json found for ${gameDir}`);
       return;
     }
 
     let gameData: GameData;
     try {
       gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf8'));
-      logger.debug(`📋 Loaded ${gameData.name} (${gameData.id}) v${gameData.dataVersion}`);
+      console.log(`📋 Loaded ${gameData.name} (${gameData.id}) v${gameData.dataVersion}`);
     } catch (error) {
-      logger.error(`❌ Error parsing game.json for ${gameDir}:`, error);
+      console.error(`❌ Error parsing game.json for ${gameDir}:`, error);
       return;
     }
 
     // Check if we need to seed this game
     const existingVersion = await this.getExistingDataVersion(gameData.id);
-    logger.debug(`🔍 Existing version: ${existingVersion || 'none'}, File version: ${gameData.dataVersion}`);
-    
+    console.log(`🔍 Existing version: ${existingVersion || 'none'}, File version: ${gameData.dataVersion}`);
+
     if (existingVersion === gameData.dataVersion) {
-      logger.debug(`✅ ${gameData.name} already up-to-date (v${gameData.dataVersion})`);
+      console.log(`✅ ${gameData.name} already up-to-date (v${gameData.dataVersion})`);
       return;
     }
 
-    logger.debug(`🔄 Seeding ${gameData.name} (v${gameData.dataVersion})...`);
+    console.log(`🔄 Seeding ${gameData.name} (v${gameData.dataVersion})...`);
 
     // Seed game data
     try {
       await this.seedGameData(gameData);
-      logger.debug(`✅ Seeded game data for ${gameData.name}`);
+      console.log(`✅ Seeded game data for ${gameData.name}`);
     } catch (error) {
-      logger.error(`❌ Error seeding game data for ${gameData.name}:`, error);
+      console.error(`❌ Error seeding game data for ${gameData.name}:`, error);
       throw error;
     }
 
@@ -147,13 +149,13 @@ export class DatabaseSeeder {
         if (modesContent) {
           const modesData: ModeData[] = JSON.parse(modesContent);
           await this.seedModes(gameData.id, modesData);
-          logger.debug(`✅ Seeded ${modesData.length} modes for ${gameData.name}`);
+          console.log(`✅ Seeded ${modesData.length} modes for ${gameData.name}`);
         }
       } catch (error) {
-        logger.error(`❌ Error seeding modes for ${gameData.name}:`, error);
+        console.error(`❌ Error seeding modes for ${gameData.name}:`, error);
       }
     } else {
-      logger.debug(`ℹ️ No modes.json found for ${gameData.name}`);
+      console.log(`ℹ️ No modes.json found for ${gameData.name}`);
     }
 
     // Seed maps if they exist
@@ -164,21 +166,21 @@ export class DatabaseSeeder {
         if (mapsContent) {
           const mapsData: MapData[] = JSON.parse(mapsContent);
           await this.seedMaps(gameData.id, mapsData, gameData.supportsAllModes);
-          logger.debug(`✅ Seeded ${mapsData.length} maps for ${gameData.name}`);
+          console.log(`✅ Seeded ${mapsData.length} maps for ${gameData.name}`);
         }
       } catch (error) {
-        logger.error(`❌ Error seeding maps for ${gameData.name}:`, error);
+        console.error(`❌ Error seeding maps for ${gameData.name}:`, error);
       }
     } else {
-      logger.debug(`ℹ️ No maps.json found for ${gameData.name}`);
+      console.log(`ℹ️ No maps.json found for ${gameData.name}`);
     }
 
     // Update data version
     try {
       await this.updateDataVersion(gameData.id, gameData.dataVersion);
-      logger.debug(`✅ Updated ${gameData.name} version to ${gameData.dataVersion}`);
+      console.log(`✅ Updated ${gameData.name} version to ${gameData.dataVersion}`);
     } catch (error) {
-      logger.error(`❌ Error updating version for ${gameData.name}:`, error);
+      console.error(`❌ Error updating version for ${gameData.name}:`, error);
       throw error;
     }
   }
@@ -219,15 +221,29 @@ export class DatabaseSeeder {
   }
 
   private async seedModes(gameId: string, modesData: ModeData[]): Promise<void> {
-    // Clear existing modes for this game
-    await this.db.run('DELETE FROM game_modes WHERE game_id = ?', [gameId]);
+    // Use a transaction to ensure atomicity
+    try {
+      await this.db.run('BEGIN TRANSACTION');
 
-    for (const mode of modesData) {
-      const scoringType = mode.scoringType || 'Normal';
-      await this.db.run(`
-        INSERT INTO game_modes (id, game_id, name, description, scoring_type, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [mode.id, gameId, mode.name, mode.description, scoringType]);
+      // Clear existing modes for this game
+      await this.db.run('DELETE FROM game_modes WHERE game_id = ?', [gameId]);
+
+      for (const mode of modesData) {
+        const scoringType = mode.scoringType || 'Normal';
+        // Properly handle NULL teamSize - don't convert to 1
+        const teamSize = mode.teamSize !== undefined ? mode.teamSize : null;
+        const maxTeams = mode.maxTeams || 2;
+        const maxPlayers = mode.maxPlayers || null;
+        await this.db.run(`
+          INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType]);
+      }
+
+      await this.db.run('COMMIT');
+    } catch (error) {
+      await this.db.run('ROLLBACK');
+      throw error;
     }
   }
 
@@ -237,85 +253,87 @@ export class DatabaseSeeder {
 
     // Check if any map has supportedModes array
     const hasSupportedModes = mapsData.some(map => Array.isArray((map as MapData & { supportedModes?: string[] }).supportedModes));
-    
+
     if (hasSupportedModes) {
-      // New approach: maps define their supported modes via supportedModes array
-      for (const map of mapsData) {
-        const mapWithModes = map as MapData & { supportedModes?: string[] };
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
-
-        if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
-          // Create an entry for each supported mode
-          for (const modeId of mapWithModes.supportedModes) {
-            const mapIdWithMode = `${map.id}-${modeId}`;
-            await this.db.run(`
-              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `, [mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null]);
-          }
-        } else {
-          // Fallback: create with null mode_id
-          await this.db.run(`
-            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
-        }
-      }
+      await this.seedMapsWithSupportedModesArray(gameId, mapsData);
     } else if (supportsAllModes) {
-      // For games that support all modes on all maps (like Valorant)
-      // Get all modes for this game first
-      const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
-      
-      for (const map of mapsData) {
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
-
-        if (modes.length > 0) {
-          // Create an entry for each map-mode combination
-          for (const mode of modes) {
-            const mapIdWithMode = `${map.id}-${mode.id}`;
-            await this.db.run(`
-              INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `, [mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null]);
-          }
-        } else {
-          // Fallback: create with null mode_id
-          await this.db.run(`
-            INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          `, [map.id, gameId, map.name, null, imageUrl, map.location || null]);
-        }
-      }
+      await this.seedMapsForAllModes(gameId, mapsData);
     } else {
-      // Traditional approach: map type defines the mode
-      for (const map of mapsData) {
-        // Convert type (e.g., "Hybrid") to mode_id (e.g., "hybrid")
-        // Special handling for "Doom Match" -> "doommatch"
-        let modeId = map.type.toLowerCase();
-        if (modeId === 'doom match') {
-          modeId = 'doommatch';
-        }
-        
-        // Fix image URL by removing /public prefix for Next.js static assets
-        let imageUrl = map.thumbnailUrl || null;
-        if (imageUrl && imageUrl.startsWith('/public/')) {
-          imageUrl = imageUrl.replace('/public/', '/');
-        }
+      await this.seedMapsTraditional(gameId, mapsData);
+    }
+  }
 
-        await this.db.run(`
-          INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [map.id, gameId, map.name, modeId, imageUrl, map.location || null]);
+  private fixImageUrl(imageUrl: string | undefined): string | null {
+    if (!imageUrl) return null;
+    if (imageUrl.startsWith('/public/')) {
+      return imageUrl.replace('/public/', '/');
+    }
+    return imageUrl;
+  }
+
+  private async seedMapsWithSupportedModesArray(gameId: string, mapsData: MapData[]): Promise<void> {
+    for (const map of mapsData) {
+      const mapWithModes = map as MapData & { supportedModes?: string[] };
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
+        // Create an entry for each supported mode
+        for (const modeId of mapWithModes.supportedModes) {
+          const mapIdWithMode = `${map.id}-${modeId}`;
+          await this.insertMap(mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null);
+        }
+      } else {
+        // Fallback: create with null mode_id
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
       }
     }
+  }
+
+  private async seedMapsForAllModes(gameId: string, mapsData: MapData[]): Promise<void> {
+    const modes = await this.db.all<{ id: string }>('SELECT id FROM game_modes WHERE game_id = ?', [gameId]);
+
+    for (const map of mapsData) {
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      if (modes.length > 0) {
+        // Create an entry for each map-mode combination
+        for (const mode of modes) {
+          const mapIdWithMode = `${map.id}-${mode.id}`;
+          await this.insertMap(mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null);
+        }
+      } else {
+        // Fallback: create with null mode_id
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
+      }
+    }
+  }
+
+  private async seedMapsTraditional(gameId: string, mapsData: MapData[]): Promise<void> {
+    for (const map of mapsData) {
+      const modeId = this.convertMapTypeToModeId(map.type);
+      const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+
+      await this.insertMap(map.id, gameId, map.name, modeId, imageUrl, map.location || null);
+    }
+  }
+
+  private convertMapTypeToModeId(type: string): string {
+    const modeId = type.toLowerCase();
+    return modeId === 'doom match' ? 'doommatch' : modeId;
+  }
+
+  private async insertMap(
+    id: string,
+    gameId: string,
+    name: string,
+    modeId: string | null,
+    imageUrl: string | null,
+    location: string | null
+  ): Promise<void> {
+    await this.db.run(`
+      INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [id, gameId, name, modeId, imageUrl, location]);
   }
 
   private async updateDataVersion(gameId: string, dataVersion: string): Promise<void> {
@@ -326,27 +344,27 @@ export class DatabaseSeeder {
   }
 
   private async seedVoices(): Promise<void> {
-    logger.debug('\n🔊 Processing voice data...');
+    console.log('\n🔊 Processing voice data...');
     const voicesJsonPath = path.join('./data', 'voices.json');
-    
+
     if (!fs.existsSync(voicesJsonPath)) {
-      logger.debug('❌ No voices.json file found, skipping voice seeding');
+      console.log('❌ No voices.json file found, skipping voice seeding');
       return;
     }
 
     const voiceData: VoiceData = JSON.parse(fs.readFileSync(voicesJsonPath, 'utf8'));
-    logger.debug(`📋 Loaded voice data v${voiceData.dataVersion} with ${voiceData.voices.length} voices`);
+    console.log(`📋 Loaded voice data v${voiceData.dataVersion} with ${voiceData.voices.length} voices`);
 
     // Check if we need to seed voices
     const existingVoiceVersion = await this.getExistingVoiceDataVersion();
-    logger.debug(`🔍 Existing voice version: ${existingVoiceVersion || 'none'}, File version: ${voiceData.dataVersion}`);
-    
+    console.log(`🔍 Existing voice version: ${existingVoiceVersion || 'none'}, File version: ${voiceData.dataVersion}`);
+
     if (existingVoiceVersion === voiceData.dataVersion) {
-      logger.debug(`✅ Voice data already up-to-date (v${voiceData.dataVersion})`);
+      console.log(`✅ Voice data already up-to-date (v${voiceData.dataVersion})`);
       return;
     }
 
-    logger.debug(`🔄 Seeding voice data v${voiceData.dataVersion}...`);
+    console.log(`🔄 Seeding voice data v${voiceData.dataVersion}...`);
 
     // Clear existing voice data
     await this.db.run('DELETE FROM voices');
@@ -361,8 +379,8 @@ export class DatabaseSeeder {
 
     // Update voice data version
     await this.updateVoiceDataVersion(voiceData.dataVersion);
-    
-    logger.debug(`✅ Seeded ${voiceData.voices.length} voice announcers (v${voiceData.dataVersion})`);
+
+    console.log(`✅ Seeded ${voiceData.voices.length} voice announcers (v${voiceData.dataVersion})`);
   }
 
   private async getExistingVoiceDataVersion(): Promise<string | null> {

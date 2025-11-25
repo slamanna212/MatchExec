@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
-import { MatchDbRow } from '@/shared/types';
+import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 export async function GET(
@@ -72,7 +73,7 @@ export async function DELETE(
     
     // Queue Discord message deletion before deleting the match
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')
@@ -96,8 +97,9 @@ export async function DELETE(
         logger.error('Error cleaning up event image:', error);
       }
     }
-    
+
     // Delete the match (CASCADE will handle related records)
+    // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
     await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
     
     return NextResponse.json({ success: true });

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 
@@ -10,13 +11,16 @@ export async function PUT(
     const db = await getDbInstance();
     const body = await request.json();
     const { channelId } = await params;
-    
+
+    /* eslint-disable @typescript-eslint/naming-convention */
     const {
       send_announcements = false,
       send_reminders = false,
       send_match_start = false,
-      send_signup_updates = false
+      send_signup_updates = false,
+      send_health_alerts = false
     } = body;
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     // Verify channel exists and is a text channel
     const channel = await db.get<{ channel_type: string }>(
@@ -44,6 +48,7 @@ export async function PUT(
         send_reminders = ?,
         send_match_start = ?,
         send_signup_updates = ?,
+        send_health_alerts = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
@@ -51,6 +56,7 @@ export async function PUT(
       send_reminders ? 1 : 0,
       send_match_start ? 1 : 0,
       send_signup_updates ? 1 : 0,
+      send_health_alerts ? 1 : 0,
       channelId
     ]);
 

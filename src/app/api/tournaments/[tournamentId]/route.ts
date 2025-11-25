@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
-import { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 interface TournamentWithDetails extends Tournament {
@@ -134,9 +135,32 @@ export async function DELETE(
       );
     }
 
-    // Queue Discord message deletion before deleting the tournament
+    // Queue Discord deletions for all tournament matches before deleting the tournament
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const tournamentMatches = await db.all<{ id: string }>(`
+        SELECT id FROM matches WHERE tournament_id = ?
+      `, [tournamentId]);
+
+      if (tournamentMatches.length > 0) {
+        logger.debug(`🗑️ Queueing Discord deletions for ${tournamentMatches.length} tournament matches`);
+
+        for (const match of tournamentMatches) {
+          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          await db.run(`
+            INSERT INTO discord_deletion_queue (id, match_id, status)
+            VALUES (?, ?, 'pending')
+          `, [matchDeletionId, match.id]);
+        }
+
+        logger.debug(`✅ Discord deletions queued for ${tournamentMatches.length} tournament matches`);
+      }
+    } catch (error) {
+      logger.error('❌ Error queuing Discord deletions for tournament matches:', error);
+    }
+
+    // Queue Discord message deletion for the tournament itself
+    try {
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')

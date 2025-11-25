@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { logger } from '../../src/lib/logger/server';
 
 export interface DatabaseStatus {
   ready: boolean;
@@ -28,7 +27,7 @@ export function writeDbStatus(status: DatabaseStatus): void {
     ensureStatusDirectory();
     fs.writeFileSync(STATUS_FILE_PATH, JSON.stringify(status, null, 2), 'utf8');
   } catch (error) {
-    logger.error('Failed to write database status:', error);
+    console.error('Failed to write database status:', error);
   }
 }
 
@@ -42,7 +41,7 @@ export function readDbStatus(): DatabaseStatus {
       return JSON.parse(content);
     }
   } catch (error) {
-    logger.error('Failed to read database status:', error);
+    console.error('Failed to read database status:', error);
   }
 
   // Default: not ready

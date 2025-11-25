@@ -1,20 +1,21 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Modal, 
-  Text, 
-  Button, 
-  Card, 
-  Group, 
-  Stack, 
-  Select, 
+import {
+  Modal,
+  Text,
+  Button,
+  Card,
+  Group,
+  Stack,
   Grid,
   Badge,
   Avatar,
   Loader,
   Divider,
-  ActionIcon
+  ActionIcon,
+  Select
 } from '@mantine/core';
 import { IconMapRoute } from '@tabler/icons-react';
 
@@ -45,16 +46,6 @@ interface MatchParticipant {
   receives_map_codes?: boolean;
 }
 
-interface VoiceChannel {
-  value: string;
-  label: string;
-}
-
-interface VoiceChannelAssignments {
-  blueTeamVoiceChannel: string | null;
-  redTeamVoiceChannel: string | null;
-}
-
 interface AssignPlayersModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -66,11 +57,6 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [voiceChannels, setVoiceChannels] = useState<VoiceChannel[]>([]);
-  const [voiceChannelAssignments, setVoiceChannelAssignments] = useState<VoiceChannelAssignments>({
-    blueTeamVoiceChannel: null,
-    redTeamVoiceChannel: null
-  });
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -92,12 +78,11 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     try {
-      const [participantsResponse, voiceChannelsResponse, matchResponse] = await Promise.all([
+      const [participantsResponse, matchResponse] = await Promise.all([
         fetch(`/api/matches/${matchId}/participants`),
-        fetch(`/api/matches/${matchId}/voice-channels`),
         fetch(`/api/matches/${matchId}`)
       ]);
-      
+
       if (participantsResponse.ok) {
         const data = await participantsResponse.json();
         setParticipants(data.participants.map((p: MatchParticipant) => ({
@@ -105,26 +90,20 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
           team_assignment: p.team_assignment || 'reserve',
           receives_map_codes: p.receives_map_codes || false
         })));
-        
+
         // Set signup config if available
         if (data.signupConfig) {
           setSignupConfig(data.signupConfig);
         }
       }
-      
-      if (voiceChannelsResponse.ok) {
-        const voiceData = await voiceChannelsResponse.json();
-        setVoiceChannels(voiceData.voiceChannels);
-        setVoiceChannelAssignments(voiceData.currentAssignments);
-      }
 
       if (matchResponse.ok) {
         const matchData = await matchResponse.json();
-        console.log('Match data received:', matchData);
-        console.log('Map codes supported:', matchData.map_codes_supported);
+        logger.info('Match data received:', matchData);
+        logger.info('Map codes supported:', matchData.map_codes_supported);
         setMapCodesSupported(matchData.map_codes_supported || false);
       } else {
-        console.error('Failed to fetch match data:', matchResponse.status);
+        logger.error('Failed to fetch match data:', matchResponse.status);
       }
 
       // Fetch match games to detect scoring type
@@ -136,7 +115,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -206,20 +185,18 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          teamAssignments,
-          blueTeamVoiceChannel: voiceChannelAssignments.blueTeamVoiceChannel,
-          redTeamVoiceChannel: voiceChannelAssignments.redTeamVoiceChannel
+        body: JSON.stringify({
+          teamAssignments
         }),
       });
 
       if (response.ok) {
         onClose();
       } else {
-        console.error('Failed to save team assignments');
+        logger.error('Failed to save team assignments');
       }
     } catch (error) {
-      console.error('Error saving team assignments:', error);
+      logger.error('Error saving team assignments:', error);
     } finally {
       setSaving(false);
     }
@@ -374,12 +351,12 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
 
   const renderTeamSection = (team: 'reserve' | 'blue' | 'red', title: string, color: string) => {
     const teamParticipants = getTeamParticipants(team);
-    
+
     return (
-      <Card 
-        shadow="xs" 
-        padding="lg" 
-        radius="md" 
+      <Card
+        shadow="xs"
+        padding="lg"
+        radius="md"
         withBorder
         onDragOver={isMobile ? undefined : handleDragOver}
         onDrop={isMobile ? undefined : (e) => handleDrop(e, team)}
@@ -391,33 +368,14 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             {teamParticipants.length}
           </Badge>
         </Group>
-        
-        {/* Voice Channel Selector for Blue and Red teams */}
-        {(team === 'blue' || team === 'red') && voiceChannels.length > 0 && (
-          <Select
-            label="Voice Channel"
-            placeholder="Select voice channel"
-            value={team === 'blue' ? voiceChannelAssignments.blueTeamVoiceChannel : voiceChannelAssignments.redTeamVoiceChannel}
-            onChange={(value) => setVoiceChannelAssignments(prev => ({
-              ...prev,
-              [team === 'blue' ? 'blueTeamVoiceChannel' : 'redTeamVoiceChannel']: value
-            }))}
-            data={[
-              { value: '', label: 'No voice channel' },
-              ...voiceChannels
-            ]}
-            mb="md"
-            clearable
-          />
-        )}
-        
+
         <Stack gap="sm">
           {teamParticipants.length === 0 ? (
             <Text size="sm" c="dimmed" ta="center" py="xl">
               No players assigned
             </Text>
           ) : (
-            teamParticipants.map((participant, index) => 
+            teamParticipants.map((participant, index) =>
               renderParticipantCard(participant, index)
             )
           )}

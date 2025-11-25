@@ -3,8 +3,7 @@
 import { getDatabase } from '../lib/database/connection';
 import { MigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
-import { markDbNotReady } from '../lib/database/status';
-import { logger } from '../src/lib/logger/server';
+import { markDbNotReady, markDbReady } from '../lib/database/status';
 
 async function runMigrationsInBackground() {
   // Mark as not ready immediately
@@ -26,21 +25,24 @@ async function runMigrationsInBackground() {
     const seeder = new DatabaseSeeder(db);
     await seeder.seedDatabase();
 
-    logger.debug('✅ Background database initialization completed');
+    // Mark database as ready
+    markDbReady();
+    console.log('✅ Background database initialization completed');
   } catch (error) {
-    logger.error('❌ Error during database initialization:', error);
+    console.error('❌ Error during database initialization:', error);
     markDbNotReady('Database initialization failed');
-    process.exit(1);
-  } finally {
-    // Close the database connection
+    // Close connection only on error
     await db.close();
+    process.exit(1);
   }
+  // Note: We do NOT close the database connection on success
+  // The singleton connection is shared across all processes
 }
 
 // Run migrations in background (non-blocking)
 if (require.main === module) {
   runMigrationsInBackground().catch((error) => {
-    logger.error('❌ Background migration script failed:', error);
+    console.error('❌ Background migration script failed:', error);
     process.exit(1);
   });
 }

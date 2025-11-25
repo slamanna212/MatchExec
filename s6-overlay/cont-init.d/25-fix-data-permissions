@@ -1,0 +1,14 @@
+#!/command/with-contenv bash
+
+echo "Fixing /app/data permissions for game files..."
+
+# Fix ownership of game data directory (includes signup forms)
+# This needs to match the abc user's UID/GID which was set in 10-adduser
+if [ -d "/app/data" ]; then
+    chown -R abc:abc /app/data
+    echo "✓ Fixed ownership of /app/data to abc:abc"
+else
+    echo "⚠ Warning: /app/data directory not found"
+fi
+
+echo "Data permissions fixed"

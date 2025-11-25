@@ -1,3 +1,5 @@
+import { logger } from '@/lib/logger/server';
+
 export interface VersionInfo {
   version: string;
   branch: string;
@@ -13,7 +15,7 @@ export async function getVersionInfo(): Promise<VersionInfo> {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error fetching version info:', error);
+    logger.error('Error fetching version info:', error);
     return {
       version: 'unknown',
       branch: 'unknown',

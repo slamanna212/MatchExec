@@ -1,5 +1,5 @@
-import { Database } from '../../../lib/database/connection';
-import { DiscordChannel } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class Utils {
@@ -33,13 +33,14 @@ export class Utils {
         send_reminders: number;
         send_match_start: number;
         send_signup_updates: number;
+        send_health_alerts: number;
         created_at: string;
         updated_at: string;
       }>(`
-        SELECT id, discord_channel_id, channel_name, channel_type, 
-               send_announcements, send_reminders, send_match_start, send_signup_updates,
+        SELECT id, discord_channel_id, channel_name, channel_type,
+               send_announcements, send_reminders, send_match_start, send_signup_updates, send_health_alerts,
                created_at, updated_at
-        FROM discord_channels 
+        FROM discord_channels
         WHERE ${column} = 1
       `);
 
@@ -52,6 +53,7 @@ export class Utils {
         send_reminders: Boolean(channel.send_reminders),
         send_match_start: Boolean(channel.send_match_start),
         send_signup_updates: Boolean(channel.send_signup_updates),
+        send_health_alerts: Boolean(channel.send_health_alerts),
         created_at: channel.created_at,
         updated_at: channel.updated_at
       }));
@@ -75,7 +77,7 @@ export class Utils {
   }
 
   generateId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   formatUptime(uptimeSeconds: number): string {

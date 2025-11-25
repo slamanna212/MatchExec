@@ -3,36 +3,44 @@
     "id": "normal",
     "name": "Normal",
     "description": "Standard competitive and casual gameplay with standard CS2 rules.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "premier",
     "name": "Premier",
     "description": "Premier competitive mode with pick/ban phase and rating system.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   },
   {
     "id": "deathmatch",
     "name": "Deathmatch",
     "description": "Free-for-all combat with respawns and weapon pickups.",
-    "scoringType": "FFA"
+    "scoringType": "FFA",
+    "teamSize": null,
+    "maxPlayers": 20
   },
   {
     "id": "wingman",
     "name": "Wingman",
     "description": "2v2 competitive matches on smaller maps.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 2
   },
   {
     "id": "arms-race",
     "name": "Arms Race",
     "description": "Progress through weapons by getting kills, first to finish wins.",
-    "scoringType": "FFA"
+    "scoringType": "FFA",
+    "teamSize": null,
+    "maxPlayers": 20
   },
   {
     "id": "hostage-rescue",
     "name": "Hostage Rescue",
     "description": "Counter-Terrorists must rescue hostages from Terrorist control.",
-    "scoringType": "Normal"
+    "scoringType": "Normal",
+    "teamSize": 5
   }
 ]

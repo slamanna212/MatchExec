@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -16,8 +17,8 @@ import {
   Badge,
   RingProgress
 } from '@mantine/core';
-import Link from 'next/link';
-import { Tournament, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
+import type { Tournament} from '@/shared/types';
+import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 
 interface TournamentWithGame extends Tournament {
@@ -158,7 +159,7 @@ export function TournamentHistoryDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching completed tournaments:', error);
+      logger.error('Error fetching completed tournaments:', error);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -268,7 +269,7 @@ export function TournamentHistoryDashboard() {
               Completed tournaments will appear here
             </Text>
             <Button
-              component={Link}
+              component="a"
               href="/tournaments"
             >
               View Active Tournaments
@@ -283,7 +284,7 @@ export function TournamentHistoryDashboard() {
               No completed tournaments match your search for &quot;{searchQuery}&quot;
             </Text>
             <Button
-              component={Link}
+              component="a"
               href="/tournaments"
             >
               View Active Tournaments

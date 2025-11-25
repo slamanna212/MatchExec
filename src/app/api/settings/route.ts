@@ -81,8 +81,7 @@ export async function GET() {
       discord: safeDiscordSettings,
       announcer: {
         announcer_voice: safeDiscordSettings.announcer_voice,
-        voice_announcements_enabled: safeDiscordSettings.voice_announcements_enabled,
-        announcement_voice_channel: '' // Not implemented yet
+        voice_announcements_enabled: safeDiscordSettings.voice_announcements_enabled
       },
       ui: safeUiSettings,
       scheduler: safeSchedulerSettings,

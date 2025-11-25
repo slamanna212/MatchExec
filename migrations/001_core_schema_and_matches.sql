@@ -89,7 +89,6 @@ CREATE TABLE IF NOT EXISTS matches (
   livestream_link TEXT,
   event_image_url TEXT,
   player_notifications BOOLEAN DEFAULT 1,
-  announcement_voice_channel TEXT,
   announcements BOOLEAN DEFAULT 1,
   blue_team_voice_channel TEXT,
   red_team_voice_channel TEXT,

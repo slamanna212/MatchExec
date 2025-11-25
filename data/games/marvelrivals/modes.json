@@ -3,30 +3,36 @@
       "id": "domination",
       "name": "Domination",
       "description": "Teams compete to control strategic points across the map.",
-      "scoringType": "Normal"
+      "scoringType": "Normal",
+      "teamSize": 6
     },
     {
       "id": "convoy",
       "name": "Convoy",
       "description": "Escort vehicles to their destination while defending against enemy attacks.",
-      "scoringType": "Normal"
+      "scoringType": "Normal",
+      "teamSize": 6
     },
     {
       "id": "convergence",
       "name": "Convergence",
       "description": "Fight to control critical convergence points in dynamic battles.",
-      "scoringType": "Normal"
+      "scoringType": "Normal",
+      "teamSize": 6
     },
     {
       "id": "doommatch",
       "name": "Doom Match",
       "description": "High-intensity combat with rapid respawns and aggressive gameplay.",
-      "scoringType": "FFA"
+      "scoringType": "FFA",
+      "teamSize": null,
+      "maxPlayers": 12
     },
     {
       "id": "conquest",
       "name": "Conquest",
       "description": "Standard team deathmatch mode in which players compete for eliminations",
-      "scoringType": "Normal"
+      "scoringType": "Normal",
+      "teamSize": 6
     }
 ]

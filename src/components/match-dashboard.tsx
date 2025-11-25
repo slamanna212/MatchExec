@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -17,12 +18,14 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { Match, MATCH_FLOW_STEPS, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
+import type { Match, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
+import { MATCH_FLOW_STEPS } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
 import { MatchDetailsModal } from './match-details-modal';
+import { showError, notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -36,7 +39,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   
   // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
   // We need to treat this as UTC, so append 'Z'
-  return new Date(timestamp + 'Z');
+  return new Date(`${timestamp  }Z`);
 };
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
@@ -229,40 +232,52 @@ export function MatchDashboard() {
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  /**
+   * Check if a match has changed
+   */
+  const hasMatchChanged = useCallback((match: MatchWithGame, prevMatch: MatchWithGame | undefined): boolean => {
+    if (!prevMatch) return true;
+    return (
+      match.id !== prevMatch.id ||
+      match.status !== prevMatch.status ||
+      match.name !== prevMatch.name ||
+      match.created_at !== prevMatch.created_at ||
+      match.updated_at !== prevMatch.updated_at
+    );
+  }, []);
+
+  /**
+   * Compare matches arrays for changes
+   */
+  const haveMatchesChanged = useCallback((
+    data: MatchWithGame[],
+    prevMatches: MatchWithGame[]
+  ): boolean => {
+    if (prevMatches.length !== data.length) return true;
+
+    return data.some((match, index) => hasMatchChanged(match, prevMatches[index]));
+  }, [hasMatchChanged]);
+
   const fetchMatches = useCallback(async (silent = false) => {
     try {
       const response = await fetch('/api/matches');
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed to prevent unnecessary rerenders
         setMatches(prevMatches => {
-          // More efficient comparison than JSON.stringify for arrays
-          if (prevMatches.length !== data.length) {
-            return data;
-          }
-          
-          // Check if any match has changed by comparing key properties
-          const hasChanges = data.some((match: MatchWithGame, index: number) => {
-            const prevMatch = prevMatches[index];
-            return !prevMatch || 
-              match.id !== prevMatch.id ||
-              match.status !== prevMatch.status ||
-              match.name !== prevMatch.name ||
-              match.created_at !== prevMatch.created_at ||
-              match.updated_at !== prevMatch.updated_at;
-          });
-          
-          return hasChanges ? data : prevMatches;
+          return haveMatchesChanged(data, prevMatches) ? data : prevMatches;
         });
       }
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      logger.error('Error fetching matches:', error);
+      if (!silent) {
+        showError('Failed to load matches. Please refresh the page.');
+      }
     } finally {
       if (!silent) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [haveMatchesChanged]);
 
   // Fetch UI settings on component mount
   useEffect(() => {
@@ -274,7 +289,7 @@ export function MatchDashboard() {
           setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
         }
       } catch (error) {
-        console.error('Error fetching UI settings:', error);
+        logger.error('Error fetching UI settings:', error);
       }
     };
 
@@ -378,7 +393,7 @@ export function MatchDashboard() {
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
-      console.error('Error fetching map names:', error);
+      logger.error('Error fetching map names:', error);
     }
   };
 
@@ -408,7 +423,7 @@ export function MatchDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching map notes:', error);
+      logger.error('Error fetching map notes:', error);
     }
   };
 
@@ -430,6 +445,33 @@ export function MatchDashboard() {
     router.push('/matches/create');
   };
 
+  /**
+   * Check if participant has changed
+   */
+  const hasParticipantChanged = useCallback((
+    participant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> },
+    prevParticipant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> } | undefined
+  ): boolean => {
+    if (!prevParticipant) return true;
+    return (
+      participant.id !== prevParticipant.id ||
+      participant.username !== prevParticipant.username ||
+      participant.joined_at !== prevParticipant.joined_at
+    );
+  }, []);
+
+  /**
+   * Check if signup config has changed
+   */
+  const hasSignupConfigChanged = useCallback((
+    newConfig: SignupConfig | null,
+    prevConfig: SignupConfig | null
+  ): boolean => {
+    if (!prevConfig && !newConfig) return false;
+    if (!prevConfig || !newConfig) return true;
+    return prevConfig.fields.length !== newConfig.fields.length;
+  }, []);
+
   const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
     if (!silent) {
       setParticipantsLoading(true);
@@ -438,50 +480,35 @@ export function MatchDashboard() {
       const response = await fetch(`/api/matches/${matchId}/participants`);
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed
+
         setParticipants(prevParticipants => {
-          // More efficient comparison for participants array
           if (prevParticipants.length !== data.participants.length) {
             return data.participants;
           }
-          
+
           const hasChanges = data.participants.some((participant: {
             id: string;
             user_id: string;
             username: string;
             joined_at: string;
             signup_data: Record<string, unknown>;
-          }, index: number) => {
-            const prevParticipant = prevParticipants[index];
-            return !prevParticipant ||
-              participant.id !== prevParticipant.id ||
-              participant.username !== prevParticipant.username ||
-              participant.joined_at !== prevParticipant.joined_at;
-          });
-          
+          }, index: number) => hasParticipantChanged(participant, prevParticipants[index]));
+
           return hasChanges ? data.participants : prevParticipants;
         });
+
         setSignupConfig(prevConfig => {
-          // Simple reference check for signup config since it rarely changes
-          if (!prevConfig && !data.signupConfig) return prevConfig;
-          if (!prevConfig || !data.signupConfig) return data.signupConfig;
-          
-          // Compare field count as a quick check
-          if (prevConfig.fields.length !== data.signupConfig.fields.length) {
-            return data.signupConfig;
-          }
-          
-          return prevConfig;
+          return hasSignupConfigChanged(data.signupConfig, prevConfig) ? data.signupConfig : prevConfig;
         });
       } else {
-        console.error('Failed to fetch participants');
+        logger.error('Failed to fetch participants');
         if (!silent) {
           setParticipants([]);
           setSignupConfig(null);
         }
       }
     } catch (error) {
-      console.error('Error fetching participants:', error);
+      logger.error('Error fetching participants:', error);
       if (!silent) {
         setParticipants([]);
         setSignupConfig(null);
@@ -491,7 +518,7 @@ export function MatchDashboard() {
         setParticipantsLoading(false);
       }
     }
-  }, []);
+  }, [hasParticipantChanged, hasSignupConfigChanged]);
 
   const fetchReminders = useCallback(async (matchId: string, silent = false) => {
     if (!silent) {
@@ -503,13 +530,13 @@ export function MatchDashboard() {
         const data = await response.json();
         setReminders(data.reminders || []);
       } else {
-        console.error('Failed to fetch reminders');
+        logger.error('Failed to fetch reminders');
         if (!silent) {
           setReminders([]);
         }
       }
     } catch (error) {
-      console.error('Error fetching reminders:', error);
+      logger.error('Error fetching reminders:', error);
       if (!silent) {
         setReminders([]);
       }
@@ -541,6 +568,7 @@ export function MatchDashboard() {
 
       return () => clearInterval(participantsInterval);
     }
+    return undefined;
   }, [detailsModalOpen, selectedMatch, refreshInterval, fetchParticipants, fetchReminders]);
 
   const handleDeleteMatch = async (matchId: string) => {
@@ -554,14 +582,37 @@ export function MatchDashboard() {
         setMatches(prev => prev.filter(match => match.id !== matchId));
         setDetailsModalOpen(false);
       } else {
-        console.error('Failed to delete match');
+        logger.error('Failed to delete match');
+        showError('Failed to delete match. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting match:', error);
+      logger.error('Error deleting match:', error);
+      showError('An error occurred while deleting the match.');
     }
   };
 
   const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
+    const notificationId = `match-transition-${matchId}`;
+
+    // Determine the action message based on the new status
+    const actionMessages: Record<string, { loading: string; success: string }> = {
+      gather: { loading: 'Opening signups...', success: 'Signups opened successfully!' },
+      assign: { loading: 'Closing signups...', success: 'Signups closed successfully!' },
+      battle: { loading: 'Starting match...', success: 'Match started successfully!' },
+      complete: { loading: 'Ending match...', success: 'Match ended successfully!' },
+    };
+
+    const messages = actionMessages[newStatus] || {
+      loading: 'Processing...',
+      success: 'Status updated successfully!'
+    };
+
+    // Show loading notification
+    notificationHelper.loading({
+      id: notificationId,
+      message: messages.loading
+    });
+
     try {
       const response = await fetch(`/api/matches/${matchId}/transition`, {
         method: 'POST',
@@ -574,18 +625,37 @@ export function MatchDashboard() {
       if (response.ok) {
         const updatedMatch = await response.json();
         // Update the match in the list
-        setMatches(prev => prev.map(match => 
+        setMatches(prev => prev.map(match =>
           match.id === matchId ? updatedMatch : match
         ));
-        
+
         if (newStatus === 'gather') {
-          console.log(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
+          logger.info(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
         }
+
+        // Update notification to success
+        notificationHelper.update(notificationId, {
+          type: 'success',
+          message: messages.success
+        });
       } else {
-        console.error('Failed to transition match status');
+        const error = await response.json();
+        logger.error('Failed to transition match status:', error);
+
+        // Update notification to error
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          message: error.error || 'Failed to update match status'
+        });
       }
     } catch (error) {
-      console.error('Error transitioning match status:', error);
+      logger.error('Error transitioning match status:', error);
+
+      // Update notification to error
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while updating the match status'
+      });
     }
   }, []);
 
@@ -593,8 +663,8 @@ export function MatchDashboard() {
     switch (match.status) {
       case 'created':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(match.id, 'gather');
@@ -606,8 +676,8 @@ export function MatchDashboard() {
         );
       case 'gather':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             color="orange"
             onClick={(e) => {
               e.stopPropagation();
@@ -630,8 +700,8 @@ export function MatchDashboard() {
         );
       case 'assign':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             color="green"
             onClick={(e) => {
               e.stopPropagation();
@@ -656,8 +726,8 @@ export function MatchDashboard() {
             >
               Scoring
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               color="red"
               onClick={(e) => {
                 e.stopPropagation();
@@ -744,7 +814,7 @@ export function MatchDashboard() {
       setScoringModalOpen(false);
       setSelectedMatchForScoring(null);
     } catch (error) {
-      console.error('Error submitting result:', error);
+      logger.error('Error submitting result:', error);
       throw error; // Re-throw to let the modal handle the error display
     }
   };

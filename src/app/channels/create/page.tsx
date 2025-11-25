@@ -11,36 +11,35 @@ import {
   Progress,
   TextInput,
   Checkbox,
-  Radio,
   Alert,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
+import { showSuccess, showError } from '@/lib/notifications';
 
 interface CreateChannelForm {
-  channel_type: 'text' | 'voice';
   discord_channel_id: string;
   send_announcements: boolean;
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
 }
 
 export default function CreateChannelPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<CreateChannelForm>({
     initialValues: {
-      channel_type: 'text',
       discord_channel_id: '',
       send_announcements: false,
       send_reminders: false,
       send_match_start: false,
       send_signup_updates: false,
+      send_health_alerts: false,
     },
     validate: {
       discord_channel_id: (value) => {
@@ -53,17 +52,13 @@ export default function CreateChannelPage() {
 
   const steps = [
     {
-      title: 'Channel Type',
-      description: 'Select whether this is a text or voice channel'
-    },
-    {
       title: 'Channel ID',
       description: 'Enter the Discord channel ID'
     },
-    ...(form.values.channel_type === 'text' ? [{
+    {
       title: 'Notifications',
       description: 'Configure notification settings for this text channel'
-    }] : []),
+    },
     {
       title: 'Review',
       description: 'Review and create the channel'
@@ -74,14 +69,14 @@ export default function CreateChannelPage() {
   const progressValue = ((currentStep + 1) / totalSteps) * 100;
 
   const handleNext = () => {
-    if (currentStep === 1) {
+    if (currentStep === 0) {
       // Validate channel ID before proceeding
       const validation = form.validate();
       if (validation.hasErrors) {
         return;
       }
     }
-    
+
     if (currentStep < totalSteps - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -95,30 +90,27 @@ export default function CreateChannelPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    setMessage(null);
 
     try {
       const response = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form.values),
+        body: JSON.stringify({
+          ...form.values,
+          channel_type: 'text'
+        }),
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Channel created successfully!' });
-        setTimeout(() => {
-          router.push('/channels');
-        }, 1500);
+        showSuccess('Channel created successfully!');
+        router.push('/channels');
       } else {
         const errorData = await response.json();
-        setMessage({ 
-          type: 'error', 
-          text: errorData.error || 'Failed to create channel' 
-        });
+        showError(errorData.error || 'Failed to create channel');
       }
     } catch (error) {
       logger.error('Error creating channel:', error);
-      setMessage({ type: 'error', text: 'An error occurred while creating the channel' });
+      showError('An error occurred while creating the channel');
     } finally {
       setLoading(false);
     }
@@ -127,32 +119,6 @@ export default function CreateChannelPage() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 0:
-        return (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              Choose the type of Discord channel you want to add to the bot.
-            </Text>
-            <Radio.Group
-              value={form.values.channel_type}
-              onChange={(value) => form.setFieldValue('channel_type', value as 'text' | 'voice')}
-            >
-              <Stack gap="sm">
-                <Radio
-                  value="text"
-                  label="Text Channel"
-                  description="A channel where users can send messages. Supports notification settings."
-                />
-                <Radio
-                  value="voice"
-                  label="Voice Channel"
-                  description="A channel where users can join voice calls. Used for voice match coordination."
-                />
-              </Stack>
-            </Radio.Group>
-          </Stack>
-        );
-
-      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -176,11 +142,7 @@ export default function CreateChannelPage() {
           </Stack>
         );
 
-      case 2:
-        if (form.values.channel_type === 'voice') {
-          // Skip notification settings for voice channels
-          return renderReviewStep();
-        }
+      case 1:
         return (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
@@ -207,11 +169,16 @@ export default function CreateChannelPage() {
                 description="Send updates when players sign up or leave matches"
                 {...form.getInputProps('send_signup_updates', { type: 'checkbox' })}
               />
+              <Checkbox
+                label="Health Alerts"
+                description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
+                {...form.getInputProps('send_health_alerts', { type: 'checkbox' })}
+              />
             </Stack>
           </Stack>
         );
 
-      case 3:
+      case 2:
         return renderReviewStep();
 
       default:
@@ -227,38 +194,34 @@ export default function CreateChannelPage() {
       <Card p="md" withBorder>
         <Stack gap="sm">
           <Group justify="space-between">
-            <Text size="sm" fw={500}>Channel Type:</Text>
-            <Text size="sm" tt="capitalize">{form.values.channel_type}</Text>
-          </Group>
-          <Group justify="space-between">
             <Text size="sm" fw={500}>Channel ID:</Text>
             <Text size="sm" ff="monospace">{form.values.discord_channel_id}</Text>
           </Group>
-          {form.values.channel_type === 'text' && (
-            <>
-              <Text size="sm" fw={500} mt="sm">Notifications:</Text>
-              <Stack gap="xs" pl="md">
-                {form.values.send_announcements && (
-                  <Text size="sm">✓ Match Announcements</Text>
-                )}
-                {form.values.send_reminders && (
-                  <Text size="sm">✓ Match Reminders</Text>
-                )}
-                {form.values.send_match_start && (
-                  <Text size="sm">✓ Live Updates</Text>
-                )}
-                {form.values.send_signup_updates && (
-                  <Text size="sm">✓ Signup Updates</Text>
-                )}
-                {!form.values.send_announcements && 
-                 !form.values.send_reminders && 
-                 !form.values.send_match_start && 
-                 !form.values.send_signup_updates && (
-                  <Text size="sm" c="dimmed">No notifications enabled</Text>
-                )}
-              </Stack>
-            </>
-          )}
+          <Text size="sm" fw={500} mt="sm">Notifications:</Text>
+          <Stack gap="xs" pl="md">
+            {form.values.send_announcements && (
+              <Text size="sm">✓ Match Announcements</Text>
+            )}
+            {form.values.send_reminders && (
+              <Text size="sm">✓ Match Reminders</Text>
+            )}
+            {form.values.send_match_start && (
+              <Text size="sm">✓ Live Updates</Text>
+            )}
+            {form.values.send_signup_updates && (
+              <Text size="sm">✓ Signup Updates</Text>
+            )}
+            {form.values.send_health_alerts && (
+              <Text size="sm">✓ Health Alerts</Text>
+            )}
+            {!form.values.send_announcements &&
+             !form.values.send_reminders &&
+             !form.values.send_match_start &&
+             !form.values.send_signup_updates &&
+             !form.values.send_health_alerts && (
+              <Text size="sm" c="dimmed">No notifications enabled</Text>
+            )}
+          </Stack>
         </Stack>
       </Card>
     </Stack>
@@ -296,12 +259,6 @@ export default function CreateChannelPage() {
                 {steps[currentStep].description}
               </Text>
             </div>
-
-            {message && (
-              <Alert color={message.type === 'success' ? 'green' : 'red'}>
-                {message.text}
-              </Alert>
-            )}
 
             {/* Step Content */}
             <div>

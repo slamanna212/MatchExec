@@ -10,10 +10,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -24,8 +24,8 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-      - name: Build processes
-        run: npm run build:processes
+      - name: Type check
+        run: npm run typecheck
 
-      - name: Build Next.js app
+      - name: Build application
         run: npm run build

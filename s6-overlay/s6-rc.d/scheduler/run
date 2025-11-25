@@ -1,7 +1,6 @@
 #!/command/with-contenv bash
 
-echo "⏰ Starting scheduler..."
+echo "Starting scheduler..."
 
 cd /app
-export DATABASE_PATH=/app/app_data/data/matchexec.db
-exec s6-setuidgid abc tsx processes/scheduler/index.ts
+exec s6-setuidgid abc node dist/scheduler.js

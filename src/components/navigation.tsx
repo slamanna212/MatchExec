@@ -1,7 +1,8 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
+import React, { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
 import {
   AppShell,
   NavLink,
@@ -30,7 +31,8 @@ import {
   IconHome,
   IconSwords
 } from '@tabler/icons-react'
-import { getVersionInfo, VersionInfo } from '@/lib/version-client'
+import type { VersionInfo } from '@/lib/version-client';
+import { getVersionInfo } from '@/lib/version-client';
 
 interface NavigationProps {
   children: React.ReactNode
@@ -46,52 +48,78 @@ export function Navigation({ children }: NavigationProps) {
 
   // Fix hydration issues by ensuring component is mounted on client
   useEffect(() => {
-    setMounted(true)
+    // Use requestAnimationFrame to avoid synchronous setState in effect
+    const frame = requestAnimationFrame(() => {
+      setMounted(true);
+    });
 
     // Fetch version info from API
     getVersionInfo().then(setVersionInfo).catch((error) => {
-      console.error('Failed to fetch version info:', error);
-    })
+      logger.error('Failed to fetch version info:', error);
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [])
+
+  // Icon mapping to avoid serialization issues with SSR
+  const getIcon = (name: string) => {
+    const iconMap: Record<string, React.ComponentType<{ size: string }>> = {
+      home: IconHome,
+      swords: IconSwords,
+      history: IconHistory,
+      trophy: IconTrophy,
+      gamepad: IconDeviceGamepad2,
+      hash: IconHash,
+      settings: IconSettings,
+      adjustments: IconAdjustments,
+      volume: IconVolume,
+      clock: IconClock,
+      discord: IconBrandDiscord,
+      paint: IconPaint,
+      info: IconInfoCircle,
+      code: IconCode,
+    };
+    return iconMap[name] || IconHome;
+  };
 
   const navigationItems = [
     {
       label: 'Home',
       href: '/',
-      icon: IconHome
+      iconName: 'home'
     },
     {
       label: 'Matches',
       href: '/matches',
-      icon: IconSwords,
+      iconName: 'swords',
       links: [
-        { label: 'History', href: '/matches/history', icon: IconHistory }
+        { label: 'History', href: '/matches/history', iconName: 'history' }
       ]
     },
     {
       label: 'Tournaments',
       href: '/tournaments',
-      icon: IconTrophy,
+      iconName: 'trophy',
       links: [
-        { label: 'History', href: '/tournaments/history', icon: IconHistory }
+        { label: 'History', href: '/tournaments/history', iconName: 'history' }
       ]
     },
-    { label: 'Games', href: '/games', icon: IconDeviceGamepad2 },
-    { label: 'Channels', href: '/channels', icon: IconHash },
+    { label: 'Games', href: '/games', iconName: 'gamepad' },
+    { label: 'Channels', href: '/channels', iconName: 'hash' },
     {
       label: 'Settings',
       href: '/settings',
-      icon: IconSettings,
+      iconName: 'settings',
       links: [
-        { label: 'Application', href: '/settings/application', icon: IconAdjustments },
-        { label: 'Announcer', href: '/settings/announcer', icon: IconVolume },
-        { label: 'Scheduler', href: '/settings/scheduler', icon: IconClock },
-        { label: 'Discord', href: '/settings/discord', icon: IconBrandDiscord },
-        { label: 'UI', href: '/settings/ui', icon: IconPaint }
+        { label: 'Application', href: '/settings/application', iconName: 'adjustments' },
+        { label: 'Announcer', href: '/settings/announcer', iconName: 'volume' },
+        { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
+        { label: 'Discord', href: '/settings/discord', iconName: 'discord' },
+        { label: 'UI', href: '/settings/ui', iconName: 'paint' }
       ]
     },
-    { label: 'Info', href: '/info', icon: IconInfoCircle },
-    ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', icon: IconCode }] : []),
+    { label: 'Info', href: '/info', iconName: 'info' },
+    ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
   ]
 
   // Prevent hydration mismatch by not rendering until mounted
@@ -188,24 +216,30 @@ export function Navigation({ children }: NavigationProps) {
 
         <AppShell.Section grow>
           {navigationItems.map((item) => {
-            // If item has links, don't handle click on parent (let it toggle)
-            // const hasChildren = item.links && item.links.length > 0;
+            const isActive = mounted && (
+              pathname === item.href ||
+              (item.href === '/settings' && pathname?.startsWith('/settings')) ||
+              (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
+              (item.href === '/matches' && pathname?.startsWith('/matches'))
+            );
+
             const isSettingsPage = pathname?.startsWith('/settings');
             const isTournamentsPage = pathname?.startsWith('/tournaments');
             const isMatchesPage = pathname?.startsWith('/matches');
-            
+
+            const shouldShowLinks = item.links && (
+              (item.href === '/settings' && isSettingsPage) ||
+              (item.href === '/tournaments' && isTournamentsPage) ||
+              (item.href === '/matches' && isMatchesPage)
+            );
+
             return (
               <div key={item.href}>
                 <NavLink
                   href={item.href}
                   label={item.label}
-                  leftSection={<item.icon size="1rem" />}
-                  active={mounted && (
-                    pathname === item.href ||
-                    (item.href === '/settings' && pathname?.startsWith('/settings')) ||
-                    (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
-                    (item.href === '/matches' && pathname?.startsWith('/matches'))
-                  )}
+                  leftSection={React.createElement(getIcon(item.iconName), { size: "1rem" })}
+                  active={isActive}
                   childrenOffset={0}
                   c="#F5F5F5"
                   styles={{
@@ -219,22 +253,17 @@ export function Navigation({ children }: NavigationProps) {
                     }
                   }}
                   onClick={(event) => {
-                    event.preventDefault()
-                    router.push(item.href)
-                    if (opened) toggle() // Close mobile menu after navigation only if open
+                    event.preventDefault();
+                    router.push(item.href);
+                    if (opened) toggle();
                   }}
                 />
-                {/* Show nested links based on current page */}
-                {item.links && (
-                  (item.href === '/settings' && isSettingsPage) ||
-                  (item.href === '/tournaments' && isTournamentsPage) ||
-                  (item.href === '/matches' && isMatchesPage)
-                ) && item.links.map((link) => (
+                {shouldShowLinks && item.links?.map((link) => (
                   <NavLink
                     key={link.href}
                     href={link.href}
                     label={link.label}
-                    leftSection={<link.icon size="1rem" />}
+                    leftSection={React.createElement(getIcon(link.iconName), { size: "1rem" })}
                     active={mounted && pathname === link.href}
                     pl="xl"
                     c="#F5F5F5"
@@ -249,9 +278,9 @@ export function Navigation({ children }: NavigationProps) {
                       }
                     }}
                     onClick={(event) => {
-                      event.preventDefault()
-                      router.push(link.href)
-                      if (opened) toggle() // Close mobile menu after navigation only if open
+                      event.preventDefault();
+                      router.push(link.href);
+                      if (opened) toggle();
                     }}
                   />
                 ))}

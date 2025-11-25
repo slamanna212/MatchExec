@@ -11,13 +11,16 @@ export async function GET(
     const { gameId } = await params;
     
     const modes = await db.all(`
-      SELECT 
-        id,
-        name,
-        description
-      FROM game_modes
-      WHERE game_id = ?
-      ORDER BY name ASC
+      SELECT
+        gm.id,
+        gm.name,
+        gm.description,
+        gm.team_size,
+        g.max_players
+      FROM game_modes gm
+      JOIN games g ON gm.game_id = g.id
+      WHERE gm.game_id = ?
+      ORDER BY gm.name ASC
     `, [gameId]);
 
     return NextResponse.json(modes);

@@ -3,18 +3,21 @@
     "id": "trackday",
     "name": "Track Day",
     "description": "Casual practice sessions on the track. Perfect for warming up and testing setups.",
+    "maxTeams": 1,
     "scoringType": "Position"
   },
   {
     "id": "quickrace",
     "name": "Quick Race",
     "description": "Fast-paced competitive racing with shorter duration. Players compete for the best finishing position.",
+    "maxTeams": 1,
     "scoringType": "Position"
   },
   {
     "id": "endurancerace",
     "name": "Endurance Race",
     "description": "Long-distance racing that tests consistency and strategy. Finishing position determines the winner.",
+    "maxTeams": 1,
     "scoringType": "Position"
   }
 ]

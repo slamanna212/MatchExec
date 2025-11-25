@@ -39,6 +39,7 @@
       "id": "workshop",
       "name": "Workshop",
       "description": "Limited only by your imagination.",
-      "scoringType": "FFA"
+      "scoringType": "FFA",
+      "teamSize": null
     }
 ]
