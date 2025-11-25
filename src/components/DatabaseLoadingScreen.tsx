@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Container, Loader, Text, Stack } from '@mantine/core';
 import Image from 'next/image';
+import { logger } from '@/lib/logger/client';
 
 interface DatabaseStatus {
   ready: boolean;
@@ -14,7 +15,7 @@ export function DatabaseLoadingScreen() {
   const [status, setStatus] = useState<DatabaseStatus>({
     ready: false,
     progress: 'Initializing database...',
-    timestamp: Date.now()
+    timestamp: 0
   });
   const [isReady, setIsReady] = useState(false);
 
@@ -31,7 +32,7 @@ export function DatabaseLoadingScreen() {
           }
         }
       } catch (error) {
-        console.error('Failed to check database status:', error);
+        logger.error('Failed to check database status:', error);
       }
     };
 

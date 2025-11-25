@@ -24,6 +24,7 @@ export abstract class BaseLogger {
   protected levelCache: { level: LogLevel; timestamp: number } | null = null;
   protected cacheDuration = 5000; // 5 seconds
   protected supportsColor: boolean;
+  protected reloadInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // Detect if terminal supports colors
@@ -32,6 +33,14 @@ export abstract class BaseLogger {
       process.stdout &&
       process.stdout.isTTY !== false &&
       process.env.TERM !== 'dumb';
+
+    // Load initial level from database (async, completes in background)
+    this.loadLogLevel();
+
+    // Set up periodic reload every 5 seconds
+    this.reloadInterval = setInterval(() => {
+      this.loadLogLevel();
+    }, this.cacheDuration);
   }
 
   // Abstract method - subclasses must implement
@@ -48,17 +57,27 @@ export abstract class BaseLogger {
   protected formatMessage(level: LogLevel, args: unknown[]): string {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const levelStr = `[${level.toUpperCase()}]`;
-    const message = args.map(arg =>
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ');
+    const message = args.map(arg => {
+      if (arg instanceof Error) {
+        // Serialize Error objects with message, stack, and other properties
+        const errorObj: Record<string, unknown> = {
+          message: arg.message,
+          name: arg.name,
+          stack: arg.stack,
+        };
+        // Include any additional enumerable properties
+        Object.keys(arg).forEach(key => {
+          errorObj[key] = (arg as unknown as Record<string, unknown>)[key];
+        });
+        return JSON.stringify(errorObj);
+      }
+      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+    }).join(' ');
 
     return `[${timestamp}] ${levelStr} ${message}`;
   }
 
   protected log(level: LogLevel, args: unknown[]): void {
-    // Reload level from cache/db periodically
-    this.loadLogLevel();
-
     if (!this.shouldLog(level)) {
       return;
     }
@@ -114,5 +133,13 @@ export abstract class BaseLogger {
   // Get current log level
   public getCurrentLevel(): LogLevel {
     return this.currentLevel;
+  }
+
+  // Cleanup method to stop the reload interval
+  public destroy(): void {
+    if (this.reloadInterval) {
+      clearInterval(this.reloadInterval);
+      this.reloadInterval = null;
+    }
   }
 }

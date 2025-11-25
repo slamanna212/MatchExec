@@ -1,5 +1,5 @@
-# Support multi-platform builds
-FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
+# Builder stage - uses TARGETPLATFORM by default for correct musl binaries
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -22,6 +22,8 @@ COPY src ./src
 COPY public ./public
 COPY *.config.* ./
 COPY tsconfig.json ./
+
+# Build Next.js app and bundle processes
 RUN npm run build
 
 # Prune dev dependencies while we still have build tools (needed for native modules on ARM)
@@ -38,11 +40,12 @@ RUN apk add --no-cache \
     tzdata \
     git \
     curl \
+    ffmpeg \
     && npm install -g pm2 tsx \
     && npm cache clean --force
 
 # Install s6-overlay
-ARG S6_OVERLAY_VERSION=3.2.0.0
+ARG S6_OVERLAY_VERSION=3.2.0.3
 ARG S6_OVERLAY_ARCH=x86_64
 
 RUN curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" | tar -C / -Jxpf - && \
@@ -64,19 +67,53 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=abc:abc /app/.next/standalone ./
 COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
 
-# Copy runtime dependencies and application files
-COPY --from=builder /app/processes ./processes
+# Copy bundled process files (optimized with esbuild)
+COPY --from=builder /app/dist ./dist
+
+# Copy runtime dependencies and application files (needed by processes and migrations)
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/data ./data
+COPY --from=builder --chown=abc:abc /app/data ./data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
-# Copy production node_modules from builder (already pruned and includes ARM-compiled binaries)
-# Next.js standalone has its own optimized subset, this adds the missing process deps
+# Copy migration runner script directly from host with execute permissions
+COPY --chmod=755 scripts/run-migrations.sh ./scripts/
+
+# Copy package files for reference
 COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/node_modules ./node_modules
+
+# Copy ONLY the process-specific dependencies that aren't in Next.js standalone
+# Standalone already has: sqlite3, and other common packages
+# We need to add: Discord.js ecosystem and their dependencies
+COPY --from=builder /app/node_modules/discord.js ./node_modules/discord.js
+COPY --from=builder /app/node_modules/@discordjs ./node_modules/@discordjs
+COPY --from=builder /app/node_modules/@snazzah ./node_modules/@snazzah
+COPY --from=builder /app/node_modules/bufferutil ./node_modules/bufferutil
+COPY --from=builder /app/node_modules/node-cron ./node_modules/node-cron
+
+# Copy Discord.js dependencies (all of them to avoid missing module errors)
+COPY --from=builder /app/node_modules/@sapphire ./node_modules/@sapphire
+COPY --from=builder /app/node_modules/@vladfrangu ./node_modules/@vladfrangu
+COPY --from=builder /app/node_modules/discord-api-types ./node_modules/discord-api-types
+COPY --from=builder /app/node_modules/ws ./node_modules/ws
+COPY --from=builder /app/node_modules/prism-media ./node_modules/prism-media
+COPY --from=builder /app/node_modules/magic-bytes.js ./node_modules/magic-bytes.js
+COPY --from=builder /app/node_modules/fast-deep-equal ./node_modules/fast-deep-equal
+COPY --from=builder /app/node_modules/lodash ./node_modules/lodash
+COPY --from=builder /app/node_modules/lodash.snakecase ./node_modules/lodash.snakecase
+COPY --from=builder /app/node_modules/ts-mixer ./node_modules/ts-mixer
+
+# Common dependencies (may be duplicated with standalone but needed for processes)
+COPY --from=builder /app/node_modules/undici ./node_modules/undici
+COPY --from=builder /app/node_modules/tslib ./node_modules/tslib
+
+# Native addon and build dependencies
+COPY --from=builder /app/node_modules/node-addon-api ./node_modules/node-addon-api
+COPY --from=builder /app/node_modules/node-gyp-build ./node_modules/node-gyp-build
+COPY --from=builder /app/node_modules/bindings ./node_modules/bindings
+COPY --from=builder /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
 
 # Copy s6-overlay configuration
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
@@ -86,9 +123,8 @@ COPY --chmod=755 s6-overlay/cont-init.d /etc/cont-init.d/
 RUN mkdir -p /app/app_data/data /app/logs && \
     chown -R abc:abc /app/app_data /app/logs
 
-# Set default PUID/PGID for Unraid compatibility
-ENV PUID=99
-ENV PGID=100
+# Note: PUID/PGID can be set at runtime (defaults to 1001:1001 in cont-init.d/10-adduser)
+# Unraid users should set -e PUID=99 -e PGID=100 when running the container
 
 EXPOSE 3000
 

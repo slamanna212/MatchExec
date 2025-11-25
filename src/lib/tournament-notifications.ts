@@ -59,7 +59,7 @@ export async function queueTournamentWinnerNotification(
     `, [tournamentId]);
 
     // Generate unique ID for the queue entry
-    const queueId = `tournament_winner_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const queueId = `tournament_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
     // Use the existing discord_match_winner_queue table but with tournament data
     // We'll use match_id to store the tournament ID and add special markers to identify it as a tournament

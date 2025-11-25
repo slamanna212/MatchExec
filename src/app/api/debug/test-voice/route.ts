@@ -37,13 +37,13 @@ export async function POST() {
     if (result.status === 'completed') {
       const resultData = JSON.parse(result.result || '{}');
       return NextResponse.json(resultData);
-    } else {
+    } 
       const errorData = JSON.parse(result.result || '{}');
       return NextResponse.json(
         { error: errorData.message || 'Voice test failed' },
         { status: 500 }
       );
-    }
+    
   } catch (error) {
     logger.error('Error testing voice lines:', error);
     return NextResponse.json(

@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import type {
+  BracketAssignment 
+} from '@/lib/tournament-bracket';
 import { 
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
-  saveGeneratedMatches,
-  BracketAssignment 
+  saveGeneratedMatches 
 } from '@/lib/tournament-bracket';
 
 interface Tournament {
@@ -161,7 +164,7 @@ export async function POST(
     // Queue Discord announcements for each generated match
     for (const match of generatedMatches) {
       try {
-        const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         await db.run(`
           INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
           VALUES (?, ?, 'standard', 'pending')

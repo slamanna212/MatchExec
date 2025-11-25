@@ -1,10 +1,149 @@
+import type {
+  Client} from 'discord.js';
 import {
-  Client,
   EmbedBuilder
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings, DiscordChannel } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+
+interface EventData {
+  id: string;
+  name: string;
+  game_id: string;
+  game_color?: string;
+  max_signups?: number;
+  [key: string]: unknown;
+}
+
+interface AnnouncementMessageData {
+  message_id: string;
+  channel_id: string;
+}
+
+/**
+ * Retrieves event data for signup notification (match or tournament)
+ */
+async function getEventDataForSignup(
+  db: Database,
+  matchId: string,
+  isTournament: boolean
+): Promise<EventData | null> {
+  const query = isTournament ? `
+    SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
+    FROM tournaments t
+    LEFT JOIN games g ON t.game_id = g.id
+    WHERE t.id = ?
+  ` : `
+    SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
+    FROM matches m
+    LEFT JOIN games g ON m.game_id = g.id
+    WHERE m.id = ?
+  `;
+
+  const result = await db.get<EventData>(query, [matchId]);
+  return result ?? null;
+}
+
+/**
+ * Builds signup notification embed
+ */
+function buildSignupEmbed(
+  signupInfo: { username: string; discordUserId: string; signupData: { [key: string]: string }; participantCount: number },
+  eventData: EventData,
+  isTournament: boolean,
+  announcementMessage: AnnouncementMessageData | null,
+  guildId: string | undefined
+): EmbedBuilder {
+  // Parse game color or use default green
+  let gameColor = 0x00ff00;
+  if (eventData.game_color) {
+    try {
+      gameColor = parseInt(eventData.game_color.replace('#', ''), 16);
+    } catch {
+      logger.warning('⚠️ Invalid game color format, using default green:', eventData.game_color);
+    }
+  }
+
+  const eventType = isTournament ? 'Tournament' : 'Match';
+  const embed = new EmbedBuilder()
+    .setTitle('🎮 New Player Signed Up!')
+    .setDescription(`**${signupInfo.username}** joined **${eventData.name}**`)
+    .setColor(gameColor)
+    .addFields(
+      {
+        name: '👤 Player',
+        value: `<@${signupInfo.discordUserId}>`,
+        inline: true
+      },
+      {
+        name: `🎯 ${eventType}`,
+        value: eventData.name,
+        inline: true
+      },
+      {
+        name: '👥 Total Players',
+        value: `${signupInfo.participantCount}${eventData.max_signups ? `/${eventData.max_signups}` : ''}`,
+        inline: true
+      }
+    )
+    .setTimestamp();
+
+  // Add key signup data fields if available
+  const displayFields: string[] = [];
+  for (const [key, value] of Object.entries(signupInfo.signupData)) {
+    if (value && displayFields.length < 3) {
+      const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      displayFields.push(`**${fieldName}:** ${value}`);
+    }
+  }
+
+  if (displayFields.length > 0) {
+    embed.addFields({
+      name: '📝 Player Info',
+      value: displayFields.join('\n'),
+      inline: false
+    });
+  }
+
+  // Add link to full match info if announcement message exists
+  if (announcementMessage?.message_id && announcementMessage?.channel_id && guildId) {
+    const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+    embed.addFields({
+      name: '🔗 View Full Match Info',
+      value: `[Click here to see the complete event details](${messageLink})`,
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
+/**
+ * Sends embed to all configured channels
+ */
+async function sendEmbedToChannels(
+  client: Client,
+  channels: DiscordChannel[],
+  embed: EmbedBuilder
+): Promise<number> {
+  let successCount = 0;
+
+  for (const channelConfig of channels) {
+    try {
+      const channel = await client.channels.fetch(channelConfig.discord_channel_id);
+
+      if (channel?.isTextBased() && 'send' in channel) {
+        await channel.send({ embeds: [embed] });
+        successCount++;
+      }
+    } catch (error) {
+      logger.error(`❌ Failed to send notification to channel ${channelConfig.discord_channel_id}:`, error);
+    }
+  }
+
+  return successCount;
+}
 
 export class ReminderHandler {
   constructor(
@@ -125,7 +264,7 @@ export class ReminderHandler {
 
     // Get channels configured for signup updates
     const signupChannels = await this.getChannelsForNotificationType('signup_updates');
-    
+
     if (signupChannels.length === 0) {
       return true; // Not an error, just no channels configured
     }
@@ -134,124 +273,28 @@ export class ReminderHandler {
       // Check if this is a tournament or match
       const isTournament = matchId.startsWith('tournament_');
 
-      // Get event data (match or tournament)
-      const matchData = await this.db?.get<{
-        id: string;
-        name: string;
-        game_id: string;
-        game_color?: string;
-        max_participants?: number;
-        [key: string]: unknown;
-      }>(isTournament ? `
-        SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
-        FROM tournaments t
-        LEFT JOIN games g ON t.game_id = g.id
-        WHERE t.id = ?
-      ` : `
-        SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
-        FROM matches m
-        LEFT JOIN games g ON m.game_id = g.id
-        WHERE m.id = ?
-      `, [matchId]);
+      // Get event data using helper function
+      const eventData = await getEventDataForSignup(this.db, matchId, isTournament);
+
+      if (!eventData) {
+        logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
+        return false;
+      }
 
       // Get announcement message info for linking
-      const announcementMessage = await this.db?.get<{
-        message_id: string;
-        channel_id: string;
-      }>(`
+      const announcementMessage = await this.db?.get<AnnouncementMessageData>(`
         SELECT message_id, channel_id
         FROM discord_match_messages
         WHERE match_id = ? AND message_type = 'announcement'
         LIMIT 1
       `, [matchId]);
 
-      if (!matchData) {
-        logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);
-        return false;
-      }
+      // Build signup embed using helper function
+      const guildId = this.client.guilds.cache.first()?.id;
+      const embed = buildSignupEmbed(signupInfo, eventData, isTournament, announcementMessage || null, guildId);
 
-      // Parse game color or use default green
-      let gameColor = 0x00ff00; // default green for positive action
-      if (matchData.game_color) {
-        try {
-          gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-        } catch {
-          logger.warning('⚠️ Invalid game color format, using default green:', matchData.game_color);
-        }
-      }
-
-      // Create signup embed
-      const eventType = isTournament ? 'Tournament' : 'Match';
-      const embed = new EmbedBuilder()
-        .setTitle('🎮 New Player Signed Up!')
-        .setDescription(`**${signupInfo.username}** joined **${matchData.name}**`)
-        .setColor(gameColor)
-        .addFields(
-          {
-            name: '👤 Player',
-            value: `<@${signupInfo.discordUserId}>`,
-            inline: true
-          },
-          {
-            name: `🎯 ${eventType}`,
-            value: matchData.name,
-            inline: true
-          },
-          {
-            name: '👥 Total Players',
-            value: `${signupInfo.participantCount}${matchData.max_signups ? `/${matchData.max_signups}` : ''}`,
-            inline: true
-          }
-        )
-        .setTimestamp();
-
-      // Add key signup data fields if available
-      const displayFields: string[] = [];
-      for (const [key, value] of Object.entries(signupInfo.signupData)) {
-        if (value && displayFields.length < 3) { // Limit to 3 additional fields
-          const fieldName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          displayFields.push(`**${fieldName}:** ${value}`);
-        }
-      }
-      
-      if (displayFields.length > 0) {
-        embed.addFields({
-          name: '📝 Player Info',
-          value: displayFields.join('\n'),
-          inline: false
-        });
-      }
-
-      // Add link to full match info if announcement message exists
-      if (announcementMessage?.message_id && announcementMessage?.channel_id && this.client.guilds.cache.first()) {
-        const guildId = this.client.guilds.cache.first()?.id;
-        const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
-        embed.addFields({
-          name: '🔗 View Full Match Info',
-          value: `[Click here to see the complete event details](${messageLink})`,
-          inline: false
-        });
-      }
-
-      let successCount = 0;
-
-      // Send to all configured signup update channels
-      for (const channelConfig of signupChannels) {
-        try {
-          const signupChannel = await this.client.channels.fetch(channelConfig.discord_channel_id);
-
-          if (signupChannel?.isTextBased() && 'send' in signupChannel) {
-            // Send signup notification
-            await signupChannel.send({
-              embeds: [embed]
-            });
-            
-            successCount++;
-          }
-        } catch (error) {
-          logger.error(`❌ Failed to send signup notification to channel ${channelConfig.discord_channel_id}:`, error);
-        }
-      }
+      // Send to all configured channels using helper function
+      const successCount = await sendEmbedToChannels(this.client, signupChannels, embed);
 
       if (successCount === 0) {
         logger.error('❌ Failed to send signup notification to any channels');
@@ -266,73 +309,68 @@ export class ReminderHandler {
     }
   }
 
-  private async createPlayerReminderEmbed(
-    matchData: {
-      name: string;
-      description?: string;
-      start_date?: string;
-      game_name?: string;
-      game_color?: string;
-      blue_team_voice_channel?: string;
-      red_team_voice_channel?: string;
-      [key: string]: unknown;
-    }, 
-    participant: {
-      username: string;
-      team_assignment?: string;
-      signup_data?: string;
-    },
-    announcementMessage?: {
-      message_id: string;
-      channel_id: string;
-    }
-  ): Promise<EmbedBuilder> {
-    // Parse game color or use default
-    let gameColor = 0x4caf50; // default green for reminder
-    if (matchData.game_color) {
-      try {
-        gameColor = parseInt(matchData.game_color.replace('#', ''), 16);
-      } catch (error) {
-        logger.error('Error parsing game color:', error);
-      }
-    }
+  /**
+   * Parse game color from match data
+   */
+  private parseGameColor(gameColor?: string): number {
+    if (!gameColor) return 0x4caf50;
 
-    const embed = new EmbedBuilder()
-      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
-      .setDescription(matchData.description || 'Your match is starting soon!')
-      .setColor(gameColor)
-      .setTimestamp()
-      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
-
-    // Add match time if available
-    if (matchData.start_date) {
-      const startTime = new Date(matchData.start_date);
-      const unixTimestamp = Math.floor(startTime.getTime() / 1000);
-      embed.addFields(
-        { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
-        { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
-        { name: '\u200b', value: '\u200b', inline: true } // Empty field to force new line
-      );
+    try {
+      return parseInt(gameColor.replace('#', ''), 16);
+    } catch (error) {
+      logger.error('Error parsing game color:', error);
+      return 0x4caf50;
     }
+  }
 
-    // Add game info
-    if (matchData.game_name) {
-      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
-    }
+  /**
+   * Add match time fields to embed
+   */
+  private addMatchTimeFields(embed: EmbedBuilder, startDate: string): void {
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+    embed.addFields(
+      { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true },
+      { name: '⏰ Starting', value: `<t:${unixTimestamp}:R>`, inline: true },
+      { name: '\u200b', value: '\u200b', inline: true }
+    );
+  }
 
-    // Add team assignment if available
+  /**
+   * Check if match is single-team configuration
+   */
+  private isSingleTeamMatch(blueChannel?: string, redChannel?: string): boolean {
+    return !!blueChannel && !redChannel;
+  }
+
+  /**
+   * Get team display info
+   */
+  private getTeamDisplayInfo(teamAssignment: string): { emoji: string; name: string } {
+    const emoji = teamAssignment === 'blue' ? '🔵' : teamAssignment === 'red' ? '🔴' : '🟡';
+    const name = teamAssignment.charAt(0).toUpperCase() + teamAssignment.slice(1);
+    return { emoji, name };
+  }
+
+  /**
+   * Add team and voice channel fields
+   */
+  private addTeamAndVoiceFields(
+    embed: EmbedBuilder,
+    participant: { team_assignment?: string },
+    matchData: { blue_team_voice_channel?: string; red_team_voice_channel?: string }
+  ): void {
+    const isSingleTeam = this.isSingleTeamMatch(matchData.blue_team_voice_channel, matchData.red_team_voice_channel);
+
     if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
-      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' : 
-                       participant.team_assignment === 'red' ? '🔴' : '🟡';
-      const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
-      
-      embed.addFields({ 
-        name: '👥 Your Team', 
-        value: `${teamEmoji} ${teamName} Team`, 
-        inline: true 
+      const { emoji, name } = this.getTeamDisplayInfo(participant.team_assignment);
+
+      embed.addFields({
+        name: '👥 Your Team',
+        value: `${emoji} ${name} Team`,
+        inline: true
       });
 
-      // Add voice channel if assigned to a team with a voice channel
       if (participant.team_assignment === 'blue' && matchData.blue_team_voice_channel) {
         embed.addFields({
           name: '🎙️ Voice Channel',
@@ -346,18 +384,73 @@ export class ReminderHandler {
           inline: true
         });
       }
-    }
-
-    // Add link to original announcement if available
-    if (announcementMessage && this.client.guilds.cache.first()) {
-      const guildId = this.client.guilds.cache.first()?.id;
-      const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+    } else if (isSingleTeam) {
       embed.addFields({
-        name: '🔗 Match Details',
-        value: `[View Full Match Info](${messageLink})`,
-        inline: false
+        name: '🎙️ Voice Channel',
+        value: `<#${matchData.blue_team_voice_channel}>`,
+        inline: true
       });
     }
+  }
+
+  /**
+   * Add announcement link to embed
+   */
+  private addAnnouncementLink(
+    embed: EmbedBuilder,
+    announcementMessage?: { message_id: string; channel_id: string }
+  ): void {
+    if (!announcementMessage || !this.client.guilds.cache.first()) return;
+
+    const guildId = this.client.guilds.cache.first()?.id;
+    const messageLink = `https://discord.com/channels/${guildId}/${announcementMessage.channel_id}/${announcementMessage.message_id}`;
+    embed.addFields({
+      name: '🔗 Match Details',
+      value: `[View Full Match Info](${messageLink})`,
+      inline: false
+    });
+  }
+
+  private async createPlayerReminderEmbed(
+    matchData: {
+      name: string;
+      description?: string;
+      start_date?: string;
+      game_name?: string;
+      game_color?: string;
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+      [key: string]: unknown;
+    },
+    participant: {
+      username: string;
+      team_assignment?: string;
+      signup_data?: string;
+    },
+    announcementMessage?: {
+      message_id: string;
+      channel_id: string;
+    }
+  ): Promise<EmbedBuilder> {
+    const gameColor = this.parseGameColor(matchData.game_color);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
+      .setDescription(matchData.description || 'Your match is starting soon!')
+      .setColor(gameColor)
+      .setTimestamp()
+      .setFooter({ text: 'MatchExec • Good luck and have fun!' });
+
+    if (matchData.start_date) {
+      this.addMatchTimeFields(embed, matchData.start_date);
+    }
+
+    if (matchData.game_name) {
+      embed.addFields({ name: '🎮 Game', value: matchData.game_name, inline: true });
+    }
+
+    this.addTeamAndVoiceFields(embed, participant, matchData);
+    this.addAnnouncementLink(embed, announcementMessage);
 
     return embed;
   }
@@ -536,13 +629,14 @@ export class ReminderHandler {
         send_reminders: number;
         send_match_start: number;
         send_signup_updates: number;
+        send_health_alerts: number;
         created_at: string;
         updated_at: string;
       }>(`
-        SELECT id, discord_channel_id, channel_name, channel_type, 
-               send_announcements, send_reminders, send_match_start, send_signup_updates,
+        SELECT id, discord_channel_id, channel_name, channel_type,
+               send_announcements, send_reminders, send_match_start, send_signup_updates, send_health_alerts,
                created_at, updated_at
-        FROM discord_channels 
+        FROM discord_channels
         WHERE ${column} = 1
       `);
 
@@ -555,6 +649,7 @@ export class ReminderHandler {
         send_reminders: Boolean(channel.send_reminders),
         send_match_start: Boolean(channel.send_match_start),
         send_signup_updates: Boolean(channel.send_signup_updates),
+        send_health_alerts: Boolean(channel.send_health_alerts),
         created_at: channel.created_at,
         updated_at: channel.updated_at
       }));

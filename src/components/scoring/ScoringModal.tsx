@@ -1,9 +1,10 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect } from 'react';
 import { Modal, Stack, Group, Text, Button, Loader } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
-import {
+import type {
   MatchFormat,
   MatchResult
 } from '@/shared/types';
@@ -51,7 +52,7 @@ export function ScoringModal({
           setScoringType('Normal'); // Default to Normal
         }
       } catch (error) {
-        console.error('Error detecting scoring type:', error);
+        logger.error('Error detecting scoring type:', error);
         setScoringType('Normal'); // Default to Normal on error
       } finally {
         setLoading(false);
@@ -66,7 +67,7 @@ export function ScoringModal({
     try {
       await onResultSubmit(result);
     } catch (err) {
-      console.error('Failed to submit result:', err);
+      logger.error('Failed to submit result:', err);
       // Don't close the modal on error - let the user try again
       throw err;
     } finally {

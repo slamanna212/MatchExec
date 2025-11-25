@@ -1,6 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
-import {
+import { deleteMatchVoiceChannels } from './voice-channel-manager';
+import type {
   MatchResult,
   MatchFormat,
   PositionScoringConfig
@@ -413,10 +414,10 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
       }
 
       return true; // There is a next map
-    } else {
+    } 
       logger.debug('No pending maps found to set as ongoing');
       return false; // No next map
-    }
+    
   } catch (error) {
     logger.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
@@ -473,7 +474,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
       
       if (mapCode) {
         // Generate unique ID for the queue entry
-        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         
         // Get the actual map name from database instead of using potentially raw mapName
         let displayMapName = mapName; // Fallback to passed mapName
@@ -612,99 +613,133 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
 }
 
 /**
+ * Get the team ID for a match (supports both tournament and regular matches)
+ */
+async function getMatchTeamId(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string,
+  teamNumber: 1 | 2
+): Promise<string | null> {
+  const teamData = await db.get<{
+    red_team_id?: string;
+    blue_team_id?: string;
+    team1_id?: string;
+    team2_id?: string;
+  }>(`
+    SELECT m.red_team_id, m.blue_team_id, tm.team1_id, tm.team2_id
+    FROM matches m
+    LEFT JOIN tournament_matches tm ON m.id = tm.match_id
+    WHERE m.id = ?
+  `, [matchId]);
+
+  if (teamNumber === 1) {
+    return teamData?.team1_id || teamData?.red_team_id || null;
+  }
+  return teamData?.team2_id || teamData?.blue_team_id || null;
+}
+
+/**
+ * Determine the winner of a match based on game wins
+ */
+async function determineMatchWinner(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string
+): Promise<string | null> {
+  const winnerQuery = `
+    SELECT
+      COUNT(*) as total_normal_games,
+      SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
+      SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
+    FROM match_games mg
+    WHERE mg.match_id = ?
+      AND mg.status = 'completed'
+      AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL)
+      AND mg.winner_id IS NOT NULL
+  `;
+
+  const winResult = await db.get<{
+    total_normal_games: number;
+    team1_wins: number;
+    team2_wins: number;
+  }>(winnerQuery, [matchId]);
+
+  if (!winResult || winResult.total_normal_games === 0) {
+    return null;
+  }
+
+  if (winResult.team1_wins > winResult.team2_wins) {
+    return await getMatchTeamId(db, matchId, 1);
+  }
+
+  if (winResult.team2_wins > winResult.team1_wins) {
+    return await getMatchTeamId(db, matchId, 2);
+  }
+
+  // Tie
+  return null;
+}
+
+/**
+ * Check if all games in a match are completed
+ */
+async function areAllGamesCompleted(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string
+): Promise<boolean> {
+  const statusQuery = `
+    SELECT COUNT(*) as total,
+           SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+    FROM match_games
+    WHERE match_id = ?
+  `;
+
+  const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
+  return statusResult !== undefined && statusResult.total > 0 && statusResult.completed === statusResult.total;
+}
+
+/**
  * Update match status to complete if all games are scored
  */
 async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean> {
   const db = await getDbInstance();
-  
+
   try {
     // Get the match ID for this game
-    const matchQuery = `
-      SELECT match_id FROM match_games WHERE id = ?
-    `;
-    
-    const matchRow = await db.get<{ match_id?: string }>(matchQuery, [matchGameId]);
+    const matchRow = await db.get<{ match_id?: string }>(
+      'SELECT match_id FROM match_games WHERE id = ?',
+      [matchGameId]
+    );
     const matchId = matchRow?.match_id;
 
     if (!matchId) return false;
 
     // Check if all games in this match are completed
-    const statusQuery = `
-      SELECT COUNT(*) as total, 
-             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
-      FROM match_games 
-      WHERE match_id = ?
-    `;
-
-    const statusResult = await db.get<{ total: number; completed: number }>(statusQuery, [matchId]);
-
-    // If all games are completed, mark match as complete and determine winner
-    if (statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total) {
-      // Calculate overall match winner based on game wins
-      const winnerQuery = `
-        SELECT
-          COUNT(*) as total_normal_games,
-          SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
-          SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
-        FROM match_games mg
-        WHERE mg.match_id = ?
-          AND mg.status = 'completed'
-          AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL)
-          AND mg.winner_id IS NOT NULL
-      `;
-
-      const winResult = await db.get<{
-        total_normal_games: number;
-        team1_wins: number;
-        team2_wins: number;
-      }>(winnerQuery, [matchId]);
-
-      let winnerTeam: string | null = null;
-      if (winResult && winResult.total_normal_games > 0) {
-        if (winResult.team1_wins > winResult.team2_wins) {
-          // Get team1 ID from tournament_matches or match data
-          const team1Data = await db.get<{ red_team_id?: string; team1_id?: string }>(`
-            SELECT m.red_team_id, tm.team1_id
-            FROM matches m
-            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
-            WHERE m.id = ?
-          `, [matchId]);
-          winnerTeam = team1Data?.team1_id || team1Data?.red_team_id || null;
-        } else if (winResult.team2_wins > winResult.team1_wins) {
-          // Get team2 ID from tournament_matches or match data
-          const team2Data = await db.get<{ blue_team_id?: string; team2_id?: string }>(`
-            SELECT m.blue_team_id, tm.team2_id
-            FROM matches m
-            LEFT JOIN tournament_matches tm ON m.id = tm.match_id
-            WHERE m.id = ?
-          `, [matchId]);
-          winnerTeam = team2Data?.team2_id || team2Data?.blue_team_id || null;
-        }
-        // If tied, leave winnerTeam as null
-      }
-
-      const updateMatchQuery = `
-        UPDATE matches
-        SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `;
-
-      await db.run(updateMatchQuery, [winnerTeam, matchId]);
-      logger.debug(`Match ${matchId} marked as complete with winner: ${winnerTeam || 'tie/none'}`);
-      
-      // Queue match winner notification
-      await queueMatchWinnerNotification(matchId);
-      
-      // Queue Discord deletion for match announcements and events
-      await queueDiscordDeletion(matchId);
-      
-      return true; // Match is now complete
+    const allGamesCompleted = await areAllGamesCompleted(db, matchId);
+    if (!allGamesCompleted) {
+      return false;
     }
-    
-    return false; // Match is not complete yet
+
+    // Determine the match winner
+    const winnerTeam = await determineMatchWinner(db, matchId);
+
+    // Update match status
+    await db.run(
+      'UPDATE matches SET status = \'complete\', winner_team = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [winnerTeam, matchId]
+    );
+
+    logger.debug(`Match ${matchId} marked as complete with winner: ${winnerTeam || 'tie/none'}`);
+
+    // Queue post-match operations
+    await queueMatchWinnerNotification(matchId);
+    await queueDiscordDeletion(matchId);
+
+    // Clean up voice channels
+    await deleteMatchVoiceChannels(matchId);
+
+    return true;
   } catch (error) {
     logger.error('Error updating match status:', error);
-    // Don't throw - this is a non-critical operation
     return false;
   }
 }
@@ -1061,7 +1096,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
 /**
  * Queue Discord deletion for match announcements and events when match completes
  */
-async function queueDiscordDeletion(matchId: string): Promise<void> {
+export async function queueDiscordDeletion(matchId: string): Promise<void> {
   try {
     const db = await getDbInstance();
     

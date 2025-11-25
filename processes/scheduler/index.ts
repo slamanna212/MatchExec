@@ -1,7 +1,7 @@
 // @ts-nocheck - Database method calls have complex typing issues
 import { waitForDatabaseReady } from '../../lib/database';
 import * as cron from 'node-cron';
-import { SchedulerSettings } from '../../shared/types';
+import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 
 class MatchExecScheduler {
@@ -16,18 +16,33 @@ class MatchExecScheduler {
       // Wait for database to be ready (migrated and seeded)
       logger.debug('⏳ Waiting for database to be ready...');
       this.db = await waitForDatabaseReady();
-      
+
       this.isRunning = true;
-      
+
+      // Send initial heartbeat for health monitoring
+      try {
+        const now = new Date().toISOString();
+        await this.db.run(
+          `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE setting_key = ?`,
+          [now, 'scheduler_last_heartbeat']
+        );
+        logger.debug('💓 Initial scheduler heartbeat sent');
+      } catch (error) {
+        logger.error('Failed to send initial scheduler heartbeat:', error);
+      }
+
       // Load and start cron jobs
       await this.loadSchedulerSettings();
       
       logger.debug('✅ Scheduler started successfully');
       
       this.keepAlive();
-      
+
     } catch (error) {
-      logger.error('❌ Failed to start scheduler:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error('❌ Failed to start scheduler:', { message: errorMessage, stack: errorStack });
       process.exit(1);
     }
   }
@@ -65,6 +80,8 @@ class MatchExecScheduler {
       if (settings.channel_refresh_cron) {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
+      // Run voice channel cleanup every 5 minutes
+      this.startCronJob('Voice Channel Cleanup', '*/5 * * * *', this.cleanupVoiceChannels.bind(this));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
@@ -170,12 +187,9 @@ class MatchExecScheduler {
   private async handleMatchReminders() {
     // Check for matches that need reminder queue entries created
     await this.queueMatchReminders();
-    
+
     // Check for matches that need player reminder DMs
     await this.queuePlayerReminders();
-    
-    // Process existing reminder queue
-    await this.processReminderQueue();
   }
 
 
@@ -186,7 +200,7 @@ class MatchExecScheduler {
       const discordSettings = await this.db.get(
         'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
       );
-      
+
       if (!discordSettings?.match_reminder_minutes) {
         logger.debug('⚠️ No Discord reminder settings found, skipping reminder queue');
         return;
@@ -198,90 +212,54 @@ class MatchExecScheduler {
       const upcomingMatches = await this.db.all(
         `SELECT m.id, m.name, m.start_date
          FROM matches m
-         WHERE m.start_date IS NOT NULL 
+         WHERE m.start_date IS NOT NULL
          AND m.status IN ('created', 'gather', 'assign', 'battle')
          AND datetime(m.start_date) > datetime('now')
          AND NOT EXISTS (
-           SELECT 1 FROM discord_reminder_queue drq 
-           WHERE drq.match_id = m.id 
+           SELECT 1 FROM discord_reminder_queue drq
+           WHERE drq.match_id = m.id
            AND drq.status != 'failed'
          )`
       );
 
+      if (upcomingMatches.length === 0) {
+        logger.debug('ℹ️ No matches need reminder queue entries');
+        return;
+      }
+
+      logger.debug(`🔍 Found ${upcomingMatches.length} match(es) that need reminders`);
+
+      let queuedCount = 0;
+      let skippedCount = 0;
+
       for (const match of upcomingMatches) {
         const startDate = new Date(match.start_date);
         const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
-        
+
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
-          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
+          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
           // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-            INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
+          await this.db.run(`
+            INSERT OR IGNORE INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
           `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
-          
+
           logger.debug(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
+          queuedCount++;
+        } else {
+          logger.debug(`⏭️ Skipped match ${match.name} - reminder time ${reminderTime.toISOString()} is in the past`);
+          skippedCount++;
         }
       }
+
+      logger.debug(`✅ Queued ${queuedCount} reminder(s), skipped ${skippedCount}`);
     } catch (error) {
       logger.error('❌ Error queueing match reminders:', error);
     }
   }
 
-  private async processReminderQueue() {
-    try {
-      // Get reminders that are due - fix datetime comparison for ISO format
-      const dueReminders = await this.db.all(`
-        SELECT drq.id, drq.match_id, drq.reminder_time
-        FROM discord_reminder_queue drq
-        WHERE drq.status = 'pending'
-        AND datetime(drq.reminder_time) <= datetime('now')
-        LIMIT 5
-      `);
-
-      for (const reminder of dueReminders) {
-        try {
-          // Queue the Discord reminder - similar to how announcements work
-          const success = await this.queueDiscordReminder(reminder.match_id);
-          
-          if (success) {
-            // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-              UPDATE discord_reminder_queue 
-              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [reminder.id]);
-            
-            logger.debug(`✅ Queued Discord reminder for match: ${reminder.match_id}`);
-          } else {
-            // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-              UPDATE discord_reminder_queue 
-              SET status = 'failed', error_message = 'Failed to queue Discord reminder'
-              WHERE id = ?
-            `, [reminder.id]);
-          }
-        } catch (error) {
-          logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-          
-          // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-            UPDATE discord_reminder_queue 
-            SET status = 'failed', error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
-        }
-      }
-    } catch (error) {
-      logger.error('❌ Error processing reminder queue:', error);
-    }
-  }
 
   private async queuePlayerReminders() {
     try {
@@ -327,7 +305,7 @@ class MatchExecScheduler {
           
           // Create reminder queue entry for each participant
           for (const participant of participants) {
-            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
             
             // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -345,31 +323,11 @@ class MatchExecScheduler {
     }
   }
 
-  private async queueDiscordReminder(matchId: string): Promise<boolean> {
-    try {
-      // Generate unique ID for the queue entry
-      const reminderId = `discord_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Add to Discord reminder queue that the bot will process
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
-    await this.db.run(`
-        INSERT INTO discord_match_reminder_queue (id, match_id, reminder_type, scheduled_for, status)
-        VALUES (?, ?, 'general_reminder', datetime('now'), 'pending')
-      `, [reminderId, matchId]);
-      
-      logger.debug('📢 Discord match reminder queued for match:', matchId);
-      return true;
-    } catch (error) {
-      logger.error('❌ Error queuing Discord match reminder:', error);
-      return false;
-    }
-  }
 
   private async queueMatchStartNotification(matchId: string): Promise<boolean> {
     try {
       // Generate unique ID for the queue entry  
-      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // Add to Discord match start notification queue that the bot will process
       // @ts-expect-error - Database run method typed as unknown
@@ -387,13 +345,107 @@ class MatchExecScheduler {
     }
   }
 
+  /**
+   * Parse announcements field into array
+   */
+  private parseAnnouncementsField(announcements: unknown, matchName: string): unknown[] | null {
+    if (typeof announcements === 'string') {
+      try {
+        return JSON.parse(announcements);
+      } catch {
+        logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not valid JSON`);
+        return null;
+      }
+    }
+
+    if (typeof announcements === 'number' || typeof announcements === 'boolean') {
+      if (announcements) {
+        return [
+          { id: 'default_1hour', value: 1, unit: 'hours' },
+          { id: 'default_30min', value: 30, unit: 'minutes' }
+        ];
+      }
+      return null;
+    }
+
+    logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not an array`);
+    return null;
+  }
+
+  /**
+   * Calculate announcement time offset
+   */
+  private calculateAnnouncementOffset(value: number, unit: 'minutes' | 'hours' | 'days'): number {
+    switch (unit) {
+      case 'minutes':
+        return value * 60 * 1000;
+      case 'hours':
+        return value * 60 * 60 * 1000;
+      case 'days':
+        return value * 24 * 60 * 60 * 1000;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Check if announcement should be sent now
+   */
+  private shouldSendAnnouncementNow(announcementTime: Date): boolean {
+    const now = new Date();
+    const checkIntervalMs = 60 * 1000; // 1 minute buffer
+    return announcementTime <= now && announcementTime >= new Date(now.getTime() - checkIntervalMs);
+  }
+
+  /**
+   * Check if announcement already exists in queue
+   */
+  private async hasExistingAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
+    const existingAnnouncement = await this.db.get(`
+      SELECT id FROM discord_announcement_queue
+      WHERE match_id = ? AND announcement_type = 'timed'
+      AND announcement_data = ?
+      AND status NOT IN ('failed')
+    `, [matchId, JSON.stringify(announcement)]);
+
+    return !!existingAnnouncement;
+  }
+
+  /**
+   * Process announcements for a single match
+   */
+  private async processMatchAnnouncements(match: { id: string; name: string; start_date: string; announcements: unknown }): Promise<void> {
+    const announcements = this.parseAnnouncementsField(match.announcements, match.name);
+    if (!announcements) return;
+
+    if (!Array.isArray(announcements)) {
+      logger.debug(`⚠️ Skipping match ${match.name} - announcements is not an array`);
+      return;
+    }
+
+    const matchStartTime = new Date(match.start_date);
+
+    for (const announcement of announcements) {
+      const { value, unit } = announcement;
+      const millisecondsOffset = this.calculateAnnouncementOffset(value, unit);
+      const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
+
+      if (this.shouldSendAnnouncementNow(announcementTime)) {
+        const exists = await this.hasExistingAnnouncement(match.id, announcement);
+        if (!exists) {
+          logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
+          await this.queueTimedAnnouncement(match.id, announcement);
+        }
+      }
+    }
+  }
+
   private async handleTimedAnnouncements() {
     try {
-      // Get matches that have announcements configured
       const matchesWithAnnouncements = await this.db.all(`
         SELECT id, name, start_date, announcements
-        FROM matches 
-        WHERE announcements IS NOT NULL 
+        FROM matches
+        WHERE announcements IS NOT NULL
         AND start_date IS NOT NULL
         AND status IN ('created', 'gather', 'assign')
         AND start_date > datetime('now')
@@ -401,83 +453,7 @@ class MatchExecScheduler {
 
       for (const match of matchesWithAnnouncements) {
         try {
-          // Handle different announcement field formats
-          let announcements;
-
-          if (typeof match.announcements === 'string') {
-            try {
-              announcements = JSON.parse(match.announcements);
-            } catch {
-              // If it's not valid JSON, skip this match
-              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
-              continue;
-            }
-          } else if (typeof match.announcements === 'number' || typeof match.announcements === 'boolean') {
-            // For tournament matches, announcements is a boolean/number flag
-            // Use default announcement schedule for tournament matches
-            if (match.announcements) {
-              announcements = [
-                { id: 'default_1hour', value: 1, unit: 'hours' },
-                { id: 'default_30min', value: 30, unit: 'minutes' }
-              ];
-            } else {
-              // announcements disabled for this tournament match
-              continue;
-            }
-          } else {
-            // If announcements is some other type, skip announcement processing
-            logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not an array`);
-            continue;
-          }
-
-          // Ensure announcements is an array
-          if (!Array.isArray(announcements)) {
-            logger.debug(`⚠️ Skipping match ${match.name} - announcements is not an array`);
-            continue;
-          }
-
-          const matchStartTime = new Date(match.start_date);
-
-          for (const announcement of announcements) {
-            // Calculate when this announcement should be sent
-            const { value, unit } = announcement;
-            let millisecondsOffset = 0;
-            
-            switch (unit) {
-              case 'minutes':
-                millisecondsOffset = value * 60 * 1000;
-                break;
-              case 'hours':
-                millisecondsOffset = value * 60 * 60 * 1000;
-                break;
-              case 'days':
-                millisecondsOffset = value * 24 * 60 * 60 * 1000;
-                break;
-            }
-            
-            const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
-            const now = new Date();
-            
-            // Check if announcement should be sent now (within the last check interval)
-            const checkIntervalMs = 60 * 1000; // 1 minute buffer
-            const shouldSendNow = announcementTime <= now && 
-                                  announcementTime >= new Date(now.getTime() - checkIntervalMs);
-            
-            if (shouldSendNow) {
-              // Check if we already sent this announcement
-              const existingAnnouncement = await this.db.get(`
-                SELECT id FROM discord_announcement_queue 
-                WHERE match_id = ? AND announcement_type = 'timed'
-                AND announcement_data = ?
-                AND status NOT IN ('failed')
-              `, [match.id, JSON.stringify(announcement)]);
-              
-              if (!existingAnnouncement) {
-                logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
-                await this.queueTimedAnnouncement(match.id, announcement);
-              }
-            }
-          }
+          await this.processMatchAnnouncements(match);
         } catch (parseError) {
           logger.error(`❌ Error parsing announcements for match ${match.id}:`, parseError);
         }
@@ -490,7 +466,7 @@ class MatchExecScheduler {
   private async queueTimedAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
-      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
@@ -528,10 +504,22 @@ class MatchExecScheduler {
 
 
   private keepAlive() {
-    // Keep the process alive
-    setInterval(() => {
+    // Keep the process alive and persist heartbeat for health monitoring
+    setInterval(async () => {
       if (this.isRunning) {
         logger.debug('🕐 Scheduler heartbeat');
+
+        // Persist heartbeat timestamp to database for health monitoring
+        try {
+          const now = new Date().toISOString();
+          await this.db.run(
+            `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE setting_key = ?`,
+            [now, 'scheduler_last_heartbeat']
+          );
+        } catch (error) {
+          logger.error('Failed to persist scheduler heartbeat:', error);
+        }
       }
     }, 300000); // Every 5 minutes
   }
@@ -574,6 +562,104 @@ class MatchExecScheduler {
       }
     } catch (error) {
       logger.error('❌ Error during scheduled channel refresh:', error);
+    }
+  }
+
+  private async cleanupVoiceChannels() {
+    try {
+      logger.debug('🔄 Starting voice channel cleanup...');
+
+      // Get Discord settings to know the cleanup delay
+      // @ts-expect-error - Database get method typed as unknown
+      const discordSettings = await this.db.get(
+        'SELECT voice_channel_cleanup_delay_minutes FROM discord_settings WHERE id = 1'
+      );
+
+      const cleanupDelayMinutes = discordSettings?.voice_channel_cleanup_delay_minutes || 10;
+
+      // Calculate the threshold time in JavaScript to avoid SQL injection
+      const thresholdTime = new Date();
+      thresholdTime.setMinutes(thresholdTime.getMinutes() - cleanupDelayMinutes);
+
+      // Find matches that completed/cancelled and are past the cleanup delay
+      // @ts-expect-error - Database all method typed as unknown
+      const matchesForCleanup = await this.db.all(`
+        SELECT DISTINCT m.id, m.name, m.status, m.updated_at
+        FROM matches m
+        INNER JOIN auto_voice_channels avc ON m.id = avc.match_id
+        WHERE m.status IN ('complete', 'cancelled')
+        AND datetime(m.updated_at) <= datetime(?)
+        LIMIT 10
+      `, [thresholdTime.toISOString()]);
+
+      if (matchesForCleanup.length === 0) {
+        logger.debug('ℹ️ No voice channels ready for cleanup');
+        return;
+      }
+
+      logger.debug(`🗑️ Found ${matchesForCleanup.length} matches with voice channels ready for cleanup`);
+
+      // Import and use the voice channel manager to delete channels
+      const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
+
+      for (const match of matchesForCleanup) {
+        try {
+          const success = await deleteMatchVoiceChannels(match.id);
+
+          if (success) {
+            logger.debug(`✅ Cleaned up voice channels for match: ${match.name} (${match.id})`);
+          } else {
+            logger.warning(`⚠️ Failed to cleanup voice channels for match: ${match.name} (${match.id})`);
+          }
+        } catch (error) {
+          logger.error(`❌ Error cleaning up voice channels for match ${match.id}:`, error);
+        }
+      }
+
+      logger.debug(`✅ Voice channel cleanup completed`);
+
+      // Also check for orphaned voice channels (match was manually deleted)
+      // @ts-expect-error - Database all method typed as unknown
+      const orphanedChannels = await this.db.all(`
+        SELECT avc.id, avc.match_id, avc.channel_id, avc.team_name
+        FROM auto_voice_channels avc
+        WHERE avc.match_id NOT IN (SELECT id FROM matches)
+      `);
+
+      if (orphanedChannels.length > 0) {
+        logger.info(`🗑️ Found ${orphanedChannels.length} orphaned voice channels (from deleted matches)`);
+
+        // Import voice channel manager for cleanup
+        const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
+
+        // Group orphaned channels by match_id
+        const orphanedByMatch = orphanedChannels.reduce((acc: Map<string, typeof orphanedChannels>, channel) => {
+          if (!acc.has(channel.match_id)) {
+            acc.set(channel.match_id, []);
+          }
+          acc.get(channel.match_id)!.push(channel);
+          return acc;
+        }, new Map());
+
+        // Clean up each orphaned match's voice channels
+        for (const [matchId, channels] of orphanedByMatch.entries()) {
+          try {
+            const success = await deleteMatchVoiceChannels(matchId);
+            if (success) {
+              logger.info(`✅ Cleaned up ${channels.length} orphaned voice channel(s) for deleted match: ${matchId}`);
+            } else {
+              logger.warning(`⚠️ Failed to cleanup orphaned voice channels for match: ${matchId}`);
+            }
+          } catch (error) {
+            logger.error(`❌ Error cleaning up orphaned voice channels for match ${matchId}:`, error);
+          }
+        }
+      } else {
+        logger.debug('ℹ️ No orphaned voice channels found');
+      }
+
+    } catch (error) {
+      logger.error('❌ Error during voice channel cleanup:', error);
     }
   }
 }

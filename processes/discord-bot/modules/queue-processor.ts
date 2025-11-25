@@ -1,13 +1,14 @@
-import { Client, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import type { Client, Message } from 'discord.js';
+import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
-import { AnnouncementHandler } from './announcement-handler';
-import { ReminderHandler } from './reminder-handler';
-import { EventHandler } from './event-handler';
-import { VoiceHandler } from './voice-handler';
-import { SettingsManager } from './settings-manager';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
+import type { AnnouncementHandler } from './announcement-handler';
+import type { ReminderHandler } from './reminder-handler';
+import type { EventHandler } from './event-handler';
+import type { VoiceHandler } from './voice-handler';
+import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 
 // Interfaces for different queue types - matching existing DB structure
@@ -52,6 +53,9 @@ interface QueuedVoiceAnnouncement {
   red_team_voice_channel: string | null;
   first_team: 'blue' | 'red';
   created_at: string;
+  retry_count: number;
+  timeout_at: string | null;
+  first_attempted_at: string | null;
 }
 
 interface QueuedMapCode {
@@ -76,6 +80,254 @@ interface QueuedMatchWinner {
   created_at: string;
 }
 
+interface BotRequest {
+  id: string;
+  type: string;
+  data: string;
+  created_at: string;
+}
+
+/**
+ * Type for request handler functions
+ */
+type RequestHandler = (processor: QueueProcessor, request: BotRequest) => Promise<void>;
+
+/**
+ * Handles voice channel creation requests
+ */
+async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const requestData = JSON.parse(request.data);
+  const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
+
+  logger.debug(`Creating voice channel${isSingleTeam ? '' : 's'} for match ${matchId} in category ${categoryId}`);
+
+  // Mark as processing
+  const updateResult = await processor['db'].run(`
+    UPDATE discord_bot_requests
+    SET status = 'processing', updated_at = datetime('now')
+    WHERE id = ? AND status = 'pending'
+  `, [request.id]);
+
+  if (updateResult.changes === 0) {
+    return;
+  }
+
+  try {
+    const settings = await processor['db'].get<{ guild_id: string }>(`SELECT guild_id FROM discord_settings LIMIT 1`);
+
+    if (!settings?.guild_id) {
+      throw new Error('Guild ID not configured');
+    }
+
+    const guild = await processor['client'].guilds.fetch(settings.guild_id);
+
+    const blueChannel = await guild.channels.create({
+      name: blueChannelName,
+      type: 2,
+      parent: categoryId,
+    });
+
+    let redChannel;
+    if (!isSingleTeam && redChannelName) {
+      redChannel = await guild.channels.create({
+        name: redChannelName,
+        type: 2,
+        parent: categoryId,
+      });
+      logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
+    } else {
+      logger.debug(`✅ Voice channel created: ${blueChannel.id}`);
+    }
+
+    await processor['db'].run(`
+      UPDATE discord_bot_requests
+      SET status = 'completed', result = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [
+      JSON.stringify({ success: true, blueChannelId: blueChannel.id, redChannelId: redChannel?.id }),
+      request.id
+    ]);
+  } catch (error) {
+    logger.error(`❌ Error creating voice channels:`, error);
+    await processor['db'].run(`
+      UPDATE discord_bot_requests
+      SET status = 'failed', result = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [
+      JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Unknown error' }),
+      request.id
+    ]);
+  }
+}
+
+/**
+ * Handles voice channel deletion requests
+ */
+async function handleVoiceChannelDelete(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const requestData = JSON.parse(request.data);
+  const { channelId, matchId } = requestData;
+
+  logger.debug(`Deleting voice channel ${channelId} for match ${matchId}`);
+
+  const updateResult = await processor['db'].run(`
+    UPDATE discord_bot_requests
+    SET status = 'processing', updated_at = datetime('now')
+    WHERE id = ? AND status = 'pending'
+  `, [request.id]);
+
+  if (updateResult.changes === 0) {
+    return;
+  }
+
+  try {
+    const channel = await processor['client'].channels.fetch(channelId);
+    if (channel) {
+      await channel.delete();
+      logger.debug(`✅ Voice channel deleted: ${channelId}`);
+    }
+
+    await processor['db'].run(`
+      UPDATE discord_bot_requests
+      SET status = 'completed', result = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [JSON.stringify({ success: true }), request.id]);
+  } catch (error) {
+    logger.warning(`⚠️ Error deleting voice channel ${channelId}:`, error instanceof Error ? error.message : 'Unknown');
+    await processor['db'].run(`
+      UPDATE discord_bot_requests
+      SET status = 'completed', result = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [JSON.stringify({ success: true, message: 'Channel may already be deleted' }), request.id]);
+  }
+}
+
+/**
+ * Handles voice test requests
+ */
+async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const requestData = JSON.parse(request.data);
+  const { userId, voiceId } = requestData;
+
+  if (processor['processingVoiceTests'].has(userId)) {
+    return;
+  }
+
+  processor['processingVoiceTests'].add(userId);
+
+  const updateResult = await processor['db'].run(`
+    UPDATE discord_bot_requests
+    SET status = 'processing', updated_at = datetime('now')
+    WHERE id = ? AND status = 'pending'
+  `, [request.id]);
+
+  if (updateResult.changes === 0) {
+    processor['processingVoiceTests'].delete(userId);
+    return;
+  }
+
+  try {
+    if (!processor['voiceHandler']) {
+      await processor['db'].run(`
+        UPDATE discord_bot_requests
+        SET status = 'failed', result = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `, [JSON.stringify({ success: false, message: 'Voice handler not available' }), request.id]);
+      logger.error(`❌ Voice handler not available for request ${request.id}`);
+      return;
+    }
+
+    const result = await processor['voiceHandler'].testVoiceLineForUser(userId, voiceId);
+
+    await processor['db'].run(`
+      UPDATE discord_bot_requests
+      SET status = ?, result = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `, [result.success ? 'completed' : 'failed', JSON.stringify(result), request.id]);
+  } finally {
+    processor['processingVoiceTests'].delete(userId);
+  }
+}
+
+/**
+ * Registry of request type handlers
+ */
+const REQUEST_HANDLERS: Record<string, RequestHandler> = {
+  'voice_channel_create': handleVoiceChannelCreate,
+  'voice_channel_delete': handleVoiceChannelDelete,
+  'voice_test': handleVoiceTest
+};
+
+interface TournamentMessageData {
+  message_id: string;
+  channel_id: string;
+  message_type: string;
+}
+
+/**
+ * Fetches tournament messages from database
+ */
+async function fetchTournamentMessages(db: Database, tournamentId: string): Promise<TournamentMessageData[]> {
+  return await db.all<TournamentMessageData>(`
+    SELECT message_id, channel_id, message_type
+    FROM discord_match_messages
+    WHERE match_id = ? AND message_type = 'announcement'
+  `, [tournamentId]);
+}
+
+/**
+ * Updates embed to show signups closed
+ */
+function buildClosedSignupEmbed(existingEmbed: EmbedBuilder | null): EmbedBuilder {
+  const updatedEmbed = existingEmbed ? EmbedBuilder.from(existingEmbed) : new EmbedBuilder();
+
+  const existingFields = updatedEmbed.data.fields || [];
+  const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+
+  if (signupStatusFieldIndex === -1) {
+    updatedEmbed.addFields([{
+      name: '📋 Signup Status',
+      value: '🔒 **Team signups are now closed**',
+      inline: false
+    }]);
+    logger.debug(`📝 Added signup closure field to tournament embed`);
+  } else {
+    logger.debug(`📋 Signup status field already exists, not adding duplicate`);
+  }
+
+  return updatedEmbed;
+}
+
+/**
+ * Recreates attachment for event image
+ */
+function recreateAttachment(eventImageUrl: string | null | undefined, updatedEmbed: EmbedBuilder): AttachmentBuilder | undefined {
+  if (!eventImageUrl || !eventImageUrl.trim()) {
+    return undefined;
+  }
+
+  try {
+    const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
+
+    if (!fs.existsSync(imagePath)) {
+      logger.warning(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
+      return undefined;
+    }
+
+    const ext = path.extname(imagePath).slice(1);
+    const attachment = new AttachmentBuilder(imagePath, {
+      name: `tournament_image.${ext}`
+    });
+
+    updatedEmbed.setImage(`attachment://tournament_image.${ext}`);
+    logger.debug(`📎 Recreated attachment for tournament image: ${imagePath}`);
+
+    return attachment;
+  } catch (error) {
+    logger.error(`❌ Error recreating attachment for ${eventImageUrl}:`, error);
+    return undefined;
+  }
+}
+
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
 
@@ -94,184 +346,316 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      // Use the original approach - JOIN with matches table to get all needed data
-      const announcements = await this.db.all<{
-        announcement_id: string;
-        match_id: string;
-        name: string;
-        description: string;
-        game_id: string;
-        max_participants: number;
-        guild_id: string;
-        maps?: string;
-        livestream_link?: string;
-        event_image_url?: string;
-        start_date?: string;
-        rules?: 'competitive' | 'casual';
-        announcement_type?: string;
-        announcement_data?: string;
-      }>(`
-        SELECT daq.id as announcement_id, daq.match_id, daq.announcement_type, daq.announcement_data,
-               COALESCE(m.name, t.name) as name,
-               COALESCE(m.description, t.description) as description,
-               COALESCE(m.game_id, t.game_id) as game_id,
-               COALESCE(m.max_participants, t.max_participants) as max_participants,
-               COALESCE(m.guild_id, ds.guild_id) as guild_id,
-               m.maps, m.livestream_link, COALESCE(m.event_image_url, t.event_image_url) as event_image_url,
-               COALESCE(m.start_date, t.start_time) as start_date,
-               COALESCE(m.rules, 'casual') as rules
-        FROM discord_announcement_queue daq
-        LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start'))
-        LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
-        LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
-        WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
-        ORDER BY daq.created_at ASC
-        LIMIT 5
-      `);
-
+      const announcements = await this.fetchPendingAnnouncements();
 
       for (const announcement of announcements) {
-        try {
-          logger.debug(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
-
-          // Immediately mark as processing to prevent duplicate processing by concurrent queue cycles
-          const updateResult = await this.db.run(`
-            UPDATE discord_announcement_queue 
-            SET status = 'processing', posted_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [announcement.announcement_id]);
-          
-          if (updateResult.changes === 0) {
-            continue;
-          }
-
-          // Parse maps if they exist
-          let maps: string[] = [];
-          if (announcement.maps) {
-            try {
-              maps = JSON.parse(announcement.maps);
-            } catch {
-              maps = [];
-            }
-          }
-
-          // Build event data object
-          const eventData: Record<string, unknown> = {
-            id: announcement.match_id,
-            name: announcement.name,
-            description: announcement.description || 'No description provided',
-            game_id: announcement.game_id,
-            type: announcement.rules || 'casual',
-            maps: maps,
-            max_participants: announcement.max_participants,
-            guild_id: announcement.guild_id,
-            livestream_link: announcement.livestream_link,
-            event_image_url: announcement.event_image_url,
-            start_date: announcement.start_date
-          };
-
-          // Handle timed announcements with special timing info
-          if (announcement.announcement_type === 'timed' && announcement.announcement_data) {
-            try {
-              const timingData = JSON.parse(announcement.announcement_data);
-              eventData._timingInfo = timingData;
-            } catch {
-              logger.warning('Could not parse timing data for timed announcement:', announcement.announcement_id);
-            }
-          }
-          
-          if (!this.announcementHandler) {
-            logger.error('❌ AnnouncementHandler not available');
-            await this.db.run(`
-              UPDATE discord_announcement_queue 
-              SET status = 'failed', posted_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['AnnouncementHandler not available', announcement.announcement_id]);
-            continue;
-          }
-
-          // Post the announcement
-          let result;
-          if (announcement.announcement_type === 'timed') {
-            result = await this.announcementHandler.postTimedReminder(eventData as any);
-          } else if (announcement.announcement_type === 'match_start') {
-            result = await this.announcementHandler.postMatchStartAnnouncement(eventData as any);
-          } else {
-            result = await this.announcementHandler.postEventAnnouncement(eventData as any);
-          }
-          
-          if (result && typeof result === 'object' && result.success) {
-            // Store Discord message information for later cleanup if needed (only for full announcements)
-            if (this.db && typeof result === 'object' && 'mainMessage' in result && result.mainMessage && announcement.announcement_type !== 'timed') {
-              try {
-                const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                
-                let threadId: string | null = null;
-                let discordEventId: string | null = null;
-
-                // Create maps thread if there are maps
-                const maps = eventData.maps as string[];
-                if (maps && maps.length > 0) {
-                  const thread = await this.announcementHandler.createMapsThread(
-                    (result as Record<string, unknown>).mainMessage as any, 
-                    eventData.name as string, 
-                    eventData.game_id as string, 
-                    maps, 
-                    eventData.id as string
-                  );
-                  threadId = thread?.id || null;
-                }
-
-                // Create Discord server event
-                if (eventData.start_date && typeof eventData.start_date === 'string' && this.eventHandler) {
-                  const rounds = maps?.length || 1;
-                  discordEventId = await this.eventHandler.createDiscordEvent(
-                    eventData as any,
-                    (result as Record<string, unknown>).mainMessage as any, 
-                    rounds
-                  );
-                }
-
-                await this.db.run(`
-                  INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [messageRecordId, eventData.id as string, ((result as Record<string, unknown>).mainMessage as any).id, ((result as Record<string, unknown>).mainMessage as any).channelId, threadId, discordEventId, 'announcement']);
-                
-              } catch (error) {
-                logger.error('❌ Error storing Discord message tracking:', error);
-              }
-            }
-
-            // Mark as completed using CURRENT_TIMESTAMP like the original
-            await this.db.run(`
-              UPDATE discord_announcement_queue 
-              SET status = 'completed', posted_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [announcement.announcement_id]);
-
-          } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_announcement_queue 
-              SET status = 'failed', error_message = 'Failed to post announcement'
-              WHERE id = ?
-            `, [announcement.announcement_id]);
-
-          }
-        } catch (error) {
-          logger.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
-          
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_announcement_queue 
-            SET status = 'failed', posted_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.announcement_id]);
-        }
+        await this.processSingleAnnouncement(announcement);
       }
     } catch (error) {
       logger.error('❌ Error processing announcement queue:', error);
     }
+  }
+
+  private async fetchPendingAnnouncements() {
+    return await this.db!.all<{
+      announcement_id: string;
+      match_id: string;
+      name: string;
+      description: string;
+      game_id: string;
+      max_participants: number;
+      guild_id: string;
+      maps?: string;
+      livestream_link?: string;
+      event_image_url?: string;
+      start_date?: string;
+      rules?: 'competitive' | 'casual';
+      announcement_type?: string;
+      announcement_data?: string;
+    }>(`
+      SELECT daq.id as announcement_id, daq.match_id, daq.announcement_type, daq.announcement_data,
+             COALESCE(m.name, t.name) as name,
+             COALESCE(m.description, t.description) as description,
+             COALESCE(m.game_id, t.game_id) as game_id,
+             COALESCE(m.max_participants, t.max_participants) as max_participants,
+             COALESCE(m.guild_id, ds.guild_id) as guild_id,
+             m.maps, m.livestream_link, COALESCE(m.event_image_url, t.event_image_url) as event_image_url,
+             COALESCE(m.start_date, t.start_time) as start_date,
+             COALESCE(m.rules, 'casual') as rules
+      FROM discord_announcement_queue daq
+      LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start'))
+      LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
+      LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
+      WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
+      ORDER BY daq.created_at ASC
+      LIMIT 5
+    `);
+  }
+
+  private async processSingleAnnouncement(announcement: any) {
+    try {
+      logger.debug(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
+
+      const wasMarkedAsProcessing = await this.markAnnouncementAsProcessing(announcement.announcement_id);
+      if (!wasMarkedAsProcessing) {
+        return;
+      }
+
+      if (!this.announcementHandler) {
+        await this.markAnnouncementAsFailed(announcement.announcement_id, 'AnnouncementHandler not available');
+        return;
+      }
+
+      const eventData = this.buildEventData(announcement);
+      const result = await this.postAnnouncementByType(announcement.announcement_type, eventData);
+
+      if (result?.success) {
+        await this.handleSuccessfulAnnouncement(announcement, result, eventData);
+      } else {
+        await this.markAnnouncementAsFailed(announcement.announcement_id, 'Failed to post announcement');
+      }
+    } catch (error) {
+      logger.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
+      await this.markAnnouncementAsFailed(
+        announcement.announcement_id,
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+  }
+
+  private async markAnnouncementAsProcessing(announcementId: string): Promise<boolean> {
+    const updateResult = await this.db!.run(`
+      UPDATE discord_announcement_queue
+      SET status = 'processing', posted_at = datetime('now')
+      WHERE id = ? AND status = 'pending'
+    `, [announcementId]);
+
+    return updateResult.changes !== 0;
+  }
+
+  private buildEventData(announcement: any): Record<string, unknown> {
+    const maps = this.parseAnnouncementMaps(announcement.maps);
+
+    const eventData: Record<string, unknown> = {
+      id: announcement.match_id,
+      name: announcement.name,
+      description: announcement.description || 'No description provided',
+      game_id: announcement.game_id,
+      type: announcement.rules || 'casual',
+      maps: maps,
+      max_participants: announcement.max_participants,
+      guild_id: announcement.guild_id,
+      livestream_link: announcement.livestream_link,
+      event_image_url: announcement.event_image_url,
+      start_date: announcement.start_date
+    };
+
+    this.addTimingInfoIfNeeded(eventData, announcement);
+
+    return eventData;
+  }
+
+  private parseAnnouncementMaps(mapsJson: string | undefined): string[] {
+    if (!mapsJson) return [];
+
+    try {
+      return JSON.parse(mapsJson);
+    } catch {
+      return [];
+    }
+  }
+
+  private addTimingInfoIfNeeded(eventData: Record<string, unknown>, announcement: any): void {
+    if (announcement.announcement_type === 'timed' && announcement.announcement_data) {
+      try {
+        const timingData = JSON.parse(announcement.announcement_data);
+        eventData._timingInfo = timingData;
+      } catch {
+        logger.warning('Could not parse timing data for timed announcement:', announcement.announcement_id);
+      }
+    }
+  }
+
+  private async postAnnouncementByType(announcementType: string | undefined, eventData: Record<string, unknown>): Promise<any> {
+    if (announcementType === 'timed') {
+      return await this.announcementHandler!.postTimedReminder(eventData as any);
+    }
+
+    if (announcementType === 'match_start') {
+      return await this.announcementHandler!.postMatchStartAnnouncement(eventData as any);
+    }
+
+    return await this.announcementHandler!.postEventAnnouncement(eventData as any);
+  }
+
+  private async handleSuccessfulAnnouncement(announcement: any, result: any, eventData: Record<string, unknown>) {
+    const shouldStoreMessage = result.mainMessage && announcement.announcement_type !== 'timed';
+
+    if (shouldStoreMessage) {
+      await this.storeDiscordMessageTracking(announcement, result, eventData);
+    }
+
+    await this.markAnnouncementAsCompleted(announcement.announcement_id);
+  }
+
+  private async storeDiscordMessageTracking(announcement: any, result: any, eventData: Record<string, unknown>) {
+    try {
+      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const threadId = await this.createMapsThreadIfNeeded(result.mainMessage, eventData);
+      const discordEventId = await this.createDiscordEventIfNeeded(eventData, result.mainMessage);
+
+      await this.db!.run(`
+        INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        messageRecordId,
+        eventData.id as string,
+        result.mainMessage.id,
+        result.mainMessage.channelId,
+        threadId,
+        discordEventId,
+        'announcement'
+      ]);
+    } catch (error) {
+      logger.error('❌ Error storing Discord message tracking:', error);
+    }
+  }
+
+  private async createMapsThreadIfNeeded(mainMessage: any, eventData: Record<string, unknown>): Promise<string | null> {
+    const maps = eventData.maps as string[];
+
+    if (!maps || maps.length === 0) {
+      return null;
+    }
+
+    const thread = await this.announcementHandler!.createMapsThread(
+      mainMessage,
+      eventData.name as string,
+      eventData.game_id as string,
+      maps,
+      eventData.id as string
+    );
+
+    return thread?.id || null;
+  }
+
+  private async createDiscordEventIfNeeded(eventData: Record<string, unknown>, mainMessage: any): Promise<string | null> {
+    const hasStartDate = eventData.start_date && typeof eventData.start_date === 'string';
+
+    if (!hasStartDate || !this.eventHandler) {
+      return null;
+    }
+
+    const maps = eventData.maps as string[];
+    const rounds = maps?.length || 1;
+
+    return await this.eventHandler.createDiscordEvent(eventData as any, mainMessage, rounds);
+  }
+
+  private async markAnnouncementAsCompleted(announcementId: string) {
+    await this.db!.run(`
+      UPDATE discord_announcement_queue
+      SET status = 'completed', posted_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [announcementId]);
+  }
+
+  private async markAnnouncementAsFailed(announcementId: string, errorMessage: string) {
+    logger.error(`❌ ${errorMessage}`);
+    await this.db!.run(`
+      UPDATE discord_announcement_queue
+      SET status = 'failed', posted_at = datetime('now'), error_message = ?
+      WHERE id = ?
+    `, [errorMessage, announcementId]);
+  }
+
+  /**
+   * Delete a Discord message
+   */
+  private async deleteDiscordMessage(messageId: string, channelId: string): Promise<void> {
+    const channel = await this.client.channels.fetch(channelId);
+    if (channel?.isTextBased() && 'messages' in channel) {
+      await channel.messages.delete(messageId);
+    }
+  }
+
+  /**
+   * Delete a Discord thread
+   */
+  private async deleteDiscordThread(threadId: string): Promise<void> {
+    try {
+      const thread = await this.client.channels.fetch(threadId);
+      if (thread?.isThread()) {
+        await thread.delete();
+      }
+    } catch (error) {
+      logger.warning(`⚠️ Could not delete thread ${threadId}:`, (error as Error)?.message);
+    }
+  }
+
+  /**
+   * Process a single match message record deletion
+   */
+  private async processMatchMessageDeletion(record: {
+    message_id: string;
+    channel_id: string;
+    thread_id: string | null;
+    discord_event_id: string | null;
+    message_type: string;
+  }): Promise<void> {
+    try {
+      // Delete the Discord message
+      await this.deleteDiscordMessage(record.message_id, record.channel_id);
+
+      // Delete thread if exists
+      if (record.thread_id) {
+        await this.deleteDiscordThread(record.thread_id);
+      }
+
+      // Delete Discord event if exists
+      if (record.discord_event_id && this.eventHandler) {
+        await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
+      }
+    } catch (error) {
+      logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
+    }
+  }
+
+  /**
+   * Process deletion for a single match
+   */
+  private async processSingleDeletion(deletion: QueuedDeletion): Promise<void> {
+    if (!this.db) return;
+
+    const matchId = deletion.match_id;
+
+    // Get all Discord messages for this match
+    const messages = await this.db.all<{
+      message_id: string;
+      channel_id: string;
+      thread_id: string | null;
+      discord_event_id: string | null;
+      message_type: string;
+    }>(`
+      SELECT message_id, channel_id, thread_id, discord_event_id, message_type
+      FROM discord_match_messages
+      WHERE match_id = ?
+    `, [matchId]);
+
+    // Delete each message
+    for (const record of messages) {
+      await this.processMatchMessageDeletion(record);
+    }
+
+    // Clean up message tracking records
+    await this.db.run('DELETE FROM discord_match_messages WHERE match_id = ?', [matchId]);
+
+    // Mark deletion as completed
+    await this.db.run(`
+      UPDATE discord_deletion_queue
+      SET status = 'completed', processed_at = datetime('now')
+      WHERE id = ?
+    `, [deletion.id]);
   }
 
   async processDeletionQueue() {
@@ -288,73 +672,13 @@ export class QueueProcessor {
 
       for (const deletion of deletions) {
         try {
-          const matchId = deletion.match_id;
-
-          // Get all Discord messages for this match
-          const messages = await this.db.all<{
-            message_id: string;
-            channel_id: string;
-            thread_id: string | null;
-            discord_event_id: string | null;
-            message_type: string;
-          }>(`
-            SELECT message_id, channel_id, thread_id, discord_event_id, message_type
-            FROM discord_match_messages
-            WHERE match_id = ?
-          `, [matchId]);
-
-
-          for (const record of messages) {
-            try {
-              // Delete the Discord message
-              const channel = await this.client.channels.fetch(record.channel_id);
-              if (channel?.isTextBased() && 'messages' in channel) {
-                await channel.messages.delete(record.message_id);
-              }
-
-              // Delete thread if exists
-              if (record.thread_id) {
-                try {
-                  const thread = await this.client.channels.fetch(record.thread_id);
-                  if (thread?.isThread()) {
-                    await thread.delete();
-                  }
-                } catch (error) {
-                  logger.warning(`⚠️ Could not delete thread ${record.thread_id}:`, (error as Error)?.message);
-                }
-              }
-
-              // Delete Discord event if exists
-              if (record.discord_event_id && this.eventHandler) {
-                const success = await this.eventHandler.deleteDiscordEvent(record.discord_event_id);
-                if (success) {
-                }
-              }
-
-            } catch (error) {
-              logger.warning(`⚠️ Could not delete message ${record.message_id}:`, (error as Error)?.message);
-            }
-          }
-
-          // Clean up message tracking records
-          await this.db.run(`
-            DELETE FROM discord_match_messages WHERE match_id = ?
-          `, [matchId]);
-
-          // Mark deletion as completed
-          await this.db.run(`
-            UPDATE discord_deletion_queue 
-            SET status = 'completed', processed_at = datetime('now')
-            WHERE id = ?
-          `, [deletion.id]);
-
-
+          await this.processSingleDeletion(deletion);
         } catch (error) {
           logger.error(`❌ Error processing deletion ${deletion.id}:`, error);
-          
+
           // Mark as failed
           await this.db.run(`
-            UPDATE discord_deletion_queue 
+            UPDATE discord_deletion_queue
             SET status = 'failed', processed_at = datetime('now')
             WHERE id = ?
           `, [deletion.id]);
@@ -447,13 +771,20 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
+      if (reminders.length === 0) {
+        logger.debug('ℹ️ No reminders ready to send');
+        return;
+      }
+
+      logger.debug(`📬 Processing ${reminders.length} reminder(s)`);
+
       for (const reminder of reminders) {
         try {
 
           if (!this.announcementHandler) {
             logger.error('❌ AnnouncementHandler not available');
             await this.db.run(`
-              UPDATE discord_reminder_queue 
+              UPDATE discord_reminder_queue
               SET status = 'failed', sent_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, ['AnnouncementHandler not available', reminder.id]);
@@ -477,14 +808,16 @@ export class QueueProcessor {
             throw new Error('Match not found');
           }
 
+          logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
+
           // Calculate actual time difference for display
           const now = new Date();
           const matchStart = new Date(matchData.start_date);
           const timeDiffMs = matchStart.getTime() - now.getTime();
           const timeDiffMinutes = Math.round(timeDiffMs / (1000 * 60));
-          
+
           let timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' } = { value: timeDiffMinutes, unit: 'minutes' };
-          
+
           // Convert to hours if more than 90 minutes
           if (timeDiffMinutes > 90) {
             const hours = Math.round(timeDiffMinutes / 60);
@@ -496,11 +829,17 @@ export class QueueProcessor {
             ...matchData,
             _timingInfo: timingInfo
           });
-          
+
+          if (success) {
+            logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
+          } else {
+            logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
+          }
+
           // Mark as completed or failed based on result
           const status = success ? 'completed' : 'failed';
           await this.db.run(`
-            UPDATE discord_reminder_queue 
+            UPDATE discord_reminder_queue
             SET status = ?, sent_at = datetime('now')
             WHERE id = ?
           `, [status, reminder.id]);
@@ -508,9 +847,9 @@ export class QueueProcessor {
 
         } catch (error) {
           logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-          
+
           await this.db.run(`
-            UPDATE discord_reminder_queue 
+            UPDATE discord_reminder_queue
             SET status = 'failed', sent_at = datetime('now'), error_message = ?
             WHERE id = ?
           `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
@@ -607,26 +946,21 @@ export class QueueProcessor {
     try {
       // Clean up old completed/failed requests older than 1 hour
       await this.db.run(`
-        DELETE FROM discord_bot_requests 
-        WHERE status IN ('completed', 'failed') 
+        DELETE FROM discord_bot_requests
+        WHERE status IN ('completed', 'failed')
         AND datetime(updated_at, '+1 hour') < datetime('now')
       `);
-      
+
       // Clean up really old pending/processing requests (older than 5 minutes)
       await this.db.run(`
-        UPDATE discord_bot_requests 
+        UPDATE discord_bot_requests
         SET status = 'failed', result = ?, updated_at = datetime('now')
-        WHERE status IN ('pending', 'processing') 
+        WHERE status IN ('pending', 'processing')
         AND datetime(created_at, '+5 minutes') < datetime('now')
       `, [JSON.stringify({ success: false, message: 'Request abandoned - too old' })]);
-      
-      // Process voice test requests and other bot requests
-      const requests = await this.db.all<{
-        id: string;
-        type: string;
-        data: string;
-        created_at: string;
-      }>(`
+
+      // Process bot requests
+      const requests = await this.db.all<BotRequest>(`
         SELECT id, type, data, created_at
         FROM discord_bot_requests
         WHERE status = 'pending'
@@ -636,73 +970,18 @@ export class QueueProcessor {
 
       for (const request of requests) {
         try {
-          if (request.type === 'voice_test') {
-            // Parse the request data
-            const requestData = JSON.parse(request.data);
-            const { userId, voiceId } = requestData;
-            
-            // Check if we're already processing a voice test for this user
-            if (this.processingVoiceTests.has(userId)) {
-              continue;
-            }
-            
-            
-            // Mark user as being processed
-            this.processingVoiceTests.add(userId);
-            
-            // Immediately mark the request as processing to prevent duplicate processing
-            const updateResult = await this.db.run(`
-              UPDATE discord_bot_requests
-              SET status = 'processing', updated_at = datetime('now')
-              WHERE id = ? AND status = 'pending'
-            `, [request.id]);
-            
-            if (updateResult.changes === 0) {
-              this.processingVoiceTests.delete(userId);
-              continue;
-            }
-            
-            try {
-              // Get the voice handler from the bot instance
-              if (!this.voiceHandler) {
-                await this.db.run(`
-                  UPDATE discord_bot_requests
-                  SET status = 'failed', result = ?, updated_at = datetime('now')
-                  WHERE id = ?
-                `, [
-                  JSON.stringify({ success: false, message: 'Voice handler not available' }),
-                  request.id
-                ]);
-                logger.error(`❌ Voice handler not available for request ${request.id}`);
-                continue;
-              }
-              
-              // Process the voice test
-              const result = await this.voiceHandler.testVoiceLineForUser(userId, voiceId);
-              
-              // Update the request with the final result
-              await this.db.run(`
-                UPDATE discord_bot_requests
-                SET status = ?, result = ?, updated_at = datetime('now')
-                WHERE id = ?
-              `, [
-                result.success ? 'completed' : 'failed',
-                JSON.stringify(result),
-                request.id
-              ]);
-              
-              
-            } finally {
-              // Always remove user from processing set
-              this.processingVoiceTests.delete(userId);
-            }
+          // Use registry to handle request types
+          const handler = REQUEST_HANDLERS[request.type];
+
+          if (handler) {
+            await handler(this, request);
+          } else {
+            logger.warning(`⚠️ Unknown request type: ${request.type}`);
           }
-          
-          // Handle other request types here in the future
-          
+
         } catch (error) {
           logger.error(`❌ Error processing request ${request.id}:`, error);
-          
+
           // Mark request as failed
           await this.db.run(`
             UPDATE discord_bot_requests
@@ -828,9 +1107,55 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
+      // First, handle timeouts for announcements stuck in 'processing'
+      const timedOutAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
+        SELECT id, match_id, announcement_type, retry_count
+        FROM discord_voice_announcement_queue
+        WHERE status = 'processing'
+          AND timeout_at IS NOT NULL
+          AND datetime(timeout_at) < datetime('now')
+      `);
+
+      for (const announcement of timedOutAnnouncements) {
+        const maxRetries = 3;
+        if (announcement.retry_count < maxRetries) {
+          // Reset to pending for retry
+          await this.db.run(`
+            UPDATE discord_voice_announcement_queue
+            SET status = 'pending',
+                retry_count = retry_count + 1,
+                timeout_at = NULL,
+                updated_at = datetime('now')
+            WHERE id = ?
+          `, [announcement.id]);
+
+          logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
+        } else {
+          // Max retries reached, mark as failed
+          await this.db.run(`
+            UPDATE discord_voice_announcement_queue
+            SET status = 'failed',
+                completed_at = datetime('now'),
+                error_message = 'Exceeded maximum retry attempts after timeout'
+            WHERE id = ?
+          `, [announcement.id]);
+
+          logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
+        }
+      }
+
+      // Clean up old completed/failed announcements (older than 1 hour)
+      await this.db.run(`
+        DELETE FROM discord_voice_announcement_queue
+        WHERE status IN ('completed', 'failed')
+          AND datetime(updated_at, '+1 hour') < datetime('now')
+      `);
+
+      // Now process pending announcements
       const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
-        SELECT id, match_id, announcement_type, blue_team_voice_channel, 
-               red_team_voice_channel, first_team, created_at
+        SELECT id, match_id, announcement_type, blue_team_voice_channel,
+               red_team_voice_channel, first_team, created_at, retry_count,
+               timeout_at, first_attempted_at
         FROM discord_voice_announcement_queue
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -840,27 +1165,60 @@ export class QueueProcessor {
       for (const announcement of voiceAnnouncements) {
         try {
           // Immediately mark as processing to prevent duplicate processing
+          // Set timeout to 2 minutes from now
           const updateResult = await this.db.run(`
             UPDATE discord_voice_announcement_queue
-            SET status = 'processing', updated_at = datetime('now')
+            SET status = 'processing',
+                timeout_at = datetime('now', '+2 minutes'),
+                first_attempted_at = COALESCE(first_attempted_at, datetime('now')),
+                updated_at = datetime('now')
             WHERE id = ? AND status = 'pending'
           `, [announcement.id]);
-          
+
           if (updateResult.changes === 0) {
             continue;
+          }
+
+          // Check if this is a welcome announcement and if delay should be applied
+          if (announcement.announcement_type === 'welcome') {
+            // Get match start delay setting from discord_settings
+            const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`
+              SELECT match_start_delay_seconds FROM discord_settings LIMIT 1
+            `);
+
+            const delaySecs = settings?.match_start_delay_seconds ?? 45;
+
+            // Calculate if delay has elapsed
+            const createdAt = new Date(`${announcement.created_at  }Z`).getTime();
+            const now = Date.now();
+            const elapsedSecs = (now - createdAt) / 1000;
+
+            if (elapsedSecs < delaySecs) {
+              // Delay hasn't elapsed yet, mark back as pending and clear timeout
+              await this.db.run(`
+                UPDATE discord_voice_announcement_queue
+                SET status = 'pending',
+                    timeout_at = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ?
+              `, [announcement.id]);
+
+              logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
+              continue;
+            }
           }
 
           if (!this.voiceHandler) {
             logger.error('❌ VoiceHandler not available');
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, ['VoiceHandler not available', announcement.id]);
             continue;
           }
 
-          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}`);
+          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
 
           // Play the team announcements sequentially
           const result = await this.voiceHandler.playTeamAnnouncements(
@@ -885,7 +1243,7 @@ export class QueueProcessor {
           } else {
             // Mark as failed
             await this.db.run(`
-              UPDATE discord_voice_announcement_queue 
+              UPDATE discord_voice_announcement_queue
               SET status = 'failed', completed_at = datetime('now'), error_message = ?
               WHERE id = ?
             `, [result.message, announcement.id]);
@@ -894,7 +1252,7 @@ export class QueueProcessor {
           }
         } catch (error) {
           logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
-          
+
           // Mark as failed
           await this.db.run(`
             UPDATE discord_voice_announcement_queue
@@ -1129,141 +1487,14 @@ export class QueueProcessor {
     }
 
     try {
-      
-      // Get match data with image info for recreating attachments
-      const matchData = await this.db.get<{
-        event_image_url?: string;
-      }>(`
-        SELECT event_image_url
-        FROM matches
-        WHERE id = ?
-      `, [matchId]);
-      
-      // Get all announcement messages for this match
-      const messages = await this.db.all<{
-        message_id: string;
-        channel_id: string;
-        message_type: string;
-      }>(`
-        SELECT message_id, channel_id, message_type
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-      `, [matchId]);
-
+      const matchData = await this.fetchMatchImageData(matchId);
+      const messages = await this.fetchMatchAnnouncementMessages(matchId);
 
       if (messages.length === 0) {
-        // Let's check if there are ANY messages for this match
-        const allMessages = await this.db.all<{
-          message_id: string;
-          channel_id: string;
-          message_type: string;
-        }>(`
-          SELECT message_id, channel_id, message_type
-          FROM discord_match_messages
-          WHERE match_id = ?
-        `, [matchId]);
-        
-        if (allMessages.length > 0) {
-        }
-        
         return true; // Not an error if no messages exist
       }
 
-      let successCount = 0;
-
-      for (const messageRecord of messages) {
-        try {
-          // Fetch the Discord channel
-          const channel = await this.client.channels.fetch(messageRecord.channel_id);
-          
-          if (!channel?.isTextBased() || !('messages' in channel)) {
-            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
-            continue;
-          }
-
-          // Fetch the Discord message
-          const message = await channel.messages.fetch(messageRecord.message_id);
-          
-          if (!message) {
-            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
-            continue;
-          }
-
-          
-          if (message.embeds[0]) {
-          }
-          
-          if (message.attachments.size > 0) {
-          }
-
-          // Create updated embed - copy the existing embed exactly but add signups closed message
-          const updatedEmbed = message.embeds[0] ? 
-            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
-          
-          
-          // Keep the image in the embed - don't remove it
-          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
-          if (updatedEmbed.data.image?.url) {
-          } else {
-          }
-          
-          // Just add a simple signups closed message at the bottom, don't change anything else
-          const existingFields = updatedEmbed.data.fields || [];
-          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
-          
-          if (signupStatusFieldIndex === -1) {
-            // Add new field at the bottom
-            updatedEmbed.addFields([{
-              name: '📋 Signup Status',
-              value: '🔒 **Signups are now closed**',
-              inline: false
-            }]);
-          } else {
-          }
-
-
-          // Recreate attachment if there's an event image to prevent Discord from stripping it
-          let attachment: AttachmentBuilder | undefined;
-          if (matchData?.event_image_url && matchData.event_image_url.trim()) {
-            try {
-              // Convert URL path to file system path for local files
-              const imagePath = path.join(process.cwd(), 'public', matchData.event_image_url.replace(/^\//, ''));
-              
-              if (fs.existsSync(imagePath)) {
-                // Create attachment for the event image
-                attachment = new AttachmentBuilder(imagePath, {
-                  name: `event_image.${path.extname(imagePath).slice(1)}`
-                });
-                
-                // Update embed to use attachment://filename to reference the reattached image
-                updatedEmbed.setImage(`attachment://event_image.${path.extname(imagePath).slice(1)}`);
-                
-              } else {
-                logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
-              }
-            } catch (error) {
-              logger.error(`❌ Error recreating attachment for ${matchData.event_image_url}:`, error);
-            }
-          }
-
-          const editOptions: Record<string, unknown> = {
-            content: null, // Explicitly clear any content that might cause image display
-            embeds: [updatedEmbed],
-            components: [], // This removes all buttons
-            files: attachment ? [attachment] : [] // Include recreated attachment if available
-          };
-          
-
-          // Remove all action rows (signup buttons) but keep everything else the same
-          await message.edit(editOptions);
-          
-
-          successCount++;
-
-        } catch (error) {
-          logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
-        }
-      }
+      const successCount = await this.updateMessagesForClosure(messages, matchData?.event_image_url);
 
       if (successCount === 0) {
         logger.error(`❌ Failed to update any Discord messages for match ${matchId}`);
@@ -1271,11 +1502,120 @@ export class QueueProcessor {
       }
 
       return true;
-
     } catch (error) {
       logger.error(`❌ Error updating Discord messages for signup closure:`, error);
       return false;
     }
+  }
+
+  private async fetchMatchImageData(matchId: string): Promise<{ event_image_url?: string } | undefined> {
+    return await this.db!.get<{ event_image_url?: string }>(`
+      SELECT event_image_url
+      FROM matches
+      WHERE id = ?
+    `, [matchId]);
+  }
+
+  private async fetchMatchAnnouncementMessages(matchId: string): Promise<Array<{ message_id: string; channel_id: string; message_type: string }>> {
+    return await this.db!.all<{
+      message_id: string;
+      channel_id: string;
+      message_type: string;
+    }>(`
+      SELECT message_id, channel_id, message_type
+      FROM discord_match_messages
+      WHERE match_id = ? AND message_type = 'announcement'
+    `, [matchId]);
+  }
+
+  private async updateMessagesForClosure(
+    messages: Array<{ message_id: string; channel_id: string; message_type: string }>,
+    eventImageUrl?: string
+  ): Promise<number> {
+    let successCount = 0;
+
+    for (const messageRecord of messages) {
+      try {
+        const channel = await this.fetchTextChannel(messageRecord.channel_id);
+        if (!channel) continue;
+
+        const message = await channel.messages.fetch(messageRecord.message_id);
+        if (!message) {
+          logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+          continue;
+        }
+
+        const updatedEmbed = this.createClosedSignupEmbed(message);
+        const attachment = this.createEventAttachment(eventImageUrl, updatedEmbed);
+
+        await message.edit({
+          content: null,
+          embeds: [updatedEmbed],
+          components: [],
+          files: attachment ? [attachment] : []
+        });
+
+        successCount++;
+      } catch (error) {
+        logger.error(`❌ Failed to update Discord message ${messageRecord.message_id}:`, error);
+      }
+    }
+
+    return successCount;
+  }
+
+  private async fetchTextChannel(channelId: string) {
+    const channel = await this.client.channels.fetch(channelId);
+
+    if (!channel?.isTextBased() || !('messages' in channel)) {
+      logger.warning(`⚠️ Channel ${channelId} is not a text channel`);
+      return null;
+    }
+
+    return channel;
+  }
+
+  private createClosedSignupEmbed(message: Message): EmbedBuilder {
+    const updatedEmbed = message.embeds[0] ?
+      EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
+
+    const existingFields = updatedEmbed.data.fields || [];
+    const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
+
+    if (signupStatusFieldIndex === -1) {
+      updatedEmbed.addFields([{
+        name: '📋 Signup Status',
+        value: '🔒 **Signups are now closed**',
+        inline: false
+      }]);
+    }
+
+    return updatedEmbed;
+  }
+
+  private createEventAttachment(eventImageUrl: string | undefined, embed: EmbedBuilder): AttachmentBuilder | undefined {
+    if (!eventImageUrl || !eventImageUrl.trim()) {
+      return undefined;
+    }
+
+    try {
+      const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        const extension = path.extname(imagePath).slice(1);
+        const fileName = `event_image.${extension}`;
+
+        embed.setImage(`attachment://${fileName}`);
+
+        return new AttachmentBuilder(imagePath, { name: fileName });
+      } 
+        logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
+      
+    } catch (error) {
+      logger.error(`❌ Error recreating attachment for ${eventImageUrl}:`, error);
+    }
+
+    return undefined;
   }
 
   private async updateTournamentMessagesForSignupClosure(tournamentId: string): Promise<boolean> {
@@ -1286,166 +1626,109 @@ export class QueueProcessor {
     try {
       logger.debug(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
 
-      // Get tournament data with image info for recreating attachments
-      const tournamentData = await this.db.get<{
-        event_image_url?: string;
-      }>(`
-        SELECT event_image_url
-        FROM tournaments
-        WHERE id = ?
-      `, [tournamentId]);
-
-      // Get all announcement messages for this tournament
-      const messages = await this.db.all<{
-        message_id: string;
-        channel_id: string;
-        message_type: string;
-      }>(`
-        SELECT message_id, channel_id, message_type
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-      `, [tournamentId]);
+      const tournamentData = await this.fetchTournamentImageData(tournamentId);
+      const messages = await fetchTournamentMessages(this.db, tournamentId);
 
       logger.debug(`📝 Found ${messages.length} tournament messages to update`);
 
       if (messages.length === 0) {
-        // Let's check if there are ANY messages for this tournament
-        const allMessages = await this.db.all<{
-          message_id: string;
-          channel_id: string;
-          message_type: string;
-        }>(`
-          SELECT message_id, channel_id, message_type
-          FROM discord_match_messages
-          WHERE match_id = ?
-        `, [tournamentId]);
-
-        if (allMessages.length > 0) {
-          logger.debug(`ℹ️ Found ${allMessages.length} total messages for tournament ${tournamentId}, but none are announcements`);
-        }
-
         return true; // Not an error if no messages exist
       }
 
-      let successCount = 0;
+      const successCount = await this.updateTournamentMessagesBatch(messages, tournamentData);
 
-      for (const messageRecord of messages) {
-        try {
-          // Fetch the Discord channel
-          const channel = await this.client.channels.fetch(messageRecord.channel_id);
-
-          if (!channel?.isTextBased() || !('messages' in channel)) {
-            logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
-            continue;
-          }
-
-          // Fetch the Discord message
-          const message = await channel.messages.fetch(messageRecord.message_id);
-
-          if (!message) {
-            logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
-            continue;
-          }
-
-          logger.debug(`🔄 Updating tournament message ${messageRecord.message_id} in channel ${messageRecord.channel_id}`);
-
-          if (message.embeds[0]) {
-            logger.debug(`📋 Existing embed title: ${message.embeds[0].title}`);
-          }
-
-          if (message.attachments.size > 0) {
-            logger.debug(`📎 Message has ${message.attachments.size} attachments`);
-          }
-
-          // Create updated embed - copy the existing embed exactly but add signups closed message
-          const updatedEmbed = message.embeds[0] ?
-            EmbedBuilder.from(message.embeds[0]) : new EmbedBuilder();
-
-          logger.debug(`🔄 Processing embed update for tournament message`);
-
-          // Keep the image in the embed - don't remove it
-          // The key is to NOT provide any files in the edit options, which prevents the duplicate image above
-          if (updatedEmbed.data.image?.url) {
-            logger.debug(`🖼️ Keeping existing image in embed: ${updatedEmbed.data.image.url}`);
-          } else {
-            logger.debug(`📷 No existing image in embed`);
-          }
-
-          // Just add a simple signups closed message at the bottom, don't change anything else
-          const existingFields = updatedEmbed.data.fields || [];
-          const signupStatusFieldIndex = existingFields.findIndex(field => field.name === '📋 Signup Status');
-
-          if (signupStatusFieldIndex === -1) {
-            // Add new field at the bottom
-            updatedEmbed.addFields([{
-              name: '📋 Signup Status',
-              value: '🔒 **Team signups are now closed**',
-              inline: false
-            }]);
-          } else {
-            logger.debug(`📋 Signup status field already exists, not adding duplicate`);
-          }
-
-          logger.debug(`📝 Added signup closure field to tournament embed`);
-
-          // Recreate attachment if there's an event image to prevent Discord from stripping it
-          let attachment: AttachmentBuilder | undefined;
-          if (tournamentData?.event_image_url && tournamentData.event_image_url.trim()) {
-            try {
-              // Convert URL path to file system path for local files
-              const imagePath = path.join(process.cwd(), 'public', tournamentData.event_image_url.replace(/^\//, ''));
-
-              if (fs.existsSync(imagePath)) {
-                // Create attachment for the event image
-                attachment = new AttachmentBuilder(imagePath, {
-                  name: `tournament_image.${path.extname(imagePath).slice(1)}`
-                });
-
-                // Update embed to use attachment://filename to reference the reattached image
-                updatedEmbed.setImage(`attachment://tournament_image.${path.extname(imagePath).slice(1)}`);
-
-                logger.debug(`📎 Recreated attachment for tournament image: ${imagePath}`);
-              } else {
-                logger.warning(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
-              }
-            } catch (error) {
-              logger.error(`❌ Error recreating attachment for ${tournamentData.event_image_url}:`, error);
-            }
-          }
-
-          const editOptions: Record<string, unknown> = {
-            content: null, // Explicitly clear any content that might cause image display
-            embeds: [updatedEmbed],
-            components: [], // This removes all buttons
-            files: attachment ? [attachment] : [] // Include recreated attachment if available
-          };
-
-          logger.debug(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
-
-          // Remove all action rows (signup buttons) but keep everything else the same
-          await message.edit(editOptions);
-
-          logger.debug(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
-
-          successCount++;
-
-        } catch (error) {
-          logger.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
-        }
-      }
-
-      if (successCount === 0) {
-        logger.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
-        return false;
-      }
-
-      logger.debug(`✅ Successfully updated ${successCount}/${messages.length} tournament messages for ${tournamentId}`);
-      return true;
-
+      return this.evaluateUpdateSuccess(successCount, messages.length, tournamentId);
     } catch (error) {
       logger.error(`❌ Error updating Discord tournament messages for signup closure:`, error);
       return false;
     }
+  }
+
+  private async fetchTournamentImageData(tournamentId: string) {
+    return await this.db!.get<{ event_image_url?: string }>(`
+      SELECT event_image_url FROM tournaments WHERE id = ?
+    `, [tournamentId]);
+  }
+
+  private async updateTournamentMessagesBatch(messages: any[], tournamentData: any): Promise<number> {
+    let successCount = 0;
+
+    for (const messageRecord of messages) {
+      const success = await this.updateSingleTournamentMessage(messageRecord, tournamentData);
+      if (success) {
+        successCount++;
+      }
+    }
+
+    return successCount;
+  }
+
+  private async updateSingleTournamentMessage(messageRecord: any, tournamentData: any): Promise<boolean> {
+    try {
+      const message = await this.fetchTournamentDiscordMessage(messageRecord);
+      if (!message) {
+        return false;
+      }
+
+      logger.debug(`🔄 Updating tournament message ${messageRecord.message_id}`);
+
+      const updatedEmbed = this.buildUpdatedTournamentEmbed(message);
+      const attachment = recreateAttachment(tournamentData?.event_image_url, updatedEmbed);
+
+      await this.editTournamentMessage(message, updatedEmbed, attachment);
+
+      logger.debug(`✅ Successfully updated tournament message ${messageRecord.message_id}`);
+      return true;
+    } catch (error) {
+      logger.error(`❌ Failed to update Discord tournament message ${messageRecord.message_id}:`, error);
+      return false;
+    }
+  }
+
+  private async fetchTournamentDiscordMessage(messageRecord: any) {
+    const channel = await this.client.channels.fetch(messageRecord.channel_id);
+
+    if (!channel?.isTextBased() || !('messages' in channel)) {
+      logger.warning(`⚠️ Channel ${messageRecord.channel_id} is not a text channel`);
+      return null;
+    }
+
+    const message = await channel.messages.fetch(messageRecord.message_id);
+
+    if (!message) {
+      logger.warning(`⚠️ Message ${messageRecord.message_id} not found in channel ${messageRecord.channel_id}`);
+      return null;
+    }
+
+    return message;
+  }
+
+  private buildUpdatedTournamentEmbed(message: any): EmbedBuilder {
+    const existingEmbed = message.embeds[0] ? EmbedBuilder.from(message.embeds[0]) : null;
+    return buildClosedSignupEmbed(existingEmbed);
+  }
+
+  private async editTournamentMessage(message: any, updatedEmbed: EmbedBuilder, attachment: any) {
+    const editOptions: Record<string, unknown> = {
+      content: null,
+      embeds: [updatedEmbed],
+      components: [],
+      files: attachment ? [attachment] : []
+    };
+
+    logger.debug(`🔄 Editing tournament message with ${attachment ? 'attachment' : 'no attachment'}`);
+
+    await message.edit(editOptions);
+  }
+
+  private evaluateUpdateSuccess(successCount: number, totalCount: number, tournamentId: string): boolean {
+    if (successCount === 0) {
+      logger.error(`❌ Failed to update any Discord messages for tournament ${tournamentId}`);
+      return false;
+    }
+
+    logger.debug(`✅ Successfully updated ${successCount}/${totalCount} tournament messages for ${tournamentId}`);
+    return true;
   }
 
   updateSettings(settings: DiscordSettings | null) {

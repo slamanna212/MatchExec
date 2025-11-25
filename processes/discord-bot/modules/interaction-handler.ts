@@ -1,8 +1,11 @@
-import {
+import type {
   Client,
   ChatInputCommandInteraction,
   ButtonInteraction,
   ModalSubmitInteraction,
+  StringSelectMenuInteraction
+} from 'discord.js';
+import {
   SlashCommandBuilder,
   REST,
   Routes,
@@ -11,15 +14,161 @@ import {
   ActionRowBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder,
-  StringSelectMenuInteraction
+  StringSelectMenuBuilder
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
+
+// Import helper functions
+import { parseModalCustomId } from '../utils/id-parsers';
+import {
+  collectFormData,
+  insertParticipant,
+  getParticipantCount,
+  buildConfirmationMessage
+} from './interaction-helpers';
+
+interface EventData {
+  max_signups: number;
+  game_id: string;
+  allow_player_team_selection?: number;
+}
+
+/**
+ * Checks if a user is already signed up for an event
+ */
+async function checkExistingParticipant(
+  db: Database,
+  eventId: string,
+  userId: string,
+  isTournament: boolean
+): Promise<boolean> {
+  const query = isTournament
+    ? 'SELECT id FROM tournament_participants WHERE tournament_id = ? AND user_id = ?'
+    : 'SELECT id FROM match_participants WHERE match_id = ? AND user_id = ?';
+
+  const existing = await db.get(query, [eventId, userId]);
+  return !!existing;
+}
+
+/**
+ * Checks if an event is at capacity
+ */
+async function checkEventCapacity(
+  db: Database,
+  eventId: string,
+  isTournament: boolean
+): Promise<{ isFull: boolean; eventData: EventData | null }> {
+  // Get participant count
+  const countQuery = isTournament
+    ? 'SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?'
+    : 'SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?';
+
+  const participantCount = await db.get<{ count: number }>(countQuery, [eventId]);
+
+  // Get event data
+  const eventQuery = isTournament
+    ? `SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups, t.allow_player_team_selection
+       FROM tournaments t WHERE t.id = ?`
+    : `SELECT m.game_id, g.max_signups
+       FROM matches m JOIN games g ON m.game_id = g.id WHERE m.id = ?`;
+
+  const eventData = await db.get<EventData>(eventQuery, [eventId]);
+
+  const isFull = (participantCount?.count ?? 0) >= (eventData?.max_signups || 16);
+
+  return { isFull, eventData: eventData ?? null };
+}
+
+/**
+ * Shows team selection menu for tournaments
+ */
+async function showTeamSelectionMenu(
+  interaction: ButtonInteraction,
+  db: Database,
+  eventId: string
+): Promise<boolean> {
+  const teams = await db.all<{ id: string; team_name: string }>(`
+    SELECT id, team_name FROM tournament_teams
+    WHERE tournament_id = ?
+    ORDER BY team_name ASC
+  `, [eventId]);
+
+  if (!teams || teams.length === 0) {
+    return false;
+  }
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId(`team_select_${eventId}`)
+    .setPlaceholder('Select a team')
+    .addOptions(teams.map(team => ({
+      label: team.team_name,
+      value: team.id,
+      description: `Join ${team.team_name}`
+    })));
+
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  await interaction.reply({
+    content: '👥 Please select a team to join:',
+    components: [row],
+    flags: MessageFlags.Ephemeral
+  });
+
+  return true;
+}
+
+/**
+ * Shows signup modal with game-specific form
+ */
+async function showSignupModal(
+  interaction: ButtonInteraction,
+  eventId: string,
+  gameId: string
+): Promise<boolean> {
+  const signupForm = await SignupFormLoader.loadSignupForm(gameId);
+
+  if (!signupForm) {
+    await interaction.reply({
+      content: '❌ Could not load signup form. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return false;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`signup_form_${eventId}`)
+    .setTitle('Event Sign Up');
+
+  const rows: ActionRowBuilder<TextInputBuilder>[] = [];
+
+  for (let i = 0; i < Math.min(signupForm.fields.length, 5); i++) {
+    const field = signupForm.fields[i];
+
+    const textInput = new TextInputBuilder()
+      .setCustomId(field.id)
+      .setLabel(field.label)
+      .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+      .setRequired(field.required)
+      .setMaxLength(field.type === 'largetext' ? 1000 : 100);
+
+    if (field.placeholder) {
+      textInput.setPlaceholder(field.placeholder);
+    }
+
+    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
+    rows.push(row);
+  }
+
+  modal.addComponents(...rows);
+  await interaction.showModal(modal);
+
+  return true;
+}
 
 export class InteractionHandler {
   constructor(
@@ -113,139 +262,67 @@ export class InteractionHandler {
     const isTournament = eventId.startsWith('tournament_');
 
     try {
-      // Check if user is already signed up
-      if (this.db) {
+      if (!this.db) return;
 
-        let existingParticipant = null;
-        if (isTournament) {
-          existingParticipant = await this.db.get(`
-            SELECT id FROM tournament_participants
-            WHERE tournament_id = ? AND user_id = ?
-          `, [eventId, interaction.user.id]);
-        } else {
-          existingParticipant = await this.db.get(`
-            SELECT id FROM match_participants
-            WHERE match_id = ? AND user_id = ?
-          `, [eventId, interaction.user.id]);
-        }
+      // Check if this is a tournament match (participants come from bracket, no signups allowed)
+      if (!isTournament) {
+        const matchData = await this.db.get<{ tournament_id: string | null }>(`
+          SELECT tournament_id FROM matches WHERE id = ?
+        `, [eventId]);
 
-        if (existingParticipant) {
+        if (matchData?.tournament_id) {
           await interaction.reply({
-            content: '✅ You are already signed up for this event!',
+            content: '❌ This is a tournament match - participants are assigned from the tournament bracket. You cannot sign up directly.',
             flags: MessageFlags.Ephemeral
           });
           return;
         }
-
-        // Check if event is full
-        let participantCount = null;
-        if (isTournament) {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
-          `, [eventId]);
-        } else {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-          `, [eventId]);
-        }
-
-        let eventData: {max_signups: number, game_id: string, allow_player_team_selection?: number} | null = null;
-
-        if (isTournament) {
-          eventData = await this.db.get<{max_signups: number, game_id: string, allow_player_team_selection?: number}>(`
-            SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups, t.allow_player_team_selection
-            FROM tournaments t
-            WHERE t.id = ?
-          `, [eventId]) || null;
-        } else {
-          eventData = await this.db.get<{max_signups: number, game_id: string}>(`
-            SELECT m.game_id, g.max_signups
-            FROM matches m
-            JOIN games g ON m.game_id = g.id
-            WHERE m.id = ?
-          `, [eventId]) || null;
-        }
-
-        if ((participantCount?.count ?? 0) >= (eventData?.max_signups || 16)) {
-          await interaction.reply({
-            content: '❌ This event is full!',
-            flags: MessageFlags.Ephemeral
-          });
-          return;
-        }
-
-        // Check if tournament has team selection enabled
-        if (isTournament && eventData?.allow_player_team_selection === 1) {
-          // Fetch available teams
-          const teams = await this.db.all<{id: string, team_name: string}>(`
-            SELECT id, team_name FROM tournament_teams
-            WHERE tournament_id = ?
-            ORDER BY team_name ASC
-          `, [eventId]);
-
-          if (teams && teams.length > 0) {
-            // Show team selection dropdown
-            const selectMenu = new StringSelectMenuBuilder()
-              .setCustomId(`team_select_${eventId}`)
-              .setPlaceholder('Select a team')
-              .addOptions(teams.map(team => ({
-                label: team.team_name,
-                value: team.id,
-                description: `Join ${team.team_name}`
-              })));
-
-            const row = new ActionRowBuilder<StringSelectMenuBuilder>()
-              .addComponents(selectMenu);
-
-            await interaction.reply({
-              content: '👥 Please select a team to join:',
-              components: [row],
-              flags: MessageFlags.Ephemeral
-            });
-            return;
-          }
-        }
-
-        // Load the game-specific signup form
-        const signupForm = await SignupFormLoader.loadSignupForm(eventData?.game_id || '');
-        if (!signupForm) {
-          await interaction.reply({
-            content: '❌ Could not load signup form. Please try again.',
-            flags: MessageFlags.Ephemeral
-          });
-          return;
-        }
-
-        // Create dynamic modal based on signup form
-        const modal = new ModalBuilder()
-          .setCustomId(`signup_form_${eventId}`)
-          .setTitle('Event Sign Up');
-
-        const rows: ActionRowBuilder<TextInputBuilder>[] = [];
-
-        for (let i = 0; i < Math.min(signupForm.fields.length, 5); i++) { // Discord modal limit is 5 components
-          const field = signupForm.fields[i];
-          
-          const textInput = new TextInputBuilder()
-            .setCustomId(field.id)
-            .setLabel(field.label)
-            .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-            .setRequired(field.required)
-            .setMaxLength(field.type === 'largetext' ? 1000 : 100);
-
-          if (field.placeholder) {
-            textInput.setPlaceholder(field.placeholder);
-          }
-
-          const row = new ActionRowBuilder<TextInputBuilder>()
-            .addComponents(textInput);
-          
-          rows.push(row);
-        }
-
-        modal.addComponents(...rows);
-        await interaction.showModal(modal);
       }
+
+      // NOTE: We cannot defer this interaction because it may show a modal,
+      // and showModal() must be the immediate response to an interaction.
+      // Instead, we rely on signup form pre-loading at bot startup to make
+      // loadSignupForm() instant (cache hit), avoiding file I/O during interaction.
+      // This keeps the total processing time well under Discord's 3-second limit.
+
+      // Check if user is already signed up
+      const isAlreadySignedUp = await checkExistingParticipant(this.db, eventId, interaction.user.id, isTournament);
+
+      if (isAlreadySignedUp) {
+        await interaction.reply({
+          content: '✅ You are already signed up for this event!',
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      // Check if event is at capacity
+      const { isFull, eventData } = await checkEventCapacity(this.db, eventId, isTournament);
+
+      if (isFull) {
+        await interaction.reply({
+          content: '❌ This event is full!',
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      if (!eventData) {
+        await interaction.reply({
+          content: '❌ Event not found!',
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      // Check if tournament has team selection enabled
+      if (isTournament && eventData.allow_player_team_selection === 1) {
+        const teamSelectionShown = await showTeamSelectionMenu(interaction, this.db, eventId);
+        if (teamSelectionShown) return;
+      }
+
+      // Show signup modal
+      await showSignupModal(interaction, eventId, eventData.game_id);
 
     } catch (error) {
       logger.error('❌ Error handling signup button:', error);
@@ -259,158 +336,75 @@ export class InteractionHandler {
   async handleModalSubmit(interaction: ModalSubmitInteraction) {
     if (!interaction.customId.startsWith('signup_form_')) return;
 
-    // Check if this is a team-based signup (format: signup_form_team_{tournamentId}_{teamId})
-    let selectedTeamId: string | null = null;
-    let eventId: string;
+    logger.debug('Processing signup modal:', interaction.customId);
 
-    if (interaction.customId.startsWith('signup_form_team_')) {
-      // Remove the prefix to get: tournament_{timestamp}_{random}_team_{timestamp}_{random}
-      const withoutPrefix = interaction.customId.replace('signup_form_team_', '');
-
-      // Find the position of the second occurrence of "team_" which starts the team ID
-      const teamIdMarker = withoutPrefix.indexOf('team_', 'tournament_'.length);
-
-      if (teamIdMarker > 0) {
-        eventId = withoutPrefix.substring(0, teamIdMarker - 1); // -1 to remove trailing underscore
-        selectedTeamId = withoutPrefix.substring(teamIdMarker);
-      } else {
-        // Fallback if parsing fails
-        eventId = interaction.customId.replace('signup_form_', '');
-      }
-    } else {
-      eventId = interaction.customId.replace('signup_form_', '');
+    // Parse modal custom ID
+    const parsedId = parseModalCustomId(interaction.customId);
+    if (!parsedId) {
+      logger.error('Failed to parse modal custom ID:', interaction.customId);
+      return;
     }
 
-    const isTournament = eventId.startsWith('tournament_');
+    logger.debug('Parsed signup modal ID:', { eventId: parsedId.eventId, isTournament: parsedId.isTournament, teamId: parsedId.selectedTeamId });
 
     try {
-      if (this.db) {
-        // Get game ID to load the signup form structure
-
-        let eventData: {game_id: string} | null = null;
-
-        if (isTournament) {
-          eventData = await this.db.get<{game_id: string}>(`
-            SELECT game_id FROM tournaments WHERE id = ?
-          `, [eventId]) || null;
-        } else {
-          eventData = await this.db.get<{game_id: string}>(`
-            SELECT game_id FROM matches WHERE id = ?
-          `, [eventId]) || null;
-        }
-
-        if (!eventData) {
-          throw new Error('Event not found');
-        }
-
-        // Load signup form to get field structure
-        const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
-        if (!signupForm) {
-          throw new Error('Could not load signup form');
-        }
-
-        // Collect all form data
-        const signupData: {[key: string]: string} = {};
-        let displayUsername = interaction.user.username; // fallback
-
-        for (const field of signupForm.fields) {
-          try {
-            const value = interaction.fields.getTextInputValue(field.id);
-            signupData[field.id] = value;
-
-            // Use the first field as the display username (usually username/battlenet_name)
-            if (field.id === 'username' || field.id === 'battlenet_name') {
-              displayUsername = value;
-            }
-          } catch {
-            // Field might not exist in modal if we hit the 5-field limit
-            if (field.required) {
-              throw new Error(`Required field ${field.id} is missing`);
-            }
-          }
-        }
-
-        // Generate participant ID
-        const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-        // Add participant to database with signup data and Discord user ID
-        if (isTournament) {
-          // Insert participant with team assignment if team was selected
-          await this.db.run(`
-            INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data, team_assignment)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData), selectedTeamId]);
-
-          // If team was selected, also add to tournament_team_members
-          if (selectedTeamId) {
-            const memberId = `member_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            await this.db.run(`
-              INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
-              VALUES (?, ?, ?, ?, ?)
-            `, [memberId, selectedTeamId, interaction.user.id, interaction.user.id, displayUsername]);
-          }
-        } else {
-          await this.db.run(`
-            INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [participantId, eventId, interaction.user.id, interaction.user.id, displayUsername, JSON.stringify(signupData)]);
-        }
-
-        // Get current participant count
-        let participantCount = null;
-        if (isTournament) {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
-          `, [eventId]);
-        } else {
-          participantCount = await this.db.get<{count: number}>(`
-            SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-          `, [eventId]);
-        }
-
-        // Create confirmation message with submitted data
-        let confirmationMessage = `✅ Successfully signed up for the event!\n`;
-
-        // Show team name if selected
-        if (selectedTeamId) {
-          const team = await this.db.get<{team_name: string}>(`
-            SELECT team_name FROM tournament_teams WHERE id = ?
-          `, [selectedTeamId]);
-          if (team) {
-            confirmationMessage += `**Team:** ${team.team_name}\n`;
-          }
-        }
-
-        // Show key information from the signup form
-        for (const field of signupForm.fields.slice(0, 3)) { // Show first 3 fields
-          if (signupData[field.id]) {
-            const label = field.label.replace(/\s*\(Optional\)\s*$/i, ''); // Remove "(Optional)" from display
-            confirmationMessage += `**${label}:** ${signupData[field.id]}\n`;
-          }
-        }
-
-        confirmationMessage += `**Participants:** ${participantCount?.count || 1}`;
-
-        await interaction.reply({
-          content: confirmationMessage,
-          flags: MessageFlags.Ephemeral
-        });
-
-        // Send signup notification to configured channels
-        await this.sendSignupNotification(eventId, {
-          username: displayUsername,
-          discordUserId: interaction.user.id,
-          signupData: signupData,
-          participantCount: participantCount?.count || 1
-        });
-
-      } else {
+      if (!this.db) {
         throw new Error('Database not available');
       }
 
+      // Get game ID to load the signup form structure
+      const tableName = parsedId.isTournament ? 'tournaments' : 'matches';
+      logger.debug(`Querying ${tableName} for event ID:`, parsedId.eventId);
+
+      const eventData = await this.db.get<{ game_id: string }>(
+        `SELECT game_id FROM ${tableName} WHERE id = ?`,
+        [parsedId.eventId]
+      );
+
+      if (!eventData) {
+        throw new Error('Event not found');
+      }
+
+      // Load signup form to get field structure
+      const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
+      if (!signupForm) {
+        throw new Error('Could not load signup form');
+      }
+
+      // Collect form data
+      const { signupData, displayUsername } = collectFormData(interaction, signupForm);
+
+      // Insert participant into database
+      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData);
+
+      // Get participant count
+      const participantCount = await getParticipantCount(this.db, parsedId.eventId, parsedId.isTournament);
+
+      // Build confirmation message
+      const confirmationMessage = await buildConfirmationMessage(
+        this.db,
+        parsedId,
+        signupForm,
+        signupData,
+        participantCount
+      );
+
+      await interaction.reply({
+        content: confirmationMessage,
+        flags: MessageFlags.Ephemeral
+      });
+
+      // Send signup notification to configured channels
+      await this.sendSignupNotification(parsedId.eventId, {
+        username: displayUsername,
+        discordUserId: interaction.user.id,
+        signupData: signupData,
+        participantCount: participantCount
+      });
+
     } catch (error) {
       logger.error('❌ Error processing signup:', error);
-      
+
       if (error instanceof Error && error.message?.includes('UNIQUE constraint failed')) {
         await interaction.reply({
           content: '❌ You are already signed up for this event!',

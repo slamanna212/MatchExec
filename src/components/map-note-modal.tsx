@@ -22,7 +22,14 @@ export function MapNoteModal({
 
   // Reset note when modal opens with new data
   useEffect(() => {
-    setNote(initialNote);
+    if (opened) {
+      // Use requestAnimationFrame to avoid synchronous setState in effect
+      const frame = requestAnimationFrame(() => {
+        setNote(initialNote);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    return undefined;
   }, [initialNote, opened]);
 
   const handleSave = () => {

@@ -1,8 +1,9 @@
 'use client'
 
+import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
-import { 
+import {
   Card, 
   Text, 
   Button, 
@@ -15,8 +16,8 @@ import {
   RingProgress,
   TextInput
 } from '@mantine/core';
-import { Match, MATCH_FLOW_STEPS, SignupConfig, ReminderData } from '@/shared/types';
-import Link from 'next/link';
+import type { Match, SignupConfig, ReminderData } from '@/shared/types';
+import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -31,7 +32,7 @@ const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => 
   
   // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
   // We need to treat this as UTC, so append 'Z'
-  return new Date(timestamp + 'Z');
+  return new Date(`${timestamp  }Z`);
 };
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
@@ -203,7 +204,7 @@ export function MatchHistoryDashboard() {
         });
       }
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      logger.error('Error fetching matches:', error);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -221,7 +222,7 @@ export function MatchHistoryDashboard() {
           setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
         }
       } catch (error) {
-        console.error('Error fetching UI settings:', error);
+        logger.error('Error fetching UI settings:', error);
       }
     };
 
@@ -259,9 +260,12 @@ export function MatchHistoryDashboard() {
         const maps = await response.json();
         const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-        
+
         // Check if this game supports all modes (flexible mode combinations)
-        const supportsAllModes = ['r6siege', 'valorant', 'leagueoflegends'].includes(gameId);
+        // Fetch game data to check the supports_all_modes flag
+        const gameResponse = await fetch(`/api/games/${gameId}`);
+        const gameData = await gameResponse.json();
+        const supportsAllModes = gameData.supports_all_modes || gameData.supportsAllModes || false;
         
         if (supportsAllModes) {
           // For flexible games, get all possible modes and create all combinations
@@ -319,7 +323,7 @@ export function MatchHistoryDashboard() {
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
-      console.error('Error fetching map names:', error);
+      logger.error('Error fetching map names:', error);
     }
   };
 
@@ -348,14 +352,14 @@ export function MatchHistoryDashboard() {
         setParticipants(data.participants || []);
         setSignupConfig(data.signupConfig || null);
       } else {
-        console.error('Failed to fetch participants');
+        logger.error('Failed to fetch participants');
         if (!silent) {
           setParticipants([]);
           setSignupConfig(null);
         }
       }
     } catch (error) {
-      console.error('Error fetching participants:', error);
+      logger.error('Error fetching participants:', error);
       if (!silent) {
         setParticipants([]);
         setSignupConfig(null);
@@ -377,13 +381,13 @@ export function MatchHistoryDashboard() {
         const data = await response.json();
         setReminders(data.reminders || []);
       } else {
-        console.error('Failed to fetch reminders');
+        logger.error('Failed to fetch reminders');
         if (!silent) {
           setReminders([]);
         }
       }
     } catch (error) {
-      console.error('Error fetching reminders:', error);
+      logger.error('Error fetching reminders:', error);
       if (!silent) {
         setReminders([]);
       }
@@ -404,7 +408,7 @@ export function MatchHistoryDashboard() {
         setMapNotes({});
       }
     } catch (error) {
-      console.error('Error fetching map notes:', error);
+      logger.error('Error fetching map notes:', error);
       setMapNotes({});
     }
   }, []);
@@ -501,8 +505,8 @@ export function MatchHistoryDashboard() {
             <Text c="dimmed" mb="md">
               Completed matches will appear here
             </Text>
-            <Button 
-              component={Link}
+            <Button
+              component="a"
               href="/matches"
             >
               View Active Matches
@@ -516,8 +520,8 @@ export function MatchHistoryDashboard() {
             <Text c="dimmed" mb="md">
               No completed matches match your search for &quot;{searchQuery}&quot;
             </Text>
-            <Button 
-              component={Link}
+            <Button
+              component="a"
               href="/matches"
             >
               View Active Matches

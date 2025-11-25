@@ -1,9 +1,11 @@
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import type { ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
-import { Database } from '../../lib/database';
-import { DiscordSettings } from '../../shared/types';
+import type { Database } from '../../lib/database';
+import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 import { logger } from '../../src/lib/logger/server';
+import { SignupFormLoader } from '../../lib/signup-forms';
 
 // Import our modules
 import { VoiceHandler } from './modules/voice-handler';
@@ -13,6 +15,7 @@ import { SettingsManager } from './modules/settings-manager';
 import { QueueProcessor } from './modules/queue-processor';
 import { ReminderHandler } from './modules/reminder-handler';
 import { InteractionHandler } from './modules/interaction-handler';
+import { HealthMonitor } from './modules/health-monitor';
 
 class MatchExecBot {
   private client: Client;
@@ -28,6 +31,7 @@ class MatchExecBot {
   private reminderHandler: ReminderHandler | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private interactionHandler: InteractionHandler | null = null;
+  private healthMonitor: HealthMonitor | null = null;
 
   constructor() {
     this.client = new Client({
@@ -110,17 +114,44 @@ class MatchExecBot {
 
   private async checkWelcomeFlowCompleted(): Promise<boolean> {
     if (!this.db) return false;
-    
+
     try {
       const result = await this.db.get<{ setting_value: string }>(
         'SELECT setting_value FROM app_settings WHERE setting_key = ?',
         ['welcome_flow_completed']
       );
-      
+
       return result?.setting_value === 'true';
     } catch (error) {
       logger.error('❌ Error checking welcome flow status:', error);
       return false;
+    }
+  }
+
+  private async preloadSignupForms() {
+    if (!this.db) return;
+
+    try {
+      // Get all games from the database
+      const games = await this.db.all<{ id: string, name: string }>('SELECT id, name FROM games');
+
+      logger.info(`📋 Pre-loading signup forms for ${games.length} games...`);
+
+      // Pre-load signup forms for all games
+      const loadPromises = games.map(async (game) => {
+        try {
+          await SignupFormLoader.loadSignupForm(game.id);
+          logger.debug(`✅ Pre-loaded signup form for: ${game.name}`);
+        } catch (error) {
+          logger.warning(`⚠️ Failed to pre-load signup form for ${game.name}:`, error);
+        }
+      });
+
+      await Promise.all(loadPromises);
+      logger.info('✅ All signup forms pre-loaded successfully');
+    } catch (error) {
+      logger.error('❌ Error pre-loading signup forms:', error);
+      // Don't crash if pre-loading fails, forms will be loaded on-demand
     }
   }
 
@@ -145,6 +176,9 @@ class MatchExecBot {
         return false;
       }
 
+      // Pre-load signup forms for all games
+      await this.preloadSignupForms();
+
       // Initialize modules
       this.voiceHandler = new VoiceHandler(this.client, this.db, this.settings);
       this.eventHandler = new EventHandler(this.client, this.db, this.settings);
@@ -165,6 +199,7 @@ class MatchExecBot {
         this.eventHandler,
         this.voiceHandler
       );
+      this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
 
 
       // Start periodic tasks
@@ -173,7 +208,9 @@ class MatchExecBot {
       return true;
 
     } catch (error) {
-      logger.error('❌ Failed to initialize bot:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      logger.error('❌ Failed to initialize bot:', { message: errorMessage, stack: errorStack });
       return false;
     }
   }
@@ -196,10 +233,15 @@ class MatchExecBot {
       }
     }, 30000);
 
-    // Queue processing every 5 seconds (simplified)
+    // Queue processing every 3 seconds (faster pickup for tournament matches)
     setInterval(async () => {
       await this.processQueues();
-    }, 5000);
+    }, 3000);
+
+    // Start health monitoring
+    if (this.healthMonitor) {
+      this.healthMonitor.start();
+    }
   }
 
   // Process all queues using the QueueProcessor
@@ -284,32 +326,42 @@ class MatchExecBot {
   }
 
   private async shutdown() {
-    
+
+    if (this.healthMonitor) {
+      this.healthMonitor.stop();
+    }
+
     if (this.voiceHandler) {
       await this.voiceHandler.disconnectFromAllVoiceChannels();
     }
-    
+
     if (this.client) {
       this.client.destroy();
     }
-    
+
     process.exit(0);
   }
 
   async start() {
     // Initialize database and settings first
-    const initialized = await this.initialize();
-    
-    if (!initialized) {
-      // If initialization failed due to incomplete welcome flow, 
-      // set up a periodic check to try again
-      this.startWelcomeFlowWatcher();
-      return;
+    let initialized = await this.initialize();
+
+    // Wait for welcome flow to complete instead of exiting
+    while (!initialized) {
+      logger.info('⏸️  Waiting for welcome flow to be completed...');
+      logger.info('💡 Complete the setup wizard at the web interface to activate the bot');
+
+      // Wait 30 seconds before checking again
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // Try to initialize again
+      initialized = await this.initialize();
     }
-    
+
     if (!this.settings?.bot_token) {
       logger.error('❌ No bot token available, cannot start bot');
-      return;
+      logger.info('💡 Configure Discord settings in the web interface');
+      process.exit(0);
     }
 
     try {
@@ -317,31 +369,8 @@ class MatchExecBot {
       logger.info('✅ Discord bot successfully connected');
     } catch (error) {
       logger.error('❌ Failed to login to Discord:', error);
+      process.exit(1);
     }
-  }
-
-  private startWelcomeFlowWatcher() {
-    logger.info('👀 Watching for welcome flow completion...');
-
-    const checkInterval = setInterval(async () => {
-      const welcomeCompleted = await this.checkWelcomeFlowCompleted();
-
-      if (welcomeCompleted) {
-        logger.info('✅ Welcome flow completed! Initializing Discord bot...');
-        clearInterval(checkInterval);
-
-        // Try to initialize and start the bot again
-        const initialized = await this.initialize();
-        if (initialized && this.settings?.bot_token) {
-          try {
-            await this.client.login(this.settings.bot_token);
-            logger.info('✅ Discord bot successfully connected');
-          } catch (error) {
-            logger.error('❌ Failed to login to Discord:', error);
-          }
-        }
-      }
-    }, 5000); // Check every 5 seconds
   }
 }
 

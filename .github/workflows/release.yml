@@ -111,9 +111,9 @@ jobs:
       run: |
         gh release create "v${{ needs.check-version.outputs.version }}" \
           --title "Release v${{ needs.check-version.outputs.version }}" \
-          --notes "## 🐛 Bug Fixes
-
-        ## ✨ New Features
+          --notes "## ✨ New Features
+          
+        ## 🐛 Bug Fixes
 
         ## 🎮 Game Data
         

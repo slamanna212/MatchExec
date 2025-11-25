@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import {
@@ -77,12 +78,12 @@ export async function POST(
       return await handleSingleEliminationProgress(tournamentId, roundInfo);
     } else if (tournament.format === 'double-elimination') {
       return await handleDoubleEliminationProgress(tournamentId, roundInfo);
-    } else {
+    } 
       return NextResponse.json(
         { error: 'Invalid tournament format' },
         { status: 400 }
       );
-    }
+    
 
   } catch (error) {
     logger.error('Error progressing tournament:', error);

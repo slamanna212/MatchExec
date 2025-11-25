@@ -44,6 +44,57 @@ npm run dev:stop
 npm run dev:restart
 ```
 
+## Debugging Workflow
+
+When debugging issues in this project, follow this collaborative approach for speed and efficiency:
+
+### Process
+
+1. **User provides context**: Share error messages, logs, symptoms, what broke, and any theories about the cause
+2. **Claude provides diagnostic commands**: Specific commands to run for targeted investigation
+3. **User runs commands and pastes output**: Creates a fast feedback loop
+4. **Claude analyzes and provides fix**: Or requests more specific info if needed
+
+This workflow is strongly preferred over extensive autonomous exploration with numerous tool calls. It maintains speed while avoiding risky assumptions.
+
+### Common Diagnostic Commands
+
+```bash
+# View recent logs from all processes
+npm run dev:logs | tail -100
+
+# Check Discord bot logs
+tail -50 ./app_data/data/logs/discord-bot.log
+
+# Check scheduler logs
+tail -50 ./app_data/data/logs/scheduler.log
+
+# Check PM2 process status
+npx pm2 status
+
+# Query database directly
+sqlite3 ./app_data/data/matchexec.db "SELECT * FROM matches ORDER BY id DESC LIMIT 5;"
+
+# Check for errors in logs
+npm run dev:logs | grep -i error
+
+# Monitor logs in real-time
+npm run dev:logs --lines 0
+```
+
+### Example Interaction
+
+**User**: "Match creation is broken, getting a 500 error"
+
+**Claude**: "Can you run these commands and paste the output?
+1. `npm run dev:logs | grep -A 5 'error'`
+2. `tail -50 ./app_data/data/logs/discord-bot.log`
+3. Check browser console for any errors"
+
+**User**: [pastes results]
+
+**Claude**: "I see the issue on line X. Here's the fix..."
+
 ## Production Using Docker
 
 The production Docker container uses s6-overlay as the init system to manage all processes.
@@ -97,7 +148,7 @@ The container uses s6-overlay v3 to manage processes:
 ├── migrations/                   # Database migrations (5 files)
 ├── data/games/                   # Game data (6 games with modes/maps)
 ├── s6-overlay/                   # Docker init system config
-└── ecosystem.*.config.js         # PM2 configurations
+└── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
 
 ## Database
 
@@ -134,19 +185,19 @@ The seeder checks `dataVersion` and only re-seeds when changed, preventing dupli
 
 ### Migration and Seeding
 
-Database migrations and seeding are handled at application startup:
+Database migrations and seeding use `scripts/migrate-background.ts`, which provides status tracking for the loading screen UI. The migration process is handled differently based on the environment:
 
 ```bash
 # Run migrations and seeding manually
 npm run migrate
 
-# Development (automatically runs migrations via PM2)
+# Development (PM2 runs migrate-background.ts as a oneshot process)
 npm run dev:all
 
-# Production with PM2 (automatically runs migrations first)  
+# Production with PM2 (runs migrate-background.ts then starts processes)
 npm run prod:start
 
-# Docker (automatically runs migrations via s6-overlay init script)
+# Docker (s6-overlay runs migrate-background.ts as a oneshot service)
 docker run matchexec
 ```
 
@@ -166,9 +217,22 @@ Individual processes only connect to the database - migrations run once at start
 
 ### Environment-Specific Migration Handling
 
-- **Development**: PM2 runs migrations before starting processes
-- **Production (PM2)**: Manual or PM2-managed migration execution
-- **Docker**: s6-overlay runs migrations via init script before starting services
+- **Development**: PM2 ecosystem config runs `migrate-background.ts` as a oneshot process, then starts all services
+- **Production (PM2)**: Same as development but without hot-reload/watch mode
+- **Docker**: s6-overlay runs `migrate-background.ts` as a oneshot service dependency; all other services wait for it to complete
+
+### PM2 Configuration
+
+The project uses a unified PM2 configuration in `ecosystem.config.js` that adapts based on the `NODE_ENV` environment variable:
+
+- **Development mode**: Set `NODE_ENV=development` (done automatically by `npm run dev:all`)
+  - Process names get `-dev` suffix
+  - Web app runs with `npm run dev` for hot reload
+  - Discord bot and scheduler watch for file changes
+- **Production mode**: Default when `NODE_ENV` is not set or set to `production`
+  - Process names have no suffix
+  - Web app runs compiled `server.js`
+  - No file watching
 
 ## Key Features
 

@@ -30,7 +30,7 @@ export async function postEventAnnouncement(eventData: EventAnnouncementData): P
     }
     
     // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     // Add to announcement queue with explicit 'standard' type
     await db.run(`

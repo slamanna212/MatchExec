@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../src/lib/logger/server';
 
@@ -32,13 +32,16 @@ export class SignupFormLoader {
 
     try {
       const signupPath = path.join(process.cwd(), 'data', 'games', gameId, 'signup.json');
-      
-      if (!fs.existsSync(signupPath)) {
+
+      // Check if file exists using async access
+      try {
+        await fs.access(signupPath);
+      } catch {
         logger.warning(`⚠️ No signup form found for game: ${gameId}`);
         return this.getDefaultSignupForm();
       }
 
-      const signupData = JSON.parse(fs.readFileSync(signupPath, 'utf-8'));
+      const signupData = JSON.parse(await fs.readFile(signupPath, 'utf-8'));
       
       // Validate the signup form structure
       if (!this.isValidSignupForm(signupData)) {

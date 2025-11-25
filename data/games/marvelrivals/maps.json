@@ -28,6 +28,13 @@
         "thumbnailUrl": "/public/assets/games/marvelrivals/maps/shin-shibuya.webp"
       },
       {
+        "id": "heart-of-heaven",
+        "name": "Heart of Heaven",
+        "type": "Convergence",
+        "location": "K'un-Lun",
+        "thumbnailUrl": "/public/assets/games/marvelrivals/maps/Heart_Of_Heaven_image.png"
+      },
+      {
         "id": "midtown",
         "name": "Midtown",
         "type": "Convoy",

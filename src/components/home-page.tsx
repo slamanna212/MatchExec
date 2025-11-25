@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { IconTrophy, IconSwords, IconUsers } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 import { AnimatedCounter } from './AnimatedCounter';
+import { logger } from '@/lib/logger/client';
 
 interface Stats {
   totalMatches: number;
@@ -34,7 +35,7 @@ export function HomePage() {
         setLoading(false);
       })
       .catch(err => {
-        console.error('Failed to load stats:', err);
+        logger.error('Failed to load stats:', err);
         setLoading(false);
       });
   }, []);

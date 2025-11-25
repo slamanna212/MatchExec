@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
-import { Tournament } from '@/shared/types';
+import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
 interface TournamentDbRow extends Tournament {
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       gameId,
+      gameModeId,
       format,
       startDate,
       startTime,
@@ -80,38 +82,65 @@ export async function POST(request: NextRequest) {
       eventImageUrl,
       allowPlayerTeamSelection
     } = body;
-    
-    if (!name || !gameId || !format || !roundsPerMatch) {
+
+    if (!name || !gameId || !gameModeId || !format || !roundsPerMatch) {
       return NextResponse.json(
-        { error: 'Missing required fields: name, gameId, format, and roundsPerMatch' },
+        { error: 'Missing required fields: name, gameId, gameModeId, format, and roundsPerMatch' },
         { status: 400 }
       );
     }
-    
+
     if (!['single-elimination', 'double-elimination'].includes(format)) {
       return NextResponse.json(
         { error: 'Invalid format. Must be single-elimination or double-elimination' },
         { status: 400 }
       );
     }
-    
+
     const db = await getDbInstance();
-    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Validate that gameModeId exists and belongs to the selected gameId
+    // Special handling for Overwatch 2 team size options
+    if (gameId === 'overwatch2' && gameModeId.startsWith('ow2-')) {
+      // Validate that it's a valid OW2 team size option
+      if (gameModeId !== 'ow2-5v5' && gameModeId !== 'ow2-6v6') {
+        return NextResponse.json(
+          { error: 'Invalid Overwatch 2 team size option' },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Regular validation for other games
+      const gameMode = await db.get<{ id: string; game_id: string }>(
+        'SELECT id, game_id FROM game_modes WHERE id = ? AND game_id = ?',
+        [gameModeId, gameId]
+      );
+
+      if (!gameMode) {
+        return NextResponse.json(
+          { error: 'Invalid game mode ID or game mode does not belong to the selected game' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;
     const startTimeOnly = startTime ? new Date(startTime).toISOString() : null;
     
     await db.run(`
       INSERT INTO tournaments (
-        id, name, description, game_id, format, status, rounds_per_match,
+        id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
         allow_player_team_selection
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tournamentId,
       name,
       description || null,
       gameId,
+      gameModeId,
       format,
       'created',
       roundsPerMatch,

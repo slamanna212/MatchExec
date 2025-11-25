@@ -1,14 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import {
+import type {
   Client,
   Message,
-  GuildScheduledEventPrivacyLevel,
-  GuildScheduledEventEntityType,
   GuildScheduledEventCreateOptions
 } from 'discord.js';
-import { Database } from '../../../lib/database/connection';
-import { DiscordSettings } from '../../../shared/types';
+import {
+  GuildScheduledEventPrivacyLevel,
+  GuildScheduledEventEntityType
+} from 'discord.js';
+import type { Database } from '../../../lib/database/connection';
+import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 
 export class EventHandler {
@@ -17,6 +19,74 @@ export class EventHandler {
     private db: Database,
     private settings: DiscordSettings | null
   ) {}
+
+  /**
+   * Fetch game name from database
+   */
+  private async fetchGameName(gameId: string): Promise<string> {
+    if (!this.db) return gameId;
+
+    try {
+      const gameData = await this.db.get<{ name: string }>(`
+        SELECT name FROM games WHERE id = ?
+      `, [gameId]);
+      return gameData ? gameData.name : gameId;
+    } catch (error) {
+      logger.error('Error fetching game name for Discord event:', error);
+      return gameId;
+    }
+  }
+
+  /**
+   * Calculate event times
+   */
+  private calculateEventTimes(startDate: string, rounds: number): { startTime: Date; endTime: Date } {
+    const durationMinutes = (this.settings?.event_duration_minutes || 45) * rounds;
+    const startTime = new Date(startDate);
+    const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+    return { startTime, endTime };
+  }
+
+  /**
+   * Build event description
+   */
+  private buildEventDescription(
+    eventData: { description: string; type: 'competitive' | 'casual'; livestream_link?: string },
+    gameName: string,
+    message: Message
+  ): string {
+    const guildId = message.guild?.id || '';
+
+    let description = eventData.description || 'Join us for this exciting match!';
+    description += `\n\n🎯 Game: ${gameName}`;
+    description += `\n🏆 Type: ${eventData.type === 'competitive' ? 'Competitive' : 'Casual'}`;
+
+    if (eventData.livestream_link) {
+      description += `\n📺 Livestream: ${eventData.livestream_link}`;
+    }
+
+    description += `\n\n📢 View full details: https://discord.com/channels/${guildId}/${message.channelId}/${message.id}`;
+
+    return description.substring(0, 1000);
+  }
+
+  /**
+   * Load event cover image
+   */
+  private loadEventImage(imageUrl: string): Buffer | undefined {
+    try {
+      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+
+      if (fs.existsSync(imagePath)) {
+        return fs.readFileSync(imagePath);
+      }
+      logger.warning(`⚠️ Event image not found for Discord event: ${imagePath}`);
+    } catch (error) {
+      logger.error(`❌ Error adding cover image to Discord event:`, error);
+    }
+
+    return undefined;
+  }
 
   async createDiscordEvent(eventData: {
     id: string;
@@ -27,7 +97,7 @@ export class EventHandler {
     start_date: string;
     livestream_link?: string;
     event_image_url?: string;
-  }, message: Message, rounds: number = 1): Promise<string | null> {
+  }, message: Message, rounds = 1): Promise<string | null> {
     try {
       const guild = this.client.guilds.cache.get(this.settings?.guild_id || '');
       if (!guild) {
@@ -35,41 +105,13 @@ export class EventHandler {
         return null;
       }
 
-      // Get game name for better event description
-      let gameName = eventData.game_id;
-      if (this.db) {
-        try {
-          const gameData = await this.db.get<{name: string}>(`
-            SELECT name FROM games WHERE id = ?
-          `, [eventData.game_id]);
-          if (gameData) {
-            gameName = gameData.name;
-          }
-        } catch (error) {
-          logger.error('Error fetching game name for Discord event:', error);
-        }
-      }
-
-      // Calculate event duration based on settings and rounds
-      const durationMinutes = (this.settings?.event_duration_minutes || 45) * rounds;
-      const startTime = new Date(eventData.start_date);
-      const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
-
-      // Create event description with match details and link to announcement
-      let eventDescription = eventData.description || 'Join us for this exciting match!';
-      eventDescription += `\n\n🎯 Game: ${gameName}`;
-      eventDescription += `\n🏆 Type: ${eventData.type === 'competitive' ? 'Competitive' : 'Casual'}`;
-      
-      if (eventData.livestream_link) {
-        eventDescription += `\n📺 Livestream: ${eventData.livestream_link}`;
-      }
-
-      // Add link to the announcement message
-      eventDescription += `\n\n📢 View full details: https://discord.com/channels/${guild.id}/${message.channelId}/${message.id}`;
+      const gameName = await this.fetchGameName(eventData.game_id);
+      const { startTime, endTime } = this.calculateEventTimes(eventData.start_date, rounds);
+      const eventDescription = this.buildEventDescription(eventData, gameName, message);
 
       const eventOptions: GuildScheduledEventCreateOptions = {
         name: eventData.name,
-        description: eventDescription.substring(0, 1000), // Discord limit
+        description: eventDescription,
         scheduledStartTime: startTime,
         scheduledEndTime: endTime,
         privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
@@ -79,26 +121,15 @@ export class EventHandler {
         }
       };
 
-      // Add cover image if event image is provided
       if (eventData.event_image_url) {
-        try {
-          // Convert URL path to file system path for local files
-          const imagePath = path.join(process.cwd(), 'public', eventData.event_image_url.replace(/^\//, ''));
-          
-          if (fs.existsSync(imagePath)) {
-            // Read the image file as a buffer
-            const imageBuffer = fs.readFileSync(imagePath);
-            eventOptions.image = imageBuffer;
-          } else {
-            logger.warning(`⚠️ Event image not found for Discord event: ${imagePath}`);
-          }
-        } catch (error) {
-          logger.error(`❌ Error adding cover image to Discord event:`, error);
+        const imageBuffer = this.loadEventImage(eventData.event_image_url);
+        if (imageBuffer) {
+          eventOptions.image = imageBuffer;
         }
       }
 
       const discordEvent = await guild.scheduledEvents.create(eventOptions);
-      
+
       return discordEvent.id;
 
     } catch (error) {
@@ -119,10 +150,10 @@ export class EventHandler {
       if (event) {
         await event.delete();
         return true;
-      } else {
+      } 
         logger.warning(`⚠️ Discord event not found: ${eventId}`);
         return false;
-      }
+      
     } catch (error) {
       logger.warning(`⚠️ Could not delete Discord event ${eventId}:`, (error as Error)?.message);
       return false;

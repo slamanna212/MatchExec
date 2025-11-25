@@ -19,6 +19,8 @@ export interface GameMode {
   game_id: string;
   name: string;
   description: string;
+  team_size: number;
+  max_teams: number;
   scoring_type: 'Normal' | 'FFA' | 'Position';
   created_at: Date;
   updated_at: Date;
@@ -98,7 +100,6 @@ export interface MatchDbRow extends Match {
   rounds?: number;
   livestream_link?: string;
   player_notifications?: number; // SQLite stores booleans as integers
-  announcement_voice_channel?: string;
 }
 
 export interface ParticipantDbRow {
@@ -132,6 +133,8 @@ export interface DiscordSettingsDbRow {
   player_reminder_minutes?: number;
   announcer_voice?: string;
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
+  voice_channel_category_id?: string;
+  voice_channel_cleanup_delay_minutes?: number;
   [key: string]: unknown;
 }
 
@@ -144,6 +147,7 @@ export interface DiscordChannel {
   send_reminders: boolean;
   send_match_start: boolean;
   send_signup_updates: boolean;
+  send_health_alerts: boolean;
   last_name_refresh?: string;
   created_at: string;
   updated_at: string;
@@ -245,6 +249,8 @@ export interface ModeDataJson {
   id: string;
   name: string;
   description: string;
+  teamSize?: number;
+  maxTeams?: number;
   scoringType?: 'Normal' | 'FFA' | 'Position';
 }
 

@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { processMatchAnnouncements } from '../../../../../lib/reminder-helpers';
 
 
 export async function GET(
@@ -35,126 +37,26 @@ export async function GET(
     }
 
     // Get scheduled announcements from match creation process
-    const scheduledAnnouncements = [];
-    
+    let scheduledAnnouncements: Awaited<ReturnType<typeof processMatchAnnouncements>> = [];
+
     if (match.start_date) {
-      // Get the announcements from the match record
       const matchWithAnnouncements = await db.get<{
-        announcements?: string;
+        announcements?: unknown;
       }>(`
         SELECT announcements
-        FROM matches 
+        FROM matches
         WHERE id = ?
       `, [matchId]);
-      
+
       if (matchWithAnnouncements?.announcements) {
         try {
-          let announcements;
-
-          // Handle different announcement field formats
-          if (typeof matchWithAnnouncements.announcements === 'string') {
-            try {
-              announcements = JSON.parse(matchWithAnnouncements.announcements);
-            } catch {
-              // If it's not valid JSON, skip this match
-              logger.debug(`⚠️ Skipping match ${match.name} - announcements field is not valid JSON`);
-              return NextResponse.json({
-                match: {
-                  id: match.id,
-                  name: match.name,
-                  start_date: match.start_date,
-                  player_notifications: Boolean(match.player_notifications),
-                  status: match.status
-                },
-                reminders: [],
-                reminderCount: 0
-              });
-            }
-          } else if (typeof matchWithAnnouncements.announcements === 'number' || typeof matchWithAnnouncements.announcements === 'boolean') {
-            // For tournament matches, announcements is a boolean/number flag
-            // Use default announcement schedule for tournament matches
-            if (matchWithAnnouncements.announcements) {
-              announcements = [
-                { id: 'default_1hour', value: 1, unit: 'hours' },
-                { id: 'default_30min', value: 30, unit: 'minutes' }
-              ];
-            } else {
-              // announcements disabled for this tournament match
-              return NextResponse.json({
-                match: {
-                  id: match.id,
-                  name: match.name,
-                  start_date: match.start_date,
-                  player_notifications: Boolean(match.player_notifications),
-                  status: match.status
-                },
-                reminders: [],
-                reminderCount: 0
-              });
-            }
-          } else {
-            announcements = matchWithAnnouncements.announcements;
-          }
-
-          const startDate = new Date(match.start_date);
-
-          for (const announcement of announcements) {
-            // Calculate when this announcement should be sent
-            const { value, unit, id } = announcement;
-            let millisecondsOffset = 0;
-            
-            switch (unit) {
-              case 'minutes':
-                millisecondsOffset = value * 60 * 1000;
-                break;
-              case 'hours':
-                millisecondsOffset = value * 60 * 60 * 1000;
-                break;
-              case 'days':
-                millisecondsOffset = value * 24 * 60 * 60 * 1000;
-                break;
-            }
-            
-            const announcementTime = new Date(startDate.getTime() - millisecondsOffset);
-            
-            // Check if this announcement was already processed in the announcement queue
-            const queuedAnnouncement = await db.get<{
-              status: string;
-              posted_at?: string;
-              error_message?: string;
-            }>(`
-              SELECT status, posted_at, error_message
-              FROM discord_announcement_queue 
-              WHERE match_id = ? AND announcement_type = 'timed'
-              AND announcement_data = ?
-            `, [matchId, JSON.stringify(announcement)]);
-            
-            let status = 'pending';
-            let sentAt = null;
-            let errorMessage = null;
-            
-            if (queuedAnnouncement) {
-              status = queuedAnnouncement.status === 'completed' ? 'sent' : queuedAnnouncement.status;
-              sentAt = queuedAnnouncement.posted_at;
-              errorMessage = queuedAnnouncement.error_message;
-            } else if (announcementTime <= new Date()) {
-              // If time has passed but no queue entry exists, it should have been processed
-              status = 'scheduled';
-            }
-            
-            scheduledAnnouncements.push({
-              id: `announcement_${id}`,
-              match_id: matchId,
-              reminder_time: announcementTime.toISOString(),
-              status: status,
-              error_message: errorMessage,
-              created_at: now,
-              sent_at: sentAt,
-              type: 'timed_announcement',
-              description: `${value} ${unit} before start`,
-              timing: { value, unit }
-            });
-          }
+          scheduledAnnouncements = await processMatchAnnouncements(
+            db,
+            matchId,
+            matchWithAnnouncements.announcements,
+            match.start_date,
+            now
+          );
         } catch (parseError) {
           logger.error('Error parsing match announcements:', parseError);
         }
