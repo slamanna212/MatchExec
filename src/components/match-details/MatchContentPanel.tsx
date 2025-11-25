@@ -6,7 +6,7 @@ import {
   Group,
   Text,
   Button,
-  Card,
+  Box,
   TextInput,
   SegmentedControl
 } from '@mantine/core';
@@ -121,7 +121,15 @@ export function MatchContentPanel({
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'maps' | 'matchcodes'>('participants');
 
   return (
-    <Card withBorder padding="lg" shadow="sm">
+    <Box
+      style={{
+        backgroundColor: 'var(--column-bg)',
+        border: '1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))',
+        borderRadius: 'var(--mantine-radius-md)',
+        padding: 'var(--mantine-spacing-lg)',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+      }}
+    >
       <Stack gap="md">
         {/* Tab Navigation */}
         <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -246,6 +254,6 @@ export function MatchContentPanel({
           </div>
         )}
       </Stack>
-    </Card>
+    </Box>
   );
 }
