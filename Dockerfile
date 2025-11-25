@@ -1,5 +1,5 @@
 # Builder stage - uses TARGETPLATFORM by default for correct musl binaries
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN npm run build
 # Prune dev dependencies while we still have build tools (needed for native modules on ARM)
 RUN npm prune --omit=dev
 
-FROM node:24-alpine AS runner
+FROM node:25-alpine AS runner
 WORKDIR /app
 
 # Install required packages for s6-overlay and runtime
