@@ -77,12 +77,8 @@ export class VoiceHandler {
       }
 
       if (!this.settings.announcer_voice) {
-        logger.error('❌ No announcer voice selected in settings:', {
-          voice_announcements_enabled: this.settings.voice_announcements_enabled,
-          announcer_voice: this.settings.announcer_voice,
-          guild_id: this.settings.guild_id
-        });
-        
+        logger.info('ℹ️ No announcer voice configured, using fallback voice');
+
         // Try to get the first available voice as fallback
         if (this.db) {
           try {

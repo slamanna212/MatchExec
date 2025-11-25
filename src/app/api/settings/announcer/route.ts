@@ -67,6 +67,13 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Ensure we have a settings row before updating
+    await db.run(`
+      INSERT INTO discord_settings (id, guild_id, bot_token)
+      VALUES (1, '', '')
+      ON CONFLICT(id) DO NOTHING
+    `);
+
     // Build dynamic UPDATE query based on provided fields
     const updates = [];
     const params = [];
