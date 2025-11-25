@@ -2,11 +2,12 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  Card, 
-  Text, 
-  Button, 
+  Card,
+  Text,
+  Button,
   Avatar,
   Divider,
   Loader,
@@ -16,9 +17,8 @@ import {
   RingProgress,
   TextInput
 } from '@mantine/core';
-import type { Match, SignupConfig, ReminderData } from '@/shared/types';
+import type { Match } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
-import { MatchDetailsModal } from './match-details-modal';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -158,22 +158,10 @@ const HistoryMatchCard = memo(({
 HistoryMatchCard.displayName = 'HistoryMatchCard';
 
 export function MatchHistoryDashboard() {
+  const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
-  const [participants, setParticipants] = useState<{
-    id: string;
-    user_id: string;
-    username: string;
-    joined_at: string;
-    signup_data: Record<string, unknown>;
-  }[]>([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(30);
-  const [reminders, setReminders] = useState<ReminderData[]>([]);
-  const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
@@ -250,8 +238,8 @@ export function MatchHistoryDashboard() {
   }, []);
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
-  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
+  const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [_mapNotes, _setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -341,85 +329,9 @@ export function MatchHistoryDashboard() {
     });
   }, [matches]);
 
-  const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setParticipantsLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/participants`);
-      if (response.ok) {
-        const data = await response.json();
-        setParticipants(data.participants || []);
-        setSignupConfig(data.signupConfig || null);
-      } else {
-        logger.error('Failed to fetch participants');
-        if (!silent) {
-          setParticipants([]);
-          setSignupConfig(null);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching participants:', error);
-      if (!silent) {
-        setParticipants([]);
-        setSignupConfig(null);
-      }
-    } finally {
-      if (!silent) {
-        setParticipantsLoading(false);
-      }
-    }
-  }, []);
-
-  const fetchReminders = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setRemindersLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/reminders`);
-      if (response.ok) {
-        const data = await response.json();
-        setReminders(data.reminders || []);
-      } else {
-        logger.error('Failed to fetch reminders');
-        if (!silent) {
-          setReminders([]);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching reminders:', error);
-      if (!silent) {
-        setReminders([]);
-      }
-    } finally {
-      if (!silent) {
-        setRemindersLoading(false);
-      }
-    }
-  }, []);
-
-  const fetchMapNotes = useCallback(async (matchId: string) => {
-    try {
-      const response = await fetch(`/api/matches/${matchId}/map-notes`);
-      if (response.ok) {
-        const data = await response.json();
-        setMapNotes(data.notes || {});
-      } else {
-        setMapNotes({});
-      }
-    } catch (error) {
-      logger.error('Error fetching map notes:', error);
-      setMapNotes({});
-    }
-  }, []);
-
   const handleViewDetails = useCallback((match: MatchWithGame) => {
-    setSelectedMatch(match);
-    setDetailsModalOpen(true);
-    fetchParticipants(match.id);
-    fetchReminders(match.id);
-    fetchMapNotes(match.id);
-  }, [fetchParticipants, fetchReminders, fetchMapNotes]);
+    router.push(`/matches/history/${match.id}`);
+  }, [router]);
 
   // Filter matches based on search query
   const filteredMatches = useMemo(() => {
@@ -539,27 +451,6 @@ export function MatchHistoryDashboard() {
           </Grid>
         </motion.div>
       )}
-
-      <MatchDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        title="Match History Details"
-        selectedMatch={selectedMatch}
-        participants={participants}
-        participantsLoading={participantsLoading}
-        signupConfig={signupConfig}
-        reminders={reminders}
-        remindersLoading={remindersLoading}
-        mapDetails={mapDetails}
-        mapNotes={mapNotes}
-        formatMapName={formatMapName}
-        parseDbTimestamp={parseDbTimestamp}
-        showTabs={true}
-        showDeleteButton={false}
-        showAssignButton={false}
-        onDelete={() => {}}
-        onAssign={() => {}}
-      />
     </div>
   );
 }

@@ -18,13 +18,12 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import type { Match, MatchResult, SignupConfig, ReminderData } from '@/shared/types';
+import type { Match, MatchResult } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 
 import { AssignPlayersModal } from './assign-players-modal';
 import { ScoringModal } from './scoring/ScoringModal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
-import { MatchDetailsModal } from './match-details-modal';
 import { showError, notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -212,24 +211,11 @@ export function MatchDashboard() {
   const { colorScheme } = useMantineColorScheme();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
-  const [participants, setParticipants] = useState<{
-    id: string;
-    user_id: string;
-    username: string;
-    joined_at: string;
-    signup_data: Record<string, unknown>;
-  }[]>([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
   const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
   const [scoringModalOpen, setScoringModalOpen] = useState(false);
   const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<MatchWithGame | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
-  const [reminders, setReminders] = useState<ReminderData[]>([]);
-  const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   /**
@@ -310,7 +296,7 @@ export function MatchDashboard() {
 
 
 
-  const formatMapName = (mapId: string) => {
+  const _formatMapName = (mapId: string) => {
     // Convert map ID to proper display name
     // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
     return mapId
@@ -320,8 +306,8 @@ export function MatchDashboard() {
   };
 
   const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
-  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
+  const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [_mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -397,7 +383,7 @@ export function MatchDashboard() {
     }
   };
 
-  const fetchMapNotes = async (matchId: string) => {
+  const _fetchMapNotes = async (matchId: string) => {
     try {
       const response = await fetch(`/api/matches/${matchId}/map-notes`);
       if (response.ok) {
@@ -445,131 +431,10 @@ export function MatchDashboard() {
     router.push('/matches/create');
   };
 
-  /**
-   * Check if participant has changed
-   */
-  const hasParticipantChanged = useCallback((
-    participant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> },
-    prevParticipant: { id: string; user_id: string; username: string; joined_at: string; signup_data: Record<string, unknown> } | undefined
-  ): boolean => {
-    if (!prevParticipant) return true;
-    return (
-      participant.id !== prevParticipant.id ||
-      participant.username !== prevParticipant.username ||
-      participant.joined_at !== prevParticipant.joined_at
-    );
-  }, []);
-
-  /**
-   * Check if signup config has changed
-   */
-  const hasSignupConfigChanged = useCallback((
-    newConfig: SignupConfig | null,
-    prevConfig: SignupConfig | null
-  ): boolean => {
-    if (!prevConfig && !newConfig) return false;
-    if (!prevConfig || !newConfig) return true;
-    return prevConfig.fields.length !== newConfig.fields.length;
-  }, []);
-
-  const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setParticipantsLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/participants`);
-      if (response.ok) {
-        const data = await response.json();
-
-        setParticipants(prevParticipants => {
-          if (prevParticipants.length !== data.participants.length) {
-            return data.participants;
-          }
-
-          const hasChanges = data.participants.some((participant: {
-            id: string;
-            user_id: string;
-            username: string;
-            joined_at: string;
-            signup_data: Record<string, unknown>;
-          }, index: number) => hasParticipantChanged(participant, prevParticipants[index]));
-
-          return hasChanges ? data.participants : prevParticipants;
-        });
-
-        setSignupConfig(prevConfig => {
-          return hasSignupConfigChanged(data.signupConfig, prevConfig) ? data.signupConfig : prevConfig;
-        });
-      } else {
-        logger.error('Failed to fetch participants');
-        if (!silent) {
-          setParticipants([]);
-          setSignupConfig(null);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching participants:', error);
-      if (!silent) {
-        setParticipants([]);
-        setSignupConfig(null);
-      }
-    } finally {
-      if (!silent) {
-        setParticipantsLoading(false);
-      }
-    }
-  }, [hasParticipantChanged, hasSignupConfigChanged]);
-
-  const fetchReminders = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setRemindersLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/reminders`);
-      if (response.ok) {
-        const data = await response.json();
-        setReminders(data.reminders || []);
-      } else {
-        logger.error('Failed to fetch reminders');
-        if (!silent) {
-          setReminders([]);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching reminders:', error);
-      if (!silent) {
-        setReminders([]);
-      }
-    } finally {
-      if (!silent) {
-        setRemindersLoading(false);
-      }
-    }
-  }, []);
 
   const handleViewDetails = useCallback((match: MatchWithGame) => {
-    setSelectedMatch(match);
-    setDetailsModalOpen(true);
-    fetchParticipants(match.id);
-    fetchReminders(match.id);
-    fetchMapNotes(match.id);
-    // Ensure map details are loaded for this game
-    fetchMapNames(match.game_id);
-  }, [fetchParticipants, fetchReminders]);
-
-  // Auto-refresh participants and reminders when details modal is open
-  useEffect(() => {
-    if (detailsModalOpen && selectedMatch) {
-      // Use the same refresh interval for participants and reminders
-      const participantsInterval = setInterval(() => {
-        fetchParticipants(selectedMatch.id, true); // Silent refresh
-        fetchReminders(selectedMatch.id, true); // Silent refresh
-      }, refreshInterval * 1000);
-
-      return () => clearInterval(participantsInterval);
-    }
-    return undefined;
-  }, [detailsModalOpen, selectedMatch, refreshInterval, fetchParticipants, fetchReminders]);
+    router.push(`/matches/${match.id}`);
+  }, [router]);
 
   const handleDeleteMatch = async (matchId: string) => {
     try {
@@ -580,7 +445,6 @@ export function MatchDashboard() {
       if (response.ok) {
         // Remove the match from the list
         setMatches(prev => prev.filter(match => match.id !== matchId));
-        setDetailsModalOpen(false);
       } else {
         logger.error('Failed to delete match');
         showError('Failed to delete match. Please try again.');
@@ -763,7 +627,7 @@ export function MatchDashboard() {
     setAssignPlayersModalOpen(true);
   };
 
-  const confirmDelete = (match: MatchWithGame) => {
+  const _confirmDelete = (match: MatchWithGame) => {
     modals.openConfirmModal({
       title: 'Delete Match',
       children: (
@@ -965,27 +829,6 @@ export function MatchDashboard() {
           onResultSubmit={handleResultSubmit}
         />
       )}
-
-      <MatchDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        title="Match Details"
-        selectedMatch={selectedMatch}
-        participants={participants}
-        participantsLoading={participantsLoading}
-        signupConfig={signupConfig}
-        reminders={reminders}
-        remindersLoading={remindersLoading}
-        mapDetails={mapDetails}
-        mapNotes={mapNotes}
-        formatMapName={formatMapName}
-        parseDbTimestamp={parseDbTimestamp}
-        showTabs={true}
-        showDeleteButton={true}
-        showAssignButton={true}
-        onDelete={(match) => confirmDelete(match)}
-        onAssign={(match) => handleAssignPlayers(match)}
-      />
     </div>
   );
 }
