@@ -2,6 +2,8 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { VoiceChannelService } from './voice-channel-service';
 import { MapCodeService } from './map-code-service';
+import { queueDiscordDeletion } from './scoring-functions';
+import { deleteMatchVoiceChannels } from './voice-channel-manager';
 
 /**
  * Queue a Discord announcement request that the Discord bot will process
@@ -233,6 +235,50 @@ export async function handleTournamentAssignTransition(tournamentId: string): Pr
 }
 
 /**
+ * Handles match transition to "complete" status
+ * Queues Discord deletion and cleans up voice channels
+ */
+export async function handleCompleteTransition(matchId: string): Promise<void> {
+  try {
+    // Queue Discord message/event deletion
+    await queueDiscordDeletion(matchId);
+    logger.debug(`🗑️ Discord deletion queued for completed match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error queuing Discord deletion for completed match:', error);
+  }
+
+  // Clean up voice channels
+  try {
+    await deleteMatchVoiceChannels(matchId);
+    logger.debug(`🔇 Voice channels deleted for completed match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error deleting voice channels for completed match:', error);
+  }
+}
+
+/**
+ * Handles match transition to "cancelled" status
+ * Queues Discord deletion and cleans up voice channels
+ */
+export async function handleCancelledTransition(matchId: string): Promise<void> {
+  try {
+    // Queue Discord message/event deletion
+    await queueDiscordDeletion(matchId);
+    logger.debug(`🗑️ Discord deletion queued for cancelled match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error queuing Discord deletion for cancelled match:', error);
+  }
+
+  // Clean up voice channels
+  try {
+    await deleteMatchVoiceChannels(matchId);
+    logger.debug(`🔇 Voice channels deleted for cancelled match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error deleting voice channels for cancelled match:', error);
+  }
+}
+
+/**
  * Routes match status transitions to the appropriate handler
  */
 export async function handleStatusTransition(matchId: string, newStatus: string): Promise<void> {
@@ -245,6 +291,12 @@ export async function handleStatusTransition(matchId: string, newStatus: string)
       break;
     case 'battle':
       await handleBattleTransition(matchId);
+      break;
+    case 'complete':
+      await handleCompleteTransition(matchId);
+      break;
+    case 'cancelled':
+      await handleCancelledTransition(matchId);
       break;
     default:
       logger.debug(`No special handling needed for status: ${newStatus}`);

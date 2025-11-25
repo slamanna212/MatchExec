@@ -1,5 +1,6 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
+import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import type {
   MatchResult,
   MatchFormat,
@@ -733,6 +734,9 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
     await queueMatchWinnerNotification(matchId);
     await queueDiscordDeletion(matchId);
 
+    // Clean up voice channels
+    await deleteMatchVoiceChannels(matchId);
+
     return true;
   } catch (error) {
     logger.error('Error updating match status:', error);
@@ -1092,7 +1096,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
 /**
  * Queue Discord deletion for match announcements and events when match completes
  */
-async function queueDiscordDeletion(matchId: string): Promise<void> {
+export async function queueDiscordDeletion(matchId: string): Promise<void> {
   try {
     const db = await getDbInstance();
     
