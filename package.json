@@ -40,7 +40,7 @@
     "@snazzah/davey": "^0.1.7",
     "@tabler/icons-react": "3.35.0",
     "bufferutil": "4.0.9",
-    "discord.js": "14.24.2",
+    "discord.js": "14.25.1",
     "express": "5.1.0",
     "framer-motion": "12.23.24",
     "lucide-react": "0.552.0",
