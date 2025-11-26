@@ -6,7 +6,6 @@ import {
   Group,
   Text,
   Button,
-  Box,
   TextInput,
   SegmentedControl
 } from '@mantine/core';
@@ -121,16 +120,7 @@ export function MatchContentPanel({
   const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'maps' | 'matchcodes'>('participants');
 
   return (
-    <Box
-      style={{
-        backgroundColor: 'var(--column-bg)',
-        border: '1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))',
-        borderRadius: 'var(--mantine-radius-md)',
-        padding: 'var(--mantine-spacing-lg)',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
-      }}
-    >
-      <Stack gap="md">
+    <Stack gap="md">
         {/* Tab Navigation */}
         <div style={{ width: '100%', overflowX: 'auto' }}>
           <Group justify="center" mb="sm">
@@ -206,45 +196,45 @@ export function MatchContentPanel({
         {activeTab === 'matchcodes' && match.map_codes_supported && (
           <div>
             <Stack gap="md">
-              <Group justify="space-between" align="center">
-                <Text size="lg" fw={600}>Match Codes</Text>
-                {onMapCodesSave && (
-                  <Button
-                    size="sm"
-                    loading={mapCodesSaving}
-                    onClick={onMapCodesSave}
-                    leftSection={<IconDeviceFloppy size={16} />}
-                  >
-                    Save Codes
-                  </Button>
-                )}
-              </Group>
-
               {match.maps && match.maps.length > 0 ? (
-                <MapResultsSection
-                  maps={match.maps}
-                  mapDetails={mapDetails}
-                  mapNotes={mapNotes}
-                  formatMapName={formatMapName}
-                >
-                  {(mapId) => (
-                    onMapCodeChange && (
-                      <TextInput
-                        placeholder="Enter map code"
-                        value={mapCodes[mapId] || ''}
-                        onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
-                        maxLength={24}
+                <>
+                  <MapResultsSection
+                    maps={match.maps}
+                    mapDetails={mapDetails}
+                    mapNotes={mapNotes}
+                    formatMapName={formatMapName}
+                  >
+                    {(mapId) => (
+                      onMapCodeChange && (
+                        <TextInput
+                          placeholder="Enter map code"
+                          value={mapCodes[mapId] || ''}
+                          onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
+                          maxLength={24}
+                          size="sm"
+                          styles={{
+                            input: {
+                              fontFamily: 'monospace',
+                              fontSize: '0.9em'
+                            }
+                          }}
+                        />
+                      )
+                    )}
+                  </MapResultsSection>
+                  {onMapCodesSave && (
+                    <Group justify="center">
+                      <Button
                         size="sm"
-                        styles={{
-                          input: {
-                            fontFamily: 'monospace',
-                            fontSize: '0.9em'
-                          }
-                        }}
-                      />
-                    )
+                        loading={mapCodesSaving}
+                        onClick={onMapCodesSave}
+                        leftSection={<IconDeviceFloppy size={16} />}
+                      >
+                        Save Codes
+                      </Button>
+                    </Group>
                   )}
-                </MapResultsSection>
+                </>
               ) : (
                 <Text size="sm" c="dimmed" ta="center" py="md">
                   No maps configured for this match
@@ -253,7 +243,6 @@ export function MatchContentPanel({
             </Stack>
           </div>
         )}
-      </Stack>
-    </Box>
+    </Stack>
   );
 }
