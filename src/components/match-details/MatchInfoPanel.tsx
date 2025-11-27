@@ -161,6 +161,14 @@ export function MatchInfoPanel({
               />
             </Group>
 
+            {/* Description */}
+            {match.description && (
+              <div>
+                <Text size="sm" fw={500} c="dimmed">Description:</Text>
+                <Text size="sm">{match.description}</Text>
+              </div>
+            )}
+
             {/* Featured Image */}
             {match.event_image_url && (
               <Image
@@ -177,13 +185,6 @@ export function MatchInfoPanel({
         {/* Card 2: Match Details */}
         <Card withBorder padding="lg" shadow="sm">
           <Stack gap="sm">
-            {match.description && (
-              <div>
-                <Text size="sm" fw={500} c="dimmed">Description:</Text>
-                <Text size="sm">{match.description}</Text>
-              </div>
-            )}
-
             {match.rules && (
               <Group justify="space-between">
                 <Text size="sm" fw={500} c="dimmed">Rules:</Text>

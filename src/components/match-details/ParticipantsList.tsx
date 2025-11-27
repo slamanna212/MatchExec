@@ -94,24 +94,22 @@ export function ParticipantsList({
           </Avatar>
           <Stack gap={4} style={{ flex: 1 }}>
             <Text fw={500} size="sm">{participant.username}</Text>
-            <Group gap="xs" wrap="wrap">
-              <Text size="xs" c="dimmed">
-                Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
-              </Text>
-              {participant.signup_data && Object.entries(participant.signup_data).map(([key, value]) => {
-                const field = signupConfig?.fields.find(f => f.id === key);
-                const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
+            <Text size="xs" c="dimmed">
+              Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
+            </Text>
+            {participant.signup_data && Object.entries(participant.signup_data).map(([key, value]) => {
+              const field = signupConfig?.fields.find(f => f.id === key);
+              const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
 
-                return (
-                  <Group key={key} gap={4}>
-                    <Text size="xs" c="dimmed">{displayLabel}:</Text>
-                    <Badge size="xs" variant="light" color={getBadgeColor(teamColor)}>
-                      {String(value)}
-                    </Badge>
-                  </Group>
-                );
-              })}
-            </Group>
+              return (
+                <Group key={key} gap={4}>
+                  <Text size="xs" c="dimmed">{displayLabel}:</Text>
+                  <Badge size="xs" variant="light" color={getBadgeColor(teamColor)}>
+                    {String(value)}
+                  </Badge>
+                </Group>
+              );
+            })}
           </Stack>
         </Group>
       </Card>
