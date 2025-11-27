@@ -6,6 +6,7 @@ interface MatchParticipant {
   id: string;
   user_id: string;
   username: string;
+  avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
@@ -89,7 +90,7 @@ export function ParticipantsList({
         style={getTeamCardStyles(teamColor)}
       >
         <Group align="center" gap="md">
-          <Avatar size="sm" color={getAvatarColor(teamColor)}>
+          <Avatar size="sm" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>
             {index}
           </Avatar>
           <Stack gap={4} style={{ flex: 1 }}>

@@ -2,9 +2,10 @@
  * Helper functions for Discord interaction handling
  */
 
-import type { ModalSubmitInteraction } from 'discord.js';
+import type { Client, ModalSubmitInteraction } from 'discord.js';
 import type { ParsedModalId } from '../utils/id-parsers';
 import type { Database } from '../../../lib/database/connection';
+import { getDiscordAvatarUrl } from '../utils/avatar-fetcher';
 
 interface SignupFormField {
   id: string;
@@ -63,9 +64,13 @@ export async function insertParticipant(
   parsedId: ParsedModalId,
   interaction: ModalSubmitInteraction,
   displayUsername: string,
-  signupData: Record<string, string>
+  signupData: Record<string, string>,
+  client: Client
 ): Promise<string> {
   const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // Fetch avatar URL when user signs up
+  const avatarUrl = await getDiscordAvatarUrl(client, interaction.user.id);
 
   if (parsedId.isTournament) {
     // Insert tournament participant
@@ -99,15 +104,16 @@ export async function insertParticipant(
   } else {
     // Insert match participant
     await db.run(`
-      INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data, avatar_url, last_avatar_check)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       participantId,
       parsedId.eventId,
       interaction.user.id,
       interaction.user.id,
       displayUsername,
-      JSON.stringify(signupData)
+      JSON.stringify(signupData),
+      avatarUrl
     ]);
   }
 

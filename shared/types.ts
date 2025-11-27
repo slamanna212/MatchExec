@@ -108,6 +108,7 @@ export interface ParticipantDbRow {
   user_id: string;
   discord_user_id: string;
   username: string;
+  avatar_url?: string | null; // Discord avatar URL
   joined_at: Date;
   signup_data?: string; // JSON string
   team_assignment?: 'reserve' | 'blue' | 'red';
@@ -196,6 +197,7 @@ export interface MatchParticipant {
   match_id: string;
   user_id: string;
   username: string;
+  avatar_url?: string | null; // Discord avatar URL
   joined_at: Date | string;
   signup_data?: Record<string, unknown>;
 }

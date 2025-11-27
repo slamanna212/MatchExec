@@ -27,8 +27,8 @@ export async function GET(
     
     // Fetch all participants for this match
     const participants = await db.all<ParticipantDbRow>(`
-      SELECT id, user_id, username, joined_at, signup_data, team_assignment, receives_map_codes
-      FROM match_participants 
+      SELECT id, user_id, discord_user_id, username, avatar_url, joined_at, signup_data, team_assignment, receives_map_codes
+      FROM match_participants
       WHERE match_id = ?
       ORDER BY joined_at ASC
     `, [matchId]);

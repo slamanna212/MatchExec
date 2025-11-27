@@ -375,7 +375,7 @@ export class InteractionHandler {
       const { signupData, displayUsername } = collectFormData(interaction, signupForm);
 
       // Insert participant into database
-      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData);
+      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData, this.client);
 
       // Get participant count
       const participantCount = await getParticipantCount(this.db, parsedId.eventId, parsedId.isTournament);

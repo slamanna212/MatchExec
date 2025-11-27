@@ -40,6 +40,7 @@ interface MatchParticipant {
   id: string;
   user_id: string;
   username: string;
+  avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
@@ -262,7 +263,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
       >
       <Group justify="space-between" align="center" mb="xs">
         <Group align="center">
-          <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled">
+          <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled" src={participant.avatar_url || undefined}>
             {index + 1}
           </Avatar>
           <div>
