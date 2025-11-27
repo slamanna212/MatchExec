@@ -83,7 +83,6 @@ export function MatchInfoPanel({
       case 'created':
         return (
           <Button
-            fullWidth
             variant="light"
             color="blue"
             onClick={() => onStatusTransition('gather')}
@@ -94,7 +93,6 @@ export function MatchInfoPanel({
       case 'gather':
         return (
           <Button
-            fullWidth
             variant="light"
             color="orange"
             onClick={() => onStatusTransition('assign')}
@@ -105,7 +103,6 @@ export function MatchInfoPanel({
       case 'assign':
         return (
           <Button
-            fullWidth
             variant="light"
             color="green"
             onClick={() => onStatusTransition('battle')}
@@ -116,7 +113,6 @@ export function MatchInfoPanel({
       case 'battle':
         return (
           <Button
-            fullWidth
             variant="light"
             color="red"
             onClick={() => onStatusTransition('complete')}
@@ -258,11 +254,10 @@ export function MatchInfoPanel({
         {/* Card 3: Action Buttons */}
         {showActions && (
           <Card withBorder padding="lg" shadow="sm">
-            <Stack gap="sm">
+            <Group gap="sm" grow>
               {/* Assign Players button */}
               {(match.status === 'gather' || match.status === 'assign' || match.status === 'battle') && onAssignPlayers && (
                 <Button
-                  fullWidth
                   variant="light"
                   onClick={onAssignPlayers}
                 >
@@ -273,7 +268,6 @@ export function MatchInfoPanel({
               {/* Scoring button */}
               {match.status === 'battle' && onScoring && (
                 <Button
-                  fullWidth
                   variant="light"
                   color="blue"
                   onClick={onScoring}
@@ -288,7 +282,6 @@ export function MatchInfoPanel({
               {/* Delete button */}
               {onDelete && (
                 <Button
-                  fullWidth
                   color="red"
                   variant="light"
                   onClick={onDelete}
@@ -296,7 +289,7 @@ export function MatchInfoPanel({
                   Delete Match
                 </Button>
               )}
-            </Stack>
+            </Group>
           </Card>
         )}
       </Stack>

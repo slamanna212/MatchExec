@@ -89,7 +89,7 @@ export function ParticipantsList({
         withBorder
         style={getTeamCardStyles(teamColor)}
       >
-        <Group align="flex-start" gap="md" wrap="nowrap">
+        <Group align="center" gap="md" wrap="nowrap">
           <Avatar size="lg" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>
             {index}
           </Avatar>
