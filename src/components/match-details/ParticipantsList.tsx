@@ -89,11 +89,11 @@ export function ParticipantsList({
         withBorder
         style={getTeamCardStyles(teamColor)}
       >
-        <Group align="center" gap="md">
-          <Avatar size="sm" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>
+        <Group align="flex-start" gap="md" wrap="nowrap">
+          <Avatar size="lg" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>
             {index}
           </Avatar>
-          <Stack gap={4} style={{ flex: 1 }}>
+          <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
             <Text fw={500} size="sm">{participant.username}</Text>
             <Text size="xs" c="dimmed">
               Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
