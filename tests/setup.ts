@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, afterEach } from 'vitest';
 import { setupTestDatabase, teardownTestDatabase, resetTestDatabase } from './utils/test-db';
+import { resetMockDbInstance } from './mocks/database';
 
 beforeAll(async () => {
   await setupTestDatabase();
@@ -7,6 +8,7 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await resetTestDatabase();
+  resetMockDbInstance();
 });
 
 afterAll(async () => {

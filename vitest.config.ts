@@ -17,6 +17,11 @@ export default defineConfig({
     },
     setupFiles: ['./tests/setup.ts'],
     testTimeout: 10000,
+    // Pool configuration for better test isolation
+    pool: 'forks',
+    // File parallelism to prevent database conflicts
+    fileParallelism: true,
+    isolate: true,
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@lib': path.resolve(__dirname, './lib'),

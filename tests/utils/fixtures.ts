@@ -63,6 +63,9 @@ const defaults = {
     name: 'Test Tournament',
     format: 'single_elimination' as const,
     status: 'created',
+    rounds_per_match: 3,
+    game_mode_id: 'test-mode',
+    ruleset: 'competitive',
   },
 };
 
@@ -100,16 +103,16 @@ export async function createGameMode(gameId: string, overrides: Partial<typeof d
   });
 }
 
-export async function createMatch(gameId: string, modeId: string, overrides: Partial<typeof defaults.match> = {}): Promise<MatchFixture> {
+export async function createMatch(gameId: string, modeId: string, overrides: Partial<typeof defaults.match & { maps?: string }> = {}): Promise<MatchFixture> {
   const db = getTestDb();
   const data = { ...defaults.match, ...overrides };
   const id = generateId('match_');
 
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [id, gameId, modeId, data.name, data.start_date, data.start_time, data.status, data.match_format, data.rounds],
+      `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, maps, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [id, gameId, modeId, data.name, data.start_date, data.start_time, data.status, data.match_format, data.rounds, overrides.maps || null],
       function(err) {
         if (err) reject(err);
         else {
@@ -123,7 +126,7 @@ export async function createMatch(gameId: string, modeId: string, overrides: Par
   });
 }
 
-export async function createMatchParticipant(matchId: string, discordUserId: string, username = 'TestUser', team: string | null = null) {
+export async function createMatchParticipant(matchId: string, discordUserId: string, username = 'TestUser', team: string | null = null): Promise<{ id: string; match_id: string; discord_user_id: string; username: string; team: string | null }> {
   const db = getTestDb();
   const id = generateId('participant_');
 
@@ -139,16 +142,16 @@ export async function createMatchParticipant(matchId: string, discordUserId: str
   });
 }
 
-export async function createTournament(gameId: string, overrides: Partial<typeof defaults.tournament> = {}): Promise<TournamentFixture> {
+export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single_elimination' | 'double_elimination'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
   const db = getTestDb();
   const data = { ...defaults.tournament, ...overrides };
   const id = generateId('tournament_');
 
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO tournaments (id, name, game_id, format, status, created_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-      [id, data.name, gameId, data.format, data.status],
+      `INSERT INTO tournaments (id, name, game_id, game_mode_id, format, status, rounds_per_match, ruleset, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [id, data.name, gameId, overrides.game_mode_id || data.game_mode_id, data.format, data.status, data.rounds_per_match, data.ruleset],
       function(err) {
         if (err) reject(err);
         else resolve({ id, game_id: gameId, name: data.name, format: data.format, status: data.status } as TournamentFixture);
@@ -158,7 +161,7 @@ export async function createTournament(gameId: string, overrides: Partial<typeof
 }
 
 // Queue fixtures for contract testing
-export async function createQueueEntry(queueTable: string, data: Record<string, unknown>) {
+export async function createQueueEntry(queueTable: string, data: Record<string, unknown>): Promise<Record<string, unknown> & { id: number }> {
   const db = getTestDb();
   const columns = Object.keys(data).join(', ');
   const placeholders = Object.keys(data).map(() => '?').join(', ');
@@ -177,7 +180,7 @@ export async function createQueueEntry(queueTable: string, data: Record<string, 
 }
 
 // Helper to seed common test data
-export async function seedBasicTestData() {
+export async function seedBasicTestData(): Promise<{ game: GameFixture; mode: GameModeFixture }> {
   const game = await createGame();
   const mode = await createGameMode(game.id);
   return { game, mode };
