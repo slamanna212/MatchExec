@@ -69,15 +69,15 @@ const defaults = {
   },
 };
 
-export async function createGame(overrides: Partial<typeof defaults.game> = {}): Promise<GameFixture> {
+export async function createGame(overrides: Partial<typeof defaults.game & { icon_url?: string }> = {}): Promise<GameFixture> {
   const db = getTestDb();
   const data = { ...defaults.game, ...overrides };
   const id = generateId('game_');
 
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO games (id, name, genre, min_players, max_players) VALUES (?, ?, ?, ?, ?)`,
-      [id, data.name, data.genre, data.min_players, data.max_players],
+      `INSERT INTO games (id, name, genre, min_players, max_players, icon_url) VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, data.name, data.genre, data.min_players, data.max_players, (overrides as any).icon_url || null],
       function(err) {
         if (err) reject(err);
         else resolve({ id, name: data.name } as GameFixture);

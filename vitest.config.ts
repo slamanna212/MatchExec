@@ -4,6 +4,14 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@/shared': path.resolve(__dirname, './shared'),
+      '@/lib': path.resolve(__dirname, './src/lib'),
+      '@': path.resolve(__dirname, './src'),
+      '@lib': path.resolve(__dirname, './lib'),
+    },
+  },
   test: {
     globals: true,
     environment: 'happy-dom',
@@ -22,9 +30,5 @@ export default defineConfig({
     // File parallelism to prevent database conflicts
     fileParallelism: true,
     isolate: true,
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@lib': path.resolve(__dirname, './lib'),
-    },
   },
 });

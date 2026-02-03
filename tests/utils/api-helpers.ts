@@ -23,7 +23,7 @@ export function createMockRequest(
 }
 
 // Helper to parse API response
-export async function parseResponse<T>(response: Response): Promise<{ status: number; data: T }> {
+export async function parseResponse<T = any>(response: Response): Promise<{ status: number; data: T }> {
   const data = await response.json();
   return {
     status: response.status,
@@ -31,7 +31,7 @@ export async function parseResponse<T>(response: Response): Promise<{ status: nu
   };
 }
 
-// Helper for route params
-export function createRouteParams(params: Record<string, string>): { params: Promise<Record<string, string>> } {
+// Helper for route params - generic to support typed params
+export function createRouteParams<T extends Record<string, string>>(params: T): { params: Promise<T> } {
   return { params: Promise.resolve(params) };
 }
