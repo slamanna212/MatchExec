@@ -1289,7 +1289,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - run: npm ci
       - run: npm run lint
@@ -1301,7 +1301,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - run: npm ci
       - run: npm run test:coverage
@@ -1317,7 +1317,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - run: npm ci
       - run: npm run test:integration
@@ -1340,7 +1340,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - run: npm ci
       - run: npm run test:coverage
