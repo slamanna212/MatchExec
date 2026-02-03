@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { getTestDb } from '../utils/test-db';
-import { Database } from '@/lib/database/connection';
+import { Database } from '@lib/database/connection';
 
 /**
  * Mock Database wrapper that uses the test SQLite database

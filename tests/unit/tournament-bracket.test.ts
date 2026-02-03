@@ -90,7 +90,7 @@ describe('Tournament Bracket', () => {
   describe('generateSingleEliminationMatches', () => {
     it('should generate correct number of first round matches for 4 teams', async () => {
       const tournament = await createTournament(game.id, {
-        format: 'single_elimination',
+        format: 'single-elimination',
         game_mode_id: mode.id
       });
 
@@ -129,7 +129,7 @@ describe('Tournament Bracket', () => {
 
     it('should handle odd number of teams with bye', async () => {
       const tournament = await createTournament(game.id, {
-        format: 'single_elimination',
+        format: 'single-elimination',
         game_mode_id: mode.id
       });
 
@@ -334,7 +334,7 @@ describe('Tournament Bracket', () => {
   describe('generateDoubleEliminationMatches', () => {
     it('should generate same first round as single elimination', async () => {
       const tournament = await createTournament(game.id, {
-        format: 'double_elimination',
+        format: 'double-elimination',
         game_mode_id: mode.id
       });
 
@@ -373,7 +373,7 @@ describe('Tournament Bracket', () => {
   describe('generateLosersBracketMatches', () => {
     it('should generate losers bracket matches for eliminated teams', async () => {
       const tournament = await createTournament(game.id, {
-        format: 'double_elimination',
+        format: 'double-elimination',
         game_mode_id: mode.id
       });
 
@@ -422,7 +422,7 @@ describe('Tournament Bracket', () => {
   describe('generateGrandFinalsMatch', () => {
     it('should create grand finals match with correct teams', async () => {
       const tournament = await createTournament(game.id, {
-        format: 'double_elimination',
+        format: 'double-elimination',
         game_mode_id: mode.id
       });
 

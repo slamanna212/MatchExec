@@ -22,7 +22,7 @@ export interface TournamentFixture {
   id: string;
   name: string;
   game_id: string;
-  format: 'single_elimination' | 'double_elimination';
+  format: 'single-elimination' | 'double-elimination';
   status: string;
 }
 
@@ -61,7 +61,7 @@ const defaults = {
   },
   tournament: {
     name: 'Test Tournament',
-    format: 'single_elimination' as const,
+    format: 'single-elimination' as const,
     status: 'created',
     rounds_per_match: 3,
     game_mode_id: 'test-mode',
@@ -142,7 +142,7 @@ export async function createMatchParticipant(matchId: string, discordUserId: str
   });
 }
 
-export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single_elimination' | 'double_elimination'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
+export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single-elimination' | 'double-elimination'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
   const db = getTestDb();
   const data = { ...defaults.tournament, ...overrides };
   const id = generateId('tournament_');
