@@ -1,14 +1,158 @@
-import * as sqlite3 from 'sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
+import { Database } from '../../lib/database/connection';
 
 // Use worker ID to create unique database per test worker
 const workerId = process.env.VITEST_POOL_ID || '1';
 const TEST_DB_PATH = path.join(process.cwd(), 'app_data', 'data', `test-matchexec-${workerId}.db`);
 
-let testDb: sqlite3.Database | null = null;
+let wrappedDb: Database | null = null;
+let testDbWrapper: TestDatabase | null = null;
 
-export async function setupTestDatabase(): Promise<sqlite3.Database> {
+/**
+ * Callback types for sqlite3-style API
+ */
+type RunCallback = (err: Error | null) => void;
+type GetCallback<T> = (err: Error | null, row: T | undefined) => void;
+type AllCallback<T> = (err: Error | null, rows: T[]) => void;
+
+/**
+ * TestDatabase wrapper that supports BOTH promise-based and callback-based APIs.
+ * This allows tests to use either style:
+ *
+ * Promise style (recommended):
+ *   await db.run('INSERT ...', [params]);
+ *   const row = await db.get('SELECT ...', [params]);
+ *
+ * Callback style (legacy sqlite3 compatibility):
+ *   db.run('INSERT ...', [params], (err) => { ... });
+ *   db.get('SELECT ...', [params], (err, row) => { ... });
+ */
+export class TestDatabase {
+  constructor(private db: Database) {}
+
+  /**
+   * Run a SQL statement (INSERT, UPDATE, DELETE)
+   * Supports both promise and callback styles
+   */
+  // Overload signatures for TypeScript
+  run(sql: string): Promise<{ lastID?: number; changes?: number }>;
+  run(sql: string, params: unknown[]): Promise<{ lastID?: number; changes?: number }>;
+  run(sql: string, callback: RunCallback): void;
+  run(sql: string, params: unknown[], callback: RunCallback): void;
+  // Implementation
+  run(sql: string, paramsOrCallback?: unknown[] | RunCallback, callback?: RunCallback): Promise<{ lastID?: number; changes?: number }> | void {
+    let params: unknown[] = [];
+    let cb: RunCallback | undefined;
+
+    if (typeof paramsOrCallback === 'function') {
+      cb = paramsOrCallback;
+    } else if (Array.isArray(paramsOrCallback)) {
+      params = paramsOrCallback;
+      cb = callback;
+    }
+
+    if (cb) {
+      // Callback style
+      this.db.run(sql, params)
+        .then(() => cb!(null))
+        .catch((err) => cb!(err));
+      return undefined as unknown as Promise<{ lastID?: number; changes?: number }>;
+    }
+
+    // Promise style
+    return this.db.run(sql, params);
+  }
+
+  /**
+   * Get a single row
+   * Supports both promise and callback styles
+   */
+  // Overload signatures
+  get<T = unknown>(sql: string): Promise<T | undefined>;
+  get<T = unknown>(sql: string, params: unknown[]): Promise<T | undefined>;
+  get<T = unknown>(sql: string, callback: GetCallback<T>): void;
+  get<T = unknown>(sql: string, params: unknown[], callback: GetCallback<T>): void;
+  // Implementation
+  get<T = unknown>(sql: string, paramsOrCallback?: unknown[] | GetCallback<T>, callback?: GetCallback<T>): Promise<T | undefined> | void {
+    let params: unknown[] = [];
+    let cb: GetCallback<T> | undefined;
+
+    if (typeof paramsOrCallback === 'function') {
+      cb = paramsOrCallback as GetCallback<T>;
+    } else if (Array.isArray(paramsOrCallback)) {
+      params = paramsOrCallback;
+      cb = callback;
+    }
+
+    if (cb) {
+      // Callback style
+      this.db.get<T>(sql, params)
+        .then((row) => cb!(null, row))
+        .catch((err) => cb!(err, undefined));
+      return undefined as unknown as Promise<T | undefined>;
+    }
+
+    // Promise style
+    return this.db.get<T>(sql, params);
+  }
+
+  /**
+   * Get all matching rows
+   * Supports both promise and callback styles
+   */
+  // Overload signatures
+  all<T = unknown>(sql: string): Promise<T[]>;
+  all<T = unknown>(sql: string, params: unknown[]): Promise<T[]>;
+  all<T = unknown>(sql: string, callback: AllCallback<T>): void;
+  all<T = unknown>(sql: string, params: unknown[], callback: AllCallback<T>): void;
+  // Implementation
+  all<T = unknown>(sql: string, paramsOrCallback?: unknown[] | AllCallback<T>, callback?: AllCallback<T>): Promise<T[]> | void {
+    let params: unknown[] = [];
+    let cb: AllCallback<T> | undefined;
+
+    if (typeof paramsOrCallback === 'function') {
+      cb = paramsOrCallback as AllCallback<T>;
+    } else if (Array.isArray(paramsOrCallback)) {
+      params = paramsOrCallback;
+      cb = callback;
+    }
+
+    if (cb) {
+      // Callback style
+      this.db.all<T>(sql, params)
+        .then((rows) => cb!(null, rows))
+        .catch((err) => cb!(err, []));
+      return undefined as unknown as Promise<T[]>;
+    }
+
+    // Promise style
+    return this.db.all<T>(sql, params);
+  }
+
+  /**
+   * Execute raw SQL (for multiple statements, schema changes, etc.)
+   */
+  exec(sql: string): Promise<void> {
+    return this.db.exec(sql);
+  }
+
+  /**
+   * Close the database connection
+   */
+  close(): Promise<void> {
+    return this.db.close();
+  }
+
+  /**
+   * Connect to the database
+   */
+  connect(): Promise<void> {
+    return this.db.connect();
+  }
+}
+
+export async function setupTestDatabase(): Promise<TestDatabase> {
   // Ensure directory exists first
   const dbDir = path.dirname(TEST_DB_PATH);
   if (!fs.existsSync(dbDir)) {
@@ -16,15 +160,14 @@ export async function setupTestDatabase(): Promise<sqlite3.Database> {
   }
 
   // Close existing connection if any
-  if (testDb) {
+  if (wrappedDb) {
     try {
-      await new Promise<void>((resolve) => {
-        testDb!.close(() => resolve());
-      });
+      await wrappedDb.close();
     } catch {
       // Ignore errors when closing
     }
-    testDb = null;
+    wrappedDb = null;
+    testDbWrapper = null;
   }
 
   // Remove existing test database file
@@ -40,12 +183,17 @@ export async function setupTestDatabase(): Promise<sqlite3.Database> {
     }
   }
 
-  // Create new test database with explicit file mode
-  testDb = new sqlite3.Database(TEST_DB_PATH, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
+  // Set environment variable so app code uses test database
+  process.env.DATABASE_PATH = TEST_DB_PATH;
+  // Note: NODE_ENV is handled by vitest automatically
+
+  // Create Database wrapper and connect
+  wrappedDb = new Database(TEST_DB_PATH);
+  await wrappedDb.connect();
 
   // Enable WAL mode for better concurrency
-  await runSql(testDb, 'PRAGMA journal_mode=WAL');
-  await runSql(testDb, 'PRAGMA synchronous=NORMAL');
+  await wrappedDb.exec('PRAGMA journal_mode=WAL');
+  await wrappedDb.exec('PRAGMA synchronous=NORMAL');
 
   // Run migrations
   const migrationsDir = path.join(process.cwd(), 'migrations');
@@ -55,40 +203,33 @@ export async function setupTestDatabase(): Promise<sqlite3.Database> {
 
   for (const file of migrationFiles) {
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-    await runSql(testDb, sql);
+    await wrappedDb.exec(sql);
   }
 
-  // Set environment variable so app code uses test database
-  process.env.DATABASE_PATH = TEST_DB_PATH;
-  // Note: NODE_ENV is handled by vitest automatically
-
-  return testDb;
+  // Create and return the test wrapper
+  testDbWrapper = new TestDatabase(wrappedDb);
+  return testDbWrapper;
 }
 
 export async function resetTestDatabase(): Promise<void> {
-  if (!testDb) return;
+  if (!wrappedDb) return;
 
   // Get all table names except migrations
-  const tables = await allAsync<{ name: string }>(
-    testDb,
+  const tables = await wrappedDb.all<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'migrations'"
   );
 
   // Delete data from all tables
   for (const table of tables) {
-    await runSql(testDb, `DELETE FROM ${table.name}`);
+    await wrappedDb.exec(`DELETE FROM ${table.name}`);
   }
 }
 
 export async function teardownTestDatabase(): Promise<void> {
-  if (testDb) {
-    await new Promise<void>((resolve, reject) => {
-      testDb!.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    testDb = null;
+  if (wrappedDb) {
+    await wrappedDb.close();
+    wrappedDb = null;
+    testDbWrapper = null;
   }
 
   // Clean up all test databases for this worker
@@ -112,26 +253,7 @@ export async function teardownTestDatabase(): Promise<void> {
   }
 }
 
-export function getTestDb(): sqlite3.Database {
-  if (!testDb) throw new Error('Test database not initialized');
-  return testDb;
-}
-
-// Helper functions
-function runSql(db: sqlite3.Database, sql: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.exec(sql, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-function allAsync<T>(db: sqlite3.Database, sql: string): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    db.all(sql, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows as T[]);
-    });
-  });
+export function getTestDb(): TestDatabase {
+  if (!testDbWrapper) throw new Error('Test database not initialized');
+  return testDbWrapper;
 }

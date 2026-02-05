@@ -31,6 +31,7 @@ export function createMockChannel(overrides = {}) {
     type: 0, // GuildText
     send: vi.fn().mockResolvedValue({ id: 'message-123' }),
     delete: vi.fn().mockResolvedValue(undefined),
+    isTextBased: vi.fn().mockReturnValue(true),
     ...overrides,
   };
 }

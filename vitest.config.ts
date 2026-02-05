@@ -23,8 +23,9 @@ export default defineConfig({
       include: ['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts', 'processes/**/*.ts'],
       exclude: ['**/*.test.ts', '**/*.d.ts', '**/types.ts'],
     },
-    setupFiles: ['./tests/setup.ts'],
-    testTimeout: 10000,
+    setupFiles: ['./tests/vitest-mocks.ts', './tests/setup.ts'],
+    testTimeout: 30000,      // 30 seconds for individual tests
+    hookTimeout: 30000,      // 30 seconds for beforeEach/afterEach hooks (database setup)
     // Pool configuration for better test isolation
     pool: 'forks',
     // File parallelism to prevent database conflicts

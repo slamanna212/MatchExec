@@ -74,16 +74,11 @@ export async function createGame(overrides: Partial<typeof defaults.game & { ico
   const data = { ...defaults.game, ...overrides };
   const id = generateId('game_');
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO games (id, name, genre, min_players, max_players, icon_url) VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, data.name, data.genre, data.min_players, data.max_players, (overrides as any).icon_url || null],
-      function(err) {
-        if (err) reject(err);
-        else resolve({ id, name: data.name } as GameFixture);
-      }
-    );
-  });
+  await db.run(
+    `INSERT INTO games (id, name, genre, min_players, max_players, icon_url) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, data.name, data.genre, data.min_players, data.max_players, (overrides as any).icon_url || null]
+  );
+  return { id, name: data.name } as GameFixture;
 }
 
 export async function createGameMode(gameId: string, overrides: Partial<typeof defaults.gameMode> = {}): Promise<GameModeFixture> {
@@ -91,55 +86,36 @@ export async function createGameMode(gameId: string, overrides: Partial<typeof d
   const data = { ...defaults.gameMode, ...overrides };
   const id = generateId('mode_');
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams) VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, gameId, data.name, data.description, data.team_size, data.max_teams],
-      function(err) {
-        if (err) reject(err);
-        else resolve({ id, game_id: gameId, name: data.name } as GameModeFixture);
-      }
-    );
-  });
+  await db.run(
+    `INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, gameId, data.name, data.description, data.team_size, data.max_teams]
+  );
+  return { id, game_id: gameId, name: data.name } as GameModeFixture;
 }
 
-export async function createMatch(gameId: string, modeId: string, overrides: Partial<typeof defaults.match & { maps?: string }> = {}): Promise<MatchFixture> {
+export async function createMatch(gameId: string, modeId: string, overrides: Partial<typeof defaults.match & { maps?: string; player_notifications?: number }> = {}): Promise<MatchFixture> {
   const db = getTestDb();
   const data = { ...defaults.match, ...overrides };
   const id = generateId('match_');
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, maps, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [id, gameId, modeId, data.name, data.start_date, data.start_time, data.status, data.match_format, data.rounds, overrides.maps || null],
-      function(err) {
-        if (err) reject(err);
-        else {
-          db.get(`SELECT * FROM matches WHERE id = ?`, [id], (err, row) => {
-            if (err) reject(err);
-            else resolve(row as MatchFixture);
-          });
-        }
-      }
-    );
-  });
+  await db.run(
+    `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, maps, player_notifications, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [id, gameId, modeId, data.name, data.start_date, data.start_time, data.status, data.match_format, data.rounds, overrides.maps || null, overrides.player_notifications ?? 1]
+  );
+  const row = await db.get<MatchFixture>(`SELECT * FROM matches WHERE id = ?`, [id]);
+  return row as MatchFixture;
 }
 
 export async function createMatchParticipant(matchId: string, discordUserId: string, username = 'TestUser', team: string | null = null): Promise<{ id: string; match_id: string; discord_user_id: string; username: string; team: string | null }> {
   const db = getTestDb();
   const id = generateId('participant_');
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, team) VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, matchId, generateId('user_'), discordUserId, username, team],
-      function(err) {
-        if (err) reject(err);
-        else resolve({ id, match_id: matchId, discord_user_id: discordUserId, username, team });
-      }
-    );
-  });
+  await db.run(
+    `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, team) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, matchId, generateId('user_'), discordUserId, username, team]
+  );
+  return { id, match_id: matchId, discord_user_id: discordUserId, username, team };
 }
 
 export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single-elimination' | 'double-elimination'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
@@ -147,17 +123,12 @@ export async function createTournament(gameId: string, overrides: Partial<Omit<t
   const data = { ...defaults.tournament, ...overrides };
   const id = generateId('tournament_');
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO tournaments (id, name, game_id, game_mode_id, format, status, rounds_per_match, ruleset, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [id, data.name, gameId, overrides.game_mode_id || data.game_mode_id, data.format, data.status, data.rounds_per_match, data.ruleset],
-      function(err) {
-        if (err) reject(err);
-        else resolve({ id, game_id: gameId, name: data.name, format: data.format, status: data.status } as TournamentFixture);
-      }
-    );
-  });
+  await db.run(
+    `INSERT INTO tournaments (id, name, game_id, game_mode_id, format, status, rounds_per_match, ruleset, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [id, data.name, gameId, overrides.game_mode_id || data.game_mode_id, data.format, data.status, data.rounds_per_match, data.ruleset]
+  );
+  return { id, game_id: gameId, name: data.name, format: data.format, status: data.status } as TournamentFixture;
 }
 
 // Queue fixtures for contract testing
@@ -167,16 +138,11 @@ export async function createQueueEntry(queueTable: string, data: Record<string, 
   const placeholders = Object.keys(data).map(() => '?').join(', ');
   const values = Object.values(data);
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO ${queueTable} (${columns}) VALUES (${placeholders})`,
-      values,
-      function(err) {
-        if (err) reject(err);
-        else resolve({ id: this.lastID, ...data });
-      }
-    );
-  });
+  const result = await db.run(
+    `INSERT INTO ${queueTable} (${columns}) VALUES (${placeholders})`,
+    values
+  );
+  return { id: result.lastID!, ...data };
 }
 
 // Helper to seed common test data

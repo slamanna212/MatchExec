@@ -1,4 +1,27 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Mock logger and database-init BEFORE any imports
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    critical: vi.fn(),
+  },
+}));
+
+vi.mock('@/lib/database-init', () => ({
+  getDbInstance: vi.fn(async () => {
+    const { getTestDb } = await import('../utils/test-db');
+    return getTestDb();
+  }),
+}));
+
+vi.mock('@/lib/voice-channel-manager', () => ({
+  deleteMatchVoiceChannels: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { seedBasicTestData, createMatch, createMatchParticipant } from '../utils/fixtures';
 import { getTestDb } from '../utils/test-db';
 import {
