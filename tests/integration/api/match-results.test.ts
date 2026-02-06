@@ -204,6 +204,56 @@ describe('Match Results API', () => {
   });
 
   describe('GET /api/matches/[matchId]/games/[gameId]/result', () => {
+    it('should return result after successful submission', async () => {
+      const db = getTestDb();
+
+      // Create a match and game
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+           VALUES ('match-get', 'Test Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'battle', 10, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_games (id, match_id, round, status)
+           VALUES ('game-get', 'match-get', 1, 'pending')`,
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      // Submit a result
+      const matchResult = {
+        matchId: 'match-get',
+        gameId: 'game-get',
+        winner: 'team1',
+        completedAt: new Date().toISOString(),
+      };
+
+      const postRequest = createMockRequest('POST', '/api/matches/match-get/games/game-get/result', matchResult);
+      const postResponse = await submitResult(
+        postRequest,
+        createRouteParams({ matchId: 'match-get', gameId: 'game-get' })
+      );
+      const { status: postStatus } = await parseResponse(postResponse);
+      expect(postStatus).toBe(200);
+
+      // Now GET the result and verify it matches what was submitted
+      const getRequest = createMockRequest('GET', '/api/matches/match-get/games/game-get/result');
+      const getResponse = await getResult(
+        getRequest,
+        createRouteParams({ matchId: 'match-get', gameId: 'game-get' })
+      );
+      const { status: getStatus, data: getData } = await parseResponse(getResponse);
+
+      expect(getStatus).toBe(200);
+      expect(getData).toBeDefined();
+      expect(getData.winner).toBe('team1');
+    });
+
     it('should return 404 when no result exists', async () => {
       const db = getTestDb();
 

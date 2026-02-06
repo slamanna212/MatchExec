@@ -3,6 +3,10 @@ import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import path from 'path';
 
+// Note: This is a structural test that validates the seeder's expected database
+// behavior (schema, constraints, idempotency) using manual INSERT statements.
+// It does NOT import or call the actual seeder module. Bugs in the real seeder's
+// file-reading or parsing logic would not be caught by these tests.
 describe('Database Seeder', () => {
   const testDbPath = path.join(process.cwd(), 'app_data', 'data', 'seeder-test.db');
   let db: sqlite3.Database;

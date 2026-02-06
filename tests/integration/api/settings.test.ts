@@ -27,7 +27,12 @@ describe('Settings API', () => {
       const { status, data } = await parseResponse(response);
 
       expect(status).toBe(200);
-      expect(data).toBeDefined();
+      expect(data).toHaveProperty('success', true);
+
+      // Verify settings were persisted by reading them back
+      const getResponse = await getDiscordSettings();
+      const { data: savedData } = await parseResponse(getResponse);
+      expect(savedData).toBeDefined();
     });
   });
 
@@ -51,7 +56,12 @@ describe('Settings API', () => {
       const { status, data } = await parseResponse(response);
 
       expect(status).toBe(200);
-      expect(data).toBeDefined();
+      expect(data).toHaveProperty('success', true);
+
+      // Verify settings were persisted by reading them back
+      const getResponse = await getAnnouncerSettings();
+      const { data: savedData } = await parseResponse(getResponse);
+      expect(savedData).toBeDefined();
     });
   });
 
@@ -73,7 +83,12 @@ describe('Settings API', () => {
       const { status, data } = await parseResponse(response);
 
       expect(status).toBe(200);
-      expect(data).toBeDefined();
+      expect(data).toHaveProperty('message');
+
+      // Verify settings were persisted by reading them back
+      const getResponse = await getUISettings();
+      const { data: savedData } = await parseResponse(getResponse);
+      expect(savedData).toBeDefined();
     });
   });
 

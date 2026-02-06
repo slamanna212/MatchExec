@@ -4,6 +4,9 @@ import { seedBasicTestData } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 import { GET } from '@/app/api/matches/[matchId]/participants/route';
 
+// Note: The participants route only exposes GET. Adding/removing participants
+// is handled via Discord bot interactions, not REST API endpoints.
+
 describe('Match Participants API', () => {
   let game: any;
   let _mode: any;
@@ -76,6 +79,40 @@ describe('Match Participants API', () => {
       const { status } = await parseResponse(response);
 
       expect(status).toBe(404);
+    });
+
+    it('should return participants with team assignments', async () => {
+      const db = getTestDb();
+
+      // Create a match
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+           VALUES ('match-1', 'Test Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'assign', 10, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      // Add participants with team assignments
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, team_assignment, joined_at)
+           VALUES
+           ('p1', 'match-1', 'user-1', 'user-1', 'Player 1', 'team1', datetime('now')),
+           ('p2', 'match-1', 'user-2', 'user-2', 'Player 2', 'team2', datetime('now'))`,
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('GET', '/api/matches/match-1/participants');
+      const response = await GET(request, createRouteParams({ matchId: 'match-1' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.participants).toHaveLength(2);
+      expect(data.participants[0].team_assignment).toBe('team1');
+      expect(data.participants[1].team_assignment).toBe('team2');
     });
 
     it('should include signup data when present', async () => {

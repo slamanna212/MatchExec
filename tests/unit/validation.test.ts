@@ -96,9 +96,8 @@ describe('Validation Utilities', () => {
 
       const result = validateRequiredFields(obj, ['teamSize', 'rounds']);
 
-      // 0 is falsy but should be considered valid
-      // This test documents current behavior - may need to be updated if validation logic changes
-      expect(result.valid).toBe(false); // Current implementation treats 0 as missing
+      // 0 is falsy but should be considered a valid value
+      expect(result.valid).toBe(true);
     });
 
     it('should accept false as valid value', () => {
@@ -109,9 +108,8 @@ describe('Validation Utilities', () => {
 
       const result = validateRequiredFields(obj, ['announcements', 'playerNotifications']);
 
-      // false is falsy but should be considered valid
-      // This test documents current behavior
-      expect(result.valid).toBe(false); // Current implementation treats false as missing
+      // false is falsy but should be considered a valid value
+      expect(result.valid).toBe(true);
     });
 
     it('should handle empty required fields array', () => {

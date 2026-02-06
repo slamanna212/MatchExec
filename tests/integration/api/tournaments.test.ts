@@ -4,6 +4,8 @@ import { seedBasicTestData } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 import { GET, POST } from '@/app/api/tournaments/route';
 import { GET as getTournament, DELETE as deleteTournament } from '@/app/api/tournaments/[tournamentId]/route';
+import { GET as getTeams, POST as createTeam, DELETE as deleteTeam } from '@/app/api/tournaments/[tournamentId]/teams/route';
+import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentId]/transition/route';
 
 describe('Tournaments API', () => {
   let game: any;
@@ -161,6 +163,146 @@ describe('Tournaments API', () => {
     it('should return 404 for non-existent tournament', async () => {
       const request = createMockRequest('DELETE', '/api/tournaments/nonexistent');
       const response = await deleteTournament(request, createRouteParams({ tournamentId: 'nonexistent' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(404);
+    });
+  });
+
+  describe('Tournament Teams API', () => {
+    it('should return empty teams array for new tournament', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-teams', 'Team Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('GET', '/api/tournaments/t-teams/teams');
+      const response = await getTeams(request, createRouteParams({ tournamentId: 't-teams' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(0);
+    });
+
+    it('should create a team for a tournament', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-team-create', 'Team Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('POST', '/api/tournaments/t-team-create/teams', {
+        teamName: 'Alpha Team',
+      });
+
+      const response = await createTeam(request, createRouteParams({ tournamentId: 't-team-create' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(201);
+      expect(data.id).toBeDefined();
+      expect(data.team_name).toBe('Alpha Team');
+    });
+
+    it('should delete a team from a tournament', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-team-del', 'Team Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES ('team-del-1', 't-team-del', 'Delete Me')`,
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('DELETE', '/api/tournaments/t-team-del/teams?teamId=team-del-1');
+      const response = await deleteTeam(request, createRouteParams({ tournamentId: 't-team-del' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data).toHaveProperty('success', true);
+
+      // Verify deletion
+      const deleted = await new Promise<any>((resolve, reject) => {
+        db.get('SELECT * FROM tournament_teams WHERE id = ?', ['team-del-1'], (err, row) =>
+          err ? reject(err) : resolve(row)
+        );
+      });
+      expect(deleted).toBeUndefined();
+    });
+  });
+
+  describe('Tournament Transitions API', () => {
+    it('should transition tournament from created to gather', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-trans', 'Transition Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('POST', '/api/tournaments/t-trans/transition', {
+        newStatus: 'gather',
+      });
+
+      const response = await transitionTournament(request, createRouteParams({ tournamentId: 't-trans' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.status).toBe('gather');
+    });
+
+    it('should reject backward transitions', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-back', 'Backward Tournament', ?, 'gather', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('POST', '/api/tournaments/t-back/transition', {
+        newStatus: 'created',
+      });
+
+      const response = await transitionTournament(request, createRouteParams({ tournamentId: 't-back' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should return 404 for non-existent tournament transition', async () => {
+      const request = createMockRequest('POST', '/api/tournaments/nonexistent/transition', {
+        newStatus: 'gather',
+      });
+
+      const response = await transitionTournament(request, createRouteParams({ tournamentId: 'nonexistent' }));
       const { status } = await parseResponse(response);
 
       expect(status).toBe(404);

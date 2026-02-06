@@ -371,7 +371,6 @@ describe('AnnouncementHandler', () => {
 
       const result = await announcementHandler.postMatchStartAnnouncement(eventData);
 
-      expect(result).toBeTruthy();
       expect(result).toHaveProperty('success', true);
       expect(mockChannel.send).toHaveBeenCalled();
     });
@@ -403,7 +402,6 @@ describe('AnnouncementHandler', () => {
 
       const result = await announcementHandler.postMapScoreNotification(scoreData);
 
-      expect(result).toBeTruthy();
       expect(result).toHaveProperty('success', true);
       expect(mockChannel.send).toHaveBeenCalled();
     });
@@ -436,7 +434,6 @@ describe('AnnouncementHandler', () => {
 
       const result = await announcementHandler.postMatchWinnerNotification(winnerData);
 
-      expect(result).toBeTruthy();
       expect(result).toHaveProperty('success', true);
       expect(mockChannel.send).toHaveBeenCalled();
     });
@@ -466,7 +463,8 @@ describe('AnnouncementHandler', () => {
 
       const result = await announcementHandler.postMatchWinnerNotification(winnerData);
 
-      expect(result).toBeTruthy();
+      expect(result).toHaveProperty('success', true);
+      expect(mockChannel.send).toHaveBeenCalled();
     });
   });
 
@@ -493,7 +491,7 @@ describe('AnnouncementHandler', () => {
 
       const result = await announcementHandler.postTournamentWinnerNotification(tournamentData);
 
-      expect(result).toBeTruthy();
+      expect(result).toHaveProperty('success', true);
       expect(mockChannel.send).toHaveBeenCalled();
     });
   });

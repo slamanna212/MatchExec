@@ -385,26 +385,104 @@ describe('Transition Handlers', () => {
   });
 
   describe('State Transition Validation', () => {
-    it('should allow valid forward transitions', async () => {
+    // Note: handleStatusTransition is a side-effect router, not a validator.
+    // It does NOT reject invalid transitions (e.g., created -> battle).
+    // Transition validation is enforced by the API route layer, not here.
+    // These tests verify correct handler routing and side effects.
+
+    it('should allow valid forward transitions and produce expected side effects', async () => {
+      const db = getTestDb();
       const match = await createMatch(game.id, mode.id, { status: 'created' });
 
-      // created → gather
-      await expect(handleStatusTransition(match.id.toString(), 'gather')).resolves.not.toThrow();
+      // created → gather: should queue announcement
+      await handleStatusTransition(match.id.toString(), 'gather');
+      const announcement = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'standard'`,
+          [match.id],
+          (err, row) => err ? reject(err) : resolve(row)
+        );
+      });
+      expect(announcement).toBeDefined();
+      expect(announcement.status).toBe('pending');
 
-      // gather → assign
-      await expect(handleStatusTransition(match.id.toString(), 'assign')).resolves.not.toThrow();
+      // gather → assign: should queue status update
+      await handleStatusTransition(match.id.toString(), 'assign');
+      const statusUpdate = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM discord_status_update_queue WHERE match_id = ? AND new_status = 'assign'`,
+          [match.id],
+          (err, row) => err ? reject(err) : resolve(row)
+        );
+      });
+      expect(statusUpdate).toBeDefined();
+      expect(statusUpdate.status).toBe('pending');
 
-      // assign → battle
-      await expect(handleStatusTransition(match.id.toString(), 'battle')).resolves.not.toThrow();
+      // assign → battle: should queue match_start announcement
+      await handleStatusTransition(match.id.toString(), 'battle');
+      const battleAnnouncement = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'match_start'`,
+          [match.id],
+          (err, row) => err ? reject(err) : resolve(row)
+        );
+      });
+      expect(battleAnnouncement).toBeDefined();
 
-      // battle → complete
-      await expect(handleStatusTransition(match.id.toString(), 'complete')).resolves.not.toThrow();
+      // battle → complete: should queue deletion
+      await handleStatusTransition(match.id.toString(), 'complete');
+      const deletion = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM discord_deletion_queue WHERE match_id = ?`,
+          [match.id],
+          (err, row) => err ? reject(err) : resolve(row)
+        );
+      });
+      expect(deletion).toBeDefined();
+      expect(deletion.status).toBe('pending');
     });
 
     it('should allow battle → cancelled transition', async () => {
+      const db = getTestDb();
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
 
-      await expect(handleStatusTransition(match.id.toString(), 'cancelled')).resolves.not.toThrow();
+      await handleStatusTransition(match.id.toString(), 'cancelled');
+
+      const deletion = await new Promise<any>((resolve, reject) => {
+        db.get(
+          `SELECT * FROM discord_deletion_queue WHERE match_id = ?`,
+          [match.id],
+          (err, row) => err ? reject(err) : resolve(row)
+        );
+      });
+      expect(deletion).toBeDefined();
+      expect(deletion.status).toBe('pending');
+    });
+
+    it('should not produce side effects for unknown statuses', async () => {
+      const db = getTestDb();
+      const match = await createMatch(game.id, mode.id, { status: 'created' });
+
+      await handleStatusTransition(match.id.toString(), 'nonexistent-status');
+
+      // Verify no queues were populated
+      const announcements = await new Promise<any[]>((resolve, reject) => {
+        db.all(
+          `SELECT * FROM discord_announcement_queue WHERE match_id = ?`,
+          [match.id],
+          (err, rows) => err ? reject(err) : resolve(rows)
+        );
+      });
+      expect(announcements).toHaveLength(0);
+
+      const deletions = await new Promise<any[]>((resolve, reject) => {
+        db.all(
+          `SELECT * FROM discord_deletion_queue WHERE match_id = ?`,
+          [match.id],
+          (err, rows) => err ? reject(err) : resolve(rows)
+        );
+      });
+      expect(deletions).toHaveLength(0);
     });
   });
 });

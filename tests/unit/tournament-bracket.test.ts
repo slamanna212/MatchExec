@@ -55,9 +55,11 @@ describe('Tournament Bracket', () => {
     });
 
     it('should calculate correct rounds for double elimination', () => {
-      // Double elimination has winner's bracket + loser's bracket + finals
-      expect(calculateTournamentRounds(4, 'double-elimination')).toBeGreaterThan(2);
-      expect(calculateTournamentRounds(8, 'double-elimination')).toBeGreaterThan(3);
+      // Double elimination: winners bracket rounds + losers bracket rounds + grand final
+      // 4 teams: 2 winners rounds + 2 losers rounds + 1 grand final = 5
+      expect(calculateTournamentRounds(4, 'double-elimination')).toBe(5);
+      // 8 teams: 3 winners rounds + 4 losers rounds + 1 grand final = 8
+      expect(calculateTournamentRounds(8, 'double-elimination')).toBe(8);
     });
 
     it('should handle edge cases', () => {

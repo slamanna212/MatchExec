@@ -479,18 +479,20 @@ describe('VoiceHandler', () => {
   });
 
   describe('disconnectFromVoiceChannel', () => {
-    it('should disconnect from voice channel', async () => {
-      // Just ensure it doesn't throw
+    it('should return false when no active connection exists', async () => {
       const result = await voiceHandler.disconnectFromVoiceChannel('voice-channel-123');
 
-      // Should return false since no connection exists
+      // Returns false because no internal voice connection is tracked for this channel
       expect(result).toBe(false);
     });
+
+    // Note: Testing successful disconnect (returns true) would require establishing
+    // a real voice connection first to populate the internal voiceConnections Map.
+    // The method uses this.voiceConnections (internal state), not the global getVoiceConnection.
   });
 
   describe('disconnectFromAllVoiceChannels', () => {
-    it('should disconnect from all voice channels', async () => {
-      // Just ensure it doesn't throw
+    it('should handle disconnect when no connections exist', async () => {
       await expect(voiceHandler.disconnectFromAllVoiceChannels()).resolves.not.toThrow();
     });
   });
