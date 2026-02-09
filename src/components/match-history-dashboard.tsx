@@ -15,6 +15,7 @@ import {
   Stack,
   Grid,
   RingProgress,
+  Image,
   TextInput
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
@@ -43,6 +44,7 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  event_image_url?: string;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -51,25 +53,21 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
 
 interface HistoryMatchCardProps {
   match: MatchWithGame;
-  mapNames: {[key: string]: string};
   onViewDetails: (match: MatchWithGame) => void;
-  formatMapName: (mapId: string) => string;
 }
 
-const HistoryMatchCard = memo(({ 
-  match, 
-  mapNames, 
-  onViewDetails, 
-  formatMapName 
+const HistoryMatchCard = memo(({
+  match,
+  onViewDetails
 }: HistoryMatchCardProps) => {
   return (
-    <Card 
-      shadow="sm" 
-      padding="lg" 
-      radius="md" 
+    <Card
+      shadow="sm"
+      padding={0}
+      radius="md"
       withBorder
-      style={{ 
-        cursor: 'pointer', 
+      style={{
+        cursor: 'pointer',
         opacity: 0.9,
         transition: 'all 0.2s ease'
       }}
@@ -83,7 +81,18 @@ const HistoryMatchCard = memo(({
       }}
       onClick={() => onViewDetails(match)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={match.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${match.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={match.game_icon}
           alt={match.game_name}
@@ -104,43 +113,16 @@ const HistoryMatchCard = memo(({
           ]}
         />
       </Group>
-      
-      <Divider mb="md" />
-      
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+
+      <Divider mb="md" mx="lg" />
+
+      <Stack gap="xs" px="lg" pb="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {match.description && (
             <Text size="sm" c="dimmed">{match.description}</Text>
           )}
         </div>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rules:</Text>
-          <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds:</Text>
-          <Text size="sm">{match.rounds || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between" align="center">
-          <Text size="sm" c="dimmed">Maps:</Text>
-          <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
-            {match.maps && match.maps.length > 0 ? (
-              (() => {
-                const cleanMapId = match.maps[0].replace(/-\d+$/, '');
-                const mapName = mapNames[cleanMapId] || formatMapName(cleanMapId);
-                return match.maps.length > 1
-                  ? `${mapName} +${match.maps.length - 1} more`
-                  : mapName;
-              })()
-            ) : (
-              'None selected'
-            )}
-          </Text>
-        </Group>
-        
+
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Max Participants:</Text>
           <Text size="sm">{match.max_participants}</Text>
@@ -228,7 +210,7 @@ export function MatchHistoryDashboard() {
     return () => clearInterval(intervalId);
   }, [refreshInterval, fetchMatches]);
 
-  const formatMapName = useCallback((mapId: string) => {
+  const _formatMapName = useCallback((mapId: string) => {
     // Convert map ID to proper display name
     // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
     return mapId
@@ -237,7 +219,7 @@ export function MatchHistoryDashboard() {
       .join(' ');
   }, []);
 
-  const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
+  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
   const [_mapNotes, _setMapNotes] = useState<{[key: string]: string}>({});
 
@@ -377,14 +359,12 @@ export function MatchHistoryDashboard() {
         >
           <HistoryMatchCard
             match={match}
-            mapNames={mapNames}
             onViewDetails={handleViewDetails}
-            formatMapName={formatMapName}
           />
         </motion.div>
       </Grid.Col>
     ));
-  }, [filteredMatches, mapNames, handleViewDetails, formatMapName]);
+  }, [filteredMatches, handleViewDetails]);
 
 
   if (loading) {

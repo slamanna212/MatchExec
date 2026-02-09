@@ -15,6 +15,7 @@ import {
   Stack,
   Grid,
   TextInput,
+  Image,
   useMantineColorScheme
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
@@ -52,6 +53,7 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   tournament_name?: string;
   tournament_round?: number;
   tournament_bracket_type?: string;
+  event_image_url?: string;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -60,29 +62,27 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
 
 interface MatchCardProps {
   match: MatchWithGame;
-  mapNames: {[key: string]: string};
   onViewDetails: (match: MatchWithGame) => void;
   onAssignPlayers: (match: MatchWithGame) => void;
   getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
-const MatchCard = memo(({ 
-  match, 
-  mapNames, 
-  onViewDetails, 
-  onAssignPlayers, 
-  getNextStatusButton 
+const MatchCard = memo(({
+  match,
+  onViewDetails,
+  onAssignPlayers,
+  getNextStatusButton
 }: MatchCardProps) => {
   const { colorScheme } = useMantineColorScheme();
   
   return (
-    <Card 
+    <Card
       shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-      padding="lg" 
-      radius="md" 
+      padding={0}
+      radius="md"
       withBorder
       bg={colorScheme === 'light' ? 'white' : undefined}
-      style={{ 
+      style={{
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
@@ -97,7 +97,18 @@ const MatchCard = memo(({
       }}
       onClick={() => onViewDetails(match)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={match.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${match.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={match.game_icon}
           alt={match.game_name}
@@ -123,48 +134,16 @@ const MatchCard = memo(({
           ]}
         />
       </Group>
-      
-      <Divider mb="md" />
-      
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+
+      <Divider mb="md" mx="lg" />
+
+      <Stack gap="xs" px="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {match.description && (
             <Text size="sm" c="dimmed">{match.description}</Text>
           )}
         </div>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rules:</Text>
-          <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds:</Text>
-          <Text size="sm">{match.rounds || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between" align="center">
-          <Text size="sm" c="dimmed">Maps:</Text>
-          <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
-            {match.maps && match.maps.length > 0 ? (
-              (() => {
-                const cleanMapId = match.maps[0].replace(/-\d+-[a-zA-Z0-9]+$/, '');
-                const mapName = mapNames[cleanMapId];
-                
-                if (!mapName) {
-                  return 'Loading...';
-                }
-                
-                return match.maps.length > 1
-                  ? `${mapName} +${match.maps.length - 1} more`
-                  : mapName;
-              })()
-            ) : (
-              'None selected'
-            )}
-          </Text>
-        </Group>
-        
+
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Participants:</Text>
           <Text size="sm">{(match as MatchWithGame & { participant_count?: number }).participant_count || 0}/{match.max_participants}</Text>
@@ -174,8 +153,8 @@ const MatchCard = memo(({
           <Text size="sm">{parseDbTimestamp(match.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
         </Group>
       </Stack>
-      
-      <Group mt="md" gap="xs">
+
+      <Group mt="md" gap="xs" px="lg" pb="lg">
         {(match.status === 'gather' || match.status === 'assign') && (
           <Button 
             size="sm" 
@@ -199,8 +178,7 @@ const MatchCard = memo(({
     prevProps.match.status === nextProps.match.status &&
     prevProps.match.name === nextProps.match.name &&
     prevProps.match.updated_at === nextProps.match.updated_at &&
-    prevProps.match.game_color === nextProps.match.game_color &&
-    JSON.stringify(prevProps.mapNames) === JSON.stringify(nextProps.mapNames)
+    prevProps.match.game_color === nextProps.match.game_color
   );
 });
 
@@ -305,7 +283,7 @@ export function MatchDashboard() {
       .join(' ');
   };
 
-  const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
+  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
   const [_mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
@@ -716,7 +694,6 @@ export function MatchDashboard() {
         >
           <MatchCard
             match={match}
-            mapNames={mapNames}
             onViewDetails={handleViewDetails}
             onAssignPlayers={handleAssignPlayers}
             getNextStatusButton={getNextStatusButton}
@@ -724,7 +701,7 @@ export function MatchDashboard() {
         </motion.div>
       </Grid.Col>
     ));
-  }, [filteredMatches, mapNames, handleViewDetails, getNextStatusButton]);
+  }, [filteredMatches, handleViewDetails, getNextStatusButton]);
 
 
   if (loading) {
