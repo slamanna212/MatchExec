@@ -209,6 +209,8 @@ export function MatchContentPanel({
                         onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
                         maxLength={24}
                         size="sm"
+                        variant="filled"
+                        w={200}
                         styles={{
                           input: {
                             fontFamily: 'monospace',
