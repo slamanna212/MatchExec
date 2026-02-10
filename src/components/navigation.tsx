@@ -174,7 +174,10 @@ export function Navigation({ children }: NavigationProps) {
     )
   }
 
-  const renderNavItems = (onNavigate?: () => void) => navigationItems.map((item) => {
+  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean }) => navigationItems.map((item) => {
+    const onNavigate = options?.onNavigate;
+    const iconSize = options?.large ? "1.25rem" : "1rem";
+    const fontSize = options?.large ? '1rem' : undefined;
     const isActive = mounted && (
       pathname === item.href ||
       (item.href === '/settings' && pathname?.startsWith('/settings')) ||
@@ -197,10 +200,11 @@ export function Navigation({ children }: NavigationProps) {
         <NavLink
           href={item.href}
           label={item.label}
-          leftSection={React.createElement(getIcon(item.iconName), { size: "1rem" })}
+          leftSection={React.createElement(getIcon(item.iconName), { size: iconSize })}
           childrenOffset={0}
           c={isActive ? "#f7cc02" : "#F5F5F5"}
           fw={isActive ? 700 : 400}
+          fz={fontSize}
           onClick={(event) => {
             event.preventDefault();
             router.push(item.href);
@@ -212,10 +216,11 @@ export function Navigation({ children }: NavigationProps) {
             key={link.href}
             href={link.href}
             label={link.label}
-            leftSection={React.createElement(getIcon(link.iconName), { size: "1rem" })}
+            leftSection={React.createElement(getIcon(link.iconName), { size: iconSize })}
             pl="xl"
             c={(mounted && pathname === link.href) ? "#f7cc02" : "#F5F5F5"}
             fw={(mounted && pathname === link.href) ? 700 : 400}
+            fz={fontSize}
             onClick={(event) => {
               event.preventDefault();
               router.push(link.href);
@@ -273,8 +278,8 @@ export function Navigation({ children }: NavigationProps) {
         transitionProps={{ transition: 'slide-right', duration: 250 }}
       >
         {/* Drawer Nav Items */}
-        <Stack gap={0} style={{ flex: 1, overflowY: 'auto' }} p="md" pt="xs">
-          {renderNavItems(toggle)}
+        <Stack gap={4} style={{ flex: 1, overflowY: 'auto' }} p="md" pt="xs">
+          {renderNavItems({ onNavigate: toggle, large: true })}
         </Stack>
 
         {/* Drawer Footer */}
@@ -323,7 +328,7 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Section>
 
         <AppShell.Section grow>
-          {renderNavItems()}
+          {renderNavItems({})}
         </AppShell.Section>
 
         <AppShell.Section>
