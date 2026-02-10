@@ -5,13 +5,12 @@ import {
   Group,
   Avatar,
   Text,
-  RingProgress,
   Button,
   Card,
   Image
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
-import { MATCH_FLOW_STEPS } from '@/shared/types';
+import { StageRing } from '../StageRing';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -145,16 +144,7 @@ export function MatchInfoPanel({
                 <Text size="xl" fw={600}>{match.name}</Text>
                 <Text size="md" c="dimmed">{match.game_name}</Text>
               </Stack>
-              <RingProgress
-                size={60}
-                thickness={6}
-                sections={[
-                  {
-                    value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
-                    color: match.game_color || '#95a5a6'
-                  }
-                ]}
-              />
+              <StageRing status={match.status} gameColor={match.game_color} size={60} thickness={6} />
             </Group>
 
             {/* Description */}

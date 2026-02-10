@@ -8,7 +8,6 @@ import {
   Group,
   Avatar,
   Text,
-  RingProgress,
   Divider,
   Button,
   Badge,
@@ -20,7 +19,7 @@ import {
 import { IconTrophy } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
-import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
+import { StageRing } from './StageRing';
 import { TournamentBracket } from './tournament-bracket';
 import { notificationHelper } from '@/lib/notifications';
 
@@ -451,16 +450,7 @@ export function TournamentDetailsModal({
             <Text size="xl" fw={600}>{tournament.name}</Text>
             <Text size="md" c="dimmed">{tournament.game_name}</Text>
           </Stack>
-          <RingProgress
-            size={60}
-            thickness={6}
-            sections={[
-              {
-                value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
-                color: tournament.game_color || '#95a5a6'
-              }
-            ]}
-          />
+          <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" size={60} thickness={6} />
         </Group>
 
         <Divider />

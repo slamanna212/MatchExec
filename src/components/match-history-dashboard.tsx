@@ -14,12 +14,11 @@ import {
   Group,
   Stack,
   Grid,
-  RingProgress,
   Image,
   TextInput
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
-import { MATCH_FLOW_STEPS } from '@/shared/types';
+import { StageRing } from './StageRing';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -102,16 +101,7 @@ const HistoryMatchCard = memo(({
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
         </Stack>
-        <RingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
-              color: match.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={match.status} gameColor={match.game_color} />
       </Group>
 
       <Divider mb="md" mx="lg" />

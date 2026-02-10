@@ -7,7 +7,6 @@ import {
   Group,
   Avatar,
   Text,
-  RingProgress,
   Divider,
   Button,
   Badge,
@@ -17,7 +16,7 @@ import {
 } from '@mantine/core';
 import { IconDeviceFloppy } from '@tabler/icons-react';
 import type { Match} from '@/shared/types';
-import { MATCH_FLOW_STEPS } from '@/shared/types';
+import { StageRing } from './StageRing';
 import classes from './gradient-segmented-control.module.css';
 import { ParticipantsList } from './match-details/ParticipantsList';
 import { RemindersList } from './match-details/RemindersList';
@@ -139,16 +138,7 @@ export function MatchDetailsModal({
             <Text size="xl" fw={600}>{selectedMatch.name}</Text>
             <Text size="md" c="dimmed">{selectedMatch.game_name}</Text>
           </Stack>
-          <RingProgress
-            size={60}
-            thickness={6}
-            sections={[
-              { 
-                value: MATCH_FLOW_STEPS[selectedMatch.status]?.progress || 0, 
-                color: selectedMatch.game_color || '#95a5a6'
-              }
-            ]}
-          />
+          <StageRing status={selectedMatch.status} gameColor={selectedMatch.game_color} size={60} thickness={6} />
         </Group>
 
         <Divider />

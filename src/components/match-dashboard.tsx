@@ -19,9 +19,8 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
-import { MATCH_FLOW_STEPS } from '@/shared/types';
 
-import { AnimatedRingProgress } from './AnimatedRingProgress';
+import { StageRing } from './StageRing';
 import { showError } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -116,16 +115,7 @@ const MatchCard = memo(({
             </Text>
           )}
         </Stack>
-        <AnimatedRingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
-              color: match.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={match.status} gameColor={match.game_color} />
       </Group>
 
       <Divider mb="md" mx="lg" />

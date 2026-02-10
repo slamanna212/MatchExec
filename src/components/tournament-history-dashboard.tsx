@@ -14,11 +14,10 @@ import {
   Stack,
   Grid,
   TextInput,
-  Badge,
-  RingProgress
+  Badge
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
-import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
+import { StageRing } from './StageRing';
 import { TournamentDetailsModal } from './tournament-details-modal';
 
 interface TournamentWithGame extends Tournament {
@@ -68,16 +67,7 @@ const HistoryTournamentCard = memo(({
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
-        <RingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
-              color: tournament.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
 
       <Divider mb="md" />

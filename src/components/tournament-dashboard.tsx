@@ -20,10 +20,9 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
-import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { TournamentDetailsModal } from './tournament-details-modal';
 import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
-import { AnimatedRingProgress } from './AnimatedRingProgress';
+import { StageRing } from './StageRing';
 import { notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -92,16 +91,7 @@ const TournamentCard = memo(({
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
-        <AnimatedRingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
-              color: tournament.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
       
       <Divider mb="md" />
