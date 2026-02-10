@@ -261,7 +261,7 @@ export function Navigation({ children }: NavigationProps) {
         opened={opened}
         onClose={toggle}
         position="left"
-        size="40%"
+        size="45%"
         withCloseButton={false}
         hiddenFrom="md"
         styles={{
