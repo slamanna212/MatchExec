@@ -3,3 +3,6 @@ ALTER TABLE match_participants ADD COLUMN avatar_url TEXT;
 
 -- Add last_avatar_check timestamp for scheduler optimization
 ALTER TABLE match_participants ADD COLUMN last_avatar_check DATETIME;
+
+-- Track consecutive avatar fetch failures to skip problematic users
+ALTER TABLE match_participants ADD COLUMN failed_avatar_checks INTEGER DEFAULT 0;

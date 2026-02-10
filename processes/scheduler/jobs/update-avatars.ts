@@ -58,12 +58,25 @@ export class AvatarUpdateJob {
         return;
       }
 
-      // Get all unique Discord user IDs from participants
+      // Get all unique Discord user IDs from participants, skipping users with 3+ failures
       const participants = await this.db.all<{ discord_user_id: string }>(`
         SELECT DISTINCT discord_user_id
         FROM match_participants
         WHERE discord_user_id IS NOT NULL
+          AND (failed_avatar_checks IS NULL OR failed_avatar_checks < 3)
       `);
+
+      // Check how many users are being skipped
+      const skipped = await this.db.get<{ count: number }>(`
+        SELECT COUNT(DISTINCT discord_user_id) as count
+        FROM match_participants
+        WHERE discord_user_id IS NOT NULL
+          AND failed_avatar_checks >= 3
+      `);
+
+      if (skipped && skipped.count > 0) {
+        logger.debug(`🖼️  Skipping ${skipped.count} users with 3+ failed avatar checks`);
+      }
 
       if (!participants || participants.length === 0) {
         logger.info('ℹ️  No participants found, skipping avatar update');
@@ -72,16 +85,17 @@ export class AvatarUpdateJob {
 
       let updated = 0;
       let failed = 0;
+      const failedUserIds: string[] = [];
 
       // Update each user's avatar
       for (const { discord_user_id } of participants) {
         try {
           const avatarUrl = await getDiscordAvatarUrl(this.discordClient, discord_user_id);
 
-          // Update all records for this user
+          // Update all records for this user - success resets failure count
           await this.db.run(`
             UPDATE match_participants
-            SET avatar_url = ?, last_avatar_check = CURRENT_TIMESTAMP
+            SET avatar_url = ?, last_avatar_check = CURRENT_TIMESTAMP, failed_avatar_checks = 0
             WHERE discord_user_id = ?
           `, [avatarUrl, discord_user_id]);
 
@@ -89,6 +103,29 @@ export class AvatarUpdateJob {
         } catch (error) {
           logger.error(`Failed to update avatar for user ${discord_user_id}:`, error);
           failed++;
+          failedUserIds.push(discord_user_id);
+
+          // Update last_avatar_check but do NOT overwrite avatar_url
+          await this.db.run(`
+            UPDATE match_participants
+            SET last_avatar_check = CURRENT_TIMESTAMP
+            WHERE discord_user_id = ?
+          `, [discord_user_id]);
+        }
+      }
+
+      // Only increment failed_avatar_checks when at least one user succeeded
+      // (proving connectivity works). If ALL failed, it's likely a connectivity issue.
+      if (updated === 0 && failed > 0) {
+        logger.warning(`⚠️  All ${failed} avatar fetches failed — likely a connectivity or API issue. Not incrementing failure counts.`);
+      } else if (failedUserIds.length > 0) {
+        // At least one succeeded, so increment failure counts for those that failed
+        for (const userId of failedUserIds) {
+          await this.db.run(`
+            UPDATE match_participants
+            SET failed_avatar_checks = COALESCE(failed_avatar_checks, 0) + 1
+            WHERE discord_user_id = ?
+          `, [userId]);
         }
       }
 
