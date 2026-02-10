@@ -239,19 +239,9 @@ export function Navigation({ children }: NavigationProps) {
                   href={item.href}
                   label={item.label}
                   leftSection={React.createElement(getIcon(item.iconName), { size: "1rem" })}
-                  active={isActive}
                   childrenOffset={0}
-                  c="#F5F5F5"
-                  styles={{
-                    root: {
-                      '&:hover': {
-                        backgroundColor: '#3d2563 !important'
-                      },
-                      '&[dataActive="true"]': {
-                        backgroundColor: '#4c1d95 !important'
-                      }
-                    }
-                  }}
+                  c={isActive ? "#f7cc02" : "#F5F5F5"}
+                  fw={isActive ? 700 : 400}
                   onClick={(event) => {
                     event.preventDefault();
                     router.push(item.href);
@@ -264,19 +254,9 @@ export function Navigation({ children }: NavigationProps) {
                     href={link.href}
                     label={link.label}
                     leftSection={React.createElement(getIcon(link.iconName), { size: "1rem" })}
-                    active={mounted && pathname === link.href}
                     pl="xl"
-                    c="#F5F5F5"
-                    styles={{
-                      root: {
-                        '&:hover': {
-                          backgroundColor: '#3d2563 !important'
-                        },
-                        '&[dataActive="true"]': {
-                          backgroundColor: '#4c1d95 !important'
-                        }
-                      }
-                    }}
+                    c={(mounted && pathname === link.href) ? "#f7cc02" : "#F5F5F5"}
+                    fw={(mounted && pathname === link.href) ? 700 : 400}
                     onClick={(event) => {
                       event.preventDefault();
                       router.push(link.href);
