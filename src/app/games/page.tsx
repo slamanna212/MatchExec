@@ -1,11 +1,11 @@
 'use client'
 
-
-import { Card, Text, Stack, Grid, Badge, Group, Image, Center, Loader, Modal, TextInput } from '@mantine/core';
-import { useEffect, useState } from 'react';
-import { useDisclosure } from '@mantine/hooks';
-import { LazyImage } from '@/components/LazyImage';
+import { Text, Badge, Button, Center, Loader, TextInput, Skeleton } from '@mantine/core';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { IconSearch, IconDeviceGamepad2 } from '@tabler/icons-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { logger } from '@/lib/logger/client';
+import styles from './games-page.module.css';
 
 interface Game {
   id: string;
@@ -17,6 +17,8 @@ interface Game {
   maxPlayers: number;
   iconUrl: string;
   coverUrl?: string;
+  color?: string;
+  supportsAllModes: boolean;
   mapCount: number;
   modeCount: number;
 }
@@ -38,20 +40,20 @@ interface GameMode {
   description?: string;
 }
 
+const FALLBACK_COLOR = '#95a5a6';
+
 export default function GamesPage() {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Modal states
-  const [mapsOpened, { open: openMaps, close: closeMaps }] = useDisclosure(false);
-  const [modesOpened, { open: openModes, close: closeModes }] = useDisclosure(false);
-  
-  // Modal data
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [maps, setMaps] = useState<GameMap[]>([]);
-  const [modes, setModes] = useState<GameMode[]>([]);
-  const [modalLoading, setModalLoading] = useState(false);
+  const [mapsLoading, setMapsLoading] = useState(false);
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [modes, setModes] = useState<GameMode[]>([]);
+  const [selectedMode, setSelectedMode] = useState<string | null>(null);
+
+  const mapCache = useRef<Record<string, GameMap[]>>({});
+  const modeCache = useRef<Record<string, GameMode[]>>({});
 
   useEffect(() => {
     async function fetchGames() {
@@ -69,62 +71,83 @@ export default function GamesPage() {
         setLoading(false);
       }
     }
-
     fetchGames();
   }, []);
 
-  const handleShowMaps = async (game: Game) => {
+  const handleSelectGame = useCallback(async (game: Game) => {
+    if (selectedGame?.id === game.id) return;
     setSelectedGame(game);
-    setModalLoading(true);
     setMapSearchQuery('');
-    openMaps();
-    
-    try {
-      const response = await fetch(`/api/games/${game.id}/maps`);
-      if (response.ok) {
-        const mapsData = await response.json();
-        setMaps(mapsData);
-      } else {
-        logger.error('Failed to fetch maps');
-      }
-    } catch (error) {
-      logger.error('Error fetching maps:', error);
-    } finally {
-      setModalLoading(false);
-    }
-  };
+    setSelectedMode(null);
 
-  const handleShowModes = async (game: Game) => {
-    setSelectedGame(game);
-    setModalLoading(true);
-    openModes();
-    
-    try {
-      const response = await fetch(`/api/games/${game.id}/modes`);
-      if (response.ok) {
-        const modesData = await response.json();
-        setModes(modesData);
-      } else {
-        logger.error('Failed to fetch modes');
+    // Fetch maps
+    if (mapCache.current[game.id]) {
+      setMaps(mapCache.current[game.id]);
+    } else {
+      setMapsLoading(true);
+      try {
+        const response = await fetch(`/api/games/${game.id}/maps`);
+        if (response.ok) {
+          const mapsData = await response.json();
+          mapCache.current[game.id] = mapsData;
+          setMaps(mapsData);
+        }
+      } catch (error) {
+        logger.error('Error fetching maps:', error);
+      } finally {
+        setMapsLoading(false);
       }
-    } catch (error) {
-      logger.error('Error fetching modes:', error);
-    } finally {
-      setModalLoading(false);
     }
-  };
 
-  // Filter maps based on search query
-  const filteredMaps = maps.filter(map =>
-    map.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
-    map.modeName.toLowerCase().includes(mapSearchQuery.toLowerCase()) ||
-    (map.location && map.location.toLowerCase().includes(mapSearchQuery.toLowerCase()))
-  );
+    // Fetch modes
+    if (modeCache.current[game.id]) {
+      setModes(modeCache.current[game.id]);
+    } else {
+      try {
+        const response = await fetch(`/api/games/${game.id}/modes`);
+        if (response.ok) {
+          const modesData = await response.json();
+          modeCache.current[game.id] = modesData;
+          setModes(modesData);
+        }
+      } catch (error) {
+        logger.error('Error fetching modes:', error);
+      }
+    }
+  }, [selectedGame?.id]);
+
+  const toggleMode = useCallback((modeName: string) => {
+    setSelectedMode(prev => prev === modeName ? null : modeName);
+  }, []);
+
+  // Filter maps by search query and selected mode
+  const filteredMaps = maps.filter(map => {
+    if (mapSearchQuery) {
+      const q = mapSearchQuery.toLowerCase();
+      const nameMatch = map.name?.toLowerCase().includes(q);
+      const locMatch = map.location?.toLowerCase().includes(q);
+      const modeMatch = map.modeName?.toLowerCase().includes(q);
+      if (!nameMatch && !locMatch && !modeMatch) return false;
+    }
+
+    if (selectedMode) {
+      if (map.supportedModes) {
+        const mapModes = map.supportedModes.split(',').map(m => m.trim());
+        if (!mapModes.includes(selectedMode)) return false;
+      } else if (map.modeName !== selectedMode) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const gameColor = selectedGame?.color || FALLBACK_COLOR;
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
-        <Center h={400}>
+      <div className={styles.container}>
+        <Center style={{ gridColumn: '1 / -1' }} h="100%">
           <Loader size="lg" />
         </Center>
       </div>
@@ -132,219 +155,225 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <Stack gap="xl">
-
-        <Grid>
-          {games.map((game) => (
-            <Grid.Col key={game.id} span={{ base: 12, md: 6, lg: 4 }}>
-              <Card shadow="sm" padding="lg" radius="md" withBorder h="320px">
-                <Group wrap="nowrap" h="100%">
-                  <div style={{ width: '180px', height: '280px', flexShrink: 0, position: 'relative' }}>
-                    {game.coverUrl && (
-                      <>
-                        {/* Blurred background */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            backgroundImage: `url(${game.coverUrl})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            filter: 'blur(10px)',
-                            zIndex: 1
-                          }}
-                        />
-                        {/* Main image */}
-                        <Image
-                          src={game.coverUrl}
-                          alt={`${game.name} cover`}
-                          radius="md"
-                          fallbackSrc="/assets/placeholder-cover.png"
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'contain',
-                            position: 'relative',
-                            zIndex: 2
-                          }}
-                        />
-                      </>
-                    )}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <Text size="lg" fw={500}>
-                      {game.name}
-                    </Text>
-                    <Badge variant="light" size="sm" mt="xs">
-                      {game.genre}
-                    </Badge>
-                    <Text size="sm" c="dimmed" mt="xs">
-                      {game.developer}
-                    </Text>
-                    <Group mt={{ base: "xs", md: "md" }} gap="xl">
-                      <div 
-                        style={{ cursor: 'pointer' }} 
-                        onClick={() => handleShowMaps(game)}
-                        className="hover:opacity-70 transition-opacity"
-                      >
-                        <Text ta="center" fz="lg" fw={700} c="blue">
-                          {game.mapCount}
-                        </Text>
-                        <Text ta="center" fz="xs" c="dimmed">
-                          Maps
-                        </Text>
-                      </div>
-                      <div 
-                        style={{ cursor: 'pointer' }} 
-                        onClick={() => handleShowModes(game)}
-                        className="hover:opacity-70 transition-opacity"
-                      >
-                        <Text ta="center" fz="lg" fw={700} c="blue">
-                          {game.modeCount}
-                        </Text>
-                        <Text ta="center" fz="xs" c="dimmed">
-                          Modes
-                        </Text>
-                      </div>
-                    </Group>
-                    <Text size="xs" c="dimmed" mt={{ base: "xs", md: "sm" }}>
-                      {game.minPlayers}-{game.maxPlayers} players
-                    </Text>
-                  </div>
-                </Group>
-              </Card>
-            </Grid.Col>
+    <div className={styles.container}>
+      {/* Desktop sidebar */}
+      <div className={styles.sidebarWrapper}>
+        <div className={styles.sidebar}>
+          {games.map(game => (
+            <div
+              key={game.id}
+              className={selectedGame?.id === game.id ? styles.gameItemSelected : styles.gameItem}
+              style={selectedGame?.id === game.id ? {
+                borderLeftColor: game.color || FALLBACK_COLOR,
+                background: `${game.color || FALLBACK_COLOR}12`,
+              } : undefined}
+              onClick={() => handleSelectGame(game)}
+            >
+              {game.coverUrl ? (
+                <img
+                  src={game.coverUrl}
+                  alt={game.name}
+                  className={styles.gameItemCover}
+                />
+              ) : (
+                <div className={styles.gameItemCover} />
+              )}
+              <div className={styles.gameItemInfo}>
+                <div className={styles.gameItemName}>{game.name}</div>
+                <Badge variant="light" size="xs">{game.genre}</Badge>
+                <Text size="xs" c="dimmed" mt={2}>{game.developer}</Text>
+              </div>
+            </div>
           ))}
-        </Grid>
+        </div>
+      </div>
 
-        {games.length === 0 && !loading && (
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Text ta="center" c="dimmed">
-              No games found. Check your database configuration.
-            </Text>
-          </Card>
-        )}
-      </Stack>
-
-      {/* Maps Modal */}
-      <Modal
-        opened={mapsOpened}
-        onClose={closeMaps}
-        title={selectedGame ? `${selectedGame.name} - Maps` : 'Maps'}
-        size="lg"
-        centered
-      >
-        {modalLoading ? (
-          <Center h={200}>
-            <Loader size="md" />
-          </Center>
-        ) : (
-          <Stack gap="md">
-            <TextInput
-              placeholder="Search maps by name, mode, or location..."
-              value={mapSearchQuery}
-              onChange={(event) => setMapSearchQuery(event.currentTarget.value)}
-              mb="md"
+      {/* Mobile horizontal game list */}
+      <div className={styles.mobileGameList}>
+        {games.map(game => (
+          <div
+            key={game.id}
+            className={selectedGame?.id === game.id ? styles.mobileGameCardSelected : styles.mobileGameCard}
+            onClick={() => handleSelectGame(game)}
+          >
+            <img
+              src={game.coverUrl || ''}
+              alt={game.name}
+              className={styles.mobileGameCardImage}
+              style={{
+                borderColor: selectedGame?.id === game.id ? (game.color || FALLBACK_COLOR) : 'transparent',
+              }}
             />
-            {filteredMaps.map((map) => (
-              <Card key={map.id} shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
-                <Group wrap="nowrap" align="stretch" gap={0}>
-                  <div style={{ width: '50%', position: 'relative' }}>
-                    {map.imageUrl && (
-                      <LazyImage
-                        src={map.imageUrl}
-                        alt={map.name}
-                        height={80}
-                        radius={0}
-                        fallbackSrc="/assets/placeholder-map.png"
-                        style={{
-                          borderTopLeftRadius: 'var(--mantine-radius-md)',
-                          borderBottomLeftRadius: 'var(--mantine-radius-md)',
-                          objectFit: 'cover',
-                          width: '100%',
-                          height: '100%'
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div style={{ width: '50%', padding: 'var(--mantine-spacing-sm)' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%', gap: 'var(--mantine-spacing-xs)' }}>
-                      <Text fw={500}>{map.name}</Text>
-                      <Group gap="xs">
-                        {map.supportedModes ? 
-                          map.supportedModes.split(',').map((mode: string, index: number) => (
-                            <Badge key={index} variant="light" size="sm">
-                              {mode.trim()}
-                            </Badge>
-                          )) : (
-                            map.modeName ? (
-                              <Badge variant="light" size="sm">
-                                {map.modeName}
-                              </Badge>
-                            ) : null
-                          )
-                        }
-                      </Group>
-                      {map.location && (
-                        <Text size="sm" c="dimmed">
-                          {map.location}
-                        </Text>
-                      )}
-                    </div>
-                  </div>
-                </Group>
-              </Card>
-            ))}
-            {filteredMaps.length === 0 && maps.length > 0 && (
-              <Text ta="center" c="dimmed">
-                No maps found matching &quot;{mapSearchQuery}&quot;.
-              </Text>
-            )}
-            {maps.length === 0 && !modalLoading && (
-              <Text ta="center" c="dimmed">
-                No maps found for this game.
-              </Text>
-            )}
-          </Stack>
-        )}
-      </Modal>
+            <span className={styles.mobileGameCardName}>{game.name}</span>
+          </div>
+        ))}
+      </div>
 
-      {/* Modes Modal */}
-      <Modal
-        opened={modesOpened}
-        onClose={closeModes}
-        title={selectedGame ? `${selectedGame.name} - Modes` : 'Modes'}
-        size="lg"
-        centered
-      >
-        {modalLoading ? (
-          <Center h={150}>
-            <Loader size="md" />
-          </Center>
-        ) : (
-          <Stack gap="md">
-            {modes.map((mode) => (
-              <Card key={mode.id} shadow="sm" padding="md" radius="md" withBorder>
-                <Text fw={500} mb="xs">{mode.name}</Text>
-                {mode.description && (
-                  <Text size="sm" c="dimmed">
-                    {mode.description}
-                  </Text>
+      {/* Detail panel */}
+      <div className={styles.detailPanel}>
+        <AnimatePresence mode="wait">
+          {!selectedGame ? (
+            <motion.div
+              key="empty"
+              className={styles.emptyState}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <IconDeviceGamepad2 size={64} className={styles.emptyStateIcon} />
+              <Text size="lg" c="dimmed">Select a game to view its maps</Text>
+            </motion.div>
+          ) : mapsLoading ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className={styles.detailHeader} style={{ borderBottomColor: gameColor }}>
+                <div className={styles.detailHeaderTop}>
+                  <Skeleton width={36} height={36} radius={8} />
+                  <Skeleton width={200} height={28} />
+                </div>
+              </div>
+              <div className={styles.skeletonGrid}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} height={190} radius={10} />
+                ))}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={selectedGame.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25 }}
+            >
+              {/* Header */}
+              <div className={styles.detailHeader} style={{ borderBottomColor: gameColor }}>
+                <div className={styles.detailHeaderTop}>
+                  {selectedGame.iconUrl && (
+                    <img
+                      src={selectedGame.iconUrl}
+                      alt={selectedGame.name}
+                      className={styles.detailHeaderIcon}
+                    />
+                  )}
+                  <span className={styles.detailHeaderTitle}>{selectedGame.name}</span>
+                  <span className={styles.detailHeaderCount}>
+                    {filteredMaps.length} {filteredMaps.length === 1 ? 'map' : 'maps'}
+                  </span>
+                </div>
+                <div className={styles.filterRow}>
+                  <TextInput
+                    className={styles.searchInput}
+                    placeholder="Search maps..."
+                    leftSection={<IconSearch size={16} />}
+                    value={mapSearchQuery}
+                    onChange={(e) => setMapSearchQuery(e.currentTarget.value)}
+                    size="sm"
+                  />
+                </div>
+                {modes.length > 0 && !selectedGame.supportsAllModes && (
+                  <div className={styles.modeBadges} style={{ marginTop: 10 }}>
+                    <Button
+                      variant={selectedMode === null ? 'filled' : 'default'}
+                      size="xs"
+                      radius="md"
+                      onClick={() => setSelectedMode(null)}
+                    >
+                      All
+                    </Button>
+                    {modes.map(mode => (
+                      <Button
+                        key={mode.id}
+                        variant={selectedMode === mode.name ? 'filled' : 'default'}
+                        size="xs"
+                        radius="md"
+                        style={selectedMode === mode.name ? {
+                          backgroundColor: gameColor,
+                          borderColor: gameColor,
+                        } : undefined}
+                        onClick={() => toggleMode(mode.name)}
+                      >
+                        {mode.name}
+                      </Button>
+                    ))}
+                  </div>
                 )}
-              </Card>
-            ))}
-            {modes.length === 0 && !modalLoading && (
-              <Text ta="center" c="dimmed">
-                No modes found for this game.
-              </Text>
-            )}
-          </Stack>
-        )}
-      </Modal>
+              </div>
+
+              {/* Map cards */}
+              {filteredMaps.length === 0 ? (
+                <div className={styles.emptyState} style={{ minHeight: 200 }}>
+                  <Text c="dimmed">
+                    {maps.length === 0
+                      ? 'No maps found for this game.'
+                      : `No maps matching "${mapSearchQuery}"`}
+                  </Text>
+                </div>
+              ) : (
+                <div className={styles.mapGrid}>
+                  <AnimatePresence>
+                  {filteredMaps.map(map => {
+                    const mapModes = map.supportedModes
+                      ? map.supportedModes.split(',').map(m => m.trim())
+                      : map.modeName ? [map.modeName] : [];
+
+                    return (
+                      <motion.div
+                        key={map.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <div
+                          className={styles.mapCard}
+                          style={{
+                            backgroundImage: map.imageUrl
+                              ? `url(${map.imageUrl})`
+                              : undefined,
+                          }}
+                        >
+                          <div className={styles.mapCardOverlay}>
+                            <div className={styles.mapCardBottom}>
+                              <div>
+                                <div className={styles.mapCardName}>{map.name}</div>
+                                {map.location && (
+                                  <div className={styles.mapCardLocation}>{map.location}</div>
+                                )}
+                              </div>
+                              {!selectedGame.supportsAllModes && mapModes.length > 0 && (
+                                <div className={styles.mapCardModes}>
+                                  {mapModes.map((mode, i) => (
+                                    <span
+                                      key={i}
+                                      className={styles.mapCardModeBadge}
+                                      style={{ backgroundColor: `${gameColor}cc` }}
+                                    >
+                                      {mode}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

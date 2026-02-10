@@ -43,6 +43,7 @@ describe('Games API', () => {
       expect(status).toBe(200);
       expect(data[0].name).toBe('Test Game');
       expect(data[0].iconUrl).toBe('/logo.png');
+      expect(data[0]).toHaveProperty('color');
     });
   });
 
