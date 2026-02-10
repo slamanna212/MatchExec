@@ -18,14 +18,11 @@ import {
   Image,
   useMantineColorScheme
 } from '@mantine/core';
-import { modals } from '@mantine/modals';
-import type { Match, MatchResult } from '@/shared/types';
+import type { Match } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 
-import { AssignPlayersModal } from './assign-players-modal';
-import { ScoringModal } from './scoring/ScoringModal';
 import { AnimatedRingProgress } from './AnimatedRingProgress';
-import { showError, notificationHelper } from '@/lib/notifications';
+import { showError } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -63,15 +60,11 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
 interface MatchCardProps {
   match: MatchWithGame;
   onViewDetails: (match: MatchWithGame) => void;
-  onAssignPlayers: (match: MatchWithGame) => void;
-  getNextStatusButton: (match: MatchWithGame) => React.JSX.Element | null;
 }
 
 const MatchCard = memo(({
   match,
   onViewDetails,
-  onAssignPlayers,
-  getNextStatusButton
 }: MatchCardProps) => {
   const { colorScheme } = useMantineColorScheme();
   
@@ -154,20 +147,18 @@ const MatchCard = memo(({
         </Group>
       </Stack>
 
-      <Group mt="md" gap="xs" px="lg" pb="lg">
-        {(match.status === 'gather' || match.status === 'assign') && (
-          <Button 
-            size="sm" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onAssignPlayers(match);
-            }}
-            style={{ flex: 1 }}
-          >
-            Assign
-          </Button>
-        )}
-        {getNextStatusButton(match)}
+      <Group mt="md" px="lg" pb="lg">
+        <Button
+          size="sm"
+          fullWidth
+          color={match.game_color || '#95a5a6'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(match);
+          }}
+        >
+          Show Details
+        </Button>
       </Group>
     </Card>
   );
@@ -189,10 +180,6 @@ export function MatchDashboard() {
   const { colorScheme } = useMantineColorScheme();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
-  const [selectedMatchForAssignment, setSelectedMatchForAssignment] = useState<MatchWithGame | null>(null);
-  const [scoringModalOpen, setScoringModalOpen] = useState(false);
-  const [selectedMatchForScoring, setSelectedMatchForScoring] = useState<MatchWithGame | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -414,211 +401,6 @@ export function MatchDashboard() {
     router.push(`/matches/${match.id}`);
   }, [router]);
 
-  const handleDeleteMatch = async (matchId: string) => {
-    try {
-      const response = await fetch(`/api/matches/${matchId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        // Remove the match from the list
-        setMatches(prev => prev.filter(match => match.id !== matchId));
-      } else {
-        logger.error('Failed to delete match');
-        showError('Failed to delete match. Please try again.');
-      }
-    } catch (error) {
-      logger.error('Error deleting match:', error);
-      showError('An error occurred while deleting the match.');
-    }
-  };
-
-  const handleStatusTransition = useCallback(async (matchId: string, newStatus: string) => {
-    const notificationId = `match-transition-${matchId}`;
-
-    // Determine the action message based on the new status
-    const actionMessages: Record<string, { loading: string; success: string }> = {
-      gather: { loading: 'Opening signups...', success: 'Signups opened successfully!' },
-      assign: { loading: 'Closing signups...', success: 'Signups closed successfully!' },
-      battle: { loading: 'Starting match...', success: 'Match started successfully!' },
-      complete: { loading: 'Ending match...', success: 'Match ended successfully!' },
-    };
-
-    const messages = actionMessages[newStatus] || {
-      loading: 'Processing...',
-      success: 'Status updated successfully!'
-    };
-
-    // Show loading notification
-    notificationHelper.loading({
-      id: notificationId,
-      message: messages.loading
-    });
-
-    try {
-      const response = await fetch(`/api/matches/${matchId}/transition`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ newStatus }),
-      });
-
-      if (response.ok) {
-        const updatedMatch = await response.json();
-        // Update the match in the list
-        setMatches(prev => prev.map(match =>
-          match.id === matchId ? updatedMatch : match
-        ));
-
-        if (newStatus === 'gather') {
-          logger.info(`✅ Match transitioned to gather stage - Discord announcement will be posted`);
-        }
-
-        // Update notification to success
-        notificationHelper.update(notificationId, {
-          type: 'success',
-          message: messages.success
-        });
-      } else {
-        const error = await response.json();
-        logger.error('Failed to transition match status:', error);
-
-        // Update notification to error
-        notificationHelper.update(notificationId, {
-          type: 'error',
-          message: error.error || 'Failed to update match status'
-        });
-      }
-    } catch (error) {
-      logger.error('Error transitioning match status:', error);
-
-      // Update notification to error
-      notificationHelper.update(notificationId, {
-        type: 'error',
-        message: 'An error occurred while updating the match status'
-      });
-    }
-  }, []);
-
-  const getNextStatusButton = useCallback((match: MatchWithGame) => {
-    switch (match.status) {
-      case 'created':
-        return (
-          <Button
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleStatusTransition(match.id, 'gather');
-            }}
-            style={{ flex: 1 }}
-          >
-            Start Signups
-          </Button>
-        );
-      case 'gather':
-        return (
-          <Button
-            size="sm"
-            color="orange"
-            onClick={(e) => {
-              e.stopPropagation();
-              modals.openConfirmModal({
-                title: 'Close Signups',
-                children: (
-                  <Text size="sm">
-                    Are you sure you want to close signups for &quot;{match.name}&quot;? This will prevent new players from joining the match.
-                  </Text>
-                ),
-                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
-                confirmProps: { color: 'orange' },
-                onConfirm: () => handleStatusTransition(match.id, 'assign'),
-              });
-            }}
-            style={{ flex: 1 }}
-          >
-            Close Signups
-          </Button>
-        );
-      case 'assign':
-        return (
-          <Button
-            size="sm"
-            color="green"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleStatusTransition(match.id, 'battle');
-            }}
-            style={{ flex: 1 }}
-          >
-            Start Match
-          </Button>
-        );
-      case 'battle':
-        return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button 
-              size="sm" 
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedMatchForScoring(match);
-                setScoringModalOpen(true);
-              }}
-              style={{ flex: 1 }}
-            >
-              Scoring
-            </Button>
-            <Button
-              size="sm"
-              color="red"
-              onClick={(e) => {
-                e.stopPropagation();
-                modals.openConfirmModal({
-                  title: 'End Match',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to end the match &quot;{match.name}&quot;? This will mark the match as complete.
-                    </Text>
-                  ),
-                  labels: { confirm: 'End Match', cancel: 'Cancel' },
-                  confirmProps: { color: 'red' },
-                  onConfirm: () => handleStatusTransition(match.id, 'complete'),
-                });
-              }}
-              style={{ flex: 1 }}
-            >
-              End Match
-            </Button>
-          </Group>
-        );
-      case 'complete':
-        return null; // No further transitions
-      case 'cancelled':
-        return null; // No further transitions
-      default:
-        return null;
-    }
-  }, [handleStatusTransition]);
-
-  const handleAssignPlayers = (match: MatchWithGame) => {
-    setSelectedMatchForAssignment(match);
-    setAssignPlayersModalOpen(true);
-  };
-
-  const _confirmDelete = (match: MatchWithGame) => {
-    modals.openConfirmModal({
-      title: 'Delete Match',
-      children: (
-        <Text size="sm">
-          Are you sure you want to delete &quot;{match.name}&quot;? This action cannot be undone.
-        </Text>
-      ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
-      onConfirm: () => handleDeleteMatch(match.id),
-    });
-  };
-
   // Animation variants for staggered entrance
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -627,37 +409,6 @@ export function MatchDashboard() {
       transition: {
         staggerChildren: 0.1
       }
-    }
-  };
-
-  // Memoize expensive match card rendering
-  // Handle score submission
-  const handleResultSubmit = async (result: MatchResult) => {
-    if (!selectedMatchForScoring) return;
-
-    try {
-      const response = await fetch(`/api/matches/${selectedMatchForScoring.id}/games/${result.gameId}/result`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(result),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to save result');
-      }
-      
-      // Refresh matches to show updated status
-      fetchMatches();
-      
-      // Close modal
-      setScoringModalOpen(false);
-      setSelectedMatchForScoring(null);
-    } catch (error) {
-      logger.error('Error submitting result:', error);
-      throw error; // Re-throw to let the modal handle the error display
     }
   };
 
@@ -695,13 +446,11 @@ export function MatchDashboard() {
           <MatchCard
             match={match}
             onViewDetails={handleViewDetails}
-            onAssignPlayers={handleAssignPlayers}
-            getNextStatusButton={getNextStatusButton}
           />
         </motion.div>
       </Grid.Col>
     ));
-  }, [filteredMatches, handleViewDetails, getNextStatusButton]);
+  }, [filteredMatches, handleViewDetails]);
 
 
   if (loading) {
@@ -786,26 +535,6 @@ export function MatchDashboard() {
       )}
 
 
-      <AssignPlayersModal
-        isOpen={assignPlayersModalOpen}
-        onClose={() => setAssignPlayersModalOpen(false)}
-        matchId={selectedMatchForAssignment?.id || ''}
-        matchName={selectedMatchForAssignment?.name || ''}
-      />
-
-      {selectedMatchForScoring && (
-        <ScoringModal
-          opened={scoringModalOpen}
-          onClose={() => {
-            setScoringModalOpen(false);
-            setSelectedMatchForScoring(null);
-          }}
-          matchId={selectedMatchForScoring.id}
-          gameId={selectedMatchForScoring.game_id}
-          matchFormat={selectedMatchForScoring.match_format || 'casual'}
-          onResultSubmit={handleResultSubmit}
-        />
-      )}
     </div>
   );
 }
