@@ -6,17 +6,30 @@
 }
 
 
-/* Force consistent NavLink hover colors with higher specificity */
-[data-mantine-color-scheme="dark"] .m_f0824112:hover,
-[data-mantine-color-scheme="light"] .m_f0824112:hover,
-.m_f0824112:hover {
-  background-color: #3d2563 !important;
+/* Force consistent NavLink hover colors - desktop sidebar only */
+@media (min-width: 62em) {
+  [data-mantine-color-scheme="dark"] .m_f0824112:hover,
+  [data-mantine-color-scheme="light"] .m_f0824112:hover,
+  .m_f0824112:hover {
+    background-color: #3d2563 !important;
+  }
+
+  [data-mantine-color-scheme="dark"] .m_f0824112[data-active="true"],
+  [data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
+  .m_f0824112[data-active="true"] {
+    background-color: #4c1d95 !important;
+  }
 }
 
-[data-mantine-color-scheme="dark"] .m_f0824112[data-active="true"],
-[data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
-.m_f0824112[data-active="true"] {
-  background-color: #4c1d95 !important;
+/* Mobile drawer NavLink hover - subtle highlight */
+@media (max-width: 61.99em) {
+  .m_f0824112:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .m_f0824112[data-active="true"] {
+    background-color: transparent !important;
+  }
 }
 
 /* Override Mantine's body background - must come after Mantine styles */
