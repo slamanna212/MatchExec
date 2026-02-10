@@ -115,8 +115,8 @@ export function MatchPageLayout({
   return (
     <div className="container mx-auto py-6 pl-2 pr-2">
       <Grid gutter="lg">
-        {/* Left column - 40% width on desktop, full width on mobile */}
-        <Grid.Col span={{ base: 12, sm: 12, md: 5, lg: 5 }} pl={{ base: 'md', md: 0 }}>
+        {/* Left column - 33% width on desktop, full width on mobile */}
+        <Grid.Col span={{ base: 12, sm: 12, md: 4, lg: 4 }} pl={{ base: 'md', md: 0 }}>
           <MatchInfoPanel
             match={match}
             mapDetails={mapDetails}
@@ -134,8 +134,8 @@ export function MatchPageLayout({
           />
         </Grid.Col>
 
-        {/* Right column - 60% width on desktop, full width on mobile */}
-        <Grid.Col span={{ base: 12, sm: 12, md: 7, lg: 7 }} pr={{ base: 'md', md: 0 }}>
+        {/* Right column - 67% width on desktop, full width on mobile */}
+        <Grid.Col span={{ base: 12, sm: 12, md: 8, lg: 8 }} pr={{ base: 'md', md: 0 }}>
           <MatchContentPanel
             match={match}
             participants={participants}

@@ -165,22 +165,20 @@ export function MatchContentPanel({
         )}
 
         {activeTab === 'maps' && (
-          <div>
-            {match.maps && match.maps.length > 0 ? (
-              <MapResultsSection
-                maps={match.maps}
-                mapDetails={mapDetails}
-                mapNotes={mapNotes}
-                formatMapName={formatMapName}
-                matchGames={matchGames}
-                showWinner={match.status === 'battle' || match.status === 'complete'}
-              />
-            ) : (
-              <Text size="sm" c="dimmed" ta="center" py="md">
-                No maps configured for this match
-              </Text>
-            )}
-          </div>
+          match.maps && match.maps.length > 0 ? (
+            <MapResultsSection
+              maps={match.maps}
+              mapDetails={mapDetails}
+              mapNotes={mapNotes}
+              formatMapName={formatMapName}
+              matchGames={matchGames}
+              showWinner={match.status === 'battle' || match.status === 'complete'}
+            />
+          ) : (
+            <Text size="sm" c="dimmed" ta="center" py="md">
+              No maps configured for this match
+            </Text>
+          )
         )}
 
         {activeTab === 'announcements' && (
@@ -194,54 +192,52 @@ export function MatchContentPanel({
         )}
 
         {activeTab === 'matchcodes' && match.map_codes_supported && (
-          <div>
-            <Stack gap="md">
-              {match.maps && match.maps.length > 0 ? (
-                <>
-                  <MapResultsSection
-                    maps={match.maps}
-                    mapDetails={mapDetails}
-                    mapNotes={mapNotes}
-                    formatMapName={formatMapName}
-                  >
-                    {(mapId) => (
-                      onMapCodeChange && (
-                        <TextInput
-                          placeholder="Enter map code"
-                          value={mapCodes[mapId] || ''}
-                          onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
-                          maxLength={24}
-                          size="sm"
-                          styles={{
-                            input: {
-                              fontFamily: 'monospace',
-                              fontSize: '0.9em'
-                            }
-                          }}
-                        />
-                      )
-                    )}
-                  </MapResultsSection>
-                  {onMapCodesSave && (
-                    <Group justify="center">
-                      <Button
+          <Stack gap="md">
+            {match.maps && match.maps.length > 0 ? (
+              <>
+                <MapResultsSection
+                  maps={match.maps}
+                  mapDetails={mapDetails}
+                  mapNotes={mapNotes}
+                  formatMapName={formatMapName}
+                >
+                  {(mapId) => (
+                    onMapCodeChange && (
+                      <TextInput
+                        placeholder="Enter map code"
+                        value={mapCodes[mapId] || ''}
+                        onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
+                        maxLength={24}
                         size="sm"
-                        loading={mapCodesSaving}
-                        onClick={onMapCodesSave}
-                        leftSection={<IconDeviceFloppy size={16} />}
-                      >
-                        Save Codes
-                      </Button>
-                    </Group>
+                        styles={{
+                          input: {
+                            fontFamily: 'monospace',
+                            fontSize: '0.9em'
+                          }
+                        }}
+                      />
+                    )
                   )}
-                </>
-              ) : (
-                <Text size="sm" c="dimmed" ta="center" py="md">
-                  No maps configured for this match
-                </Text>
-              )}
-            </Stack>
-          </div>
+                </MapResultsSection>
+                {onMapCodesSave && (
+                  <Group justify="center">
+                    <Button
+                      size="sm"
+                      loading={mapCodesSaving}
+                      onClick={onMapCodesSave}
+                      leftSection={<IconDeviceFloppy size={16} />}
+                    >
+                      Save Codes
+                    </Button>
+                  </Group>
+                )}
+              </>
+            ) : (
+              <Text size="sm" c="dimmed" ta="center" py="md">
+                No maps configured for this match
+              </Text>
+            )}
+          </Stack>
         )}
     </Stack>
   );

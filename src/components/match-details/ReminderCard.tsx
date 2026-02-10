@@ -24,7 +24,7 @@ interface ReminderCardProps {
 
 export function ReminderCard({ reminder, parseDbTimestamp, showDescription }: ReminderCardProps) {
   return (
-    <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder>
+    <Card key={reminder.id} shadow="sm" padding="sm" radius="md" withBorder w="100%" maw={500}>
       <Group justify="space-between" align="flex-start">
         <Stack gap="xs" style={{ flex: 1 }}>
           <Group gap="xs">

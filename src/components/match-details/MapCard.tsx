@@ -3,6 +3,7 @@
 import { Card, Group, Image, Stack, Text, Badge } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import responsiveTextClasses from '../responsive-text.module.css';
+import classes from './map-card.module.css';
 
 interface MapDetail {
   name: string;
@@ -32,31 +33,19 @@ export function MapCard({
   winner,
   children
 }: MapCardProps) {
-  const hasChildren = Boolean(children);
-
   return (
-    <Card shadow="sm" padding={0} radius="md" withBorder style={{ overflow: 'hidden' }}>
+    <Card shadow="sm" padding={0} radius="md" withBorder className={classes.card}>
       <Group wrap="nowrap" align="stretch" gap={0}>
-        <div style={{ width: hasChildren ? '40%' : '50%', position: 'relative' }}>
+        <div className={classes.imageWrapper}>
           <Image
             src={mapDetail?.imageUrl}
             alt={mapDetail?.name || formatMapName(mapId)}
-            height={80}
             radius={0}
-            style={{
-              borderTopLeftRadius: 'var(--mantine-radius-md)',
-              borderBottomLeftRadius: 'var(--mantine-radius-md)',
-              objectFit: 'cover',
-              width: '100%',
-              height: '100%'
-            }}
+            className={classes.image}
             fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
           />
         </div>
-        <div style={{
-          width: hasChildren ? '60%' : '50%',
-          padding: hasChildren ? 'var(--mantine-spacing-md)' : 'var(--mantine-spacing-sm)'
-        }}>
+        <div className={classes.content}>
           <Stack gap="xs" justify="center" style={{ height: '100%' }}>
             <div>
               <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
