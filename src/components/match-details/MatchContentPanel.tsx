@@ -129,19 +129,19 @@ export function MatchContentPanel({
               size="sm"
               data={[
                 {
-                  label: `Players (${participants.length}/${match.max_participants})`,
+                  label: <span>Players<span className="hidden md:inline"> ({participants.length}/{match.max_participants})</span></span>,
                   value: 'participants'
                 },
                 {
-                  label: `Maps (${match.maps?.length || 0})`,
+                  label: <span>Maps<span className="hidden md:inline"> ({match.maps?.length || 0})</span></span>,
                   value: 'maps'
                 },
                 {
-                  label: `Alerts (${reminders.length})`,
+                  label: <span>Alerts<span className="hidden md:inline"> ({reminders.length})</span></span>,
                   value: 'announcements'
                 },
                 ...(match.map_codes_supported ? [{
-                  label: 'Match Codes',
+                  label: <span>Codes<span className="hidden md:inline">: Match</span></span>,
                   value: 'matchcodes'
                 }] : [])
               ]}
