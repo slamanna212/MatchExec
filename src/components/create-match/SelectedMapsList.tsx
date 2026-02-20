@@ -1,12 +1,13 @@
 'use client'
 
-import { Grid, Card, Box, Image, Group, Stack, Text, Badge, ActionIcon } from '@mantine/core';
+import { Grid, Card, Box, Group, Stack, Text, ActionIcon } from '@mantine/core';
 import { IconNote, IconX, IconPlus } from '@tabler/icons-react';
 import type { SelectedMapCard } from './useMatchForm';
 
 interface SelectedMapsListProps {
   selectedMaps: SelectedMapCard[];
   showMapSelector: boolean;
+  supportsAllModes?: boolean;
   onRemoveMap: (mapId: string) => void;
   onOpenNoteModal: (map: SelectedMapCard) => void;
   onAddMapClick: () => void;
@@ -15,6 +16,7 @@ interface SelectedMapsListProps {
 export function SelectedMapsList({
   selectedMaps,
   showMapSelector,
+  supportsAllModes,
   onRemoveMap,
   onOpenNoteModal,
   onAddMapClick
@@ -23,80 +25,106 @@ export function SelectedMapsList({
     <Grid>
       {selectedMaps.map((map) => (
         <Grid.Col key={map.id} span={{ base: 12, sm: 6, md: 4 }}>
-          <Card shadow="sm" padding="md" radius="md" withBorder>
-            <Card.Section>
-              <Box
+          <Box
+            style={{
+              position: 'relative',
+              height: 190,
+              borderRadius: 10,
+              overflow: 'hidden',
+              backgroundImage: `url(${map.imageUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundColor: 'var(--mantine-color-dark-6)',
+            }}
+          >
+            {/* Gradient overlay with map info at bottom */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 65%)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                padding: 12,
+              }}
+            >
+              <Text
+                fw={700}
+                size="sm"
                 style={{
-                  position: 'relative',
-                  width: '100%',
-                  aspectRatio: '16/9',
-                  overflow: 'hidden',
-                  borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0'
+                  color: '#fff',
+                  textShadow: '0 1px 3px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.5)',
                 }}
               >
-                {/* Blur background */}
-                <Box
+                {map.name}
+              </Text>
+              {!supportsAllModes && (
+                <span
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    backgroundImage: `url(${map.imageUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    filter: 'blur(10px)',
-                    transform: 'scale(1.1)'
+                    display: 'inline-block',
+                    alignSelf: 'flex-start',
+                    marginTop: 4,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    backgroundColor: 'rgba(59, 130, 246, 0.85)',
+                    color: '#fff',
+                    textShadow: '0 0 2px rgba(0,0,0,0.5)',
+                    whiteSpace: 'nowrap',
                   }}
-                />
-                {/* Main image */}
-                <Image
-                  src={map.imageUrl}
-                  alt={map.name}
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    zIndex: 1
-                  }}
-                  fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-                />
-              </Box>
-            </Card.Section>
+                >
+                  {map.modeName}
+                </span>
+              )}
+              {map.note && (
+                <Text
+                  size="xs"
+                  lineClamp={1}
+                  title={map.note}
+                  style={{ color: 'rgba(255,255,255,0.8)', marginTop: 4 }}
+                >
+                  📝 {map.note}
+                </Text>
+              )}
+            </div>
 
-            <Group justify="space-between" mt="xs">
-              <Stack gap={2} style={{ flex: 1 }}>
-                <Text fw={500} size="sm">{map.name}</Text>
-                <Badge size="xs" variant="light">{map.modeName}</Badge>
-                {map.note && (
-                  <Text size="xs" c="dimmed" lineClamp={1} title={map.note}>
-                    📝 {map.note}
-                  </Text>
-                )}
-              </Stack>
-              <Stack gap={2} align="center">
-                <ActionIcon
-                  color="blue"
-                  variant="light"
-                  size="sm"
-                  onClick={() => onOpenNoteModal(map)}
-                  title="Add/Edit Note"
-                >
-                  <IconNote size={14} />
-                </ActionIcon>
-                <ActionIcon
-                  color="red"
-                  variant="light"
-                  size="sm"
-                  onClick={() => onRemoveMap(map.id)}
-                  title="Remove Map"
-                >
-                  <IconX size={14} />
-                </ActionIcon>
-              </Stack>
+            {/* Action buttons top-right */}
+            <Group
+              gap={4}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+              }}
+            >
+              <ActionIcon
+                size="sm"
+                onClick={() => onOpenNoteModal(map)}
+                title="Add/Edit Note"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                }}
+              >
+                <IconNote size={14} />
+              </ActionIcon>
+              <ActionIcon
+                size="sm"
+                onClick={() => onRemoveMap(map.id)}
+                title="Remove Map"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                }}
+              >
+                <IconX size={14} />
+              </ActionIcon>
             </Group>
-          </Card>
+          </Box>
         </Grid.Col>
       ))}
 

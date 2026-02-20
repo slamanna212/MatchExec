@@ -431,6 +431,7 @@ export default function EditMatchPage({
               <SelectedMapsList
                 selectedMaps={selectedMaps}
                 showMapSelector={false}
+                supportsAllModes={currentGameSupportsAllModes}
                 onRemoveMap={handleRemoveMap}
                 onOpenNoteModal={handleOpenNoteModal}
                 onAddMapClick={openMapModal}
@@ -460,6 +461,7 @@ export default function EditMatchPage({
           <SelectedMapsList
             selectedMaps={selectedMaps}
             showMapSelector={showMapSelector}
+            supportsAllModes={currentGameSupportsAllModes}
             onRemoveMap={handleRemoveMap}
             onOpenNoteModal={handleOpenNoteModal}
             onAddMapClick={() => setShowMapSelector(true)}
