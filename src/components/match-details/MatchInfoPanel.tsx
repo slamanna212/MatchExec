@@ -84,6 +84,8 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="blue"
+            className="sm:flex-1"
+            fullWidth
             onClick={() => onStatusTransition('gather')}
           >
             Start Signups
@@ -94,6 +96,8 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="orange"
+            className="sm:flex-1"
+            fullWidth
             onClick={() => onStatusTransition('assign')}
           >
             Close Signups
@@ -104,6 +108,8 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="green"
+            className="sm:flex-1"
+            fullWidth
             onClick={() => onStatusTransition('battle')}
           >
             Start Match
@@ -114,6 +120,8 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="red"
+            className="sm:flex-1"
+            fullWidth
             onClick={() => onStatusTransition('complete')}
           >
             End Match
@@ -244,11 +252,13 @@ export function MatchInfoPanel({
         {/* Card 3: Action Buttons */}
         {showActions && (
           <Card withBorder padding="lg" shadow="sm">
-            <Group gap="sm" grow>
+            <div className="flex flex-col sm:flex-row gap-2">
               {/* Assign Players button */}
               {(match.status === 'gather' || match.status === 'assign' || match.status === 'battle') && onAssignPlayers && (
                 <Button
                   variant="light"
+                  className="sm:flex-1"
+                  fullWidth
                   onClick={onAssignPlayers}
                 >
                   Assign Players
@@ -260,6 +270,8 @@ export function MatchInfoPanel({
                 <Button
                   variant="light"
                   color="blue"
+                  className="sm:flex-1"
+                  fullWidth
                   onClick={onScoring}
                 >
                   Scoring
@@ -274,12 +286,14 @@ export function MatchInfoPanel({
                 <Button
                   color="red"
                   variant="light"
+                  className="sm:flex-1"
+                  fullWidth
                   onClick={onDelete}
                 >
                   Delete Match
                 </Button>
               )}
-            </Group>
+            </div>
           </Card>
         )}
       </Stack>
