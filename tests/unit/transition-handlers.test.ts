@@ -10,6 +10,14 @@ import {
   handleCancelledTransition
 } from '@/lib/transition-handlers';
 
+// Mock database to use test DB instead of production DB
+vi.mock('@/lib/database-init', () => ({
+  getDbInstance: async () => {
+    const { getMockDbInstance } = await import('../mocks/database');
+    return getMockDbInstance();
+  }
+}));
+
 // Mock the voice channel service
 vi.mock('@/lib/voice-channel-service', () => ({
   VoiceChannelService: {

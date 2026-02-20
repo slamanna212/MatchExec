@@ -1,6 +1,21 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getTestDb } from '../utils/test-db';
 import { seedBasicTestData, createTournament } from '../utils/fixtures';
+
+// Mock database to use test DB instead of production DB
+vi.mock('@/lib/database-init', () => ({
+  getDbInstance: async () => {
+    const { getMockDbInstance } = await import('../mocks/database');
+    return getMockDbInstance();
+  }
+}));
+
+// Mock voice channel service (used by saveGeneratedMatches)
+vi.mock('@/lib/voice-channel-service', () => ({
+  VoiceChannelService: {
+    setupMatchVoiceChannels: vi.fn().mockResolvedValue(undefined)
+  }
+}));
 import {
   calculateTournamentRounds,
   calculateTotalMatches,
