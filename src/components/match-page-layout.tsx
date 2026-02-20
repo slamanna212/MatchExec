@@ -79,6 +79,7 @@ interface MatchPageLayoutProps {
   onAssignPlayers?: () => void;
   onScoring?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   formatMapName: (mapId: string) => string;
@@ -104,6 +105,7 @@ export function MatchPageLayout({
   onAssignPlayers,
   onScoring,
   onDelete,
+  onEdit,
   onStatusTransition,
   parseDbTimestamp,
   formatMapName,
@@ -130,6 +132,7 @@ export function MatchPageLayout({
             onAssignPlayers={onAssignPlayers}
             onScoring={onScoring}
             onDelete={onDelete}
+            onEdit={onEdit}
             onStatusTransition={onStatusTransition}
           />
         </Grid.Col>

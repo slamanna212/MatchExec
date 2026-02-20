@@ -466,6 +466,7 @@ export default function MatchPage({
         onAssignPlayers={() => setAssignPlayersModalOpen(true)}
         onScoring={() => setScoringModalOpen(true)}
         onDelete={handleDeleteMatch}
+        onEdit={() => router.push(`/matches/${match.id}/edit`)}
         onStatusTransition={handleStatusTransition}
         parseDbTimestamp={parseDbTimestamp}
         formatMapName={formatMapName}

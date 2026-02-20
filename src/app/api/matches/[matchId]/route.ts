@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { parseMatchResponse } from '../helpers';
 
 export async function GET(
   request: NextRequest,
@@ -47,6 +48,83 @@ export async function GET(
       { error: 'Failed to fetch match' },
       { status: 500 }
     );
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ matchId: string }> }
+) {
+  try {
+    const db = await getDbInstance();
+    const { matchId } = await params;
+
+    const existingMatch = await db.get<MatchDbRow>('SELECT id FROM matches WHERE id = ?', [matchId]);
+    if (!existingMatch) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { name, description, startDate, rules, rounds, livestreamLink, maps } = body;
+
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    }
+
+    const startDateTime = startDate ? new Date(startDate).toISOString() : null;
+    const mapsJson = maps && Array.isArray(maps) && maps.length > 0 ? JSON.stringify(maps) : null;
+
+    await db.run(`
+      UPDATE matches
+      SET name = ?, description = ?, start_date = ?, start_time = ?, rules = ?,
+          rounds = ?, livestream_link = ?, maps = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [
+      name.trim(),
+      description || null,
+      startDateTime,
+      startDateTime,
+      rules || null,
+      rounds || null,
+      livestreamLink || null,
+      mapsJson,
+      matchId
+    ]);
+
+    // Queue Discord embed update if announcement message exists
+    try {
+      const announcementMsg = await db.get('SELECT id FROM discord_match_messages WHERE match_id = ? AND message_type = ?', [matchId, 'announcement']);
+      if (announcementMsg) {
+        const editQueueId = `match_edit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        await db.run(`
+          INSERT INTO discord_match_edit_queue (id, match_id, status)
+          VALUES (?, ?, 'pending')
+        `, [editQueueId, matchId]);
+        logger.debug('📝 Discord edit queued for match:', matchId);
+      }
+    } catch (error) {
+      logger.error('❌ Error queuing Discord edit:', error);
+    }
+
+    const updatedMatch = await db.get<MatchDbRow & {
+      game_name?: string;
+      game_icon?: string;
+      game_color?: string;
+      map_codes_supported?: number;
+    }>(`
+      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported
+      FROM matches m
+      LEFT JOIN games g ON m.game_id = g.id
+      WHERE m.id = ?
+    `, [matchId]);
+
+    return NextResponse.json({
+      ...parseMatchResponse(updatedMatch),
+      map_codes_supported: Boolean(updatedMatch?.map_codes_supported)
+    });
+  } catch (error) {
+    logger.error('Error updating match:', error);
+    return NextResponse.json({ error: 'Failed to update match' }, { status: 500 });
   }
 }
 

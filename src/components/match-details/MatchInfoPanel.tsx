@@ -56,6 +56,7 @@ interface MatchInfoPanelProps {
   onAssignPlayers?: () => void;
   onScoring?: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
 }
 
@@ -72,6 +73,7 @@ export function MatchInfoPanel({
   onAssignPlayers,
   onScoring,
   onDelete,
+  onEdit,
   onStatusTransition
 }: MatchInfoPanelProps) {
   // Determine which status transition button to show
@@ -84,8 +86,7 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="blue"
-            className="sm:flex-1"
-            fullWidth
+                        fullWidth
             onClick={() => onStatusTransition('gather')}
           >
             Start Signups
@@ -96,8 +97,7 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="orange"
-            className="sm:flex-1"
-            fullWidth
+                        fullWidth
             onClick={() => onStatusTransition('assign')}
           >
             Close Signups
@@ -108,8 +108,7 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="green"
-            className="sm:flex-1"
-            fullWidth
+                        fullWidth
             onClick={() => onStatusTransition('battle')}
           >
             Start Match
@@ -120,8 +119,7 @@ export function MatchInfoPanel({
           <Button
             variant="light"
             color="red"
-            className="sm:flex-1"
-            fullWidth
+                        fullWidth
             onClick={() => onStatusTransition('complete')}
           >
             End Match
@@ -252,12 +250,11 @@ export function MatchInfoPanel({
         {/* Card 3: Action Buttons */}
         {showActions && (
           <Card withBorder padding="lg" shadow="sm">
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {/* Assign Players button */}
               {(match.status === 'gather' || match.status === 'assign' || match.status === 'battle') && onAssignPlayers && (
                 <Button
                   variant="light"
-                  className="sm:flex-1"
                   fullWidth
                   onClick={onAssignPlayers}
                 >
@@ -270,7 +267,6 @@ export function MatchInfoPanel({
                 <Button
                   variant="light"
                   color="blue"
-                  className="sm:flex-1"
                   fullWidth
                   onClick={onScoring}
                 >
@@ -281,12 +277,23 @@ export function MatchInfoPanel({
               {/* Status transition button */}
               {getStatusTransitionButton()}
 
+              {/* Edit button */}
+              {!isHistory && onEdit && (
+                <Button
+                  variant="light"
+                  color="yellow"
+                  fullWidth
+                  onClick={onEdit}
+                >
+                  Edit Match
+                </Button>
+              )}
+
               {/* Delete button */}
               {onDelete && (
                 <Button
                   color="red"
                   variant="light"
-                  className="sm:flex-1"
                   fullWidth
                   onClick={onDelete}
                 >
