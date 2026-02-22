@@ -21,7 +21,7 @@ import {
 import type { Match } from '@/shared/types';
 
 import { StageRing } from './StageRing';
-import { showError } from '@/lib/notifications';
+import { showError, showSuccess } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -56,14 +56,32 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   end_date?: string;
 }
 
+const NEXT_STATUS: Partial<Record<string, { status: string; label: string; color: string }>> = {
+  created: { status: 'gather',   label: 'Start Signups', color: 'blue' },
+  gather:  { status: 'assign',   label: 'Close Signups', color: 'orange' },
+  assign:  { status: 'battle',   label: 'Start Match',   color: 'green' },
+  battle:  { status: 'complete', label: 'End Match',     color: 'red' },
+};
+
+const TRANSITION_SUCCESS: Record<string, string> = {
+  gather:   'Signups opened successfully!',
+  assign:   'Signups closed successfully!',
+  battle:   'Match started successfully!',
+  complete: 'Match ended successfully!',
+};
+
 interface MatchCardProps {
   match: MatchWithGame;
   onViewDetails: (match: MatchWithGame) => void;
+  onNextPhase: (match: MatchWithGame) => void;
+  isTransitioning: boolean;
 }
 
 const MatchCard = memo(({
   match,
   onViewDetails,
+  onNextPhase,
+  isTransitioning,
 }: MatchCardProps) => {
   const { colorScheme } = useMantineColorScheme();
   
@@ -137,18 +155,30 @@ const MatchCard = memo(({
         </Group>
       </Stack>
 
-      <Group mt="md" px="lg" pb="lg">
+      <Group mt="md" px="lg" pb="lg" grow>
         <Button
           size="sm"
-          fullWidth
           color={match.game_color || '#95a5a6'}
           onClick={(e) => {
             e.stopPropagation();
             onViewDetails(match);
           }}
         >
-          Show Details
+          Details
         </Button>
+        {NEXT_STATUS[match.status] && (
+          <Button
+            size="sm"
+            color={NEXT_STATUS[match.status]!.color}
+            loading={isTransitioning}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNextPhase(match);
+            }}
+          >
+            {NEXT_STATUS[match.status]!.label}
+          </Button>
+        )}
       </Group>
     </Card>
   );
@@ -159,7 +189,8 @@ const MatchCard = memo(({
     prevProps.match.status === nextProps.match.status &&
     prevProps.match.name === nextProps.match.name &&
     prevProps.match.updated_at === nextProps.match.updated_at &&
-    prevProps.match.game_color === nextProps.match.game_color
+    prevProps.match.game_color === nextProps.match.game_color &&
+    prevProps.isTransitioning === nextProps.isTransitioning
   );
 });
 
@@ -172,6 +203,7 @@ export function MatchDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [searchQuery, setSearchQuery] = useState('');
+  const [transitioning, setTransitioning] = useState<Set<string>>(new Set());
 
   /**
    * Check if a match has changed
@@ -391,6 +423,36 @@ export function MatchDashboard() {
     router.push(`/matches/${match.id}`);
   }, [router]);
 
+  const handleNextPhase = useCallback(async (match: MatchWithGame) => {
+    const next = NEXT_STATUS[match.status];
+    if (!next) return;
+
+    setTransitioning(prev => new Set(prev).add(match.id));
+    try {
+      const response = await fetch(`/api/matches/${match.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus: next.status }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setMatches(prev => prev.map(m => m.id === match.id ? { ...m, ...updated } : m));
+        showSuccess(TRANSITION_SUCCESS[next.status]);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        showError(err.error || 'Failed to advance match phase.');
+      }
+    } catch {
+      showError('Failed to advance match phase.');
+    } finally {
+      setTransitioning(prev => {
+        const next = new Set(prev);
+        next.delete(match.id);
+        return next;
+      });
+    }
+  }, []);
+
   // Animation variants for staggered entrance
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -436,11 +498,13 @@ export function MatchDashboard() {
           <MatchCard
             match={match}
             onViewDetails={handleViewDetails}
+            onNextPhase={handleNextPhase}
+            isTransitioning={transitioning.has(match.id)}
           />
         </motion.div>
       </Grid.Col>
     ));
-  }, [filteredMatches, handleViewDetails]);
+  }, [filteredMatches, handleViewDetails, handleNextPhase, transitioning]);
 
 
   if (loading) {
