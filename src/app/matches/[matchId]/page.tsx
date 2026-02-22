@@ -7,7 +7,6 @@ import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { AssignPlayersModal } from '@/components/assign-players-modal';
-import { ScoringModal } from '@/components/scoring/ScoringModal';
 import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
@@ -78,7 +77,6 @@ export default function MatchPage({
 
   // Modal states
   const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
-  const [scoringModalOpen, setScoringModalOpen] = useState(false);
 
   // Map data states
   const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
@@ -410,16 +408,6 @@ export default function MatchPage({
     });
   }, [match, router]);
 
-  // Handle scoring result submit
-  const handleResultSubmit = useCallback(async () => {
-    setScoringModalOpen(false);
-    // Refresh match data
-    if (match) {
-      await fetchParticipants(match.id, true);
-      await fetchReminders(match.id, true);
-    }
-  }, [match, fetchParticipants, fetchReminders]);
-
   // Render loading state
   if (loading) {
     return (
@@ -465,7 +453,7 @@ export default function MatchPage({
         onMapCodesSave={saveMapCodes}
         mapCodesSaving={mapCodesSaving}
         onAssignPlayers={() => setAssignPlayersModalOpen(true)}
-        onScoring={() => setScoringModalOpen(true)}
+        onScoring={() => router.push(`/matches/${match.id}/scoring`)}
         onDelete={handleDeleteMatch}
         onEdit={() => router.push(`/matches/${match.id}/edit`)}
         onStatusTransition={handleStatusTransition}
@@ -484,14 +472,6 @@ export default function MatchPage({
         matchName={match.name}
       />
 
-      <ScoringModal
-        opened={scoringModalOpen}
-        onClose={() => setScoringModalOpen(false)}
-        matchId={match.id}
-        gameId={match.game_id}
-        matchFormat={match.match_format || 'casual'}
-        onResultSubmit={handleResultSubmit}
-      />
     </>
   );
 }

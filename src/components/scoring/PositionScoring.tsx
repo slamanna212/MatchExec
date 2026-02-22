@@ -1,23 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react';
-import { Stack, Group, Card, Button, Text, Select, Alert, Divider, Badge, Box } from '@mantine/core';
-import { IconTrophy, IconFlag, IconCheck } from '@tabler/icons-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Text, Badge, Alert, Loader, Group, Stack, Select, Button } from '@mantine/core';
+import { IconFlag, IconCheck, IconTrophy } from '@tabler/icons-react';
 import type { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger/client';
+import { getMapImageUrl, formatMapName } from '@/lib/utils/map-utils';
+import styles from './PositionScoring.module.css';
 
 interface MatchGame {
   id: string;
-  match_id: string;
   round: number;
   map_id: string;
   map_name: string;
   image_url?: string;
-  game_id: string;
-  mode_scoring_type?: 'Position';
   status: 'pending' | 'ongoing' | 'completed';
   position_results?: string;
-  points_awarded?: string;
 }
 
 interface MatchParticipant {
@@ -32,6 +30,246 @@ interface PositionScoringProps {
   submitting: boolean;
 }
 
+function getOrdinalSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+// ── Race sidebar (desktop) ────────────────────────────────────────────────────
+
+function RaceSidebar({
+  matchGames,
+  gameType,
+  selectedGameId,
+  onSelect,
+  disabled
+}: {
+  matchGames: MatchGame[];
+  gameType: string;
+  selectedGameId: string | null;
+  onSelect: (id: string) => void;
+  disabled: boolean;
+}) {
+  const completed = matchGames.filter(g => g.status === 'completed').length;
+
+  return (
+    <div className={styles.sidebarWrapper}>
+      <div className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          Races — {completed}/{matchGames.length} done
+        </div>
+
+        {matchGames.map(game => {
+          const imageUrl = game.image_url || getMapImageUrl(gameType, game.map_id);
+          const isSelected = selectedGameId === game.id;
+          const itemClass = [
+            styles.raceItem,
+            isSelected ? styles.raceItemSelected : '',
+            game.status === 'completed' ? styles.raceItemCompleted : '',
+          ].filter(Boolean).join(' ');
+
+          return (
+            <div
+              key={game.id}
+              className={itemClass}
+              onClick={() => !disabled && onSelect(game.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && !disabled && onSelect(game.id)}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl}
+                alt={formatMapName(game.map_id, game.map_name)}
+                className={styles.raceThumb}
+              />
+              <div className={styles.raceInfo}>
+                <div className={styles.raceRound}>Race {game.round}</div>
+                <div className={styles.raceName}>
+                  {formatMapName(game.map_id, game.map_name)}
+                </div>
+                <Badge
+                  size="xs"
+                  color={game.status === 'completed' ? 'green' : 'gray'}
+                  leftSection={game.status === 'completed' ? <IconCheck size={10} /> : undefined}
+                >
+                  {game.status}
+                </Badge>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Mobile horizontal race list ───────────────────────────────────────────────
+
+function MobileRaceList({
+  matchGames,
+  gameType,
+  selectedGameId,
+  onSelect,
+  disabled
+}: {
+  matchGames: MatchGame[];
+  gameType: string;
+  selectedGameId: string | null;
+  onSelect: (id: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className={styles.mobileRaceList}>
+      {matchGames.map(game => {
+        const imageUrl = game.image_url || getMapImageUrl(gameType, game.map_id);
+        const isSelected = selectedGameId === game.id;
+        const thumbClass = [
+          styles.mobileRaceThumb,
+          isSelected ? styles.mobileRaceThumbSelected : '',
+          game.status === 'completed' ? styles.mobileRaceThumbCompleted : '',
+        ].filter(Boolean).join(' ');
+
+        return (
+          <div
+            key={game.id}
+            className={styles.mobileRaceItem}
+            onClick={() => !disabled && onSelect(game.id)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt={formatMapName(game.map_id, game.map_name)}
+              className={thumbClass}
+            />
+            <span className={styles.mobileRaceName}>
+              {formatMapName(game.map_id, game.map_name)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Race detail panel ─────────────────────────────────────────────────────────
+
+function RaceDetailPanel({
+  selectedGame,
+  gameType,
+  participants,
+  positionAssignments,
+  onPositionChange,
+  onSubmit,
+  submitting,
+  isValid
+}: {
+  selectedGame: MatchGame;
+  gameType: string;
+  participants: MatchParticipant[];
+  positionAssignments: Record<string, number | null>;
+  onPositionChange: (participantId: string, position: string | null) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  isValid: boolean;
+}) {
+  const imageUrl = selectedGame.image_url || getMapImageUrl(gameType, selectedGame.map_id);
+  const raceName = formatMapName(selectedGame.map_id, selectedGame.map_name);
+  const isCompleted = selectedGame.status === 'completed';
+
+  const positionOptions = Array.from({ length: participants.length }, (_, i) => ({
+    value: String(i + 1),
+    label: `${i + 1}${getOrdinalSuffix(i + 1)} Place`
+  }));
+
+  const allAssigned = participants.every(p => positionAssignments[p.id] !== null);
+  const hasDuplicates = (() => {
+    const vals = participants.map(p => positionAssignments[p.id]).filter(v => v !== null);
+    return new Set(vals).size !== vals.length;
+  })();
+
+  return (
+    <div className={styles.detailPanel}>
+      {/* Hero */}
+      <div
+        className={styles.raceHero}
+        style={{ backgroundImage: `url('${imageUrl}')` }}
+      >
+        <div className={styles.raceHeroOverlay}>
+          <div className={styles.raceHeroRound}>Race {selectedGame.round}</div>
+          <div className={styles.raceHeroTitle}>{raceName}</div>
+        </div>
+      </div>
+
+      {/* Completed */}
+      {isCompleted && (
+        <Alert color="green" icon={<IconCheck size={16} />} radius="md">
+          <Text fw={600}>Race complete — results recorded.</Text>
+        </Alert>
+      )}
+
+      {/* Position entry */}
+      {!isCompleted && (
+        <Stack gap="md">
+          <Group gap="xs">
+            <IconTrophy size={16} color="var(--mantine-color-dimmed)" />
+            <Text size="sm" c="dimmed" fw={500}>Assign finishing positions</Text>
+            <Badge size="sm" color="blue" ml="auto">Position Scoring</Badge>
+          </Group>
+
+          <div className={styles.participantList}>
+            {participants.map(participant => {
+              const assigned = positionAssignments[participant.id] !== null;
+              const rowClass = `${styles.participantRow} ${assigned ? styles.participantRowAssigned : ''}`;
+              const initial = participant.username.charAt(0).toUpperCase();
+
+              return (
+                <div key={participant.id} className={rowClass}>
+                  <div className={styles.participantAvatar}>{initial}</div>
+                  <span className={styles.participantName}>{participant.username}</span>
+                  <div className={styles.participantSelect}>
+                    <Select
+                      placeholder="Position"
+                      data={positionOptions}
+                      value={positionAssignments[participant.id]?.toString() ?? null}
+                      onChange={value => onPositionChange(participant.id, value)}
+                      disabled={submitting}
+                      clearable
+                      size="sm"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {hasDuplicates && (
+            <Text size="xs" c="red" ta="center">Two participants cannot share the same position.</Text>
+          )}
+          {!allAssigned && !hasDuplicates && (
+            <Text size="xs" c="dimmed" ta="center">Assign a position to every participant to submit.</Text>
+          )}
+
+          <Button
+            fullWidth
+            size="md"
+            color="blue"
+            onClick={onSubmit}
+            disabled={!isValid || submitting}
+            loading={submitting}
+            leftSection={<IconCheck size={18} />}
+          >
+            Submit Race Results
+          </Button>
+        </Stack>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function PositionScoring({
   matchId,
   gameType,
@@ -45,169 +283,109 @@ export function PositionScoring({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch match data
-  useEffect(() => {
-    if (!matchId || matchId.trim() === '') {
-      setLoading(true);
-      return;
-    }
+  const fetchMatchData = useCallback(async () => {
+    try {
+      setError(null);
+      const [gamesRes, participantsRes] = await Promise.all([
+        fetch(`/api/matches/${matchId}/games?t=${Date.now()}`),
+        fetch(`/api/matches/${matchId}/participants`)
+      ]);
 
-    const fetchMatchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+      if (!gamesRes.ok) throw new Error('Failed to load races');
+      if (!participantsRes.ok) throw new Error('Failed to load participants');
 
-        // Fetch match games
-        const gamesResponse = await fetch(`/api/matches/${matchId}/games?t=${Date.now()}`);
-        if (!gamesResponse.ok) {
-          throw new Error('Failed to load match games');
-        }
-        const gamesData = await gamesResponse.json();
-        setMatchGames(gamesData.games || []);
+      const gamesData = await gamesRes.json();
+      const participantsData = await participantsRes.json();
 
-        // Fetch participants
-        const participantsResponse = await fetch(`/api/matches/${matchId}/participants`);
-        if (!participantsResponse.ok) {
-          throw new Error('Failed to load participants');
-        }
-        const participantsData = await participantsResponse.json();
-        setParticipants(participantsData.participants || []);
+      const games: MatchGame[] = gamesData.games || [];
+      const parts: MatchParticipant[] = participantsData.participants || [];
 
-        // Auto-select the first pending/ongoing game
-        const activeGame = gamesData.games.find((game: MatchGame) =>
-          game.status === 'pending' || game.status === 'ongoing'
-        );
-        if (activeGame) {
-          setSelectedGameId(activeGame.id);
-        }
-      } catch (err) {
-        logger.error('Error fetching match data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load match data');
-      } finally {
-        setLoading(false);
+      setMatchGames(games);
+      setParticipants(parts);
+
+      // Auto-select first pending/ongoing race
+      if (!selectedGameId) {
+        const active = games.find(g => g.status === 'pending' || g.status === 'ongoing');
+        if (active) setSelectedGameId(active.id);
       }
-    };
+    } catch (err) {
+      logger.error('Error fetching position scoring data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load match data');
+    } finally {
+      setLoading(false);
+    }
+  }, [matchId, selectedGameId]);
 
-    fetchMatchData();
-  }, [matchId]);
+  useEffect(() => {
+    if (matchId?.trim()) fetchMatchData();
+  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initialize position assignments when game is selected
+  // Reset assignments when participants load or selected game changes
   useEffect(() => {
     if (participants.length > 0) {
       const initial: Record<string, number | null> = {};
-      participants.forEach(p => {
-        initial[p.id] = null;
-      });
+      participants.forEach(p => { initial[p.id] = null; });
       setPositionAssignments(initial);
     }
-  }, [participants]);
+  }, [participants, selectedGameId]);
 
-  const selectedGame = matchGames.find(game => game.id === selectedGameId);
-
-  const getMapImageUrl = (gameId: string, mapId: string) => {
-    // Handle special cases where maps don't use webp format
-    if (gameId === 'overwatch2' && mapId === 'ow2-workshop') {
-      return `/assets/games/${gameId}/maps/${mapId}.jpg`;
-    }
-    // Default to webp for all other maps
-    return `/assets/games/${gameId}/maps/${mapId}.webp`;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'green';
-      case 'ongoing':
-        return 'orange';
-      default:
-        return 'gray';
-    }
-  };
-
-  // Generate position options (1 to number of participants)
-  const positionOptions = Array.from({ length: participants.length }, (_, i) => ({
-    value: String(i + 1),
-    label: `${i + 1}${getOrdinalSuffix(i + 1)} Place`
-  }));
-
-  function getOrdinalSuffix(n: number): string {
-    const s = ['th', 'st', 'nd', 'rd'];
-    const v = n % 100;
-    return s[(v - 20) % 10] || s[v] || s[0];
-  }
-
-  const handlePositionChange = (participantId: string, position: string | null) => {
+  const handlePositionChange = (participantId: string, value: string | null) => {
     setPositionAssignments(prev => ({
       ...prev,
-      [participantId]: position ? parseInt(position) : null
+      [participantId]: value ? parseInt(value) : null
     }));
   };
 
-  const isValidSubmission = (): boolean => {
-    // All participants must have a position assigned
-    const allAssigned = Object.values(positionAssignments).every(pos => pos !== null);
-
-    // No duplicate positions
-    const positions = Object.values(positionAssignments).filter(p => p !== null);
-    const uniquePositions = new Set(positions);
-    const noDuplicates = positions.length === uniquePositions.size;
-
-    return allAssigned && noDuplicates;
+  const isValid = (): boolean => {
+    const vals = Object.values(positionAssignments);
+    if (vals.some(v => v === null)) return false;
+    return new Set(vals).size === vals.length;
   };
 
   const handleSubmit = async () => {
-    if (!selectedGame || !isValidSubmission()) return;
+    const selectedGame = matchGames.find(g => g.id === selectedGameId);
+    if (!selectedGame || !isValid()) return;
 
     try {
-      // Convert assignments to Record<string, number>
       const positionResults: Record<string, number> = {};
-      for (const [participantId, position] of Object.entries(positionAssignments)) {
-        if (position !== null) {
-          positionResults[participantId] = position;
-        }
+      for (const [id, pos] of Object.entries(positionAssignments)) {
+        if (pos !== null) positionResults[id] = pos;
       }
 
       const result: MatchResult = {
         matchId,
         gameId: selectedGame.id,
-        winner: 'team1', // Required field but not used in Position mode
+        winner: 'team1',
         positionResults,
         isPositionMode: true,
         completedAt: new Date()
       };
 
       await onResultSubmit(result);
+      await fetchMatchData();
 
-      // Move to next game
-      const nextGame = matchGames.find((game: MatchGame) =>
-        game.status === 'pending' || game.status === 'ongoing'
+      // Move to next pending race
+      const nextGame = matchGames.find(g =>
+        g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
       );
-      if (nextGame && nextGame.id !== selectedGameId) {
-        setSelectedGameId(nextGame.id);
-      }
-
-      // Reset position assignments
-      const initial: Record<string, number | null> = {};
-      participants.forEach(p => {
-        initial[p.id] = null;
-      });
-      setPositionAssignments(initial);
-    } catch (error) {
-      logger.error('Error submitting position results:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save results');
+      if (nextGame) setSelectedGameId(nextGame.id);
+    } catch (err) {
+      logger.error('Error submitting position results:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save results');
     }
   };
 
   if (loading) {
-    return <Text>Loading race data...</Text>;
+    return (
+      <Group justify="center" p="xl">
+        <Loader size="md" />
+        <Text>Loading race data...</Text>
+      </Group>
+    );
   }
 
   if (error) {
-    return (
-      <Alert color="red" icon={<IconTrophy size={16} />}>
-        {error}
-      </Alert>
-    );
+    return <Alert color="red" icon={<IconFlag size={16} />}>{error}</Alert>;
   }
 
   if (matchGames.length === 0 || participants.length === 0) {
@@ -218,155 +396,44 @@ export function PositionScoring({
     );
   }
 
+  const selectedGame = matchGames.find(g => g.id === selectedGameId);
+
   return (
-    <Stack gap="md">
-      {/* Race Selection */}
-      <Card withBorder p="md">
-        <Stack gap="sm">
-          <Text fw={600} size="sm">Race Schedule</Text>
+    <div className={styles.container}>
+      <RaceSidebar
+        matchGames={matchGames}
+        gameType={gameType}
+        selectedGameId={selectedGameId}
+        onSelect={setSelectedGameId}
+        disabled={submitting}
+      />
 
-          <Group gap="md">
-            {matchGames.map((game) => (
-              <Card
-                key={game.id}
-                withBorder
-                onClick={() => setSelectedGameId(game.id)}
-                style={{
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  minWidth: 180,
-                  height: 120,
-                  backgroundImage: `linear-gradient(${selectedGameId === game.id ? 'rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)'}), url('${game.image_url || getMapImageUrl(gameType, game.map_id)}')`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundColor: '#1a1b1e',
-                  border: selectedGameId === game.id ? `2px solid var(--mantine-color-${getStatusColor(game.status)}-6)` : 'none',
-                  boxShadow: selectedGameId === game.id ? `0 0 0 1px var(--mantine-color-${getStatusColor(game.status)}-6)` : undefined,
-                  opacity: submitting ? 0.6 : 1,
-                  position: 'relative'
-                }}
-                p="sm"
-              >
-                <Stack gap="xs" h="100%" justify="space-between">
-                  {/* Status Icon and Badge */}
-                  <Group justify="space-between" align="flex-start">
-                    {game.status === 'completed' ? (
-                      <IconCheck size={16} color="green" />
-                    ) : (
-                      <IconFlag size={16} color="gray" />
-                    )}
-                    <Badge
-                      color={getStatusColor(game.status)}
-                      size="xs"
-                      style={{ backgroundColor: `var(--mantine-color-${getStatusColor(game.status)}-6)` }}
-                    >
-                      {game.status}
-                    </Badge>
-                  </Group>
+      <MobileRaceList
+        matchGames={matchGames}
+        gameType={gameType}
+        selectedGameId={selectedGameId}
+        onSelect={setSelectedGameId}
+        disabled={submitting}
+      />
 
-                  {/* Map Info */}
-                  <Box>
-                    <Text
-                      size="xs"
-                      fw={600}
-                      c="white"
-                      style={{
-                        textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
-                        lineHeight: 1.2,
-                        fontWeight: 700
-                      }}
-                    >
-                      Race {game.round}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="white"
-                      style={{
-                        textShadow: '0 0 4px rgba(0, 0, 0, 0.9), 1px 1px 2px rgba(0, 0, 0, 0.8)',
-                        lineHeight: 1.1,
-                        fontWeight: 600
-                      }}
-                    >
-                      {game.map_name}
-                    </Text>
-                  </Box>
-                </Stack>
-              </Card>
-            ))}
-          </Group>
-        </Stack>
-      </Card>
-
-      {/* Position Entry */}
-      {selectedGame && selectedGame.status !== 'completed' && (
-        <Card withBorder p="md">
-          <Stack gap="md">
-            <Group justify="space-between">
-              <Text fw={600}>
-                Race {selectedGame.round}: {selectedGame.map_name}
-              </Text>
-              <Badge color="blue" size="sm">
-                Position-Based Scoring
-              </Badge>
-            </Group>
-
-            <Divider />
-
-            <Text size="sm" c="dimmed">
-              <IconTrophy size={16} style={{ marginRight: 8 }} />
-              Assign finishing position to each participant:
-            </Text>
-
-            <Stack gap="sm">
-              {participants.map((participant) => (
-                <Group key={participant.id} align="center" justify="space-between">
-                  <Text fw={500} style={{ flex: 1 }}>
-                    {participant.username}
-                  </Text>
-                  <Select
-                    placeholder="Select position"
-                    data={positionOptions}
-                    value={positionAssignments[participant.id]?.toString() || null}
-                    onChange={(value) => handlePositionChange(participant.id, value)}
-                    disabled={submitting}
-                    style={{ width: 200 }}
-                    clearable
-                  />
-                </Group>
-              ))}
-            </Stack>
-
-            <Divider />
-
-            <Button
-              fullWidth
-              size="lg"
-              color="blue"
-              onClick={handleSubmit}
-              disabled={!isValidSubmission() || submitting}
-              loading={submitting}
-              leftSection={<IconCheck size={20} />}
-            >
-              Submit Race Results
-            </Button>
-
-            {!isValidSubmission() && (
-              <Text size="xs" c="dimmed" ta="center">
-                {Object.values(positionAssignments).every(pos => pos !== null)
-                  ? 'Please ensure no duplicate positions'
-                  : 'Please assign a position to all participants'}
-              </Text>
-            )}
-          </Stack>
-        </Card>
+      {selectedGame ? (
+        <RaceDetailPanel
+          selectedGame={selectedGame}
+          gameType={gameType}
+          participants={participants}
+          positionAssignments={positionAssignments}
+          onPositionChange={handlePositionChange}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          isValid={isValid()}
+        />
+      ) : (
+        <div className={styles.detailPanel}>
+          <Alert color="blue" icon={<IconFlag size={16} />}>
+            Select a race from the list to enter results.
+          </Alert>
+        </div>
       )}
-
-      {/* Completed Race Display */}
-      {selectedGame && selectedGame.status === 'completed' && (
-        <Alert color="green" icon={<IconCheck size={16} />}>
-          This race has been completed. Results recorded.
-        </Alert>
-      )}
-    </Stack>
+    </div>
   );
 }
