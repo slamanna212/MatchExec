@@ -91,6 +91,13 @@ export function TournamentEventInfoStep({
         onChange={(e) => updateFormData('allowPlayerTeamSelection', e.currentTarget.checked)}
       />
 
+      <Switch
+        label="Allow Match Editing"
+        description="When enabled, matches in this tournament can be edited before they reach the battle phase. When disabled, matches cannot be edited at any phase."
+        checked={formData.allowMatchEditing ?? true}
+        onChange={(e) => updateFormData('allowMatchEditing', e.currentTarget.checked)}
+      />
+
       <EventImageUpload
         imagePreview={imagePreview}
         uploadingImage={uploadingImage}

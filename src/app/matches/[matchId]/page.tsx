@@ -44,6 +44,7 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   maps?: string[];
   map_codes?: Record<string, string>;
   livestream_link?: string;
+  tournament_allow_match_editing?: boolean;
   created_at: string;
   updated_at: string;
   start_date?: string;

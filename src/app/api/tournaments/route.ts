@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
       ruleset,
       maxParticipants,
       eventImageUrl,
-      allowPlayerTeamSelection
+      allowPlayerTeamSelection,
+      allowMatchEditing
     } = body;
 
     if (!name || !gameId || !gameModeId || !format || !roundsPerMatch) {
@@ -133,8 +134,8 @@ export async function POST(request: NextRequest) {
       INSERT INTO tournaments (
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
-        allow_player_team_selection
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allow_player_team_selection, allow_match_editing
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       tournamentId,
       name,
@@ -149,7 +150,8 @@ export async function POST(request: NextRequest) {
       startDateTime,
       startTimeOnly,
       eventImageUrl || null,
-      allowPlayerTeamSelection ? 1 : 0
+      allowPlayerTeamSelection ? 1 : 0,
+      allowMatchEditing === false ? 0 : 1
     ]);
     
     const tournament = await db.get<TournamentDbRow>(`

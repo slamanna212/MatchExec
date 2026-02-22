@@ -14,15 +14,19 @@ export async function GET(
     const { matchId } = await params;
     
     // Fetch match with game info including map_codes_supported
-    const match = await db.get<MatchDbRow & { 
-      game_name?: string; 
-      game_icon?: string; 
-      game_color?: string; 
+    const match = await db.get<MatchDbRow & {
+      game_name?: string;
+      game_icon?: string;
+      game_color?: string;
       map_codes_supported?: number;
+      tournament_allow_match_editing?: number;
     }>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported
+      SELECT m.*,
+        g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported,
+        t.allow_match_editing as tournament_allow_match_editing
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
+      LEFT JOIN tournaments t ON m.tournament_id = t.id
       WHERE m.id = ?
     `, [matchId]);
     
@@ -38,7 +42,9 @@ export async function GET(
       ...match,
       maps: match.maps ? JSON.parse(match.maps) : [],
       map_codes: match.map_codes ? JSON.parse(match.map_codes) : {},
-      map_codes_supported: Boolean(match.map_codes_supported)
+      map_codes_supported: Boolean(match.map_codes_supported),
+      // NULL (non-tournament match) → true, 1 → true, 0 → false
+      tournament_allow_match_editing: match.tournament_allow_match_editing !== 0
     };
     
     return NextResponse.json(parsedMatch);
@@ -59,13 +65,26 @@ export async function PUT(
     const db = await getDbInstance();
     const { matchId } = await params;
 
-    const existingMatch = await db.get<MatchDbRow>('SELECT id, status FROM matches WHERE id = ?', [matchId]);
+    const existingMatch = await db.get<MatchDbRow & { tournament_allow_match_editing?: number }>(
+      `SELECT m.id, m.status, m.tournament_id, t.allow_match_editing as tournament_allow_match_editing
+       FROM matches m
+       LEFT JOIN tournaments t ON m.tournament_id = t.id
+       WHERE m.id = ?`,
+      [matchId]
+    );
     if (!existingMatch) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
     if (['battle', 'complete', 'cancelled'].includes(existingMatch.status)) {
       return NextResponse.json({ error: 'Match cannot be edited once it has started' }, { status: 403 });
+    }
+
+    if (existingMatch.tournament_allow_match_editing === 0) {
+      return NextResponse.json(
+        { error: 'Match editing is disabled for this tournament' },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();

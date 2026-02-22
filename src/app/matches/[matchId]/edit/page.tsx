@@ -38,6 +38,7 @@ interface MatchData {
   livestream_link?: string;
   maps?: string[];
   status: string;
+  tournament_allow_match_editing?: boolean;
 }
 
 interface MapDetail {
@@ -201,6 +202,12 @@ export default function EditMatchPage({
 
         if (['battle', 'complete', 'cancelled'].includes(data.status)) {
           showError('Match cannot be edited once it has started');
+          router.push(`/matches/${matchId}`);
+          return;
+        }
+
+        if (data.tournament_allow_match_editing === false) {
+          showError('Match editing is disabled for this tournament');
           router.push(`/matches/${matchId}`);
           return;
         }

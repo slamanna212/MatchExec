@@ -116,6 +116,7 @@ describe('Database Schema Validation', () => {
       expect(columnNames).toContain('rounds_per_match');
       expect(columnNames).toContain('ruleset');
       expect(columnNames).toContain('created_at');
+      expect(columnNames).toContain('allow_match_editing');
     });
 
     it('should have foreign key to games table', async () => {

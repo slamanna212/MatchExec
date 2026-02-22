@@ -71,6 +71,7 @@ export interface Tournament {
   start_date?: Date;
   start_time?: Date;
   allow_player_team_selection?: boolean;
+  allow_match_editing?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -100,6 +101,7 @@ export interface MatchDbRow extends Match {
   rounds?: number;
   livestream_link?: string;
   player_notifications?: number; // SQLite stores booleans as integers
+  tournament_allow_match_editing?: number; // SQLite integer from JOIN with tournaments
 }
 
 export interface ParticipantDbRow {

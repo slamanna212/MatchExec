@@ -19,3 +19,7 @@ CREATE TABLE IF NOT EXISTS discord_match_edit_queue (
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_discord_match_edit_queue_match_id ON discord_match_edit_queue(match_id);
+
+-- Allow match editing setting for tournaments
+-- Default 1 (allowed) preserves existing tournament behavior
+ALTER TABLE tournaments ADD COLUMN allow_match_editing INTEGER DEFAULT 1;
