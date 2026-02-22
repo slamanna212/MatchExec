@@ -136,8 +136,6 @@ const MatchCard = memo(({
         <StageRing status={match.status} gameColor={match.game_color} />
       </Group>
 
-      <Divider mb="md" mx="lg" />
-
       <Stack gap="xs" px="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {match.description && (
@@ -145,13 +143,35 @@ const MatchCard = memo(({
           )}
         </div>
 
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Participants:</Text>
-          <Text size="sm">{(match as MatchWithGame & { participant_count?: number }).participant_count || 0}/{match.max_participants}</Text>
-        </Group>
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Starts:</Text>
-          <Text size="sm">{parseDbTimestamp(match.start_date)?.toLocaleString('en-US') || 'N/A'}</Text>
+        <Divider mb="xs" />
+
+        <Group gap="xl" justify="center">
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Participants</Text>
+            <Text size="sm" fw={500}>
+              {(match as MatchWithGame & { participant_count?: number }).participant_count || 0}/{match.max_participants}
+            </Text>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Rounds</Text>
+            <Text size="sm" fw={500}>
+              {match.rounds ?? 'N/A'}
+            </Text>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Starts</Text>
+            <Text size="sm" fw={500}>
+              {parseDbTimestamp(match.start_date)
+                ? parseDbTimestamp(match.start_date)!.toLocaleString('en-US', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })
+                : 'N/A'}
+            </Text>
+          </Stack>
         </Group>
       </Stack>
 
