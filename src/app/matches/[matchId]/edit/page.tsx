@@ -198,6 +198,13 @@ export default function EditMatchPage({
           return;
         }
         const data: MatchData = await res.json();
+
+        if (['battle', 'complete', 'cancelled'].includes(data.status)) {
+          showError('Match cannot be edited once it has started');
+          router.push(`/matches/${matchId}`);
+          return;
+        }
+
         setMatch(data);
         setName(data.name || '');
         setDescription(data.description || '');

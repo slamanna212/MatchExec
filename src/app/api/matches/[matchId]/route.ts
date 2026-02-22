@@ -59,9 +59,13 @@ export async function PUT(
     const db = await getDbInstance();
     const { matchId } = await params;
 
-    const existingMatch = await db.get<MatchDbRow>('SELECT id FROM matches WHERE id = ?', [matchId]);
+    const existingMatch = await db.get<MatchDbRow>('SELECT id, status FROM matches WHERE id = ?', [matchId]);
     if (!existingMatch) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+    }
+
+    if (['battle', 'complete', 'cancelled'].includes(existingMatch.status)) {
+      return NextResponse.json({ error: 'Match cannot be edited once it has started' }, { status: 403 });
     }
 
     const body = await request.json();

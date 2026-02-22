@@ -278,7 +278,7 @@ export function MatchInfoPanel({
               {getStatusTransitionButton()}
 
               {/* Edit button */}
-              {!isHistory && onEdit && (
+              {!isHistory && onEdit && !['battle', 'complete', 'cancelled'].includes(match.status) && (
                 <Button
                   variant="light"
                   color="yellow"
