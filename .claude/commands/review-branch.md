@@ -28,6 +28,7 @@ Perform a comprehensive bug and logic error review before merging the current br
 - Race conditions in async code
 - Missing null/undefined checks
 - Type safety issues (TypeScript any types, missing validations)
+- Missing/Wrong/useless tests
 - API endpoint validation (missing input validation, error responses)
 - Discord bot error handling (queue operations, voice channel management)
 - Off-by-one errors, boundary conditions
