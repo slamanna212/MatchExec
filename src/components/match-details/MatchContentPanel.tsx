@@ -141,7 +141,7 @@ export function MatchContentPanel({
                   value: 'announcements'
                 },
                 ...(match.map_codes_supported ? [{
-                  label: <span>Codes<span className="hidden md:inline">: Match</span></span>,
+                  label: <span><span className="hidden md:inline">Match </span>Codes</span>,
                   value: 'matchcodes'
                 }] : [])
               ]}
