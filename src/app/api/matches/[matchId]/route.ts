@@ -4,6 +4,35 @@ import { getDbInstance } from '../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { parseMatchResponse } from '../helpers';
+import type { Database } from '@/lib/database/connection';
+
+function getMatchEditPermissionError(existingMatch: { status: string; tournament_allow_match_editing?: number }): { error: string; status: number } | null {
+  if (['battle', 'complete', 'cancelled'].includes(existingMatch.status)) {
+    return { error: 'Match cannot be edited once it has started', status: 403 };
+  }
+  if (existingMatch.tournament_allow_match_editing === 0) {
+    return { error: 'Match editing is disabled for this tournament', status: 403 };
+  }
+  return null;
+}
+
+function validateMatchName(name: unknown): string | null {
+  if (!name || typeof name !== 'string' || name.trim() === '') return 'Name is required';
+  return null;
+}
+
+function prepareMapsJson(maps: unknown): string | null {
+  if (Array.isArray(maps) && maps.length > 0) return JSON.stringify(maps);
+  return null;
+}
+
+async function queueDiscordMatchEdit(db: Database, matchId: string): Promise<void> {
+  const announcementMsg = await db.get('SELECT id FROM discord_match_messages WHERE match_id = ? AND message_type = ?', [matchId, 'announcement']);
+  if (!announcementMsg) return;
+  const editQueueId = `match_edit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  await db.run(`INSERT INTO discord_match_edit_queue (id, match_id, status) VALUES (?, ?, 'pending')`, [editQueueId, matchId]);
+  logger.debug('📝 Discord edit queued for match:', matchId);
+}
 
 export async function GET(
   request: NextRequest,
@@ -76,26 +105,21 @@ export async function PUT(
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (['battle', 'complete', 'cancelled'].includes(existingMatch.status)) {
-      return NextResponse.json({ error: 'Match cannot be edited once it has started' }, { status: 403 });
-    }
-
-    if (existingMatch.tournament_allow_match_editing === 0) {
-      return NextResponse.json(
-        { error: 'Match editing is disabled for this tournament' },
-        { status: 403 }
-      );
+    const permError = getMatchEditPermissionError(existingMatch);
+    if (permError) {
+      return NextResponse.json({ error: permError.error }, { status: permError.status });
     }
 
     const body = await request.json();
     const { name, description, startDate, rules, rounds, livestreamLink, maps } = body;
 
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    const nameError = validateMatchName(name);
+    if (nameError) {
+      return NextResponse.json({ error: nameError }, { status: 400 });
     }
 
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;
-    const mapsJson = maps && Array.isArray(maps) && maps.length > 0 ? JSON.stringify(maps) : null;
+    const mapsJson = prepareMapsJson(maps);
 
     await db.run(`
       UPDATE matches
@@ -103,7 +127,7 @@ export async function PUT(
           rounds = ?, livestream_link = ?, maps = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
-      name.trim(),
+      (name as string).trim(),
       description || null,
       startDateTime,
       startDateTime,
@@ -116,15 +140,7 @@ export async function PUT(
 
     // Queue Discord embed update if announcement message exists
     try {
-      const announcementMsg = await db.get('SELECT id FROM discord_match_messages WHERE match_id = ? AND message_type = ?', [matchId, 'announcement']);
-      if (announcementMsg) {
-        const editQueueId = `match_edit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        await db.run(`
-          INSERT INTO discord_match_edit_queue (id, match_id, status)
-          VALUES (?, ?, 'pending')
-        `, [editQueueId, matchId]);
-        logger.debug('📝 Discord edit queued for match:', matchId);
-      }
+      await queueDiscordMatchEdit(db, matchId);
     } catch (error) {
       logger.error('❌ Error queuing Discord edit:', error);
     }

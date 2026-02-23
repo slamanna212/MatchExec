@@ -36,6 +36,78 @@ import {
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
 
+interface NavItemData {
+  href: string;
+  label: string;
+  iconName: string;
+  links?: Array<{ href: string; label: string; iconName: string }>;
+}
+
+interface NavRenderContext {
+  pathname: string | null;
+  mounted: boolean;
+  iconSize: string;
+  fontSize: string | undefined;
+  onNavigate?: () => void;
+  router: ReturnType<typeof useRouter>;
+  getIcon: (name: string) => React.ComponentType<{ size: string }>;
+}
+
+function isNavSectionActive(itemHref: string, pathname: string | null): boolean {
+  if (itemHref === '/settings') return Boolean(pathname?.startsWith('/settings'));
+  if (itemHref === '/tournaments') return Boolean(pathname?.startsWith('/tournaments'));
+  if (itemHref === '/matches') return Boolean(pathname?.startsWith('/matches'));
+  return false;
+}
+
+function SubNavLink({ link, ctx }: { link: { href: string; label: string; iconName: string }; ctx: NavRenderContext }) {
+  const isActive = ctx.mounted && ctx.pathname === link.href;
+  return (
+    <NavLink
+      href={link.href}
+      label={link.label}
+      leftSection={React.createElement(ctx.getIcon(link.iconName), { size: ctx.iconSize })}
+      pl="xl"
+      c={isActive ? '#f7cc02' : '#F5F5F5'}
+      fw={isActive ? 700 : 400}
+      fz={ctx.fontSize}
+      onClick={(event) => {
+        event.preventDefault();
+        ctx.router.push(link.href);
+        ctx.onNavigate?.();
+      }}
+    />
+  );
+}
+
+function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
+  const sectionActive = isNavSectionActive(item.href, ctx.pathname);
+  const isActive = ctx.mounted && (ctx.pathname === item.href || sectionActive);
+  const shouldShowLinks = Boolean(item.links) && sectionActive;
+
+  return (
+    <div key={item.href}>
+      <NavLink
+        href={item.href}
+        label={item.label}
+        leftSection={React.createElement(ctx.getIcon(item.iconName), { size: ctx.iconSize })}
+        childrenOffset={0}
+        c={isActive ? '#f7cc02' : '#F5F5F5'}
+        fw={isActive ? 700 : 400}
+        fz={ctx.fontSize}
+        onClick={(event) => {
+          event.preventDefault();
+          ctx.router.push(item.href);
+          ctx.onNavigate?.();
+        }}
+      />
+      {shouldShowLinks && item.links?.map((link) => (
+        <SubNavLink key={link.href} link={link} ctx={ctx} />
+      ))}
+    </div>
+  );
+}
+
 interface NavigationProps {
   children: React.ReactNode
 }
@@ -174,63 +246,18 @@ export function Navigation({ children }: NavigationProps) {
     )
   }
 
-  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean }) => navigationItems.map((item) => {
-    const onNavigate = options?.onNavigate;
-    const iconSize = options?.large ? "1.25rem" : "1rem";
-    const fontSize = options?.large ? '1rem' : undefined;
-    const isActive = mounted && (
-      pathname === item.href ||
-      (item.href === '/settings' && pathname?.startsWith('/settings')) ||
-      (item.href === '/tournaments' && pathname?.startsWith('/tournaments')) ||
-      (item.href === '/matches' && pathname?.startsWith('/matches'))
-    );
-
-    const isSettingsPage = pathname?.startsWith('/settings');
-    const isTournamentsPage = pathname?.startsWith('/tournaments');
-    const isMatchesPage = pathname?.startsWith('/matches');
-
-    const shouldShowLinks = item.links && (
-      (item.href === '/settings' && isSettingsPage) ||
-      (item.href === '/tournaments' && isTournamentsPage) ||
-      (item.href === '/matches' && isMatchesPage)
-    );
-
-    return (
-      <div key={item.href}>
-        <NavLink
-          href={item.href}
-          label={item.label}
-          leftSection={React.createElement(getIcon(item.iconName), { size: iconSize })}
-          childrenOffset={0}
-          c={isActive ? "#f7cc02" : "#F5F5F5"}
-          fw={isActive ? 700 : 400}
-          fz={fontSize}
-          onClick={(event) => {
-            event.preventDefault();
-            router.push(item.href);
-            onNavigate?.();
-          }}
-        />
-        {shouldShowLinks && item.links?.map((link) => (
-          <NavLink
-            key={link.href}
-            href={link.href}
-            label={link.label}
-            leftSection={React.createElement(getIcon(link.iconName), { size: iconSize })}
-            pl="xl"
-            c={(mounted && pathname === link.href) ? "#f7cc02" : "#F5F5F5"}
-            fw={(mounted && pathname === link.href) ? 700 : 400}
-            fz={fontSize}
-            onClick={(event) => {
-              event.preventDefault();
-              router.push(link.href);
-              onNavigate?.();
-            }}
-          />
-        ))}
-      </div>
-    );
-  });
+  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean }) => {
+    const ctx: NavRenderContext = {
+      pathname,
+      mounted,
+      iconSize: options?.large ? '1.25rem' : '1rem',
+      fontSize: options?.large ? '1rem' : undefined,
+      onNavigate: options?.onNavigate,
+      router,
+      getIcon
+    };
+    return navigationItems.map((item) => <NavItem key={item.href} item={item} ctx={ctx} />);
+  };
 
   return (
     <AppShell

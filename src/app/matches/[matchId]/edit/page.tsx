@@ -49,6 +49,38 @@ interface MapDetail {
   mode_id?: string;
 }
 
+function findMapDetail(
+  mapId: string,
+  mapsById: Record<string, MapDetail>,
+  mapsByBaseId: Record<string, MapDetail[]>
+): MapDetail | undefined {
+  if (mapsById[mapId]) return mapsById[mapId];
+  const baseId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+  if (mapsById[baseId]) return mapsById[baseId];
+  const parts = baseId.split('-');
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const candidates = mapsByBaseId[parts.slice(0, i + 1).join('-')];
+    if (candidates && candidates.length > 0) return candidates[0];
+  }
+  return undefined;
+}
+
+function resolveMapMode(
+  mapId: string,
+  mapDetail: MapDetail | undefined,
+  modes: GameMode[]
+): { modeId: string; modeName: string } {
+  const modeId = mapDetail?.mode_id || '';
+  const modeName = mapDetail?.modeName || '';
+  if (modeName || modes.length === 0) return { modeId, modeName };
+  const modeCandidate = modes.find(m => mapId.includes(m.id));
+  if (modeCandidate) return { modeId: modeCandidate.id, modeName: modeCandidate.name };
+  if (!mapId.match(/[^-]+-([^-]+)/)) {
+    return { modeId: modes[0]?.id || '', modeName: modes[0]?.name || '' };
+  }
+  return { modeId: modes[0].id, modeName: modes[0].name };
+}
+
 export default function EditMatchPage({
   params
 }: {
@@ -131,50 +163,8 @@ export default function EditMatchPage({
       });
 
       return mapIds.map((mapId) => {
-        // Try exact match first
-        let mapDetail = mapsById[mapId];
-
-        // Strip timestamp suffix if present: e.g. "hanamura-control-1234567890-abc"
-        if (!mapDetail) {
-          const baseId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-          mapDetail = mapsById[baseId];
-
-          // If still not found, try stripping one segment at a time
-          if (!mapDetail) {
-            const parts = baseId.split('-');
-            for (let i = parts.length - 1; i >= 1; i--) {
-              const tryId = parts.slice(0, i + 1).join('-');
-              const candidates = mapsByBaseId[tryId];
-              if (candidates && candidates.length > 0) {
-                mapDetail = candidates[0];
-                break;
-              }
-            }
-          }
-        }
-
-        // Determine mode from mapDetail or modes list
-        let modeId = mapDetail?.mode_id || '';
-        let modeName = mapDetail?.modeName || '';
-
-        if (!modeName && modes.length > 0) {
-          // Try to extract mode from map ID
-          const modeMatch = mapId.match(/[^-]+-([^-]+)/);
-          if (modeMatch) {
-            const modeCandidate = modes.find(m => mapId.includes(m.id));
-            if (modeCandidate) {
-              modeId = modeCandidate.id;
-              modeName = modeCandidate.name;
-            } else {
-              modeId = modes[0].id;
-              modeName = modes[0].name;
-            }
-          } else {
-            modeId = modes[0]?.id || '';
-            modeName = modes[0]?.name || '';
-          }
-        }
-
+        const mapDetail = findMapDetail(mapId, mapsById, mapsByBaseId);
+        const { modeId, modeName } = resolveMapMode(mapId, mapDetail, modes);
         return {
           id: mapId,
           name: mapDetail?.name || mapId,

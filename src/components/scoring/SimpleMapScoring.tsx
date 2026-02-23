@@ -244,6 +244,80 @@ function TeamWinCard({
   );
 }
 
+// ── Map detail panel helpers ────────────────────────────────────────────────────
+
+function MapCompletedAlert({
+  selectedGame,
+  team1Name,
+  team2Name,
+  participants
+}: {
+  selectedGame: MatchGame;
+  team1Name: string | null;
+  team2Name: string | null;
+  participants: MatchParticipant[];
+}) {
+  const teamWinner = selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team');
+  const participantWinner = participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown';
+
+  return (
+    <Alert color="green" icon={<IconCheck size={16} />} radius="md">
+      <Text fw={600}>Map complete</Text>
+      {selectedGame.winner_id && <Text size="sm">Winner: {teamWinner}</Text>}
+      {selectedGame.participant_winner_id && <Text size="sm">Winner: {participantWinner}</Text>}
+    </Alert>
+  );
+}
+
+function MapWinnerSelection({
+  selectedGame,
+  team1Name,
+  team2Name,
+  participants,
+  onTeamWin,
+  onParticipantWin,
+  submitting
+}: {
+  selectedGame: MatchGame;
+  team1Name: string | null;
+  team2Name: string | null;
+  participants: MatchParticipant[];
+  onTeamWin: (winner: 'team1' | 'team2') => void;
+  onParticipantWin: (id: string) => void;
+  submitting: boolean;
+}) {
+  const mode = selectedGame.mode_scoring_type;
+  const showTeamCards = mode === 'Normal' || !mode;
+
+  return (
+    <Stack gap="md">
+      <Group gap="xs">
+        <IconSwords size={16} color="var(--mantine-color-dimmed)" />
+        <Text size="sm" c="dimmed" fw={500}>Who won this map?</Text>
+        <Badge size="sm" color={statusColor(selectedGame.status)} ml="auto">
+          {selectedGame.status}
+        </Badge>
+      </Group>
+      {showTeamCards && (
+        <div className={styles.winnerGrid}>
+          <TeamWinCard teamName={team1Name || 'Blue Team'} side="blue" onClick={() => onTeamWin('team1')} disabled={submitting} />
+          <TeamWinCard teamName={team2Name || 'Red Team'} side="red" onClick={() => onTeamWin('team2')} disabled={submitting} />
+        </div>
+      )}
+      {mode === 'FFA' && (
+        <div className={styles.ffaGrid}>
+          {participants.map(p => (
+            <button key={p.id} className={styles.ffaCard} onClick={() => onParticipantWin(p.id)} disabled={submitting} type="button">
+              <IconTrophy size={18} color="var(--mantine-color-violet-5)" />
+              <span className={styles.ffaCardName}>{p.username} Wins</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </Stack>
+  );
+}
+
 // ── Map detail panel ───────────────────────────────────────────────────────────
 
 function MapDetailPanel({
@@ -272,81 +346,32 @@ function MapDetailPanel({
 
   return (
     <div className={styles.detailPanel}>
-      {/* Hero image */}
-      <div
-        className={styles.mapHero}
-        style={{ backgroundImage: `url('${imageUrl}')` }}
-      >
+      <div className={styles.mapHero} style={{ backgroundImage: `url('${imageUrl}')` }}>
         <div className={styles.mapHeroOverlay}>
           <div className={styles.mapHeroRound}>Map {selectedGame.round}</div>
           <div className={styles.mapHeroTitle}>{mapName}</div>
         </div>
       </div>
 
-      {/* Completed state */}
       {isCompleted && (
-        <Alert color="green" icon={<IconCheck size={16} />} radius="md">
-          <Text fw={600}>Map complete</Text>
-          {selectedGame.winner_id && (
-            <Text size="sm">
-              Winner: {selectedGame.winner_id === 'team1' ? (team1Name || 'Blue Team') : (team2Name || 'Red Team')}
-            </Text>
-          )}
-          {selectedGame.participant_winner_id && (
-            <Text size="sm">
-              Winner: {participants.find(p => p.id === selectedGame.participant_winner_id)?.username || 'Unknown'}
-            </Text>
-          )}
-        </Alert>
+        <MapCompletedAlert
+          selectedGame={selectedGame}
+          team1Name={team1Name}
+          team2Name={team2Name}
+          participants={participants}
+        />
       )}
 
-      {/* Pending / ongoing — winner selection */}
       {!isCompleted && mode !== 'Position' && (
-        <Stack gap="md">
-          <Group gap="xs">
-            <IconSwords size={16} color="var(--mantine-color-dimmed)" />
-            <Text size="sm" c="dimmed" fw={500}>Who won this map?</Text>
-            <Badge size="sm" color={statusColor(selectedGame.status)} ml="auto">
-              {selectedGame.status}
-            </Badge>
-          </Group>
-
-          {/* Normal mode: two team cards */}
-          {(mode === 'Normal' || !mode) && (
-            <div className={styles.winnerGrid}>
-              <TeamWinCard
-                teamName={team1Name || 'Blue Team'}
-                side="blue"
-                onClick={() => onTeamWin('team1')}
-                disabled={submitting}
-              />
-              <TeamWinCard
-                teamName={team2Name || 'Red Team'}
-                side="red"
-                onClick={() => onTeamWin('team2')}
-                disabled={submitting}
-              />
-            </div>
-          )}
-
-          {/* FFA mode: participant list */}
-          {mode === 'FFA' && (
-            <div className={styles.ffaGrid}>
-              {participants.map(p => (
-                <button
-                  key={p.id}
-                  className={styles.ffaCard}
-                  onClick={() => onParticipantWin(p.id)}
-                  disabled={submitting}
-                  type="button"
-                >
-                  <IconTrophy size={18} color="var(--mantine-color-violet-5)" />
-                  <span className={styles.ffaCardName}>{p.username} Wins</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </Stack>
+        <MapWinnerSelection
+          selectedGame={selectedGame}
+          team1Name={team1Name}
+          team2Name={team2Name}
+          participants={participants}
+          onTeamWin={onTeamWin}
+          onParticipantWin={onParticipantWin}
+          submitting={submitting}
+        />
       )}
 
       {!isCompleted && mode === 'Position' && (

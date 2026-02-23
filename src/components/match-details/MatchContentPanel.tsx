@@ -16,6 +16,97 @@ import { RemindersList } from './RemindersList';
 import { MapResultsSection } from './MapResultsSection';
 import classes from '../gradient-segmented-control.module.css';
 
+function MapsTabContent({
+  maps,
+  mapDetails,
+  mapNotes,
+  formatMapName,
+  matchGames,
+  showWinner
+}: {
+  maps?: string[];
+  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
+  mapNotes: {[key: string]: string};
+  formatMapName: (mapId: string) => string;
+  matchGames?: MatchGameResult[];
+  showWinner: boolean;
+}) {
+  if (!maps || maps.length === 0) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">No maps configured for this match</Text>;
+  }
+  return (
+    <MapResultsSection
+      maps={maps}
+      mapDetails={mapDetails}
+      mapNotes={mapNotes}
+      formatMapName={formatMapName}
+      matchGames={matchGames}
+      showWinner={showWinner}
+    />
+  );
+}
+
+function MapCodesTabContent({
+  maps,
+  mapDetails,
+  mapNotes,
+  formatMapName,
+  mapCodes,
+  onMapCodeChange,
+  onMapCodesSave,
+  mapCodesSaving
+}: {
+  maps?: string[];
+  mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
+  mapNotes: {[key: string]: string};
+  formatMapName: (mapId: string) => string;
+  mapCodes: Record<string, string>;
+  onMapCodeChange?: (mapId: string, code: string) => void;
+  onMapCodesSave?: () => void;
+  mapCodesSaving: boolean;
+}) {
+  if (!maps || maps.length === 0) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">No maps configured for this match</Text>;
+  }
+  return (
+    <Stack gap="md">
+      <MapResultsSection
+        maps={maps}
+        mapDetails={mapDetails}
+        mapNotes={mapNotes}
+        formatMapName={formatMapName}
+      >
+        {(mapId) => (
+          onMapCodeChange && (
+            <TextInput
+              placeholder="Enter map code"
+              value={mapCodes[mapId] || ''}
+              onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
+              maxLength={24}
+              size="sm"
+              variant="filled"
+              w={200}
+              styles={{ input: { fontFamily: 'monospace', fontSize: '0.9em' } }}
+            />
+          )
+        )}
+      </MapResultsSection>
+      {onMapCodesSave && (
+        <Group justify="center">
+          <Button
+            size="sm"
+            loading={mapCodesSaving}
+            onClick={onMapCodesSave}
+            leftSection={<IconDeviceFloppy size={16} />}
+          >
+            Save Codes
+          </Button>
+        </Group>
+      )}
+    </Stack>
+  );
+}
+
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
   game_icon?: string;
@@ -165,20 +256,14 @@ export function MatchContentPanel({
         )}
 
         {activeTab === 'maps' && (
-          match.maps && match.maps.length > 0 ? (
-            <MapResultsSection
-              maps={match.maps}
-              mapDetails={mapDetails}
-              mapNotes={mapNotes}
-              formatMapName={formatMapName}
-              matchGames={matchGames}
-              showWinner={match.status === 'battle' || match.status === 'complete'}
-            />
-          ) : (
-            <Text size="sm" c="dimmed" ta="center" py="md">
-              No maps configured for this match
-            </Text>
-          )
+          <MapsTabContent
+            maps={match.maps}
+            mapDetails={mapDetails}
+            mapNotes={mapNotes}
+            formatMapName={formatMapName}
+            matchGames={matchGames}
+            showWinner={match.status === 'battle' || match.status === 'complete'}
+          />
         )}
 
         {activeTab === 'announcements' && (
@@ -192,54 +277,16 @@ export function MatchContentPanel({
         )}
 
         {activeTab === 'matchcodes' && match.map_codes_supported && (
-          <Stack gap="md">
-            {match.maps && match.maps.length > 0 ? (
-              <>
-                <MapResultsSection
-                  maps={match.maps}
-                  mapDetails={mapDetails}
-                  mapNotes={mapNotes}
-                  formatMapName={formatMapName}
-                >
-                  {(mapId) => (
-                    onMapCodeChange && (
-                      <TextInput
-                        placeholder="Enter map code"
-                        value={mapCodes[mapId] || ''}
-                        onChange={(event) => onMapCodeChange(mapId, event.currentTarget.value)}
-                        maxLength={24}
-                        size="sm"
-                        variant="filled"
-                        w={200}
-                        styles={{
-                          input: {
-                            fontFamily: 'monospace',
-                            fontSize: '0.9em'
-                          }
-                        }}
-                      />
-                    )
-                  )}
-                </MapResultsSection>
-                {onMapCodesSave && (
-                  <Group justify="center">
-                    <Button
-                      size="sm"
-                      loading={mapCodesSaving}
-                      onClick={onMapCodesSave}
-                      leftSection={<IconDeviceFloppy size={16} />}
-                    >
-                      Save Codes
-                    </Button>
-                  </Group>
-                )}
-              </>
-            ) : (
-              <Text size="sm" c="dimmed" ta="center" py="md">
-                No maps configured for this match
-              </Text>
-            )}
-          </Stack>
+          <MapCodesTabContent
+            maps={match.maps}
+            mapDetails={mapDetails}
+            mapNotes={mapNotes}
+            formatMapName={formatMapName}
+            mapCodes={mapCodes}
+            onMapCodeChange={onMapCodeChange}
+            onMapCodesSave={onMapCodesSave}
+            mapCodesSaving={mapCodesSaving}
+          />
         )}
     </Stack>
   );

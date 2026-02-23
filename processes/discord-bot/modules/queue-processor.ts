@@ -1128,55 +1128,94 @@ export class QueueProcessor {
     }
   }
 
+  private async handleTimedOutVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
+    if (!this.db) return;
+    const maxRetries = 3;
+    if (announcement.retry_count < maxRetries) {
+      await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'pending', retry_count = retry_count + 1, timeout_at = NULL, updated_at = datetime('now')
+        WHERE id = ?
+      `, [announcement.id]);
+      logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
+    } else {
+      await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'failed', completed_at = datetime('now'), error_message = 'Exceeded maximum retry attempts after timeout'
+        WHERE id = ?
+      `, [announcement.id]);
+      logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
+    }
+  }
+
+  private async processSingleVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
+    if (!this.db) return;
+    try {
+      const updateResult = await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'processing', timeout_at = datetime('now', '+2 minutes'),
+            first_attempted_at = COALESCE(first_attempted_at, datetime('now')), updated_at = datetime('now')
+        WHERE id = ? AND status = 'pending'
+      `, [announcement.id]);
+
+      if (updateResult.changes === 0) return;
+
+      if (announcement.announcement_type === 'welcome') {
+        const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`SELECT match_start_delay_seconds FROM discord_settings LIMIT 1`);
+        const delaySecs = settings?.match_start_delay_seconds ?? 45;
+        const elapsedSecs = (Date.now() - new Date(`${announcement.created_at}Z`).getTime()) / 1000;
+        if (elapsedSecs < delaySecs) {
+          await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'pending', timeout_at = NULL, updated_at = datetime('now') WHERE id = ?`, [announcement.id]);
+          logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
+          return;
+        }
+      }
+
+      if (!this.voiceHandler) {
+        logger.error('❌ VoiceHandler not available');
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, ['VoiceHandler not available', announcement.id]);
+        return;
+      }
+
+      logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
+
+      const result = await this.voiceHandler.playTeamAnnouncements(
+        announcement.blue_team_voice_channel,
+        announcement.red_team_voice_channel,
+        announcement.announcement_type,
+        announcement.first_team
+      );
+
+      if (result.success) {
+        await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'completed', completed_at = datetime('now') WHERE id = ?`, [announcement.id]);
+        logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
+      } else {
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [result.message, announcement.id]);
+        logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
+      }
+    } catch (error) {
+      logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
+      await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+    }
+  }
+
   async processVoiceAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      // First, handle timeouts for announcements stuck in 'processing'
       const timedOutAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
         SELECT id, match_id, announcement_type, retry_count
         FROM discord_voice_announcement_queue
-        WHERE status = 'processing'
-          AND timeout_at IS NOT NULL
-          AND datetime(timeout_at) < datetime('now')
+        WHERE status = 'processing' AND timeout_at IS NOT NULL AND datetime(timeout_at) < datetime('now')
       `);
 
       for (const announcement of timedOutAnnouncements) {
-        const maxRetries = 3;
-        if (announcement.retry_count < maxRetries) {
-          // Reset to pending for retry
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'pending',
-                retry_count = retry_count + 1,
-                timeout_at = NULL,
-                updated_at = datetime('now')
-            WHERE id = ?
-          `, [announcement.id]);
-
-          logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
-        } else {
-          // Max retries reached, mark as failed
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'failed',
-                completed_at = datetime('now'),
-                error_message = 'Exceeded maximum retry attempts after timeout'
-            WHERE id = ?
-          `, [announcement.id]);
-
-          logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
-        }
+        await this.handleTimedOutVoiceAnnouncement(announcement);
       }
 
-      // Clean up old completed/failed announcements (older than 1 hour)
-      await this.db.run(`
-        DELETE FROM discord_voice_announcement_queue
-        WHERE status IN ('completed', 'failed')
-          AND datetime(updated_at, '+1 hour') < datetime('now')
-      `);
+      await this.db.run(`DELETE FROM discord_voice_announcement_queue WHERE status IN ('completed', 'failed') AND datetime(updated_at, '+1 hour') < datetime('now')`);
 
-      // Now process pending announcements
       const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
         SELECT id, match_id, announcement_type, blue_team_voice_channel,
                red_team_voice_channel, first_team, created_at, retry_count,
@@ -1188,103 +1227,7 @@ export class QueueProcessor {
       `);
 
       for (const announcement of voiceAnnouncements) {
-        try {
-          // Immediately mark as processing to prevent duplicate processing
-          // Set timeout to 2 minutes from now
-          const updateResult = await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'processing',
-                timeout_at = datetime('now', '+2 minutes'),
-                first_attempted_at = COALESCE(first_attempted_at, datetime('now')),
-                updated_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [announcement.id]);
-
-          if (updateResult.changes === 0) {
-            continue;
-          }
-
-          // Check if this is a welcome announcement and if delay should be applied
-          if (announcement.announcement_type === 'welcome') {
-            // Get match start delay setting from discord_settings
-            const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`
-              SELECT match_start_delay_seconds FROM discord_settings LIMIT 1
-            `);
-
-            const delaySecs = settings?.match_start_delay_seconds ?? 45;
-
-            // Calculate if delay has elapsed
-            const createdAt = new Date(`${announcement.created_at  }Z`).getTime();
-            const now = Date.now();
-            const elapsedSecs = (now - createdAt) / 1000;
-
-            if (elapsedSecs < delaySecs) {
-              // Delay hasn't elapsed yet, mark back as pending and clear timeout
-              await this.db.run(`
-                UPDATE discord_voice_announcement_queue
-                SET status = 'pending',
-                    timeout_at = NULL,
-                    updated_at = datetime('now')
-                WHERE id = ?
-              `, [announcement.id]);
-
-              logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
-              continue;
-            }
-          }
-
-          if (!this.voiceHandler) {
-            logger.error('❌ VoiceHandler not available');
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'failed', completed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['VoiceHandler not available', announcement.id]);
-            continue;
-          }
-
-          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
-
-          // Play the team announcements sequentially
-          const result = await this.voiceHandler.playTeamAnnouncements(
-            announcement.blue_team_voice_channel,
-            announcement.red_team_voice_channel,
-            announcement.announcement_type,
-            announcement.first_team
-          );
-
-          if (result.success) {
-            // Update the alternation tracker
-            await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
-
-            // Mark as completed
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'completed', completed_at = datetime('now')
-              WHERE id = ?
-            `, [announcement.id]);
-
-            logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
-          } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'failed', completed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, [result.message, announcement.id]);
-
-            logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
-          }
-        } catch (error) {
-          logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
-
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'failed', completed_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
-        }
+        await this.processSingleVoiceAnnouncement(announcement);
       }
     } catch (error) {
       logger.error('❌ Error processing voice announcement queue:', error);
