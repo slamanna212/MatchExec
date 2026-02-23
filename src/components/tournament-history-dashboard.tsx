@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -18,7 +19,6 @@ import {
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
 import { StageRing } from './StageRing';
-import { TournamentDetailsModal } from './tournament-details-modal';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -118,11 +118,10 @@ const HistoryTournamentCard = memo(({
 HistoryTournamentCard.displayName = 'HistoryTournamentCard';
 
 export function TournamentHistoryDashboard() {
+  const router = useRouter();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedTournament, setSelectedTournament] = useState<TournamentWithGame | null>(null);
 
   const fetchCompletedTournaments = useCallback(async (silent = false) => {
     try {
@@ -183,9 +182,8 @@ export function TournamentHistoryDashboard() {
   }, [tournaments, searchQuery]);
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    setSelectedTournament(tournament);
-    setDetailsModalOpen(true);
-  }, []);
+    router.push(`/tournaments/${tournament.id}`);
+  }, [router]);
 
   // Animation variants for staggered entrance
   const containerVariants = {
@@ -293,11 +291,6 @@ export function TournamentHistoryDashboard() {
         </motion.div>
       )}
 
-      <TournamentDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        tournament={selectedTournament}
-      />
     </div>
   );
 }

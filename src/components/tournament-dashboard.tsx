@@ -20,8 +20,6 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
-import { TournamentDetailsModal } from './tournament-details-modal';
-import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
 import { StageRing } from './StageRing';
 import { notificationHelper } from '@/lib/notifications';
 
@@ -150,10 +148,6 @@ export function TournamentDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedTournament, setSelectedTournament] = useState<TournamentWithGame | null>(null);
-  const [assignTeamsModalOpen, setAssignTeamsModalOpen] = useState(false);
-  const [selectedTournamentForAssignment, setSelectedTournamentForAssignment] = useState<TournamentWithGame | null>(null);
 
   const fetchTournaments = useCallback(async (silent = false) => {
     try {
@@ -220,9 +214,8 @@ export function TournamentDashboard() {
   };
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    setSelectedTournament(tournament);
-    setDetailsModalOpen(true);
-  }, []);
+    router.push(`/tournaments/${tournament.id}`);
+  }, [router]);
 
   const handleStatusTransition = async (tournamentId: string, newStatus: string) => {
     const notificationId = `tournament-transition-${tournamentId}`;
@@ -285,36 +278,6 @@ export function TournamentDashboard() {
         message: 'Failed to update tournament status'
       });
     }
-  };
-
-  const handleDeleteTournament = async (tournament: TournamentWithGame) => {
-    try {
-      const response = await fetch(`/api/tournaments/${tournament.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setTournaments(prev => prev.filter(t => t.id !== tournament.id));
-        setDetailsModalOpen(false);
-      } else {
-        const error = await response.json();
-        notificationHelper.error({
-          title: 'Delete Failed',
-          message: error.error || 'Failed to delete tournament'
-        });
-      }
-    } catch (error) {
-      logger.error('Error deleting tournament:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'Failed to delete tournament'
-      });
-    }
-  };
-
-  const handleAssignTeamsFromModal = (tournament: TournamentWithGame) => {
-    setSelectedTournamentForAssignment(tournament);
-    setAssignTeamsModalOpen(true);
   };
 
   const handleProgressTournament = useCallback(async (tournamentId: string) => {
@@ -432,8 +395,7 @@ export function TournamentDashboard() {
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedTournamentForAssignment(tournament);
-                setAssignTeamsModalOpen(true);
+                router.push(`/tournaments/${tournament.id}/assign`);
               }}
               style={{ flex: 1 }}
             >
@@ -469,8 +431,7 @@ export function TournamentDashboard() {
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedTournamentForAssignment(tournament);
-                setAssignTeamsModalOpen(true);
+                router.push(`/tournaments/${tournament.id}/assign`);
               }}
               style={{ flex: 1 }}
             >
@@ -667,20 +628,6 @@ export function TournamentDashboard() {
         </motion.div>
       )}
 
-      <TournamentDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        tournament={selectedTournament}
-        onDelete={handleDeleteTournament}
-        onAssign={handleAssignTeamsFromModal}
-      />
-
-      <AssignTournamentTeamsModal
-        isOpen={assignTeamsModalOpen}
-        onClose={() => setAssignTeamsModalOpen(false)}
-        tournamentId={selectedTournamentForAssignment?.id || ''}
-        tournamentName={selectedTournamentForAssignment?.name || ''}
-      />
     </div>
   );
 }
