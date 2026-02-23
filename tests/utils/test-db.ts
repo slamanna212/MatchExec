@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { Database } from '../../lib/database/connection';
+import { Database, resetConnectionSingleton } from '../../lib/database/connection';
+import { resetDbSingleton } from '../../lib/database-init';
 
 // Use worker ID to create unique database per test worker
 const workerId = process.env.VITEST_POOL_ID || '1';
@@ -186,6 +187,10 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
   // Set environment variable so app code uses test database
   process.env.DATABASE_PATH = TEST_DB_PATH;
   // Note: NODE_ENV is handled by vitest automatically
+
+  // Force DB singletons to reconnect with the new test database path
+  resetConnectionSingleton();
+  resetDbSingleton();
 
   // Create Database wrapper and connect
   wrappedDb = new Database(TEST_DB_PATH);

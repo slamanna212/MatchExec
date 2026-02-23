@@ -22,6 +22,11 @@ export function getDbInstance() {
   return dbPromise;
 }
 
+export function resetDbSingleton(): void {
+  dbPromise = null;
+  dbPromiseEnvPath = undefined;
+}
+
 // Note: Auto-initialization removed to prevent conflicts during startup
 // Database initialization is handled by the migration script (scripts/migrate-background.ts)
 // which runs as a oneshot service before other processes start

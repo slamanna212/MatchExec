@@ -122,3 +122,8 @@ export function getDatabase(): Database {
   }
   return dbInstance;
 }
+
+export function resetConnectionSingleton(): void {
+  dbInstance = null;
+  dbInstanceEnvPath = undefined;
+}
