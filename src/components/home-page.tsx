@@ -344,7 +344,7 @@ export function HomePage() {
           <Stack gap="md">
             <Text size="xl" fw={700}>Mission Control</Text>
 
-            <Table horizontalSpacing="md" verticalSpacing="xs" striped highlightOnHover>
+            <Table horizontalSpacing="md" verticalSpacing="xs" striped highlightOnHover stripedColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : undefined}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Name</Table.Th>
