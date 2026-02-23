@@ -23,16 +23,6 @@ All functions exceeding the ESLint complexity limit of 15. Fix and check off eac
 
 ## Frontend Components
 
-- [ ] **36** — `MatchDetailsModal` — `src/components/match-details-modal.tsx:95`
-  New files created in src/components/match-details/:
-  - MatchInfoSection.tsx — match metadata (description, rules, rounds, maps, livestream, dates)                                                      
-  - MapCodesTab.tsx — map code editing panel with save button                                                                                        
-  - TabbedMatchDetails.tsx — segmented control + tab content (owns activeTab state)                                                                  
-  - NonTabbedMatchDetails.tsx — participants with count badge + optional reminders section                                                           
-  - MatchActionsFooter.tsx — Delete/Assign Players/Close buttons                                                                                     
-  Modified files:
-  - helpers.ts — added formatTimestamp helper replacing 3 identical .toLocaleString(...) calls                                                       
-  - match-details-modal.tsx — reduced from 416 lines to ~145 lines (composition of sub-components), removed unused showAssignButton prop 
 - [ ] **29** — Arrow function — `src/components/navigation.tsx:177`
 - [ ] **28** — `MatchInfoPanel` — `src/components/match-details/MatchInfoPanel.tsx:64`
 - [ ] **21** — Arrow function — `src/app/matches/[matchId]/edit/page.tsx:133`
