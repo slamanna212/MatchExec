@@ -11,9 +11,12 @@ async function initializeDatabase(): Promise<Database> {
 }
 
 let dbPromise: Promise<Database> | null = null;
+let dbPromiseEnvPath: string | undefined = undefined;
 
 export function getDbInstance() {
-  if (!dbPromise) {
+  const envPath = process.env.DATABASE_PATH;
+  if (!dbPromise || dbPromiseEnvPath !== envPath) {
+    dbPromiseEnvPath = envPath;
     dbPromise = initializeDatabase();
   }
   return dbPromise;

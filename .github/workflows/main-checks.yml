@@ -6,6 +6,7 @@ on:
 
 jobs:
   full-test-suite:
+    name: Full Test Suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,9 +14,12 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
-      - run: npm ci
-      - run: npm run test:coverage
-      - run: npm run test:integration
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+      - name: Run integration tests
+        run: npm run test:integration
 
   # [DEFERRED - UI REFACTOR] Uncomment after frontend redesign is complete
   # e2e-tests:

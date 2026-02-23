@@ -112,10 +112,13 @@ export class Database {
 }
 
 let dbInstance: Database | null = null;
+let dbInstanceEnvPath: string | undefined = undefined;
 
 export function getDatabase(): Database {
-  if (!dbInstance) {
+  const envPath = process.env.DATABASE_PATH;
+  if (!dbInstance || dbInstanceEnvPath !== envPath) {
     dbInstance = new Database();
+    dbInstanceEnvPath = envPath;
   }
   return dbInstance;
 }
