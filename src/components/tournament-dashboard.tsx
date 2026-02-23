@@ -16,7 +16,8 @@ import {
   Grid,
   TextInput,
   useMantineColorScheme,
-  Badge
+  Badge,
+  Image
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
@@ -40,6 +41,7 @@ interface TournamentWithGame extends Tournament {
   game_name?: string;
   game_icon?: string;
   game_color?: string;
+  event_image_url?: string;
   participant_count?: number;
   has_bracket?: boolean;
 }
@@ -58,13 +60,13 @@ const TournamentCard = memo(({
   const { colorScheme } = useMantineColorScheme();
   
   return (
-    <Card 
+    <Card
       shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-      padding="lg" 
-      radius="md" 
+      padding={0}
+      radius="md"
       withBorder
       bg={colorScheme === 'light' ? 'white' : undefined}
-      style={{ 
+      style={{
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
@@ -79,7 +81,18 @@ const TournamentCard = memo(({
       }}
       onClick={() => onViewDetails(tournament)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={tournament.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${tournament.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={tournament.game_icon}
           alt={tournament.game_name}
@@ -91,47 +104,52 @@ const TournamentCard = memo(({
         </Stack>
         <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
-      
-      <Divider mb="md" />
-      
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+
+      <Stack gap="xs" px="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {tournament.description && (
             <Text size="sm" c="dimmed">{tournament.description}</Text>
           )}
         </div>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Format:</Text>
-          <Badge size="sm" variant="light">
-            {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
-          </Badge>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds/Match:</Text>
-          <Text size="sm">{tournament.rounds_per_match}</Text>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Participants:</Text>
-          <Text size="sm">
-            {tournament.participant_count || 0}
-            {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
-          </Text>
-        </Group>
 
-        {tournament.start_time && (
-          <Group justify="space-between">
-            <Text size="sm" c="dimmed">Start:</Text>
-            <Text size="sm">{parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()}</Text>
-          </Group>
-        )}
+        <Divider mb="xs" />
+
+        <Group gap="xl" justify="center">
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Format</Text>
+            <Badge size="sm" variant="light">
+              {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
+            </Badge>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Participants</Text>
+            <Text size="sm" fw={500}>
+              {tournament.participant_count || 0}
+              {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
+            </Text>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Starts</Text>
+            <Text size="sm" fw={500}>
+              {tournament.start_time
+                ? parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()
+                : 'N/A'}
+            </Text>
+          </Stack>
+        </Group>
       </Stack>
-      
-      <Divider mt="md" mb="md" />
-      
-      <Group justify="space-between" align="center">
+
+      <Group mt="md" px="lg" pb="lg" grow>
+        <Button
+          size="sm"
+          color={tournament.game_color || 'blue'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(tournament);
+          }}
+        >
+          Details
+        </Button>
         {getNextStatusButton(tournament)}
       </Group>
     </Card>
@@ -377,141 +395,75 @@ export function TournamentDashboard() {
     switch (tournament.status) {
       case 'created':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(tournament.id, 'gather');
             }}
-            style={{ flex: 1 }}
           >
             Open Signups
           </Button>
         );
       case 'gather':
         return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                router.push(`/tournaments/${tournament.id}/assign`);
-              }}
-              style={{ flex: 1 }}
-            >
-              Assign
-            </Button>
-            <Button
-              size="sm"
-              color="orange"
-              onClick={(e) => {
-                e.stopPropagation();
-                modals.openConfirmModal({
-                  title: 'Close Signups',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
-                    </Text>
-                  ),
-                  labels: { confirm: 'Close Signups', cancel: 'Cancel' },
-                  confirmProps: { color: 'orange' },
-                  onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
-                });
-              }}
-              style={{ flex: 1 }}
-            >
-              Close Signups
-            </Button>
-          </Group>
+          <Button
+            size="sm"
+            color="orange"
+            onClick={(e) => {
+              e.stopPropagation();
+              modals.openConfirmModal({
+                title: 'Close Signups',
+                children: (
+                  <Text size="sm">
+                    Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
+                  </Text>
+                ),
+                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+                confirmProps: { color: 'orange' },
+                onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
+              });
+            }}
+          >
+            Close Signups
+          </Button>
         );
       case 'assign':
-        return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                router.push(`/tournaments/${tournament.id}/assign`);
-              }}
-              style={{ flex: 1 }}
-            >
-              Assign
-            </Button>
-            {tournament.has_bracket ? (
-              <Button
-                size="sm"
-                color="green"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStatusTransition(tournament.id, 'battle');
-                }}
-                style={{ flex: 1 }}
-              >
-                Start Tournament
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                color="blue"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleGenerateBracket(tournament.id);
-                }}
-                style={{ flex: 1 }}
-              >
-                Bracket
-              </Button>
-            )}
-          </Group>
+        return tournament.has_bracket ? (
+          <Button
+            size="sm"
+            color="green"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(tournament.id, 'battle');
+            }}
+          >
+            Start Tournament
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            color="blue"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGenerateBracket(tournament.id);
+            }}
+          >
+            Generate Bracket
+          </Button>
         );
       case 'battle':
         return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleProgressTournament(tournament.id);
-              }}
-              style={{ flex: 1 }}
-              color="green"
-            >
-              Next Round
-            </Button>
-            <Button
-              size="sm"
-              color="red"
-              onClick={(e) => {
-                e.stopPropagation();
-                modals.openConfirmModal({
-                  title: 'End Tournament',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to end &quot;{tournament.name}&quot;? This will mark the tournament as complete.
-                    </Text>
-                  ),
-                  labels: { confirm: 'End Tournament', cancel: 'Cancel' },
-                  confirmProps: { color: 'red' },
-                  onConfirm: () => handleStatusTransition(tournament.id, 'complete'),
-                });
-              }}
-              style={{ flex: 1 }}
-            >
-              End Tournament
-            </Button>
-          </Group>
-        );
-      case 'complete':
-        return (
-          <Text size="sm" c="green" fw={500} ta="center" style={{ flex: 1 }}>
-            Tournament Complete
-          </Text>
-        );
-      case 'cancelled':
-        return (
-          <Text size="sm" c="red" fw={500} ta="center" style={{ flex: 1 }}>
-            Tournament Cancelled
-          </Text>
+          <Button
+            size="sm"
+            color="green"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleProgressTournament(tournament.id);
+            }}
+          >
+            Next Round
+          </Button>
         );
       default:
         return null;

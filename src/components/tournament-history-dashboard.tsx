@@ -15,7 +15,9 @@ import {
   Stack,
   Grid,
   TextInput,
-  Badge
+  Badge,
+  Image,
+  useMantineColorScheme
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
 import { StageRing } from './StageRing';
@@ -24,6 +26,7 @@ interface TournamentWithGame extends Tournament {
   game_name?: string;
   game_icon?: string;
   game_color?: string;
+  event_image_url?: string;
   participant_count?: number;
 }
 
@@ -36,16 +39,19 @@ const HistoryTournamentCard = memo(({
   tournament,
   onViewDetails
 }: HistoryTournamentCardProps) => {
+  const { colorScheme } = useMantineColorScheme();
+
   return (
     <Card
-      shadow="sm"
-      padding="lg"
+      shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+      padding={0}
       radius="md"
       withBorder
+      bg={colorScheme === 'light' ? 'white' : undefined}
       style={{
         cursor: 'pointer',
-        opacity: 0.9,
-        transition: 'all 0.2s ease'
+        transition: 'all 0.2s ease',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -53,11 +59,22 @@ const HistoryTournamentCard = memo(({
       }}
       onMouseOut={(e) => {
         e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.12)';
+        e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(tournament)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={tournament.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${tournament.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={tournament.game_icon}
           alt={tournament.game_name}
@@ -70,9 +87,9 @@ const HistoryTournamentCard = memo(({
         <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
 
-      <Divider mb="md" />
+      <Divider mb="md" mx="lg" />
 
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+      <Stack gap="xs" px="lg" pb="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {tournament.description && (
             <Text size="sm" c="dimmed">{tournament.description}</Text>
@@ -84,11 +101,6 @@ const HistoryTournamentCard = memo(({
           <Badge size="sm" variant="light">
             {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
           </Badge>
-        </Group>
-
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds/Match:</Text>
-          <Text size="sm">{tournament.rounds_per_match}</Text>
         </Group>
 
         <Group justify="space-between">
