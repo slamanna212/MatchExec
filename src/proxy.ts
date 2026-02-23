@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 const WELCOME_COOKIE = 'welcome_flow_completed';
 const WELCOME_PATH = '/welcome';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isWelcomePath = pathname === WELCOME_PATH || pathname.startsWith(`${WELCOME_PATH}/`);
 
