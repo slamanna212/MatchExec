@@ -72,6 +72,25 @@ interface QueuedMatchEdit {
   created_at: string;
 }
 
+interface MatchEditData {
+  id: string;
+  name: string;
+  description: string;
+  game_id: string;
+  rules: string;
+  maps: string | null;
+  livestream_link: string | null;
+  start_date: string | null;
+  event_image_url: string | null;
+}
+
+interface MatchMessageRecord {
+  message_id: string;
+  channel_id: string;
+  thread_id: string | null;
+  discord_event_id: string | null;
+}
+
 interface QueuedMatchWinner {
   id: string;
   match_id: string;
@@ -1472,6 +1491,203 @@ export class QueueProcessor {
     }
   }
 
+  private updateEmbedTimeFields(embed: EmbedBuilder, startDate: string): void {
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+
+    const fields = embed.data.fields || [];
+    const timeIdx = fields.findIndex(f => f.name === '🕐 Match Time');
+    const countdownIdx = fields.findIndex(f => f.name === '⏰ Countdown');
+
+    const timeField = { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true };
+    const countdownField = { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true };
+
+    if (timeIdx !== -1) {
+      fields[timeIdx] = timeField;
+    }
+    if (countdownIdx !== -1) {
+      fields[countdownIdx] = countdownField;
+    }
+    if (timeIdx === -1 && countdownIdx === -1) {
+      embed.addFields(timeField, countdownField);
+    }
+  }
+
+  private async updateEmbedMapsField(
+    embed: EmbedBuilder,
+    mapsJson: string | null
+  ): Promise<{ maps: string[]; changed: boolean }> {
+    let maps: string[] = [];
+    if (mapsJson) {
+      try {
+        maps = JSON.parse(mapsJson);
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    const fields = embed.data.fields || [];
+    const mapsIdx = fields.findIndex(f => f.name === '🗺️ Maps');
+
+    if (maps.length > 0) {
+      const mapNames: string[] = [];
+      for (const mapId of maps) {
+        const baseMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const mapRow = await this.db!.get<{ name: string }>(`
+          SELECT name FROM game_maps WHERE id = ?
+        `, [baseMapId]);
+        mapNames.push(mapRow?.name ?? baseMapId);
+      }
+
+      const mapsValue = mapNames.map(n => `**${n}**`).join('\n');
+      const existingMapsValue = mapsIdx !== -1 ? fields[mapsIdx].value : null;
+      const changed = existingMapsValue !== mapsValue;
+
+      if (mapsIdx !== -1) {
+        fields[mapsIdx] = { name: '🗺️ Maps', value: mapsValue, inline: false };
+      } else {
+        embed.addFields({ name: '🗺️ Maps', value: mapsValue, inline: false });
+      }
+      return { maps, changed };
+    } 
+      let changed = false;
+      if (mapsIdx !== -1) {
+        fields.splice(mapsIdx, 1);
+        changed = true;
+      }
+      return { maps, changed };
+    
+  }
+
+  private async updateMatchScheduledEvent(
+    matchId: string,
+    matchData: MatchEditData,
+    messageRecord: MatchMessageRecord
+  ): Promise<void> {
+    if (!messageRecord.discord_event_id || !matchData.start_date || !this.settings?.guild_id) return;
+
+    try {
+      const guild = await this.client.guilds.fetch(this.settings.guild_id);
+      const scheduledEvent = await guild.scheduledEvents.fetch(messageRecord.discord_event_id);
+      if (scheduledEvent) {
+        const startTime = new Date(matchData.start_date);
+        const durationMinutes = (this.settings?.event_duration_minutes || 45);
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+
+        await scheduledEvent.edit({
+          name: matchData.name,
+          scheduledStartTime: startTime,
+          scheduledEndTime: endTime
+        });
+        logger.debug(`✅ Updated Discord scheduled event for match ${matchId}`);
+      }
+    } catch (eventError) {
+      logger.warning(`⚠️ Could not update Discord scheduled event for match ${matchId}:`, (eventError as Error)?.message);
+    }
+  }
+
+  private async updateMatchAnnouncementEmbed(
+    matchId: string,
+    matchData: MatchEditData,
+    messageRecord: MatchMessageRecord
+  ): Promise<void> {
+    try {
+      const channel = await this.fetchTextChannel(messageRecord.channel_id);
+      if (!channel) return;
+
+      const message = await channel.messages.fetch(messageRecord.message_id);
+      if (!message || message.embeds.length === 0) return;
+
+      const existingEmbed = EmbedBuilder.from(message.embeds[0]);
+
+      existingEmbed.setTitle(matchData.name);
+      if (matchData.description) {
+        existingEmbed.setDescription(matchData.description);
+      }
+
+      if (matchData.start_date) {
+        this.updateEmbedTimeFields(existingEmbed, matchData.start_date);
+      }
+
+      const { maps, changed: mapsChanged } = await this.updateEmbedMapsField(existingEmbed, matchData.maps);
+
+      const attachment = this.createEventAttachment(matchData.event_image_url ?? undefined, existingEmbed);
+
+      await message.edit({
+        content: null,
+        embeds: [existingEmbed],
+        components: message.components,
+        files: attachment ? [attachment] : []
+      });
+
+      logger.debug(`✅ Updated Discord embed for match ${matchId}`);
+
+      if (mapsChanged) {
+        if (messageRecord.thread_id) {
+          await this.deleteDiscordThread(messageRecord.thread_id);
+        }
+
+        let newThreadId: string | null = null;
+        if (maps.length > 0 && this.announcementHandler) {
+          const newThread = await this.announcementHandler.createMapsThread(
+            message,
+            matchData.name,
+            matchData.game_id,
+            maps,
+            matchId
+          );
+          newThreadId = newThread?.id ?? null;
+        }
+
+        await this.db!.run(`
+          UPDATE discord_match_messages SET thread_id = ?
+          WHERE match_id = ? AND message_type = 'announcement'
+        `, [newThreadId, matchId]);
+      }
+    } catch (embedError) {
+      logger.error(`❌ Error updating embed for match ${matchId}:`, embedError);
+    }
+  }
+
+  private async processSingleMatchEdit(edit: QueuedMatchEdit): Promise<void> {
+    const updateResult = await this.db!.run(`
+      UPDATE discord_match_edit_queue
+      SET status = 'processing', processed_at = datetime('now')
+      WHERE id = ? AND status = 'pending'
+    `, [edit.id]);
+
+    if (updateResult.changes === 0) return;
+
+    const matchId = edit.match_id;
+
+    const matchData = await this.db!.get<MatchEditData>(`
+      SELECT id, name, description, game_id, rules, maps, livestream_link, start_date, event_image_url
+      FROM matches WHERE id = ?
+    `, [matchId]);
+
+    if (!matchData) {
+      throw new Error(`Match ${matchId} not found`);
+    }
+
+    const messageRecord = await this.db!.get<MatchMessageRecord>(`
+      SELECT message_id, channel_id, thread_id, discord_event_id
+      FROM discord_match_messages
+      WHERE match_id = ? AND message_type = 'announcement'
+      LIMIT 1
+    `, [matchId]);
+
+    if (messageRecord) {
+      await this.updateMatchAnnouncementEmbed(matchId, matchData, messageRecord);
+      await this.updateMatchScheduledEvent(matchId, matchData, messageRecord);
+    }
+
+    await this.db!.run(`
+      UPDATE discord_match_edit_queue
+      SET status = 'completed', processed_at = datetime('now')
+      WHERE id = ?
+    `, [edit.id]);
+  }
+
   async processMatchEditQueue() {
     if (!this.client.isReady() || !this.db) return;
 
@@ -1486,200 +1702,7 @@ export class QueueProcessor {
 
       for (const edit of edits) {
         try {
-          // Mark as processing
-          const updateResult = await this.db.run(`
-            UPDATE discord_match_edit_queue
-            SET status = 'processing', processed_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [edit.id]);
-
-          if (updateResult.changes === 0) continue;
-
-          const matchId = edit.match_id;
-
-          // Fetch current match data
-          const matchData = await this.db.get<{
-            id: string;
-            name: string;
-            description: string;
-            game_id: string;
-            rules: string;
-            maps: string | null;
-            livestream_link: string | null;
-            start_date: string | null;
-            event_image_url: string | null;
-          }>(`
-            SELECT id, name, description, game_id, rules, maps, livestream_link, start_date, event_image_url
-            FROM matches WHERE id = ?
-          `, [matchId]);
-
-          if (!matchData) {
-            throw new Error(`Match ${matchId} not found`);
-          }
-
-          // Fetch announcement message record
-          const messageRecord = await this.db.get<{
-            message_id: string;
-            channel_id: string;
-            thread_id: string | null;
-            discord_event_id: string | null;
-          }>(`
-            SELECT message_id, channel_id, thread_id, discord_event_id
-            FROM discord_match_messages
-            WHERE match_id = ? AND message_type = 'announcement'
-            LIMIT 1
-          `, [matchId]);
-
-          if (messageRecord) {
-            // Rebuild the embed from the existing message
-            try {
-              const channel = await this.fetchTextChannel(messageRecord.channel_id);
-              if (channel) {
-                const message = await channel.messages.fetch(messageRecord.message_id);
-                if (message && message.embeds.length > 0) {
-                  const existingEmbed = EmbedBuilder.from(message.embeds[0]);
-
-                  // Update title, description, and time fields
-                  existingEmbed.setTitle(matchData.name);
-                  if (matchData.description) {
-                    existingEmbed.setDescription(matchData.description);
-                  }
-
-                  // Rebuild time fields if start_date changed
-                  if (matchData.start_date) {
-                    const startTime = new Date(matchData.start_date);
-                    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
-
-                    const fields = existingEmbed.data.fields || [];
-                    const timeIdx = fields.findIndex(f => f.name === '🕐 Match Time');
-                    const countdownIdx = fields.findIndex(f => f.name === '⏰ Countdown');
-
-                    const timeField = { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true };
-                    const countdownField = { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true };
-
-                    if (timeIdx !== -1) {
-                      fields[timeIdx] = timeField;
-                    }
-                    if (countdownIdx !== -1) {
-                      fields[countdownIdx] = countdownField;
-                    }
-                    if (timeIdx === -1 && countdownIdx === -1) {
-                      existingEmbed.addFields(timeField, countdownField);
-                    }
-                  }
-
-                  // Rebuild the 🗺️ Maps field with current map data
-                  let maps: string[] = [];
-                  if (matchData.maps) {
-                    try {
-                      maps = JSON.parse(matchData.maps);
-                    } catch {
-                      // ignore parse error
-                    }
-                  }
-
-                  let mapsChanged = false;
-                  if (maps.length > 0) {
-                    // Look up display names for each map ID (strip timestamp suffix first)
-                    const mapNames: string[] = [];
-                    for (const mapId of maps) {
-                      const baseMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-                      const mapRow = await this.db!.get<{ name: string }>(`
-                        SELECT name FROM game_maps WHERE id = ?
-                      `, [baseMapId]);
-                      mapNames.push(mapRow?.name ?? baseMapId);
-                    }
-
-                    const mapsValue = mapNames.map(n => `**${n}**`).join('\n');
-                    const fields = existingEmbed.data.fields || [];
-                    const mapsIdx = fields.findIndex(f => f.name === '🗺️ Maps');
-                    const existingMapsValue = mapsIdx !== -1 ? fields[mapsIdx].value : null;
-                    mapsChanged = existingMapsValue !== mapsValue;
-
-                    if (mapsIdx !== -1) {
-                      fields[mapsIdx] = { name: '🗺️ Maps', value: mapsValue, inline: false };
-                    } else {
-                      existingEmbed.addFields({ name: '🗺️ Maps', value: mapsValue, inline: false });
-                    }
-                  } else {
-                    // No maps — remove the field if it exists
-                    const fields = existingEmbed.data.fields || [];
-                    const mapsIdx = fields.findIndex(f => f.name === '🗺️ Maps');
-                    if (mapsIdx !== -1) {
-                      fields.splice(mapsIdx, 1);
-                      mapsChanged = true;
-                    }
-                  }
-
-                  const attachment = this.createEventAttachment(matchData.event_image_url ?? undefined, existingEmbed);
-
-                  await message.edit({
-                    content: null,
-                    embeds: [existingEmbed],
-                    components: message.components,
-                    files: attachment ? [attachment] : []
-                  });
-
-                  logger.debug(`✅ Updated Discord embed for match ${matchId}`);
-
-                  // Only rebuild the maps thread if maps actually changed
-                  if (mapsChanged) {
-                    if (messageRecord.thread_id) {
-                      await this.deleteDiscordThread(messageRecord.thread_id);
-                    }
-
-                    let newThreadId: string | null = null;
-                    if (maps.length > 0 && this.announcementHandler) {
-                      const newThread = await this.announcementHandler.createMapsThread(
-                        message,
-                        matchData.name,
-                        matchData.game_id,
-                        maps,
-                        matchId
-                      );
-                      newThreadId = newThread?.id ?? null;
-                    }
-
-                    await this.db!.run(`
-                      UPDATE discord_match_messages SET thread_id = ?
-                      WHERE match_id = ? AND message_type = 'announcement'
-                    `, [newThreadId, matchId]);
-                  }
-                }
-              }
-            } catch (embedError) {
-              logger.error(`❌ Error updating embed for match ${matchId}:`, embedError);
-            }
-
-            // Update Discord Scheduled Event if start_date changed
-            if (messageRecord.discord_event_id && matchData.start_date && this.settings?.guild_id) {
-              try {
-                const guild = await this.client.guilds.fetch(this.settings.guild_id);
-                const scheduledEvent = await guild.scheduledEvents.fetch(messageRecord.discord_event_id);
-                if (scheduledEvent) {
-                  const startTime = new Date(matchData.start_date);
-                  const durationMinutes = (this.settings?.event_duration_minutes || 45);
-                  const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
-
-                  await scheduledEvent.edit({
-                    name: matchData.name,
-                    scheduledStartTime: startTime,
-                    scheduledEndTime: endTime
-                  });
-                  logger.debug(`✅ Updated Discord scheduled event for match ${matchId}`);
-                }
-              } catch (eventError) {
-                logger.warning(`⚠️ Could not update Discord scheduled event for match ${matchId}:`, (eventError as Error)?.message);
-              }
-            }
-          }
-
-          await this.db.run(`
-            UPDATE discord_match_edit_queue
-            SET status = 'completed', processed_at = datetime('now')
-            WHERE id = ?
-          `, [edit.id]);
-
+          await this.processSingleMatchEdit(edit);
         } catch (error) {
           logger.error(`❌ Error processing match edit ${edit.id}:`, error);
           await this.db.run(`
