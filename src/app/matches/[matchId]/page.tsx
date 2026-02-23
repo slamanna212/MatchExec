@@ -84,7 +84,7 @@ export default function MatchPage({
   const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
   // Custom hooks
-  const { matchGames, gamesLoading } = useMatchGames(match, true);
+  const { matchGames, gamesLoading, refetch: refetchMatchGames } = useMatchGames(match, true);
   const { mapCodes, mapCodesSaving, saveMapCodes, updateMapCode } = useMapCodes(match, true);
 
   // Fetch map names
@@ -303,19 +303,22 @@ export default function MatchPage({
     fetchData();
   }, [matchId, fetchMapNames, fetchMapNotes]);
 
-  // Auto-refresh participants and reminders
+  // Auto-refresh participants, reminders, and match games
   useEffect(() => {
     if (!match || match.status === 'complete') return undefined;
 
     const interval = setInterval(() => {
       fetchParticipants(match.id, true);
       fetchReminders(match.id, true);
+      if (match.status === 'battle') {
+        refetchMatchGames();
+      }
     }, refreshInterval * 1000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [match, refreshInterval, fetchParticipants, fetchReminders]);
+  }, [match, refreshInterval, fetchParticipants, fetchReminders, refetchMatchGames]);
 
   // Handle status transition
   const handleStatusTransition = useCallback(async (newStatus: string) => {
