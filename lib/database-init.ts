@@ -27,6 +27,11 @@ export function resetDbSingleton(): void {
   dbPromiseEnvPath = undefined;
 }
 
+export function setDbForTesting(db: Database): void {
+  dbPromise = Promise.resolve(db);
+  dbPromiseEnvPath = process.env.DATABASE_PATH;
+}
+
 // Note: Auto-initialization removed to prevent conflicts during startup
 // Database initialization is handled by the migration script (scripts/migrate-background.ts)
 // which runs as a oneshot service before other processes start
