@@ -84,10 +84,23 @@ export async function GET(
       }
     }
     
+    const participantCountRow = await db.get<{ count: number }>(`
+      SELECT
+        CASE
+          WHEN t.status IN ('created', 'gather') THEN COUNT(DISTINCT tp.user_id)
+          ELSE COUNT(DISTINCT ttm.user_id)
+        END as count
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
+      LEFT JOIN tournament_teams tt ON t.id = tt.tournament_id
+      LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
+      WHERE t.id = ?
+    `, [tournamentId]);
+
     const tournamentWithDetails: TournamentWithDetails = {
       ...tournament,
       teams: Array.from(teamsMap.values()),
-      participant_count: Array.from(teamsMap.values()).reduce((total, team) => total + team.members.length, 0)
+      participant_count: participantCountRow?.count ?? 0
     };
     
     return NextResponse.json(tournamentWithDetails);
