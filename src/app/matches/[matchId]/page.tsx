@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
-import { AssignPlayersModal } from '@/components/assign-players-modal';
 import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
@@ -74,9 +73,6 @@ export default function MatchPage({
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(10);
-
-  // Modal states
-  const [assignPlayersModalOpen, setAssignPlayersModalOpen] = useState(false);
 
   // Map data states
   const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
@@ -455,7 +451,7 @@ export default function MatchPage({
         onMapCodeChange={updateMapCode}
         onMapCodesSave={saveMapCodes}
         mapCodesSaving={mapCodesSaving}
-        onAssignPlayers={() => setAssignPlayersModalOpen(true)}
+        onAssignPlayers={() => router.push(`/matches/${match.id}/assign`)}
         onScoring={() => router.push(`/matches/${match.id}/scoring`)}
         onDelete={handleDeleteMatch}
         onEdit={() => router.push(`/matches/${match.id}/edit`)}
@@ -466,13 +462,6 @@ export default function MatchPage({
         isHistory={false}
         participantsLoading={participantsLoading}
         remindersLoading={remindersLoading}
-      />
-
-      <AssignPlayersModal
-        isOpen={assignPlayersModalOpen}
-        onClose={() => setAssignPlayersModalOpen(false)}
-        matchId={match.id}
-        matchName={match.name}
       />
 
     </>
