@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getDbInstance } from '@/lib/database-init';
+import { readDbStatus } from '@/lib/database/status';
 
 export async function GET(): Promise<NextResponse> {
+  const dbStatus = readDbStatus();
+  if (!dbStatus.ready) {
+    return NextResponse.json({
+      isFirstRun: true,
+      completed: false,
+      dbReady: false,
+      metadata: { screens_completed: [], completion_date: null, setup_type: null }
+    });
+  }
+
   try {
     const db = await getDbInstance();
 
@@ -19,6 +30,7 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({
       isFirstRun: !completed,
       completed,
+      dbReady: true,
       metadata
     });
   } catch (error) {
@@ -26,6 +38,7 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({
       isFirstRun: true,
       completed: false,
+      dbReady: false,
       metadata: { screens_completed: [], completion_date: null, setup_type: null }
     });
   }
@@ -52,7 +65,14 @@ export async function PUT(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: 'Failed to update welcome flow - row not found' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true });
+    response.cookies.set('welcome_flow_completed', 'true', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+    return response;
   } catch (error) {
     logger.error('Error completing welcome flow:', error);
     return NextResponse.json({ error: 'Failed to complete welcome flow' }, { status: 500 });
