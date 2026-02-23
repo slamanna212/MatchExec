@@ -88,6 +88,8 @@ export interface TournamentTeamMember {
   team_id: string;
   user_id: string;
   username: string;
+  discord_user_id?: string;
+  avatar_url?: string;
   joined_at: Date;
 }
 

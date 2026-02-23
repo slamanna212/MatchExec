@@ -407,7 +407,7 @@ export default function TournamentPage({
   }
 
   return (
-    <Container size="xl" py="xl">
+    <div className="container mx-auto py-6 px-2">
       <Stack gap="lg">
         <Breadcrumbs>
           <Anchor onClick={() => router.push('/tournaments')} style={{ cursor: 'pointer' }}>
@@ -442,6 +442,6 @@ export default function TournamentPage({
           </Grid.Col>
         </Grid>
       </Stack>
-    </Container>
+    </div>
   );
 }

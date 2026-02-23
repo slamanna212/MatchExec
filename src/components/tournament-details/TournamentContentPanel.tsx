@@ -7,7 +7,7 @@ import {
   Text,
   Badge,
   Card,
-  Grid,
+  SimpleGrid,
   Avatar,
   Divider,
   Loader,
@@ -185,53 +185,57 @@ export function TournamentContentPanel({
               <Loader size="md" />
             </div>
           ) : teams.length > 0 ? (
-            <Grid>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
               {teams.map((team, teamIndex) => {
                 const teamStyles = getTeamCardStyles(teamIndex);
                 const badgeColor = getTeamBadgeColor(teamIndex);
 
                 return (
-                  <Grid.Col key={team.id} span={{ base: 12, sm: 6 }}>
-                    <Card
-                      withBorder
-                      p="md"
-                      style={{
-                        height: '100%',
-                        minHeight: '200px',
-                        display: 'flex',
-                        flexDirection: 'column'
-                      }}
-                    >
-                      <Group mb="sm">
-                        <IconTrophy size="1.2rem" color={teamStyles.borderColor} />
-                        <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
-                        <Badge size="sm" variant="filled" color={badgeColor}>
-                          {team.members?.length || 0} members
-                        </Badge>
-                      </Group>
-                      <Divider mb="sm" opacity={0.7} />
+                  <Card
+                    key={team.id}
+                    withBorder
+                    p="md"
+                    style={{
+                      height: '100%',
+                      minHeight: '200px',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <Group mb="sm">
+                      <IconTrophy size="1.2rem" color={teamStyles.borderColor} />
+                      <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
+                      <Badge size="sm" variant="filled" color={badgeColor}>
+                        {team.members?.length || 0} members
+                      </Badge>
+                    </Group>
+                    <Divider mb="sm" opacity={0.7} />
 
-                      <div style={{ flex: 1, overflow: 'auto' }}>
-                        {team.members && team.members.length > 0 ? (
-                          <Stack gap="xs">
-                            {team.members.map((member, memberIndex) => (
-                              <Group key={member.id} gap="sm">
-                                <Avatar size="sm" color={badgeColor} variant="filled">
-                                  {memberIndex + 1}
-                                </Avatar>
-                                <Text size="sm">{member.username}</Text>
-                              </Group>
-                            ))}
-                          </Stack>
-                        ) : (
-                          <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
-                        )}
-                      </div>
-                    </Card>
-                  </Grid.Col>
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      {team.members && team.members.length > 0 ? (
+                        <Stack gap="xs">
+                          {team.members.map((member, memberIndex) => (
+                            <Group key={member.id} gap="sm">
+                              <Avatar
+                                size="sm"
+                                src={member.avatar_url || null}
+                                color={badgeColor}
+                                variant={member.avatar_url ? undefined : 'filled'}
+                              >
+                                {!member.avatar_url && (memberIndex + 1)}
+                              </Avatar>
+                              <Text size="sm">{member.username}</Text>
+                            </Group>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Text size="sm" c="dimmed" fs="italic">No members yet</Text>
+                      )}
+                    </div>
+                  </Card>
                 );
               })}
-            </Grid>
+            </SimpleGrid>
           ) : (
             <Card withBorder p="xl">
               <Text size="sm" c="dimmed" ta="center">No teams registered yet</Text>
