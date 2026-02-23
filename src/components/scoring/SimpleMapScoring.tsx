@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Text, Badge, Alert, Loader, Group, Stack } from '@mantine/core';
 import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
 import type { MatchResult } from '@/shared/types';
@@ -144,8 +144,48 @@ function MobileMapList({
   onSelect: (id: string) => void;
   disabled: boolean;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragScrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+  const [listDragging, setListDragging] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = listRef.current;
+    if (!el) return;
+    isDraggingRef.current = true;
+    hasDraggedRef.current = false;
+    dragStartXRef.current = e.pageX - el.offsetLeft;
+    dragScrollLeftRef.current = el.scrollLeft;
+    setListDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const el = listRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - dragStartXRef.current;
+    if (Math.abs(walk) > 5) hasDraggedRef.current = true;
+    el.scrollLeft = dragScrollLeftRef.current - walk;
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+    setListDragging(false);
+  };
+
   return (
-    <div className={styles.mobileMapList}>
+    <div
+      ref={listRef}
+      className={listDragging ? `${styles.mobileMapList} ${styles.mobileMapListDragging}` : styles.mobileMapList}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {matchGames.map(game => {
         const imageUrl = game.image_url || getMapImageUrl(gameType, game.map_id);
         const isSelected = selectedGameId === game.id;
@@ -159,7 +199,7 @@ function MobileMapList({
           <div
             key={game.id}
             className={styles.mobileMapItem}
-            onClick={() => !disabled && onSelect(game.id)}
+            onClick={() => { if (!hasDraggedRef.current && !disabled) onSelect(game.id); }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

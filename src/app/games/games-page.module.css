@@ -320,6 +320,7 @@
     flex-direction: column;
     height: auto;
     min-height: calc(100vh - 60px);
+    overflow: visible;
   }
 
   .sidebar {
@@ -337,6 +338,7 @@
     top: 0;
     z-index: 10;
     scrollbar-width: none;
+    cursor: grab;
   }
 
   .mobileGameList::-webkit-scrollbar {
@@ -356,4 +358,9 @@
   .emptyState {
     min-height: 300px;
   }
+}
+
+.mobileGameListDragging {
+  cursor: grabbing !important;
+  user-select: none;
 }

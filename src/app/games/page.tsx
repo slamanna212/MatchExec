@@ -55,6 +55,40 @@ export default function GamesPage() {
   const mapCache = useRef<Record<string, GameMap[]>>({});
   const modeCache = useRef<Record<string, GameMode[]>>({});
 
+  // Mobile list drag-to-scroll
+  const mobileListRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragScrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+  const [listDragging, setListDragging] = useState(false);
+
+  const handleListMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = mobileListRef.current;
+    if (!el) return;
+    isDraggingRef.current = true;
+    hasDraggedRef.current = false;
+    dragStartXRef.current = e.pageX - el.offsetLeft;
+    dragScrollLeftRef.current = el.scrollLeft;
+    setListDragging(true);
+  }, []);
+
+  const handleListMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const el = mobileListRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - dragStartXRef.current;
+    if (Math.abs(walk) > 5) hasDraggedRef.current = true;
+    el.scrollLeft = dragScrollLeftRef.current - walk;
+  }, []);
+
+  const handleListMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
+    setListDragging(false);
+  }, []);
+
   useEffect(() => {
     async function fetchGames() {
       try {
@@ -189,12 +223,19 @@ export default function GamesPage() {
       </div>
 
       {/* Mobile horizontal game list */}
-      <div className={styles.mobileGameList}>
+      <div
+        ref={mobileListRef}
+        className={listDragging ? `${styles.mobileGameList} ${styles.mobileGameListDragging}` : styles.mobileGameList}
+        onMouseDown={handleListMouseDown}
+        onMouseMove={handleListMouseMove}
+        onMouseUp={handleListMouseUp}
+        onMouseLeave={handleListMouseUp}
+      >
         {games.map(game => (
           <div
             key={game.id}
             className={selectedGame?.id === game.id ? styles.mobileGameCardSelected : styles.mobileGameCard}
-            onClick={() => handleSelectGame(game)}
+            onClick={() => { if (!hasDraggedRef.current) handleSelectGame(game); }}
           >
             <img
               src={game.coverUrl || ''}
