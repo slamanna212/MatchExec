@@ -55,10 +55,10 @@ interface BracketAssignment {
   teamId: string;
 }
 
-export function TournamentBracket({ 
-  format, 
-  teams, 
-  matches, 
+export function TournamentBracket({
+  format,
+  teams,
+  matches,
   onGenerateMatches,
   isAssignMode = false,
   onBracketAssignment
@@ -566,32 +566,16 @@ export function TournamentBracket({
             ))}
           </Grid>
         </div>
-        
-        <Divider />
-        
-        {/* Generate matches section */}
-        <Group justify="center">
+
+        <Group justify="flex-end">
           <Button
-            size="lg"
             onClick={handleGenerateMatches}
-            disabled={!isAllSlotsAssigned() || teams.length < 2}
-            color="green"
+            disabled={!isAllSlotsAssigned()}
           >
-            Generate First Round Matches
+            Generate Matches
           </Button>
         </Group>
-        
-        {!isAllSlotsAssigned() && teams.length >= 2 && (
-          <Text size="sm" c="orange" ta="center">
-            Please assign all teams to bracket positions before generating matches
-          </Text>
-        )}
-        
-        {teams.length < 2 && (
-          <Text size="sm" c="red" ta="center">
-            At least 2 teams are required to generate matches
-          </Text>
-        )}
+
       </Stack>
     );
   };
@@ -607,15 +591,6 @@ export function TournamentBracket({
         </Group>
 
         <Group>
-          {matches.length === 0 && onGenerateMatches && isAssignMode && (
-            <Button
-              onClick={onGenerateMatches}
-              disabled={teams.length < 2}
-            >
-              Generate First Matches
-            </Button>
-          )}
-
           {isAssignMode && (
             <SegmentedControl
               value={viewMode}
