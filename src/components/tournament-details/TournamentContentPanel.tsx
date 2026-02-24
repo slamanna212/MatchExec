@@ -92,7 +92,7 @@ export function TournamentContentPanel({
   onGenerateMatches,
   onBracketAssignment
 }: TournamentContentPanelProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'teams' | 'bracket' | 'standings'>('overview');
+  const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings'>('teams');
 
   return (
     <Stack gap="md">
@@ -103,7 +103,6 @@ export function TournamentContentPanel({
             radius="xl"
             size="sm"
             data={[
-              { label: 'Overview', value: 'overview' },
               {
                 label: <span>Teams<span className="hidden md:inline"> ({teams.length})</span></span>,
                 value: 'teams'
@@ -112,70 +111,12 @@ export function TournamentContentPanel({
               { label: 'Standings', value: 'standings' }
             ]}
             value={activeTab}
-            onChange={(value) => setActiveTab(value as 'overview' | 'teams' | 'bracket' | 'standings')}
+            onChange={(value) => setActiveTab(value as 'teams' | 'bracket' | 'standings')}
             classNames={classes}
             style={{ minWidth: 'fit-content' }}
           />
         </Group>
       </div>
-
-      {/* Overview Tab */}
-      {activeTab === 'overview' && (
-        <Stack gap="sm">
-          {tournament.description && (
-            <div>
-              <Text size="sm" fw={500} c="dimmed">Description:</Text>
-              <Text size="sm">{tournament.description}</Text>
-            </div>
-          )}
-
-          <Group justify="space-between">
-            <Text size="sm" fw={500} c="dimmed">Format:</Text>
-            <Badge variant="light">
-              {tournament.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
-            </Badge>
-          </Group>
-
-          <Group justify="space-between">
-            <Text size="sm" fw={500} c="dimmed">Rounds/Match:</Text>
-            <Text size="sm">{tournament.rounds_per_match}</Text>
-          </Group>
-
-          <Group justify="space-between">
-            <Text size="sm" fw={500} c="dimmed">Participants:</Text>
-            <Text size="sm">
-              {tournament.participant_count || 0}
-              {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
-            </Text>
-          </Group>
-
-          {tournament.start_time && (
-            <Group justify="space-between">
-              <Text size="sm" fw={500} c="dimmed">Start Time:</Text>
-              <Text size="sm">{new Date(tournament.start_time).toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'numeric',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-              })}</Text>
-            </Group>
-          )}
-
-          <Group justify="space-between">
-            <Text size="sm" fw={500} c="dimmed">Created:</Text>
-            <Text size="sm">{new Date(tournament.created_at).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'numeric',
-              day: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true
-            })}</Text>
-          </Group>
-        </Stack>
-      )}
 
       {/* Teams Tab */}
       {activeTab === 'teams' && (

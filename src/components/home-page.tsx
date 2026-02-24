@@ -160,7 +160,7 @@ function buildMissionControlRows(matches: MatchItem[], tournaments: TournamentIt
         max_participants: t.max_participants,
         type: 'tournament',
         isTournamentChild: false,
-        navigateTo: '/tournaments',
+        navigateTo: `/tournaments/${t.id}`,
       });
       // Sort child matches: in-progress first, then by start_time
       const children = [...item.childMatches].sort((a, b) => {
