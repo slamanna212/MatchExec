@@ -290,46 +290,6 @@ export function HomePage() {
   return (
     <div className="container mx-auto px-6 pt-3 pb-6 max-w-6xl">
       <Stack gap="lg">
-        {/* Stats Section */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
-            {statItems.map((stat: StatItem) => {
-              const Icon = stat.icon;
-              return (
-                <motion.div key={stat.title} variants={itemVariants}>
-                  <Card
-                key={stat.title}
-                shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-                p="lg"
-                radius="md"
-                withBorder
-                bg={colorScheme === 'light' ? 'white' : undefined}
-                style={{
-                  borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-                }}
-              >
-                <Group justify="space-between">
-                  <div>
-                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                      {stat.title}
-                    </Text>
-                    <Text fw={700} size="xl" mt="xs">
-                      {loading ? '...' : <AnimatedCounter value={stat.value} />}
-                    </Text>
-                  </div>
-                  <Icon size={32} stroke={1.5} style={{ color: stat.color.startsWith('#') ? stat.color : `var(--mantine-color-${stat.color}-6)` }} />
-                </Group>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </SimpleGrid>
-        </motion.div>
-
         {/* Mission Control Card */}
         <Card
           shadow={colorScheme === 'light' ? 'lg' : 'sm'}
@@ -389,16 +349,16 @@ export function HomePage() {
                     </Table.Tr>
                   ))
                 ) : null}
-                {/* Pad with empty rows to always show 8 rows */}
-                {Array.from({ length: Math.max(0, ROWS_PER_PAGE - pagedRows.length) }).map((_, i) => (
-                  <Table.Tr key={`empty-${i}`}>
+                {/* Always show at least 1 row */}
+                {pagedRows.length === 0 && (
+                  <Table.Tr>
                     <Table.Td><Text size="sm" c="dimmed">&nbsp;</Text></Table.Td>
                     <Table.Td />
                     <Table.Td className="hidden md:table-cell" />
                     <Table.Td className="hidden md:table-cell" />
                     <Table.Td className="hidden md:table-cell" />
                   </Table.Tr>
-                ))}
+                )}
               </Table.Tbody>
             </Table>
 
@@ -427,6 +387,46 @@ export function HomePage() {
             )}
           </Stack>
         </Card>
+
+        {/* Stats Section */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+            {statItems.map((stat: StatItem) => {
+              const Icon = stat.icon;
+              return (
+                <motion.div key={stat.title} variants={itemVariants}>
+                  <Card
+                key={stat.title}
+                shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+                p="lg"
+                radius="md"
+                withBorder
+                bg={colorScheme === 'light' ? 'white' : undefined}
+                style={{
+                  borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+                }}
+              >
+                <Group justify="space-between">
+                  <div>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                      {stat.title}
+                    </Text>
+                    <Text fw={700} size="xl" mt="xs">
+                      {loading ? '...' : <AnimatedCounter value={stat.value} />}
+                    </Text>
+                  </div>
+                  <Icon size={32} stroke={1.5} style={{ color: stat.color.startsWith('#') ? stat.color : `var(--mantine-color-${stat.color}-6)` }} />
+                </Group>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </SimpleGrid>
+        </motion.div>
       </Stack>
     </div>
   );
