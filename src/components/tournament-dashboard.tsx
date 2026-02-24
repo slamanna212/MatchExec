@@ -105,12 +105,10 @@ const TournamentCard = memo(({
         <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
 
-      <Stack gap="xs" px="lg" style={{ minHeight: '100px' }}>
-        <div style={{ minHeight: '20px' }}>
-          {tournament.description && (
-            <Text size="sm" c="dimmed">{tournament.description}</Text>
-          )}
-        </div>
+      <Stack gap="xs" px="lg">
+        {tournament.description && (
+          <Text size="sm" c="dimmed">{tournament.description}</Text>
+        )}
 
         <Divider mb="xs" />
 

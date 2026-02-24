@@ -136,12 +136,10 @@ const MatchCard = memo(({
         <StageRing status={match.status} gameColor={match.game_color} />
       </Group>
 
-      <Stack gap="xs" px="lg" style={{ minHeight: '100px' }}>
-        <div style={{ minHeight: '20px' }}>
-          {match.description && (
-            <Text size="sm" c="dimmed">{match.description}</Text>
-          )}
-        </div>
+      <Stack gap="xs" px="lg">
+        {match.description && (
+          <Text size="sm" c="dimmed">{match.description}</Text>
+        )}
 
         <Divider mb="xs" />
 
