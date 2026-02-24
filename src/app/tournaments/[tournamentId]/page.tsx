@@ -56,6 +56,7 @@ interface BracketMatch {
   team2?: { id: string; name: string };
   winner?: string;
   status: 'pending' | 'ongoing' | 'complete';
+  rawStatus: string;
   match_order: number;
 }
 
@@ -379,6 +380,61 @@ export default function TournamentPage({
     }
   }, [tournament]);
 
+  // Handle starting a single match
+  const handleStartMatch = useCallback(async (matchId: string) => {
+    const notificationId = `start-match-${matchId}`;
+    notificationHelper.loading({ id: notificationId, message: 'Starting match...' });
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus: 'battle' }),
+      });
+
+      if (response.ok) {
+        notificationHelper.update(notificationId, { type: 'success', message: 'Match started!' });
+        await fetchMatches(true);
+      } else {
+        const errorData = await response.json();
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          message: errorData.error || 'Failed to start match'
+        });
+      }
+    } catch (err) {
+      logger.error('Error starting match:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while starting the match'
+      });
+    }
+  }, [fetchMatches]);
+
+  // Handle starting all gather-phase matches at once
+  const handleStartAllMatches = useCallback(async (matchIds: string[]) => {
+    const notificationId = `start-all-matches-${tournamentId}`;
+    notificationHelper.loading({ id: notificationId, message: `Starting ${matchIds.length} matches...` });
+
+    try {
+      await Promise.all(matchIds.map(id =>
+        fetch(`/api/matches/${id}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newStatus: 'battle' }),
+        })
+      ));
+      notificationHelper.update(notificationId, { type: 'success', message: 'All matches started!' });
+      await fetchMatches(true);
+    } catch (err) {
+      logger.error('Error starting all matches:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while starting matches'
+      });
+    }
+  }, [tournamentId, fetchMatches]);
+
   if (loading) {
     return (
       <Container>
@@ -438,6 +494,8 @@ export default function TournamentPage({
               loading={contentLoading}
               onGenerateMatches={handleGenerateBracket}
               onBracketAssignment={handleBracketAssignment}
+              onStartMatch={handleStartMatch}
+              onStartAllMatches={handleStartAllMatches}
             />
           </Grid.Col>
         </Grid>

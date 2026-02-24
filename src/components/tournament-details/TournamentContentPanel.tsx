@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Stack,
   Group,
@@ -11,11 +12,13 @@ import {
   Avatar,
   Divider,
   Loader,
-  SegmentedControl
+  SegmentedControl,
+  Button
 } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from '../tournament-bracket';
+import { StageRing } from '../StageRing';
 import classes from '../gradient-segmented-control.module.css';
 
 interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
@@ -40,6 +43,7 @@ interface BracketMatch {
   team2?: { id: string; name: string };
   winner?: string;
   status: 'pending' | 'ongoing' | 'complete';
+  rawStatus: string;
   match_order: number;
 }
 
@@ -64,6 +68,8 @@ interface TournamentContentPanelProps {
   loading: boolean;
   onGenerateMatches: () => Promise<void>;
   onBracketAssignment: (assignments: BracketAssignment[]) => Promise<void>;
+  onStartMatch: (matchId: string) => Promise<void>;
+  onStartAllMatches: (matchIds: string[]) => Promise<void>;
 }
 
 const getTeamCardStyles = (teamIndex: number) => {
@@ -90,9 +96,12 @@ export function TournamentContentPanel({
   standings,
   loading,
   onGenerateMatches,
-  onBracketAssignment
+  onBracketAssignment,
+  onStartMatch,
+  onStartAllMatches
 }: TournamentContentPanelProps) {
-  const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings'>('teams');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>('teams');
 
   return (
     <Stack gap="md">
@@ -108,10 +117,11 @@ export function TournamentContentPanel({
                 value: 'teams'
               },
               { label: 'Bracket', value: 'bracket' },
-              { label: 'Standings', value: 'standings' }
+              { label: 'Standings', value: 'standings' },
+              { label: 'Control', value: 'control' }
             ]}
             value={activeTab}
-            onChange={(value) => setActiveTab(value as 'teams' | 'bracket' | 'standings')}
+            onChange={(value) => setActiveTab(value as 'teams' | 'bracket' | 'standings' | 'control')}
             classNames={classes}
             style={{ minWidth: 'fit-content' }}
           />
@@ -210,7 +220,7 @@ export function TournamentContentPanel({
               <Loader size="md" />
             </div>
           ) : standings.length > 0 ? (
-            <Stack gap="xs">
+            <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
               {standings.map((team, index) => (
                 <Card
                   key={team.team_id}
@@ -253,6 +263,80 @@ export function TournamentContentPanel({
           )}
         </Stack>
       )}
+
+      {/* Control Tab */}
+      {activeTab === 'control' && (() => {
+        const activeMatches = matches.filter(m =>
+          m.rawStatus === 'assign' || m.rawStatus === 'gather' || m.rawStatus === 'battle'
+        );
+        const startableMatches = activeMatches.filter(m => m.rawStatus === 'assign' || m.rawStatus === 'gather');
+
+        return (
+          <Stack gap="md">
+            {activeMatches.length === 0 ? (
+              <Card withBorder p="xl">
+                <Text size="sm" c="dimmed" ta="center">No active matches right now</Text>
+              </Card>
+            ) : (
+              <>
+                {startableMatches.length > 0 && (
+                  <Group justify="center">
+                    <Button
+                      color="green"
+                      variant="filled"
+                      onClick={() => onStartAllMatches(startableMatches.map(m => m.id))}
+                    >
+                      Start All Matches
+                    </Button>
+                  </Group>
+                )}
+                <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
+                  {activeMatches.map((match) => (
+                    <Card
+                      key={match.id}
+                      withBorder
+                      p="md"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => router.push(`/matches/${match.id}`)}
+                    >
+                      <Group justify="space-between" wrap="nowrap">
+                        <Group gap="md">
+                          <StageRing status={match.rawStatus} type="match" size={44} thickness={4} gameColor={tournament.game_color} />
+                          <div>
+                            <Text fw={500} size="sm">
+                              {match.team1?.name ?? 'TBD'} vs {match.team2?.name ?? 'TBD'}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              Round {match.round}
+                              {match.bracket_type !== 'winners' && ` (${match.bracket_type})`}
+                            </Text>
+                          </div>
+                          <Badge
+                            color={match.rawStatus === 'battle' ? 'green' : 'blue'}
+                            variant="filled"
+                            size="sm"
+                          >
+                            {match.rawStatus === 'battle' ? 'In Progress' : 'Ready to Start'}
+                          </Badge>
+                        </Group>
+                        {match.rawStatus !== 'battle' && (
+                          <Button
+                            color="green"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); onStartMatch(match.id); }}
+                          >
+                            Start Match
+                          </Button>
+                        )}
+                      </Group>
+                    </Card>
+                  ))}
+                </Stack>
+              </>
+            )}
+          </Stack>
+        );
+      })()}
     </Stack>
   );
 }
