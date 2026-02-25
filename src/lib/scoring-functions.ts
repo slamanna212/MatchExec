@@ -155,42 +155,74 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
  */
 export async function getMatchGames(matchId: string): Promise<Array<Record<string, unknown>>> {
   logger.debug(`getMatchGames: Starting for matchId: ${matchId}`);
-  
+
   try {
     const db = await getDbInstance();
     logger.debug('getMatchGames: Database instance obtained');
-    
-    // First get the match games
+
+    // Fetch match games together with the match's game_id in one query
     const gamesQuery = `
-      SELECT mg.*
+      SELECT mg.*, m.game_id AS match_game_id
       FROM match_games mg
+      JOIN matches m ON mg.match_id = m.id
       WHERE mg.match_id = ?
       ORDER BY mg.round ASC
     `;
-    
+
     logger.debug('getMatchGames: Executing games query...');
     const games = await db.all<Record<string, unknown>>(gamesQuery, [matchId]);
     logger.debug(`getMatchGames: Query completed, found ${games?.length || 0} games`);
-    
-    // Now enrich each game with map data by stripping timestamps
-    for (const game of games) {
-      const cleanMapId = String(game.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, '');
-      
+
+    if (!games || games.length === 0) {
+      return [];
+    }
+
+    // All games in a match share the same game_id (from the parent match)
+    const gameId = String(games[0].match_game_id || '');
+
+    // Compute clean map IDs (strip timestamp suffixes added during map customisation)
+    const cleanMapIds = games
+      .map(g => String(g.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, ''))
+      .filter(id => id !== '');
+
+    // Fetch all map data in a single query, filtered by the correct game_id to avoid
+    // returning the wrong map when multiple games share the same map name/id.
+    const mapLookup: Record<string, {
+      name: string;
+      image_url?: string;
+      mode_id?: string;
+      game_id: string;
+      mode_scoring_type?: string;
+    }> = {};
+
+    if (gameId && cleanMapIds.length > 0) {
+      const placeholders = cleanMapIds.map(() => '?').join(', ');
       const mapQuery = `
-        SELECT gm.name, gm.image_url, gm.mode_id, gm.game_id, gamemode.scoring_type as mode_scoring_type
+        SELECT gm.id, gm.name, gm.image_url, gm.mode_id, gm.game_id,
+               gamemode.scoring_type AS mode_scoring_type
         FROM game_maps gm
         LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
-        WHERE gm.id = ?
-        LIMIT 1
+        WHERE gm.game_id = ? AND gm.id IN (${placeholders})
       `;
-      
-      const mapData = await db.get(mapQuery, [cleanMapId]) as {
+
+      const mapRows = await db.all<{
+        id: string;
         name: string;
         image_url?: string;
         mode_id?: string;
         game_id: string;
         mode_scoring_type?: string;
-      } | undefined;
+      }>(mapQuery, [gameId, ...cleanMapIds]);
+
+      for (const row of mapRows) {
+        mapLookup[row.id] = row;
+      }
+    }
+
+    // Enrich each game with its map data
+    for (const game of games) {
+      const cleanMapId = String(game.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      const mapData = mapLookup[cleanMapId];
       if (mapData) {
         game.map_name = mapData.name;
         game.image_url = mapData.image_url;
@@ -199,8 +231,8 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
         game.mode_scoring_type = mapData.mode_scoring_type;
       }
     }
-    
-    return games || [];
+
+    return games;
   } catch (error) {
     logger.error('Error in getMatchGames:', error);
     logger.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
