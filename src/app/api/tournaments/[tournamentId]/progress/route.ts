@@ -125,8 +125,14 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
     );
   }
 
-  // If only one match left, tournament is complete
-  if (completedMatches.length === 1) {
+  // Check for bye teams in the current round — if any exist, a final match still needs to be generated
+  const byeTeamsCurrent = await db.all(
+    'SELECT team_id FROM tournament_round_byes WHERE tournament_id = ? AND round = ? AND bracket_type = ?',
+    [tournamentId, roundInfo.maxWinnersRound, 'winners']
+  ) as { team_id: string }[];
+
+  // Tournament is complete only when 1 match finishes AND no bye teams remain for this round
+  if (completedMatches.length === 1 && byeTeamsCurrent.length === 0) {
     await db.run(
       'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       ['complete', tournamentId]

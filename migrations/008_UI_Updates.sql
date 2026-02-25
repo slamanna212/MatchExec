@@ -23,3 +23,16 @@ CREATE INDEX IF NOT EXISTS idx_discord_match_edit_queue_match_id ON discord_matc
 -- Allow match editing setting for tournaments
 -- Default 1 (allowed) preserves existing tournament behavior
 ALTER TABLE tournaments ADD COLUMN allow_match_editing INTEGER DEFAULT 1;
+
+-- Track bye teams per round for odd-numbered brackets
+CREATE TABLE IF NOT EXISTS tournament_round_byes (
+  id TEXT PRIMARY KEY,
+  tournament_id TEXT NOT NULL,
+  round INTEGER NOT NULL,
+  bracket_type TEXT NOT NULL,
+  team_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id) REFERENCES tournament_teams(id) ON DELETE CASCADE,
+  UNIQUE(tournament_id, round, bracket_type, team_id)
+);

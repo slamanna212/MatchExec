@@ -598,6 +598,276 @@ describe('Tournament Bracket', () => {
     });
   });
 
+  describe('6-team bye team bracket progression', () => {
+    it('should correctly handle bye teams in a 6-team single elimination tournament', async () => {
+      const tournament = await createTournament(game.id, {
+        format: 'single-elimination',
+        game_mode_id: mode.id
+      });
+
+      const db = getTestDb();
+
+      // Create 6 teams
+      const teams: string[] = [];
+      for (let i = 1; i <= 6; i++) {
+        const teamId = `team-bye6-${i}`;
+        await new Promise<void>((resolve, reject) => {
+          db.run(
+            `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
+            [teamId, tournament.id, `Team ${i}`],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+        teams.push(teamId);
+      }
+
+      const bracketAssignments: BracketAssignment[] = teams.map((teamId, index) => ({
+        position: index + 1,
+        teamId
+      }));
+
+      // Step 1: Generate Round 1 — expect 3 matches, 0 byes
+      const round1Matches = await generateSingleEliminationMatches(
+        tournament.id.toString(),
+        bracketAssignments,
+        game.id,
+        3
+      );
+
+      expect(round1Matches).toHaveLength(3);
+
+      const round1TournamentMatches: TournamentMatchInfo[] = round1Matches.map((match, index) => ({
+        id: match.id,
+        tournament_id: tournament.id.toString(),
+        round: 1,
+        bracket_type: 'winners',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
+        match_order: index + 1
+      }));
+
+      await saveGeneratedMatches(round1Matches, round1TournamentMatches);
+
+      // Verify no byes stored yet
+      const byes0 = await db.all(
+        `SELECT * FROM tournament_round_byes WHERE tournament_id = ?`,
+        [tournament.id.toString()]
+      );
+      expect(byes0).toHaveLength(0);
+
+      // Step 2: Mark all 3 Round 1 matches complete with winners
+      for (const match of round1Matches) {
+        await new Promise<void>((resolve, reject) => {
+          db.run(
+            `UPDATE matches SET status = 'complete', winner_team = ? WHERE id = ?`,
+            [match.team1_id, match.id],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+      }
+
+      // Step 3: Generate Round 2 — expect 1 match + 1 bye stored
+      const round2Matches = await generateNextRoundMatches(
+        tournament.id.toString(),
+        1,
+        'winners',
+        'single-elimination'
+      );
+
+      expect(round2Matches).toHaveLength(1);
+      expect(round2Matches[0].tournament_round).toBe(2);
+
+      // Verify 1 bye was stored for round 2
+      const byes2 = await db.all(
+        `SELECT * FROM tournament_round_byes WHERE tournament_id = ? AND round = 2 AND bracket_type = 'winners'`,
+        [tournament.id.toString()]
+      ) as { team_id: string }[];
+      expect(byes2).toHaveLength(1);
+
+      const byeTeamId = byes2[0].team_id;
+
+      // Save Round 2 matches
+      const round2TournamentMatches: TournamentMatchInfo[] = round2Matches.map((match, index) => ({
+        id: match.id,
+        tournament_id: tournament.id.toString(),
+        round: 2,
+        bracket_type: 'winners',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
+        match_order: index + 1
+      }));
+
+      await saveGeneratedMatches(round2Matches, round2TournamentMatches);
+
+      // Step 4: Mark Round 2 match complete
+      const round2WinnerId = round2Matches[0].team1_id!;
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE matches SET status = 'complete', winner_team = ? WHERE id = ?`,
+          [round2WinnerId, round2Matches[0].id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      // Step 5: Generate Round 3 — expect 1 final match (bye team vs Round 2 winner)
+      const round3Matches = await generateNextRoundMatches(
+        tournament.id.toString(),
+        2,
+        'winners',
+        'single-elimination'
+      );
+
+      expect(round3Matches).toHaveLength(1);
+      expect(round3Matches[0].tournament_round).toBe(3);
+
+      // Final match should feature the bye team and the round 2 winner
+      const finalTeams = [round3Matches[0].team1_id, round3Matches[0].team2_id];
+      expect(finalTeams).toContain(byeTeamId);
+      expect(finalTeams).toContain(round2WinnerId);
+
+      // Save Round 3 match
+      const round3TournamentMatches: TournamentMatchInfo[] = round3Matches.map((match, index) => ({
+        id: match.id,
+        tournament_id: tournament.id.toString(),
+        round: 3,
+        bracket_type: 'winners',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
+        match_order: index + 1
+      }));
+
+      await saveGeneratedMatches(round3Matches, round3TournamentMatches);
+
+      // Step 6: Complete final and verify tournament should end (generateNextRoundMatches returns [])
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE matches SET status = 'complete', winner_team = ? WHERE id = ?`,
+          [round3Matches[0].team1_id, round3Matches[0].id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      const afterFinalMatches = await generateNextRoundMatches(
+        tournament.id.toString(),
+        3,
+        'winners',
+        'single-elimination'
+      );
+
+      expect(afterFinalMatches).toEqual([]);
+    });
+
+    it('should not affect 4-team (power-of-2) tournaments', async () => {
+      const tournament = await createTournament(game.id, {
+        format: 'single-elimination',
+        game_mode_id: mode.id
+      });
+
+      const db = getTestDb();
+
+      // Create 4 teams
+      const teams: string[] = [];
+      for (let i = 1; i <= 4; i++) {
+        const teamId = `team-pow2-${i}`;
+        await new Promise<void>((resolve, reject) => {
+          db.run(
+            `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
+            [teamId, tournament.id, `Team ${i}`],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+        teams.push(teamId);
+      }
+
+      const bracketAssignments: BracketAssignment[] = teams.map((teamId, index) => ({
+        position: index + 1,
+        teamId
+      }));
+
+      // Round 1: 2 matches
+      const round1Matches = await generateSingleEliminationMatches(
+        tournament.id.toString(),
+        bracketAssignments,
+        game.id,
+        3
+      );
+
+      expect(round1Matches).toHaveLength(2);
+
+      const round1TournamentMatches: TournamentMatchInfo[] = round1Matches.map((match, index) => ({
+        id: match.id,
+        tournament_id: tournament.id.toString(),
+        round: 1,
+        bracket_type: 'winners',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
+        match_order: index + 1
+      }));
+
+      await saveGeneratedMatches(round1Matches, round1TournamentMatches);
+
+      // Mark both complete
+      for (const match of round1Matches) {
+        await new Promise<void>((resolve, reject) => {
+          db.run(
+            `UPDATE matches SET status = 'complete', winner_team = ? WHERE id = ?`,
+            [match.team1_id, match.id],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+      }
+
+      // Round 2: 1 final match, 0 byes
+      const round2Matches = await generateNextRoundMatches(
+        tournament.id.toString(),
+        1,
+        'winners',
+        'single-elimination'
+      );
+
+      expect(round2Matches).toHaveLength(1);
+      expect(round2Matches[0].tournament_round).toBe(2);
+
+      // No byes stored
+      const byes = await db.all(
+        `SELECT * FROM tournament_round_byes WHERE tournament_id = ?`,
+        [tournament.id.toString()]
+      );
+      expect(byes).toHaveLength(0);
+
+      // Save and complete the final
+      const round2TournamentMatches: TournamentMatchInfo[] = round2Matches.map((match, index) => ({
+        id: match.id,
+        tournament_id: tournament.id.toString(),
+        round: 2,
+        bracket_type: 'winners',
+        team1_id: match.team1_id,
+        team2_id: match.team2_id,
+        match_order: index + 1
+      }));
+
+      await saveGeneratedMatches(round2Matches, round2TournamentMatches);
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `UPDATE matches SET status = 'complete', winner_team = ? WHERE id = ?`,
+          [round2Matches[0].team1_id, round2Matches[0].id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      // Should return empty (tournament over)
+      const afterFinal = await generateNextRoundMatches(
+        tournament.id.toString(),
+        2,
+        'winners',
+        'single-elimination'
+      );
+
+      expect(afterFinal).toEqual([]);
+    });
+  });
+
   describe('getBracketWinner', () => {
     it('should return winner of the bracket', async () => {
       const tournament = await createTournament(game.id, { game_mode_id: mode.id });

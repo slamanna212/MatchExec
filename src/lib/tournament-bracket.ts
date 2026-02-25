@@ -426,8 +426,12 @@ export async function generateNextRoundMatches(
   const tournament = await fetchTournamentForNextRound(db, tournamentId);
   const previousRoundMatches = await fetchPreviousRoundMatches(db, tournamentId, currentRound, bracketType);
 
-  if (shouldEndTournament(previousRoundMatches, bracketType)) {
-    return [];
+  // Fetch any bye teams carried over into the current round
+  const byeTeamIds = await fetchByeTeamsForRound(db, tournamentId, currentRound, bracketType);
+  const totalAdvancing = previousRoundMatches.length + byeTeamIds.length;
+
+  if (totalAdvancing === 1 && bracketType === 'winners') {
+    return []; // Only 1 team left — tournament should end
   }
 
   const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
@@ -436,6 +440,7 @@ export async function generateNextRoundMatches(
   return await generateNextRoundMatchesFromWinners(
     db,
     previousRoundMatches,
+    byeTeamIds,
     tournament,
     tournamentId,
     currentRound,
@@ -485,13 +490,37 @@ async function fetchPreviousRoundMatches(
   return matches;
 }
 
-function shouldEndTournament(previousRoundMatches: MatchResult[], bracketType: string): boolean {
-  return previousRoundMatches.length === 1 && bracketType === 'winners';
+async function fetchByeTeamsForRound(
+  db: Database,
+  tournamentId: string,
+  round: number,
+  bracketType: string
+): Promise<string[]> {
+  const rows = await db.all(
+    'SELECT team_id FROM tournament_round_byes WHERE tournament_id = ? AND round = ? AND bracket_type = ?',
+    [tournamentId, round, bracketType]
+  ) as { team_id: string }[];
+  return rows.map(r => r.team_id);
+}
+
+async function saveByeTeam(
+  db: Database,
+  tournamentId: string,
+  round: number,
+  bracketType: string,
+  teamId: string
+): Promise<void> {
+  const id = uuidv4();
+  await db.run(
+    'INSERT OR IGNORE INTO tournament_round_byes (id, tournament_id, round, bracket_type, team_id) VALUES (?, ?, ?, ?, ?)',
+    [id, tournamentId, round, bracketType, teamId]
+  );
 }
 
 async function generateNextRoundMatchesFromWinners(
   db: Database,
   previousRoundMatches: MatchResult[],
+  byeTeamIds: string[],
   tournament: TournamentRecord & { description?: string | null },
   tournamentId: string,
   currentRound: number,
@@ -502,18 +531,23 @@ async function generateNextRoundMatchesFromWinners(
   const matches: GeneratedMatch[] = [];
   const nextRound = currentRound + 1;
 
-  for (let i = 0; i < previousRoundMatches.length; i += 2) {
-    const match1 = previousRoundMatches[i];
-    const match2 = previousRoundMatches[i + 1];
+  // Combine bye teams from the current round with winners from completed matches
+  const allTeamIds: string[] = [
+    ...byeTeamIds,
+    ...previousRoundMatches.map(m => m.winner_team).filter(Boolean) as string[]
+  ];
 
-    if (!match2) {
-      continue; // Odd number - bye
+  for (let i = 0; i < allTeamIds.length; i += 2) {
+    const winner1TeamId = allTeamIds[i];
+    const winner2TeamId = allTeamIds[i + 1];
+
+    if (!winner2TeamId) {
+      // Odd team out — record as a bye for the next round
+      await saveByeTeam(db, tournamentId, nextRound, bracketType, winner1TeamId);
+      continue;
     }
 
     const matchId = uuidv4();
-
-    const winner1TeamId = match1.winner_team;
-    const winner2TeamId = match2.winner_team;
 
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
