@@ -319,7 +319,15 @@ export function TournamentContentPanel({
                             {match.rawStatus === 'battle' ? 'In Progress' : 'Ready to Start'}
                           </Badge>
                         </Group>
-                        {match.rawStatus !== 'battle' && (
+                        {match.rawStatus === 'battle' ? (
+                          <Button
+                            color="blue"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/matches/${match.id}/scoring`); }}
+                          >
+                            Score
+                          </Button>
+                        ) : (
                           <Button
                             color="green"
                             size="sm"
