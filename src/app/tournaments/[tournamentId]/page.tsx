@@ -382,6 +382,13 @@ export default function TournamentPage({
 
   // Handle starting a single match
   const handleStartMatch = useCallback(async (matchId: string) => {
+    // If tournament hasn't been started yet, start it (which auto-starts all round-1 matches)
+    if (tournament?.status === 'assign') {
+      await handleStatusTransition('battle');
+      await fetchMatches(true);
+      return;
+    }
+
     const notificationId = `start-match-${matchId}`;
     notificationHelper.loading({ id: notificationId, message: 'Starting match...' });
 
@@ -409,10 +416,20 @@ export default function TournamentPage({
         message: 'An error occurred while starting the match'
       });
     }
-  }, [fetchMatches]);
+  }, [fetchMatches, tournament, handleStatusTransition]);
 
   // Handle starting all gather-phase matches at once
   const handleStartAllMatches = useCallback(async (matchIds: string[]) => {
+    // If tournament hasn't been started yet, start it (which auto-starts all round-1 matches)
+    if (tournament?.status === 'assign') {
+      const notificationId = `start-all-matches-${tournamentId}`;
+      notificationHelper.loading({ id: notificationId, message: 'Starting tournament...' });
+      await handleStatusTransition('battle');
+      notificationHelper.update(notificationId, { type: 'success', message: 'Tournament started and all matches launched!' });
+      await fetchMatches(true);
+      return;
+    }
+
     const notificationId = `start-all-matches-${tournamentId}`;
     notificationHelper.loading({ id: notificationId, message: `Starting ${matchIds.length} matches...` });
 
@@ -433,7 +450,7 @@ export default function TournamentPage({
         message: 'An error occurred while starting matches'
       });
     }
-  }, [tournamentId, fetchMatches]);
+  }, [tournamentId, fetchMatches, tournament, handleStatusTransition]);
 
   if (loading) {
     return (
