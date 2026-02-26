@@ -37,8 +37,9 @@ export default function WelcomePageClient() {
           <Image
             src="/logo.svg"
             alt="MatchExec"
-            width={80}
-            height={80}
+            width={250}
+            height={250}
+            unoptimized
           />
         </div>
         <Title order={1} ta="center" mb="xs">
