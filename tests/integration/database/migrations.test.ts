@@ -2,6 +2,8 @@ import { describe, it, expect, afterAll } from 'vitest';
 import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { Database } from '../../../lib/database/connection';
+import { MigrationRunner } from '../../../lib/database/migrations';
 
 describe('Database Migrations', () => {
   const testDbPath = path.join(process.cwd(), 'app_data', 'data', 'migration-test.db');
@@ -92,6 +94,35 @@ describe('Database Migrations', () => {
     expect(tableNames).toContain('discord_channels');
     expect(tableNames).toContain('team_voice_channels');
 
+    // Migration 007 tables
+    expect(tableNames).toContain('auto_voice_channels');
+    expect(tableNames).toContain('health_alerts_sent');
+
+    // Migration 008 tables
+    expect(tableNames).toContain('discord_match_edit_queue');
+    expect(tableNames).toContain('tournament_round_byes');
+
+    // Verify key columns from ALTER TABLE migrations (catches partial migration bugs)
+    const discordSettingsCols = await new Promise<any[]>((resolve, reject) => {
+      db.all('PRAGMA table_info(discord_settings)', (err, rows) => err ? reject(err) : resolve(rows));
+    });
+    const discordColNames = discordSettingsCols.map((c: any) => c.name);
+    expect(discordColNames).toContain('voice_channel_cleanup_delay_minutes'); // migration 007
+    expect(discordColNames).toContain('match_start_delay_seconds');           // migration 007
+
+    const tournamentCols = await new Promise<any[]>((resolve, reject) => {
+      db.all('PRAGMA table_info(tournaments)', (err, rows) => err ? reject(err) : resolve(rows));
+    });
+    const tournamentColNames = tournamentCols.map((c: any) => c.name);
+    expect(tournamentColNames).toContain('game_mode_id');         // migration 007
+    expect(tournamentColNames).toContain('allow_match_editing');  // migration 008
+
+    const participantCols = await new Promise<any[]>((resolve, reject) => {
+      db.all('PRAGMA table_info(match_participants)', (err, rows) => err ? reject(err) : resolve(rows));
+    });
+    const participantColNames = participantCols.map((c: any) => c.name);
+    expect(participantColNames).toContain('avatar_url'); // migration 008
+
     // Close database
     await new Promise<void>((resolve, reject) => {
       db.close((err) => {
@@ -118,13 +149,14 @@ describe('Database Migrations', () => {
       .sort();
 
     // Filter to only test migrations that should be idempotent (CREATE TABLE IF NOT EXISTS)
-    // Some migrations use ALTER TABLE ADD COLUMN or depend on tables from skipped migrations
+    // These migrations use ALTER TABLE ADD COLUMN which is not idempotent
+    // (SQLite does not support IF NOT EXISTS for ADD COLUMN)
     const idempotentMigrations = migrationFiles.filter(f =>
       !f.includes('004_fix_voice_alternation_schema.sql') && // ALTER TABLE ADD COLUMN
       !f.includes('005_tournament_system.sql') && // ALTER TABLE statements
       !f.includes('006_position_based_scoring.sql') && // May have ALTER TABLE
-      !f.includes('007_v0_6.sql') && // ALTER TABLE and depends on tournaments
-      !f.includes('008_UI_Updates.sql') // May have ALTER TABLE
+      !f.includes('007_v0_6.sql') && // ALTER TABLE ADD COLUMN + DROP/RECREATE tables
+      !f.includes('008_UI_Updates.sql') // ALTER TABLE ADD COLUMN
     );
 
     // Run migrations first time
@@ -166,6 +198,42 @@ describe('Database Migrations', () => {
         else resolve();
       });
     });
+  });
+
+  it('should record all migrations in tracking table when using MigrationRunner', async () => {
+    const runnerDbPath = path.join(process.cwd(), 'app_data', 'data', 'migration-runner-test.db');
+
+    // Clean up from any previous run (including WAL/SHM files)
+    for (const filePath of [runnerDbPath, `${runnerDbPath}-wal`, `${runnerDbPath}-shm`]) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    const db = new Database(runnerDbPath);
+    await db.connect();
+
+    try {
+      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationFiles = fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql'))
+        .sort();
+
+      const runner = new MigrationRunner(db, migrationsDir);
+      await runner.runMigrations();
+
+      // Verify all migrations are recorded (catches partial-application bugs)
+      const migrationRecords = await db.all<{ filename: string }>('SELECT filename FROM migrations ORDER BY filename');
+      const recordedMigrations = migrationRecords.map((r: any) => r.filename);
+      for (const file of migrationFiles) {
+        expect(recordedMigrations).toContain(file);
+      }
+    } finally {
+      await db.close();
+      for (const filePath of [runnerDbPath, `${runnerDbPath}-wal`, `${runnerDbPath}-shm`]) {
+        if (fs.existsSync(filePath)) {
+          try { fs.unlinkSync(filePath); } catch { }
+        }
+      }
+    }
   });
 
   it('should create migrations tracking table', async () => {

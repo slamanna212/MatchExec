@@ -171,15 +171,17 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
     testDbWrapper = null;
   }
 
-  // Remove existing test database file
-  if (fs.existsSync(TEST_DB_PATH)) {
-    try {
-      fs.unlinkSync(TEST_DB_PATH);
-    } catch {
-      // If we can't delete it, wait a bit and retry
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (fs.existsSync(TEST_DB_PATH)) {
-        fs.unlinkSync(TEST_DB_PATH);
+  // Remove existing test database files (including WAL/SHM companion files)
+  const dbFilesToRemove = [TEST_DB_PATH, `${TEST_DB_PATH}-wal`, `${TEST_DB_PATH}-shm`];
+  for (const filePath of dbFilesToRemove) {
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
     }
   }
@@ -244,9 +246,11 @@ export async function teardownTestDatabase(): Promise<void> {
     testDbWrapper = null;
   }
 
-  // Clean up all test databases for this worker
-  if (fs.existsSync(TEST_DB_PATH)) {
-    fs.unlinkSync(TEST_DB_PATH);
+  // Clean up all test databases for this worker (including WAL/SHM companion files)
+  for (const filePath of [TEST_DB_PATH, `${TEST_DB_PATH}-wal`, `${TEST_DB_PATH}-shm`]) {
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch { }
+    }
   }
 
   // Also clean up any other worker databases (in case of cleanup from main process)
@@ -255,10 +259,9 @@ export async function teardownTestDatabase(): Promise<void> {
     const files = fs.readdirSync(dataDir);
     for (const file of files) {
       if (file.startsWith('test-matchexec-') && file.endsWith('.db')) {
-        try {
-          fs.unlinkSync(path.join(dataDir, file));
-        } catch {
-          // Ignore errors during cleanup
+        const dbPath = path.join(dataDir, file);
+        for (const filePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+          try { fs.unlinkSync(filePath); } catch { }
         }
       }
     }
