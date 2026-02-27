@@ -199,26 +199,27 @@ export function ParticipantsList({
         </Grid>
       )}
 
-      {/* Special Case: All Unassigned - Split into 2 columns */}
+      {/* Special Case: All Unassigned - Split into 2 columns on desktop */}
       {allUnassigned && unassigned.length > 0 && (
-        <Grid gutter="md">
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-            <Stack gap="xs">
-              {unassigned.slice(0, Math.ceil(unassigned.length / 2)).map((p, i) =>
-                renderParticipantCard(p, i + 1, null)
-              )}
-            </Stack>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Text size="lg" fw={600} c="gray" mb="sm" style={{ opacity: 0 }}>&nbsp;</Text>
-            <Stack gap="xs">
-              {unassigned.slice(Math.ceil(unassigned.length / 2)).map((p, i) =>
-                renderParticipantCard(p, Math.ceil(unassigned.length / 2) + i + 1, null)
-              )}
-            </Stack>
-          </Grid.Col>
-        </Grid>
+        <>
+          <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+          <Grid gutter="md">
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Stack gap="xs">
+                {unassigned.slice(0, Math.ceil(unassigned.length / 2)).map((p, i) =>
+                  renderParticipantCard(p, i + 1, null)
+                )}
+              </Stack>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Stack gap="xs">
+                {unassigned.slice(Math.ceil(unassigned.length / 2)).map((p, i) =>
+                  renderParticipantCard(p, Math.ceil(unassigned.length / 2) + i + 1, null)
+                )}
+              </Stack>
+            </Grid.Col>
+          </Grid>
+        </>
       )}
 
       {/* Unassigned Players Section - When teams exist */}
