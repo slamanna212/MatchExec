@@ -37,7 +37,7 @@ Create a Match, and MatchExec handles the rest!
 
 ## 🛸 Get Started
 
-Checking out our dedicated [Wiki page](https://github.com/slamanna212/MatchExec/wiki/Setting-Up-MatchExec) is recommended, but TLDR:
+Documentation is available [here!](https://docs.matchexec.com/docs/getting-started/getting-started/) is recommended, but TLDR:
 
 ```
 docker run -d \
@@ -48,32 +48,6 @@ docker run -d \
   -v $(pwd)/uploads:/app/public/uploads \
   ghcr.io/slamanna212/matchexec:latest
 ```
-
----
-
-## 🧪 Contributing
-
-First, run the development server:
-
-```bash
-npm install
-```
-
-The, start the dev server
-
-```bash
-npm run dev:all
-```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-**All pull requests must target the dev branch, and pass Lint and Build checks.**
-
-### Resetting the App Database
-
-If you delete the database and restart the app to re-run the welcome setup wizard, you must also clear the `welcome_flow_completed` browser cookie. The proxy middleware trusts this cookie to skip the welcome flow, so an old cookie from a previous session will bypass the wizard even with a fresh database.
-
-To clear the cookie, open your browser's DevTools → Application → Cookies → `http://localhost:3000` and delete `welcome_flow_completed`, or use "Clear site data" for the origin.
-
 ---
 
 ## ✉️ Connect
