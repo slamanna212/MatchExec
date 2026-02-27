@@ -208,7 +208,7 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: 'linear-gradient(135deg, #1a0e3d 0%, #241459 60%, #2d1b69 100%)' }}>
+        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459' }}>
           <Group h="100%" px="md">
             <Image
               src="/logo.svg"
@@ -269,7 +269,7 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: 'linear-gradient(135deg, #1a0e3d 0%, #241459 60%, #2d1b69 100%)', zIndex: 301 }}>
+      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
         <Group h="100%" px="md">
           <Image
             src="/logo.svg"
@@ -297,10 +297,23 @@ export function Navigation({ children }: NavigationProps) {
         withCloseButton={false}
         hiddenFrom="md"
         styles={{
-          body: { backgroundColor: '#241459', height: 'calc(100% - 60px)', padding: 0, display: 'flex', flexDirection: 'column' },
-          content: { backgroundColor: '#241459', marginTop: 60, height: 'calc(100% - 60px)' },
+          body: {
+            background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)',
+            height: 'calc(100% - 60px - env(safe-area-inset-top))',
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column'
+          },
+          content: {
+            background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)',
+            marginTop: 'calc(60px + env(safe-area-inset-top))',
+            height: 'calc(100% - 60px - env(safe-area-inset-top))'
+          },
           inner: { top: 0 },
-          overlay: { backgroundColor: 'rgba(0, 0, 0, 0.6)', marginTop: 60 },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            marginTop: 'calc(60px + env(safe-area-inset-top))'
+          },
         }}
         transitionProps={{ transition: 'slide-right', duration: 250 }}
       >
