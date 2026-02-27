@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
+import { useHotkeys } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
 import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import { modals } from '@mantine/modals';
@@ -406,6 +407,21 @@ export default function MatchPage({
       },
     });
   }, [match, router]);
+
+  // Keyboard shortcut: mod+Enter triggers next state transition
+  const nextStatusMap: Record<string, string> = {
+    created: 'gather',
+    gather: 'assign',
+    assign: 'battle',
+    battle: 'complete',
+  };
+  useHotkeys([
+    ['mod+Enter', () => {
+      if (!match) return;
+      const next = nextStatusMap[match.status];
+      if (next) handleStatusTransition(next);
+    }],
+  ]);
 
   // Render loading state
   if (loading) {

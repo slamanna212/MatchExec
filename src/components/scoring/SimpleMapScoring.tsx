@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useHotkeys } from '@mantine/hooks';
 import { Text, Badge, Alert, Loader, Group, Stack } from '@mantine/core';
 import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
 import type { MatchResult } from '@/shared/types';
@@ -465,6 +466,31 @@ export function SimpleMapScoring({
     setSelectedGameId,
     onAllMapsCompleted
   });
+
+  const cycleMap = useCallback((direction: 'prev' | 'next') => {
+    if (matchGames.length === 0) return;
+    const currentIndex = matchGames.findIndex(g => g.id === selectedGameId);
+    const base = currentIndex === -1 ? 0 : currentIndex;
+    const next = direction === 'next'
+      ? (base + 1) % matchGames.length
+      : (base - 1 + matchGames.length) % matchGames.length;
+    setSelectedGameId(matchGames[next].id);
+  }, [matchGames, selectedGameId, setSelectedGameId]);
+
+  const submitTeamWin = useCallback((team: 'team1' | 'team2') => {
+    const game = matchGames.find(g => g.id === selectedGameId);
+    if (!game || game.status === 'completed' || submitting) return;
+    const mode = game.mode_scoring_type;
+    if (mode === 'Position' || mode === 'FFA') return;
+    handleWinnerSubmit(team);
+  }, [matchGames, selectedGameId, submitting, handleWinnerSubmit]);
+
+  useHotkeys([
+    ['ArrowUp', () => cycleMap('prev')],
+    ['ArrowDown', () => cycleMap('next')],
+    ['1', () => submitTeamWin('team1')],
+    ['2', () => submitTeamWin('team2')],
+  ]);
 
   if (loading) return <LoadingState />;
   if (fetchError || error) return <ErrorState error={fetchError || error || ''} />;

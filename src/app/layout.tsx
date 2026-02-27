@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { ColorSchemeScript } from '@mantine/core';
 import { ConditionalNavigation } from '@/components/ConditionalNavigation';
 import { DatabaseStatusWrapper } from '@/components/DatabaseStatusWrapper';
+import { KeyboardShortcutsProvider } from '@/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,9 +40,11 @@ export default function RootLayout({
       >
         <Providers>
           <DatabaseStatusWrapper>
-            <ConditionalNavigation>
-              {children}
-            </ConditionalNavigation>
+            <KeyboardShortcutsProvider>
+              <ConditionalNavigation>
+                {children}
+              </ConditionalNavigation>
+            </KeyboardShortcutsProvider>
           </DatabaseStatusWrapper>
         </Providers>
       </body>
