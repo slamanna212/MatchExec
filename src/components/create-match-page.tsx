@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, ActionIcon, Title, Breadcrumbs, Anchor, Progress, Box, Text } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { Container, Stack, Group, ActionIcon, Title, Breadcrumbs, Anchor, Stepper } from '@mantine/core';
+import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap } from '@tabler/icons-react';
 import { showError, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { MapNoteModal } from './map-note-modal';
@@ -323,8 +323,6 @@ export function CreateMatchPage() {
     }
   };
 
-  const progressValue = (currentStep / 4) * 100;
-
   return (
     <Container size="md" py={{ base: "md", sm: "xl" }} px={{ base: "md", sm: "xl" }}>
       <Stack gap="md">
@@ -352,14 +350,13 @@ export function CreateMatchPage() {
           ))}
         </Breadcrumbs>
 
-        {/* Progress Indicator */}
-        <Box>
-          <Group justify="space-between" mb="xs">
-            <Text size="sm" fw={500}>{getStepTitle()}</Text>
-            <Text size="xs" c="dimmed">Step {currentStep} of 4</Text>
-          </Group>
-          <Progress value={progressValue} size="xs" />
-        </Box>
+        {/* Step Indicator */}
+        <Stepper active={currentStep - 1} size="sm">
+          <Stepper.Step icon={<IconDeviceGamepad2 size={18} />} />
+          <Stepper.Step icon={<IconCalendar size={18} />} />
+          <Stepper.Step icon={<IconBell size={18} />} />
+          <Stepper.Step icon={<IconMap size={18} />} />
+        </Stepper>
 
         {/* Step Content */}
         {currentStep === 1 && (
