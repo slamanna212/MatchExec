@@ -1,7 +1,7 @@
 import { Database, getDatabase } from './connection';
 import { MigrationRunner } from './migrations';
 import { DatabaseSeeder } from './seeder';
-import { DatabaseReadinessChecker } from './ready-checker';
+import { readDbStatus } from './status';
 
 export async function initializeDatabase(): Promise<Database> {
   const db = getDatabase();
@@ -20,16 +20,29 @@ export async function initializeDatabase(): Promise<Database> {
   return db;
 }
 
-export async function waitForDatabaseReady(): Promise<Database> {
+export async function waitForDatabaseReady(maxWaitMs = 120000, intervalMs = 500): Promise<Database> {
+  const startTime = Date.now();
+  let ready = false;
+
+  // Poll the status file FIRST — do not connect until migrator says DB is ready.
+  // Connecting early would acquire a shared lock, preventing the migrator from
+  // getting the exclusive lock it needs during migrations.
+  while (Date.now() - startTime < maxWaitMs) {
+    const status = readDbStatus();
+    if (status.ready) {
+      ready = true;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  if (!ready) {
+    throw new Error(`Database not ready after ${maxWaitMs}ms timeout`);
+  }
+
+  // Now safe to connect — migrations and seeding are complete
   const db = getDatabase();
-  
-  // Connect to database
   await db.connect();
-  
-  // Wait for database to be ready (seeded and migrated)
-  const readinessChecker = new DatabaseReadinessChecker(db);
-  await readinessChecker.waitForReady();
-  
   return db;
 }
 

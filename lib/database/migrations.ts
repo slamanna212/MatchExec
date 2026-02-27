@@ -73,8 +73,13 @@ export class MigrationRunner {
     } catch (error) {
       try {
         await this.db.run('ROLLBACK');
-      } catch (rollbackError) {
-        console.error(`Failed to rollback migration ${filename}:`, rollbackError);
+      } catch (rollbackError: unknown) {
+        // Suppress "no transaction is active" — SQLite implicitly aborts on SQLITE_IOERR,
+        // so ROLLBACK will fail with this message. It's not a real error.
+        const msg = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        if (!msg.includes('no transaction is active')) {
+          console.error(`Failed to rollback migration ${filename}:`, rollbackError);
+        }
       }
       console.error(`Migration ${filename} failed:`, error);
       throw error;

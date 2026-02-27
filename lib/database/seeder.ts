@@ -153,6 +153,7 @@ export class DatabaseSeeder {
         }
       } catch (error) {
         console.error(`❌ Error seeding modes for ${gameData.name}:`, error);
+        throw error;
       }
     } else {
       console.log(`ℹ️ No modes.json found for ${gameData.name}`);
@@ -170,6 +171,7 @@ export class DatabaseSeeder {
         }
       } catch (error) {
         console.error(`❌ Error seeding maps for ${gameData.name}:`, error);
+        throw error;
       }
     } else {
       console.log(`ℹ️ No maps.json found for ${gameData.name}`);
@@ -248,18 +250,27 @@ export class DatabaseSeeder {
   }
 
   private async seedMaps(gameId: string, mapsData: MapData[], supportsAllModes?: boolean): Promise<void> {
-    // Clear existing maps for this game
-    await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
+    try {
+      await this.db.run('BEGIN TRANSACTION');
 
-    // Check if any map has supportedModes array
-    const hasSupportedModes = mapsData.some(map => Array.isArray((map as MapData & { supportedModes?: string[] }).supportedModes));
+      // Clear existing maps for this game
+      await this.db.run('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
 
-    if (hasSupportedModes) {
-      await this.seedMapsWithSupportedModesArray(gameId, mapsData);
-    } else if (supportsAllModes) {
-      await this.seedMapsForAllModes(gameId, mapsData);
-    } else {
-      await this.seedMapsTraditional(gameId, mapsData);
+      // Check if any map has supportedModes array
+      const hasSupportedModes = mapsData.some(map => Array.isArray((map as MapData & { supportedModes?: string[] }).supportedModes));
+
+      if (hasSupportedModes) {
+        await this.seedMapsWithSupportedModesArray(gameId, mapsData);
+      } else if (supportsAllModes) {
+        await this.seedMapsForAllModes(gameId, mapsData);
+      } else {
+        await this.seedMapsTraditional(gameId, mapsData);
+      }
+
+      await this.db.run('COMMIT');
+    } catch (error) {
+      await this.db.run('ROLLBACK');
+      throw error;
     }
   }
 
