@@ -8,6 +8,9 @@ on:
       - 'README.md'
       - 'docs/**'
 
+permissions:
+  contents: read
+
 jobs:
   check-version:
     runs-on: ubuntu-latest

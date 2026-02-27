@@ -3,6 +3,7 @@
 import { logger } from '@/lib/logger/client';
 import React, { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import {
   AppShell,
   NavLink,
@@ -208,7 +209,7 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
+        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459' }}>
           <Group h="100%" px="md">
             <Image
               src="/logo.svg"
@@ -220,7 +221,7 @@ export function Navigation({ children }: NavigationProps) {
             <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+        <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
           <AppShell.Section>
             <Group mb="md" justify="center" hiddenFrom="base" visibleFrom="md">
               <Image
@@ -269,15 +270,17 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459', zIndex: 301 }}>
+      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
         <Group h="100%" px="md">
-          <Image
-            src="/logo.svg"
-            alt="MatchExec Logo"
-            w={40}
-            h={40}
-            fit="contain"
-          />
+          <Link href="/" style={{ display: 'flex' }}>
+            <Image
+              src="/logo.svg"
+              alt="MatchExec Logo"
+              w={40}
+              h={40}
+              fit="contain"
+            />
+          </Link>
           <Burger
             opened={opened}
             onClick={toggle}
@@ -297,10 +300,23 @@ export function Navigation({ children }: NavigationProps) {
         withCloseButton={false}
         hiddenFrom="md"
         styles={{
-          body: { backgroundColor: '#241459', height: 'calc(100% - 60px)', padding: 0, display: 'flex', flexDirection: 'column' },
-          content: { backgroundColor: '#241459', marginTop: 60, height: 'calc(100% - 60px)' },
+          body: {
+            background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)',
+            height: 'calc(100% - 60px - env(safe-area-inset-top))',
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column'
+          },
+          content: {
+            background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)',
+            marginTop: 'calc(60px + env(safe-area-inset-top))',
+            height: 'calc(100% - 60px - env(safe-area-inset-top))'
+          },
           inner: { top: 0 },
-          overlay: { backgroundColor: 'rgba(0, 0, 0, 0.6)', marginTop: 60 },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            marginTop: 'calc(60px + env(safe-area-inset-top))'
+          },
         }}
         transitionProps={{ transition: 'slide-right', duration: 250 }}
       >
@@ -341,7 +357,7 @@ export function Navigation({ children }: NavigationProps) {
       </Drawer>
 
       {/* Desktop Sidebar */}
-      <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+      <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center">
             <Image

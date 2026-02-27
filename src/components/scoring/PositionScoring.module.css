@@ -72,6 +72,11 @@
   flex-shrink: 0;
   background: var(--mantine-color-dark-6);
   display: block;
+  transition: transform 0.2s ease;
+}
+
+.raceItem:hover .raceThumb {
+  transform: scale(1.06);
 }
 
 .raceInfo {
@@ -130,7 +135,7 @@
 .raceHeroOverlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
+  background: linear-gradient(to top, rgba(10, 5, 30, 0.95) 0%, rgba(10, 5, 30, 0.4) 45%, rgba(109, 40, 217, 0.12) 100%);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;

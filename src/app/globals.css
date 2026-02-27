@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+html, body {
+  min-height: 100dvh;
+}
+
 html {
   scrollbar-gutter: stable;
 }
@@ -9,19 +13,39 @@ html {
   --font-mono: var(--font-geist-mono);
 }
 
+/* Pulsing dot for live/in-progress badges */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.live-pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+  margin-right: 5px;
+  margin-left: 3px;
+  vertical-align: middle;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
 
 /* Force consistent NavLink hover colors - desktop sidebar only */
 @media (min-width: 62em) {
   [data-mantine-color-scheme="dark"] .m_f0824112:hover,
   [data-mantine-color-scheme="light"] .m_f0824112:hover,
   .m_f0824112:hover {
-    background-color: #3d2563 !important;
+    background-color: rgba(124, 58, 237, 0.25) !important;
+    border-radius: 8px !important;
   }
 
   [data-mantine-color-scheme="dark"] .m_f0824112[data-active="true"],
   [data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
   .m_f0824112[data-active="true"] {
-    background-color: #4c1d95 !important;
+    background: linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5)) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(109, 40, 217, 0.3) !important;
   }
 }
 
@@ -29,6 +53,7 @@ html {
 @media (max-width: 61.99em) {
   .m_f0824112:hover {
     background-color: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
   }
 
   .m_f0824112[data-active="true"] {
@@ -53,6 +78,26 @@ html {
   --mantine-color-dark-4: #3a3a44;
   --paper-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
   --column-bg: #1a1a24;
+  background-color: #241459; /* iOS reads this for notch/Dynamic Island color */
+}
+
+/* Dark mode: body is transparent; gradient lives on a fixed pseudo-element
+   so it always covers the full live visual viewport (fixes iOS Safari cutoff).
+   position: fixed on an element tracks the viewport during address bar transitions;
+   background-attachment: fixed does not work on iOS Safari. */
+[data-mantine-color-scheme='dark'] body {
+  background-color: #101019 !important;
+  position: relative;
+}
+
+[data-mantine-color-scheme='dark'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: #101019;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(76, 29, 149, 0.18) 0%, transparent 60%);
 }
 
 
