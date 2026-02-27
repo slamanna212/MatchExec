@@ -298,7 +298,7 @@ export function HomePage() {
         {/* Mission Control Card */}
         <Card
           shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-          padding="xl"
+          p={{ base: 'xs', md: 'xl' }}
           radius="md"
           withBorder
           bg={colorScheme === 'light' ? 'white' : undefined}
