@@ -3,6 +3,7 @@
 import { logger } from '@/lib/logger/client';
 import React, { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import {
   AppShell,
   NavLink,
@@ -271,13 +272,15 @@ export function Navigation({ children }: NavigationProps) {
     >
       <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
         <Group h="100%" px="md">
-          <Image
-            src="/logo.svg"
-            alt="MatchExec Logo"
-            w={40}
-            h={40}
-            fit="contain"
-          />
+          <Link href="/" style={{ display: 'flex' }}>
+            <Image
+              src="/logo.svg"
+              alt="MatchExec Logo"
+              w={40}
+              h={40}
+              fit="contain"
+            />
+          </Link>
           <Burger
             opened={opened}
             onClick={toggle}
