@@ -29,7 +29,7 @@ function prepareMapsJson(maps: unknown): string | null {
 async function queueDiscordMatchEdit(db: Database, matchId: string): Promise<void> {
   const announcementMsg = await db.get('SELECT id FROM discord_match_messages WHERE match_id = ? AND message_type = ?', [matchId, 'announcement']);
   if (!announcementMsg) return;
-  const editQueueId = `match_edit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const editQueueId = crypto.randomUUID();
   await db.run(`INSERT INTO discord_match_edit_queue (id, match_id, status) VALUES (?, ?, 'pending')`, [editQueueId, matchId]);
   logger.debug('📝 Discord edit queued for match:', matchId);
 }
@@ -121,7 +121,7 @@ export async function PUT(
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;
     const mapsJson = prepareMapsJson(maps);
 
-    await db.run(`
+    const updateResult = await db.run(`
       UPDATE matches
       SET name = ?, description = ?, start_date = ?, start_time = ?, rules = ?,
           rounds = ?, livestream_link = ?, maps = ?, updated_at = CURRENT_TIMESTAMP
@@ -137,6 +137,10 @@ export async function PUT(
       mapsJson,
       matchId
     ]);
+
+    if (updateResult.changes === 0) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+    }
 
     // Queue Discord embed update if announcement message exists
     try {
@@ -157,9 +161,13 @@ export async function PUT(
       WHERE m.id = ?
     `, [matchId]);
 
+    if (!updatedMatch) {
+      return NextResponse.json({ error: 'Failed to retrieve updated match' }, { status: 500 });
+    }
+
     return NextResponse.json({
       ...parseMatchResponse(updatedMatch),
-      map_codes_supported: Boolean(updatedMatch?.map_codes_supported)
+      map_codes_supported: Boolean(updatedMatch.map_codes_supported)
     });
   } catch (error) {
     logger.error('Error updating match:', error);
