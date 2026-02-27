@@ -72,7 +72,12 @@ function isInProgress(status: string) {
 function getStatusBadge(status: string) {
   switch (status) {
     case 'battle':
-      return <Badge color="orange" variant="filled" size="sm">In Progress</Badge>;
+      return (
+        <Badge color="orange" variant="filled" size="sm" style={{ overflow: 'visible' }}>
+          <span className="live-pulse-dot" style={{ color: 'white' }} />
+          Battle
+        </Badge>
+      );
     case 'gather':
       return <Badge color="green" variant="filled" size="sm">Signups Open</Badge>;
     case 'assign':
@@ -407,7 +412,16 @@ export function HomePage() {
                 withBorder
                 bg={colorScheme === 'light' ? 'white' : undefined}
                 style={{
-                  borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+                  borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : `${stat.color}22`,
+                  transition: 'all 0.25s ease',
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+                  e.currentTarget.style.boxShadow = `0 8px 24px ${stat.color}33`;
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '';
                 }}
               >
                 <Group justify="space-between">
@@ -415,11 +429,35 @@ export function HomePage() {
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
                       {stat.title}
                     </Text>
-                    <Text fw={700} size="xl" mt="xs">
+                    <Text
+                      fw={800}
+                      size="xl"
+                      mt="xs"
+                      style={{
+                        background: `linear-gradient(135deg, ${stat.color}, ${stat.color}99)`,
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                        fontFamily: 'var(--font-outfit, sans-serif)',
+                        fontSize: '1.75rem',
+                      }}
+                    >
                       {loading ? '...' : <AnimatedCounter value={stat.value} />}
                     </Text>
                   </div>
-                  <Icon size={32} stroke={1.5} style={{ color: stat.color.startsWith('#') ? stat.color : `var(--mantine-color-${stat.color}-6)` }} />
+                  <div
+                    style={{
+                      background: `linear-gradient(135deg, ${stat.color}33, ${stat.color}11)`,
+                      border: `1px solid ${stat.color}44`,
+                      borderRadius: '12px',
+                      padding: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={28} stroke={1.5} style={{ color: stat.color }} />
+                  </div>
                 </Group>
                   </Card>
                 </motion.div>

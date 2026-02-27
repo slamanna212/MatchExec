@@ -208,7 +208,7 @@ export function Navigation({ children }: NavigationProps) {
         }}
         padding="md"
       >
-        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459' }}>
+        <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: 'linear-gradient(135deg, #1a0e3d 0%, #241459 60%, #2d1b69 100%)' }}>
           <Group h="100%" px="md">
             <Image
               src="/logo.svg"
@@ -220,7 +220,7 @@ export function Navigation({ children }: NavigationProps) {
             <Burger opened={false} onClick={() => {}} size="sm" aria-label="Open navigation" color="#F5F5F5" />
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+        <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
           <AppShell.Section>
             <Group mb="md" justify="center" hiddenFrom="base" visibleFrom="md">
               <Image
@@ -269,7 +269,7 @@ export function Navigation({ children }: NavigationProps) {
       }}
       padding="md"
     >
-      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ backgroundColor: '#241459', zIndex: 301 }}>
+      <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: 'linear-gradient(135deg, #1a0e3d 0%, #241459 60%, #2d1b69 100%)', zIndex: 301 }}>
         <Group h="100%" px="md">
           <Image
             src="/logo.svg"
@@ -341,7 +341,7 @@ export function Navigation({ children }: NavigationProps) {
       </Drawer>
 
       {/* Desktop Sidebar */}
-      <AppShell.Navbar p="md" withBorder={false} style={{ backgroundColor: '#241459', color: '#F5F5F5' }}>
+      <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center">
             <Image

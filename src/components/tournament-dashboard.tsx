@@ -59,6 +59,8 @@ const TournamentCard = memo(({
 }: TournamentCardProps) => {
   const { colorScheme } = useMantineColorScheme();
   
+  const accentColor = tournament.game_color || '#7c3aed';
+
   return (
     <Card
       shadow={colorScheme === 'light' ? 'lg' : 'sm'}
@@ -68,15 +70,15 @@ const TournamentCard = memo(({
       bg={colorScheme === 'light' ? 'white' : undefined}
       style={{
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+        transition: 'all 0.25s ease',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : `${accentColor}33`,
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        e.currentTarget.style.transform = 'translateY(-4px) scale(1.01)';
+        e.currentTarget.style.boxShadow = `0 12px 32px ${accentColor}44`;
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
         e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(tournament)}
@@ -88,7 +90,9 @@ const TournamentCard = memo(({
           h={140}
           w="100%"
           fit="cover"
-          style={{ objectFit: 'cover' }}
+          style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
+          onMouseOver={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.04)'; }}
+          onMouseOut={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
         />
       </Card.Section>
 

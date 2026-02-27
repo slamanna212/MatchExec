@@ -80,6 +80,11 @@
   flex-shrink: 0;
   background: var(--mantine-color-dark-6);
   display: block;
+  transition: transform 0.2s ease;
+}
+
+.mapItem:hover .mapThumb {
+  transform: scale(1.06);
 }
 
 .mapInfo {
@@ -142,7 +147,7 @@
 .mapHeroOverlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
+  background: linear-gradient(to top, rgba(10, 5, 30, 0.95) 0%, rgba(10, 5, 30, 0.4) 45%, rgba(109, 40, 217, 0.12) 100%);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -203,10 +208,10 @@
 }
 
 .teamCardBlue:hover:not(:disabled) {
-  background: rgba(34, 139, 230, 0.18);
-  border-color: rgba(34, 139, 230, 0.6);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(34, 139, 230, 0.18);
+  background: rgba(34, 139, 230, 0.22);
+  border-color: rgba(34, 139, 230, 0.75);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 28px rgba(34, 139, 230, 0.35);
 }
 
 .teamCardRed {
@@ -215,10 +220,10 @@
 }
 
 .teamCardRed:hover:not(:disabled) {
-  background: rgba(250, 82, 82, 0.18);
-  border-color: rgba(250, 82, 82, 0.6);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(250, 82, 82, 0.18);
+  background: rgba(250, 82, 82, 0.22);
+  border-color: rgba(250, 82, 82, 0.75);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 28px rgba(250, 82, 82, 0.35);
 }
 
 .teamCardIcon {
