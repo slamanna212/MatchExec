@@ -20,6 +20,6 @@ export async function getDiscordAvatarUrl(
     return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${format}?size=128`;
   } catch (error) {
     logger.error('Failed to fetch avatar for user:', discordUserId, error);
-    throw error;
+    return null;
   }
 }
