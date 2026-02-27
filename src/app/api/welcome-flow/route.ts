@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getDbInstance } from '@/lib/database-init';
 import { readDbStatus } from '@/lib/database/status';
+import { safeJSONParse } from '@/lib/utils/validation';
 
 export async function GET(): Promise<NextResponse> {
   const dbStatus = readDbStatus();
@@ -23,9 +24,7 @@ export async function GET(): Promise<NextResponse> {
     );
 
     const completed = row?.setting_value === 'true';
-    const metadata = row?.metadata
-      ? JSON.parse(row.metadata)
-      : { screens_completed: [], completion_date: null, setup_type: null };
+    const metadata = safeJSONParse(row?.metadata, { screens_completed: [], completion_date: null, setup_type: null });
 
     return NextResponse.json({
       isFirstRun: !completed,
