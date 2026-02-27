@@ -37,7 +37,7 @@ Create a Match, and MatchExec handles the rest!
 
 ## 🛸 Get Started
 
-Documentation is available [here!](https://docs.matchexec.com/docs/getting-started/getting-started/) is recommended, but TLDR:
+Documentation is available [here!](https://docs.matchexec.com/docs/getting-started/getting-started/) Reading it is recommended, but TLDR:
 
 ```
 docker run -d \
