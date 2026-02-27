@@ -1,6 +1,6 @@
 'use client'
 
-import { Grid } from '@mantine/core';
+import { Stack } from '@mantine/core';
 import { cleanMapId, getMapWinner } from './helpers';
 import { MapCard } from './MapCard';
 
@@ -42,7 +42,7 @@ export function MapResultsSection({
   children
 }: MapResultsSectionProps) {
   return (
-    <Grid>
+    <Stack gap="md">
       {maps.map((mapId, index) => {
         const cleanId = cleanMapId(mapId);
         const mapDetail = mapDetails[cleanId] || mapDetails[mapId];
@@ -50,19 +50,18 @@ export function MapResultsSection({
         const winner = showWinner ? getMapWinner(mapId, matchGames) : null;
 
         return (
-          <Grid.Col key={`${mapId}-${index}`} span={12}>
-            <MapCard
-              mapId={cleanId}
-              mapDetail={mapDetail}
-              mapNote={mapNote}
-              formatMapName={formatMapName}
-              winner={winner}
-            >
-              {children && children(mapId, mapDetail, mapNote)}
-            </MapCard>
-          </Grid.Col>
+          <MapCard
+            key={`${mapId}-${index}`}
+            mapId={cleanId}
+            mapDetail={mapDetail}
+            mapNote={mapNote}
+            formatMapName={formatMapName}
+            winner={winner}
+          >
+            {children && children(mapId, mapDetail, mapNote)}
+          </MapCard>
         );
       })}
-    </Grid>
+    </Stack>
   );
 }

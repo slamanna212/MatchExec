@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { logger } from '@/lib/logger/client';
 
 interface MatchGameResult {
@@ -20,27 +20,27 @@ export function useMatchGames(match: Match | null, opened: boolean) {
   const [matchGames, setMatchGames] = useState<MatchGameResult[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
 
-  useEffect(() => {
+  const fetchMatchGames = useCallback(async () => {
     if (!match || !opened) return;
     if (match.status !== 'battle' && match.status !== 'complete') return;
 
-    const fetchMatchGames = async () => {
-      try {
-        setGamesLoading(true);
-        const response = await fetch(`/api/matches/${match.id}/games`);
-        if (response.ok) {
-          const data = await response.json();
-          setMatchGames(data.games || []);
-        }
-      } catch (error) {
-        logger.error('Failed to fetch match games:', error);
-      } finally {
-        setGamesLoading(false);
+    try {
+      setGamesLoading(true);
+      const response = await fetch(`/api/matches/${match.id}/games`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatchGames(data.games || []);
       }
-    };
-
-    fetchMatchGames();
+    } catch (error) {
+      logger.error('Failed to fetch match games:', error);
+    } finally {
+      setGamesLoading(false);
+    }
   }, [match, opened]);
 
-  return { matchGames, gamesLoading };
+  useEffect(() => {
+    fetchMatchGames();
+  }, [fetchMatchGames]);
+
+  return { matchGames, gamesLoading, refetch: fetchMatchGames };
 }

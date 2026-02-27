@@ -211,7 +211,7 @@ export async function getMatchLink(
 /**
  * Attach event image to embed
  */
-export function attachEventImage(imageUrl: string): AttachmentBuilder | undefined {
+export async function attachEventImage(imageUrl: string): Promise<AttachmentBuilder | undefined> {
   if (!imageUrl || !imageUrl.trim()) {
     return undefined;
   }
@@ -220,7 +220,14 @@ export function attachEventImage(imageUrl: string): AttachmentBuilder | undefine
     const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
 
     if (fs.existsSync(imagePath)) {
-      return new AttachmentBuilder(imagePath, {
+      const imageBuffer = await fs.promises.readFile(imagePath);
+
+      if (!imageBuffer || imageBuffer.length === 0) {
+        logger.error(`❌ Match start image buffer is empty`);
+        return undefined;
+      }
+
+      return new AttachmentBuilder(imageBuffer, {
         name: `match_start_image.${path.extname(imagePath).slice(1)}`
       });
     }

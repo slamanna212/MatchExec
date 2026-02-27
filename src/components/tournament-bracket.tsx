@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Stack,
   Group,
@@ -55,14 +56,15 @@ interface BracketAssignment {
   teamId: string;
 }
 
-export function TournamentBracket({ 
-  format, 
-  teams, 
-  matches, 
+export function TournamentBracket({
+  format,
+  teams,
+  matches,
   onGenerateMatches,
   isAssignMode = false,
   onBracketAssignment
 }: TournamentBracketProps) {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('list');
   const [bracketAssignments, setBracketAssignments] = useState<BracketAssignment[]>([]);
   const [draggedTeam, setDraggedTeam] = useState<string | null>(null);
@@ -170,11 +172,13 @@ export function TournamentBracket({
       key={match.id}
       withBorder
       p="md"
+      onClick={() => router.push(`/matches/${  match.id}`)}
       style={{
         height: '100%',
         minHeight: '120px',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        cursor: 'pointer'
       }}
     >
       <Stack gap="sm" style={{ flex: 1 }}>
@@ -566,32 +570,16 @@ export function TournamentBracket({
             ))}
           </Grid>
         </div>
-        
-        <Divider />
-        
-        {/* Generate matches section */}
-        <Group justify="center">
+
+        <Group justify="flex-end">
           <Button
-            size="lg"
             onClick={handleGenerateMatches}
-            disabled={!isAllSlotsAssigned() || teams.length < 2}
-            color="green"
+            disabled={!isAllSlotsAssigned()}
           >
-            Generate First Round Matches
+            Generate Matches
           </Button>
         </Group>
-        
-        {!isAllSlotsAssigned() && teams.length >= 2 && (
-          <Text size="sm" c="orange" ta="center">
-            Please assign all teams to bracket positions before generating matches
-          </Text>
-        )}
-        
-        {teams.length < 2 && (
-          <Text size="sm" c="red" ta="center">
-            At least 2 teams are required to generate matches
-          </Text>
-        )}
+
       </Stack>
     );
   };
@@ -607,15 +595,6 @@ export function TournamentBracket({
         </Group>
 
         <Group>
-          {matches.length === 0 && onGenerateMatches && isAssignMode && (
-            <Button
-              onClick={onGenerateMatches}
-              disabled={teams.length < 2}
-            >
-              Generate First Matches
-            </Button>
-          )}
-
           {isAssignMode && (
             <SegmentedControl
               value={viewMode}

@@ -335,6 +335,88 @@ The logger automatically reloads the level from the database every 5 seconds (ca
 - **Database Init**: `lib/database-init.ts` uses `console.error` for initialization failures since the logger depends on the database being initialized first
 - **All Application Code**: The entire running application (web app, Discord bot, scheduler) uses the centralized logger
 
+## Testing
+
+### IMPORTANT: When modifying source code, always update the corresponding tests. If a function's behavior changes, its test expectations must be updated too.
+
+### Test Framework
+- **Vitest** with `pool: 'forks'` and `fileParallelism: true`
+- Config: `vitest.config.ts`
+- Setup files: `tests/vitest-mocks.ts`, `tests/setup.ts`
+
+### Running Tests
+```bash
+npm run test              # Run all tests
+npm run test:unit         # Unit tests only
+npm run test:integration  # Integration tests only
+npm run test:coverage     # With coverage report
+```
+
+### Test Structure
+```
+tests/
+├── setup.ts                          # Global beforeAll/afterEach/afterAll hooks
+├── vitest-mocks.ts                   # Empty (mocks must be in each test file)
+├── utils/
+│   ├── test-db.ts                    # TestDatabase wrapper with promise+callback API
+│   ├── fixtures.ts                   # seedBasicTestData(), createMatch(), createTournament()
+│   └── api-helpers.ts                # createMockRequest(), parseResponse(), createRouteParams()
+├── mocks/
+│   ├── database.ts                   # getMockDbInstance() / resetMockDbInstance()
+│   └── discord.ts                    # mockDiscordClient, createMockChannel()
+├── unit/
+│   ├── validation.test.ts            # validateRequiredFields, safeJSONParse/Stringify
+│   ├── scoring-functions.test.ts     # Scoring calculations
+│   ├── tournament-bracket.test.ts    # Bracket generation and progression
+│   ├── transition-handlers.test.ts   # Match state transition side effects
+│   └── discord-bot/
+│       ├── announcement-handler.test.ts
+│       ├── queue-processor.test.ts
+│       └── voice-handler.test.ts
+└── integration/
+    ├── api/                          # API route handler tests
+    │   ├── matches.test.ts
+    │   ├── match-participants.test.ts
+    │   ├── match-results.test.ts
+    │   ├── match-transitions.test.ts
+    │   ├── tournaments.test.ts
+    │   ├── games.test.ts
+    │   └── settings.test.ts
+    ├── database/
+    │   ├── migrations.test.ts
+    │   ├── schema.test.ts
+    │   └── seeder.test.ts
+    └── queues/
+        └── queue-contracts.test.ts
+
+```
+
+### Key Source-to-Test Mappings
+| Source File | Test File |
+|-------------|-----------|
+| `src/lib/utils/validation.ts` | `tests/unit/validation.test.ts` |
+| `src/lib/scoring-functions.ts` | `tests/unit/scoring-functions.test.ts` |
+| `src/lib/tournament-bracket.ts` | `tests/unit/tournament-bracket.test.ts` |
+| `src/lib/transition-handlers.ts` | `tests/unit/transition-handlers.test.ts` |
+| `processes/discord-bot/modules/announcement-handler.ts` | `tests/unit/discord-bot/announcement-handler.test.ts` |
+| `processes/discord-bot/modules/voice-handler.ts` | `tests/unit/discord-bot/voice-handler.test.ts` |
+| `src/app/api/matches/*/route.ts` | `tests/integration/api/matches*.test.ts` |
+| `src/app/api/tournaments/*/route.ts` | `tests/integration/api/tournaments.test.ts` |
+| `src/app/api/settings/*/route.ts` | `tests/integration/api/settings.test.ts` |
+| `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |
+
+### Known Issues
+- **DB isolation**: ~48 integration API tests fail because `getTestDb()` and `getDbInstance()` use separate database connections. Tests that insert data directly via `getTestDb()` and then query via API route handlers (which use `getDbInstance()`) will get 404s. Unit tests and queue/schema tests are unaffected.
+- **FK schema mismatch**: Enabling `PRAGMA foreign_keys=ON` in tests reveals that the `matches` table has a malformed FK reference to `game_maps`. This must be fixed in migrations before FK constraints can be enabled in tests.
+
+### Writing Tests
+- Use `getTestDb()` for direct DB operations in tests
+- Use `createMockRequest()` / `parseResponse()` / `createRouteParams()` for API tests
+- Use `seedBasicTestData()` to get a game + mode for test setup
+- Use `createMatch()` / `createTournament()` from fixtures for quick entity creation
+- Discord bot tests require `vi.mock()` at the top of each file (mocks don't work in setup files)
+- `handleStatusTransition()` does NOT validate transitions - it only routes to handlers. Transition validation is in the API route layer.
+
 ## Technology Stack
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 8

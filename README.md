@@ -68,6 +68,12 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 **All pull requests must target the dev branch, and pass Lint and Build checks.**
 
+### Resetting the App Database
+
+If you delete the database and restart the app to re-run the welcome setup wizard, you must also clear the `welcome_flow_completed` browser cookie. The proxy middleware trusts this cookie to skip the welcome flow, so an old cookie from a previous session will bypass the wizard even with a fresh database.
+
+To clear the cookie, open your browser's DevTools → Application → Cookies → `http://localhost:3000` and delete `welcome_flow_completed`, or use "Clear site data" for the origin.
+
 ---
 
 ## ✉️ Connect

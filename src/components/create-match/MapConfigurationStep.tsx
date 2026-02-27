@@ -63,6 +63,7 @@ export function MapConfigurationStep({
       <SelectedMapsList
         selectedMaps={selectedMaps}
         showMapSelector={showMapSelector}
+        supportsAllModes={currentGameSupportsAllModes}
         onRemoveMap={onRemoveMap}
         onOpenNoteModal={onOpenNoteModal}
         onAddMapClick={onAddMapClick}

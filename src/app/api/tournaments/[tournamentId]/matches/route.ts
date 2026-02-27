@@ -35,6 +35,7 @@ interface BracketMatch {
   };
   winner?: string;
   status: 'pending' | 'ongoing' | 'complete';
+  rawStatus: string;
   match_order: number;
 }
 
@@ -116,6 +117,7 @@ export async function GET(
       } : undefined,
       winner: match.winner_team || undefined,
       status: getMatchStatus(match.status),
+      rawStatus: match.status,
       match_order: match.match_order
     }));
 

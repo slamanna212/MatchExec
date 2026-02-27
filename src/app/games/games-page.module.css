@@ -1,0 +1,366 @@
+/* Two-panel master-detail layout */
+.container {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebarWrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebarWrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(to top, var(--column-bg) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sidebar {
+  background: var(--column-bg);
+  overflow-y: auto;
+  height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+
+/* Game list item */
+.gameItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.gameItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gameItemSelected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.gameItemCover {
+  width: 64px;
+  height: 85px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--mantine-color-dark-6);
+}
+
+.gameItemInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.gameItemName {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--mantine-color-text);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* Right panel / detail area */
+.detailPanel {
+  overflow-y: auto;
+  padding: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.detailPanel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.detailPanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.detailPanel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+/* Detail header */
+.detailHeader {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid transparent;
+}
+
+.detailHeaderTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detailHeaderIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.detailHeaderTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--mantine-color-text);
+}
+
+.detailHeaderCount {
+  font-size: 14px;
+  color: var(--mantine-color-dimmed);
+  margin-left: auto;
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+.modeBadges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--mantine-color-dimmed);
+  gap: 12px;
+}
+
+.emptyStateIcon {
+  opacity: 0.3;
+}
+
+/* Map card grid */
+.mapGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* Individual map card */
+.mapCard {
+  position: relative;
+  height: 190px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: default;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background-color: var(--mantine-color-dark-6);
+  background-size: cover;
+  background-position: center;
+}
+
+.mapCard:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.mapCardOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.1) 65%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px;
+}
+
+.mapCardName {
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 1), 0 0 8px rgba(0, 0, 0, 0.9), 0 0 16px rgba(0, 0, 0, 0.5);
+  line-height: 1.2;
+}
+
+.mapCardLocation {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 1), 0 0 8px rgba(0, 0, 0, 0.9);
+  margin-top: 2px;
+}
+
+.mapCardBottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.mapCardModes {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+
+.mapCardModeBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+/* Skeleton loading grid */
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* Mobile horizontal game list */
+.mobileGameList {
+  display: none;
+}
+
+.mobileGameCard {
+  flex-shrink: 0;
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.mobileGameCardSelected {
+  flex-shrink: 0;
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.mobileGameCardImage {
+  width: 68px;
+  height: 90px;
+  border-radius: 8px;
+  object-fit: cover;
+  background-color: var(--mantine-color-dark-6);
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.mobileGameCardName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mantine-color-text);
+  line-height: 1.2;
+  text-align: center;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 60px);
+    overflow: visible;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .mobileGameList {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 12px 16px;
+    background: var(--column-bg);
+    border-bottom: 1px solid var(--mantine-color-dark-4);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    scrollbar-width: none;
+    cursor: grab;
+  }
+
+  .mobileGameList::-webkit-scrollbar {
+    display: none;
+  }
+
+  .detailPanel {
+    flex: 1;
+    padding: 16px;
+  }
+
+  .mapGrid,
+  .skeletonGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .emptyState {
+    min-height: 300px;
+  }
+}
+
+.mobileGameListDragging {
+  cursor: grabbing !important;
+  user-select: none;
+}

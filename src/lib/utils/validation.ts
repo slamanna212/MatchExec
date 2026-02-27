@@ -21,7 +21,7 @@ export function validateRequiredFields(
   obj: Record<string, unknown>,
   requiredFields: string[]
 ): ValidationResult {
-  const missing = requiredFields.filter(field => !obj[field]);
+  const missing = requiredFields.filter(field => obj[field] === undefined || obj[field] === null || obj[field] === '');
 
   if (missing.length > 0) {
     return {

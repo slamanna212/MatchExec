@@ -137,6 +137,13 @@ export function TournamentReviewStep({
               </Group>
             </div>
           )}
+
+          <Group>
+            <Text fw={500}>Match Editing:</Text>
+            <Badge variant="light" color={formData.allowMatchEditing !== false ? 'green' : 'red'}>
+              {formData.allowMatchEditing !== false ? 'Allowed' : 'Disabled'}
+            </Badge>
+          </Group>
         </Stack>
       </Card>
 

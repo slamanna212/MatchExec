@@ -50,7 +50,7 @@ export function RemindersList({
   }
 
   return (
-    <Stack gap="xs">
+    <Stack gap="md" align="center" py="md">
       {reminders.map((reminder) => (
         <ReminderCard
           key={reminder.id}

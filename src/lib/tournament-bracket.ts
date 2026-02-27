@@ -25,6 +25,7 @@ interface TournamentRecord {
   game_mode_id: string;
   rounds_per_match: number;
   ruleset: string;
+  event_image_url?: string | null;
 }
 
 interface MatchResult {
@@ -91,6 +92,7 @@ export interface GeneratedMatch {
   team2_name?: string;
   team1_id?: string; // Tournament team ID for red team
   team2_id?: string; // Tournament team ID for blue team
+  event_image_url?: string | null;
 }
 
 /**
@@ -150,7 +152,7 @@ export async function generateSingleEliminationMatches(
     throw new Error('Tournament not found');
   }
 
-  const { tournamentRuleset, tournamentDescription } = await fetchTournamentInfo(db, tournamentId);
+  const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl } = await fetchTournamentInfo(db, tournamentId);
   const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
 
   const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
@@ -164,6 +166,7 @@ export async function generateSingleEliminationMatches(
     roundsPerMatch,
     tournamentRuleset,
     tournamentDescription,
+    tournamentEventImageUrl,
     gameModes,
     tournamentMaps,
     startTime
@@ -171,10 +174,11 @@ export async function generateSingleEliminationMatches(
 }
 
 async function fetchTournamentInfo(db: Database, tournamentId: string) {
-  const tournament = await db.get('SELECT ruleset, description FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null } | undefined;
+  const tournament = await db.get('SELECT ruleset, description, event_image_url FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null; event_image_url: string | null } | undefined;
   return {
     tournamentRuleset: tournament?.ruleset || 'casual',
-    tournamentDescription: tournament?.description || null
+    tournamentDescription: tournament?.description || null,
+    tournamentEventImageUrl: tournament?.event_image_url || null,
   };
 }
 
@@ -265,6 +269,7 @@ async function generateMatchesFromPairings(
   roundsPerMatch: number,
   tournamentRuleset: string,
   tournamentDescription: string | null,
+  tournamentEventImageUrl: string | null,
   gameModes: GameMode[],
   tournamentMaps: GameMap[],
   startTime?: Date
@@ -296,6 +301,7 @@ async function generateMatchesFromPairings(
       roundsPerMatch,
       tournamentRuleset,
       tournamentDescription,
+      tournamentEventImageUrl,
       selectedMaps,
       primaryMode!,
       team1Assignment,
@@ -374,6 +380,7 @@ function createMatchRecord(
   roundsPerMatch: number,
   tournamentRuleset: string,
   tournamentDescription: string | null,
+  tournamentEventImageUrl: string | null,
   selectedMaps: string[],
   primaryMode: GameMode,
   team1Assignment: BracketAssignment,
@@ -400,7 +407,8 @@ function createMatchRecord(
     team1_name: team1?.team_name,
     team2_name: team2?.team_name,
     team1_id: team1Assignment.teamId,
-    team2_id: team2Assignment.teamId
+    team2_id: team2Assignment.teamId,
+    event_image_url: tournamentEventImageUrl || undefined,
   };
 }
 
@@ -418,8 +426,12 @@ export async function generateNextRoundMatches(
   const tournament = await fetchTournamentForNextRound(db, tournamentId);
   const previousRoundMatches = await fetchPreviousRoundMatches(db, tournamentId, currentRound, bracketType);
 
-  if (shouldEndTournament(previousRoundMatches, bracketType)) {
-    return [];
+  // Fetch any bye teams carried over into the current round
+  const byeTeamIds = await fetchByeTeamsForRound(db, tournamentId, currentRound, bracketType);
+  const totalAdvancing = previousRoundMatches.length + byeTeamIds.length;
+
+  if (totalAdvancing === 1 && bracketType === 'winners') {
+    return []; // Only 1 team left — tournament should end
   }
 
   const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
@@ -428,6 +440,7 @@ export async function generateNextRoundMatches(
   return await generateNextRoundMatchesFromWinners(
     db,
     previousRoundMatches,
+    byeTeamIds,
     tournament,
     tournamentId,
     currentRound,
@@ -477,13 +490,37 @@ async function fetchPreviousRoundMatches(
   return matches;
 }
 
-function shouldEndTournament(previousRoundMatches: MatchResult[], bracketType: string): boolean {
-  return previousRoundMatches.length === 1 && bracketType === 'winners';
+async function fetchByeTeamsForRound(
+  db: Database,
+  tournamentId: string,
+  round: number,
+  bracketType: string
+): Promise<string[]> {
+  const rows = await db.all(
+    'SELECT team_id FROM tournament_round_byes WHERE tournament_id = ? AND round = ? AND bracket_type = ?',
+    [tournamentId, round, bracketType]
+  ) as { team_id: string }[];
+  return rows.map(r => r.team_id);
+}
+
+async function saveByeTeam(
+  db: Database,
+  tournamentId: string,
+  round: number,
+  bracketType: string,
+  teamId: string
+): Promise<void> {
+  const id = uuidv4();
+  await db.run(
+    'INSERT OR IGNORE INTO tournament_round_byes (id, tournament_id, round, bracket_type, team_id) VALUES (?, ?, ?, ?, ?)',
+    [id, tournamentId, round, bracketType, teamId]
+  );
 }
 
 async function generateNextRoundMatchesFromWinners(
   db: Database,
   previousRoundMatches: MatchResult[],
+  byeTeamIds: string[],
   tournament: TournamentRecord & { description?: string | null },
   tournamentId: string,
   currentRound: number,
@@ -494,18 +531,23 @@ async function generateNextRoundMatchesFromWinners(
   const matches: GeneratedMatch[] = [];
   const nextRound = currentRound + 1;
 
-  for (let i = 0; i < previousRoundMatches.length; i += 2) {
-    const match1 = previousRoundMatches[i];
-    const match2 = previousRoundMatches[i + 1];
+  // Combine bye teams from the current round with winners from completed matches
+  const allTeamIds: string[] = [
+    ...byeTeamIds,
+    ...previousRoundMatches.map(m => m.winner_team).filter(Boolean) as string[]
+  ];
 
-    if (!match2) {
-      continue; // Odd number - bye
+  for (let i = 0; i < allTeamIds.length; i += 2) {
+    const winner1TeamId = allTeamIds[i];
+    const winner2TeamId = allTeamIds[i + 1];
+
+    if (!winner2TeamId) {
+      // Odd team out — record as a bye for the next round
+      await saveByeTeam(db, tournamentId, nextRound, bracketType, winner1TeamId);
+      continue;
     }
 
     const matchId = uuidv4();
-
-    const winner1TeamId = match1.winner_team;
-    const winner2TeamId = match2.winner_team;
 
     const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner1TeamId]) as TeamRecord | undefined;
     const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winner2TeamId]) as TeamRecord | undefined;
@@ -532,7 +574,8 @@ async function generateNextRoundMatchesFromWinners(
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
       team1_id: winner1TeamId,
-      team2_id: winner2TeamId
+      team2_id: winner2TeamId,
+      event_image_url: tournament.event_image_url || undefined,
     };
 
     matches.push(generatedMatch);
@@ -672,7 +715,8 @@ async function generateLosersBracketMatchesFromTeams(
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
       team1_id: team1Id,
-      team2_id: team2Id
+      team2_id: team2Id,
+      event_image_url: tournament.event_image_url || undefined,
     };
 
     matches.push(generatedMatch);
@@ -746,7 +790,8 @@ export async function generateGrandFinalsMatch(
     team1_name: wbTeam?.team_name,
     team2_name: lbTeam?.team_name,
     team1_id: winnersBracketWinnerId,
-    team2_id: losersBracketWinnerId
+    team2_id: losersBracketWinnerId,
+    event_image_url: tournament.event_image_url || undefined,
   };
 
   return [grandFinalsMatch];
@@ -768,15 +813,18 @@ async function insertMatch(
       id, name, description, game_id, mode_id, map_id, maps, rounds,
       max_participants, status, tournament_id,
       tournament_round, tournament_bracket_type, start_date, start_time,
-      team1_name, team2_name, red_team_id, blue_team_id, announcements, rules, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      team1_name, team2_name, red_team_id, blue_team_id, announcements, rules,
+      event_image_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     match.id, match.name, match.description || null, match.game_id, match.game_mode_id, match.map_id,
     match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
     match.max_participants, match.status, match.tournament_id,
     match.tournament_round, match.tournament_bracket_type, scheduledDate,
     scheduledDateTime, match.team1_name, match.team2_name,
-    match.team2_id, match.team1_id, 1, match.rules || 'casual'
+    match.team2_id, match.team1_id, 1, match.rules || 'casual',
+    match.event_image_url || null
   ]);
 }
 

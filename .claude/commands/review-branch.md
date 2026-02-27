@@ -28,10 +28,12 @@ Perform a comprehensive bug and logic error review before merging the current br
 - Race conditions in async code
 - Missing null/undefined checks
 - Type safety issues (TypeScript any types, missing validations)
+- Missing/Wrong/useless tests
 - API endpoint validation (missing input validation, error responses)
 - Discord bot error handling (queue operations, voice channel management)
 - Off-by-one errors, boundary conditions
 - Timezone handling issues
+- Our dockerfile imported only whats needed into the final image, do we need to add anything else?
 
 **Review Critical Areas**
 - Database queries and migrations (SQLite callback patterns)

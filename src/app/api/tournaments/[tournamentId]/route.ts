@@ -40,18 +40,25 @@ export async function GET(
     }
     
     // Fetch teams and their members
-    const teams = await db.all<TournamentTeam & { 
+    const teams = await db.all<TournamentTeam & {
       member_id?: string;
       member_user_id?: string;
+      member_discord_user_id?: string;
       member_username?: string;
       member_joined_at?: string;
+      member_avatar_url?: string;
     }>(`
-      SELECT 
+      SELECT
         tt.*,
         ttm.id as member_id,
         ttm.user_id as member_user_id,
+        ttm.discord_user_id as member_discord_user_id,
         ttm.username as member_username,
-        ttm.joined_at as member_joined_at
+        ttm.joined_at as member_joined_at,
+        (SELECT mp.avatar_url FROM match_participants mp
+         WHERE mp.discord_user_id = ttm.discord_user_id
+           AND mp.avatar_url IS NOT NULL
+         LIMIT 1) as member_avatar_url
       FROM tournament_teams tt
       LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
       WHERE tt.tournament_id = ?
@@ -78,16 +85,31 @@ export async function GET(
           id: row.member_id,
           team_id: row.id,
           user_id: row.member_user_id!,
+          discord_user_id: row.member_discord_user_id ?? undefined,
           username: row.member_username!,
+          avatar_url: row.member_avatar_url ?? undefined,
           joined_at: new Date(row.member_joined_at!)
         });
       }
     }
     
+    const participantCountRow = await db.get<{ count: number }>(`
+      SELECT
+        CASE
+          WHEN t.status IN ('created', 'gather') THEN COUNT(DISTINCT tp.user_id)
+          ELSE COUNT(DISTINCT ttm.user_id)
+        END as count
+      FROM tournaments t
+      LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
+      LEFT JOIN tournament_teams tt ON t.id = tt.tournament_id
+      LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
+      WHERE t.id = ?
+    `, [tournamentId]);
+
     const tournamentWithDetails: TournamentWithDetails = {
       ...tournament,
       teams: Array.from(teamsMap.values()),
-      participant_count: Array.from(teamsMap.values()).reduce((total, team) => total + team.members.length, 0)
+      participant_count: participantCountRow?.count ?? 0
     };
     
     return NextResponse.json(tournamentWithDetails);

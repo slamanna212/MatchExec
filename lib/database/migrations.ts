@@ -66,9 +66,16 @@ export class MigrationRunner {
     const sql = fs.readFileSync(migrationPath, 'utf8');
 
     try {
+      await this.db.run('BEGIN');
       await this.db.exec(sql);
       await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
+      await this.db.run('COMMIT');
     } catch (error) {
+      try {
+        await this.db.run('ROLLBACK');
+      } catch (rollbackError) {
+        console.error(`Failed to rollback migration ${filename}:`, rollbackError);
+      }
       console.error(`Migration ${filename} failed:`, error);
       throw error;
     }
