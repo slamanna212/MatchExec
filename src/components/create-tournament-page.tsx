@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, Title, Breadcrumbs, Anchor, Progress, Button } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { Container, Stack, Group, Title, Breadcrumbs, Anchor, Button, Stepper } from '@mantine/core';
+import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconTrophy, IconUsers, IconListCheck } from '@tabler/icons-react';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 
@@ -194,10 +194,6 @@ export function CreateTournamentPage() {
     }
   };
 
-  const getProgressValue = () => {
-    return (currentStep / 5) * 100;
-  };
-
   return (
     <Container size="lg" py="md">
       <Stack gap="md">
@@ -215,8 +211,14 @@ export function CreateTournamentPage() {
           </Button>
         </Group>
 
-        {/* Progress */}
-        <Progress value={getProgressValue()} size="sm" />
+        {/* Step Indicator */}
+        <Stepper active={currentStep - 1} size="sm">
+          <Stepper.Step icon={<IconDeviceGamepad2 size={18} />} />
+          <Stepper.Step icon={<IconCalendar size={18} />} />
+          <Stepper.Step icon={<IconTrophy size={18} />} />
+          <Stepper.Step icon={<IconUsers size={18} />} />
+          <Stepper.Step icon={<IconListCheck size={18} />} />
+        </Stepper>
 
         {/* Step Content */}
         {currentStep === 1 && (
