@@ -77,7 +77,7 @@
     "eslint-config-next": "16.1.6",
     "happy-dom": "20.7.0",
     "husky": "9.1.7",
-    "lint-staged": "16.2.7",
+    "lint-staged": "16.3.1",
     "tailwindcss": "4.2.1",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
