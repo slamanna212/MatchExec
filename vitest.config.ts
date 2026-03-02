@@ -15,6 +15,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom',
+    reporters: ['default', 'github-actions'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     exclude: ['node_modules', '.next', 'e2e'],
     coverage: {

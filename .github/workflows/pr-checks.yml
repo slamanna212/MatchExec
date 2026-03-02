@@ -20,9 +20,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run ESLint
+        id: eslint
         run: npm run lint
+        continue-on-error: true
       - name: Run TypeScript check
+        id: typecheck
         run: npm run typecheck
+        continue-on-error: true
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Lint & Type Check" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.eslint.outcome }}" = "success" ]; then
+            echo "- ✅ ESLint" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ ESLint failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.typecheck.outcome }}" = "success" ]; then
+            echo "- ✅ TypeScript" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ TypeScript failed" >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Fail if errors
+        if: steps.eslint.outcome == 'failure' || steps.typecheck.outcome == 'failure'
+        run: exit 1
 
   test:
     name: Unit Tests
@@ -38,9 +59,10 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/coverage-final.json
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
   integration-test:
@@ -70,4 +92,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Build Next.js application
+        id: build
         run: npm run build
+        continue-on-error: true
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Build" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.build.outcome }}" = "success" ]; then
+            echo "✅ Next.js build succeeded" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Next.js build failed" >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
