@@ -26,8 +26,8 @@ Create a Match, and MatchExec handles the rest!
 
 ## 📷 Screenshots
 
-![Matches Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Matches.png?raw=true "Matches Screen")
-![Games Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Games.png?raw=true "Games Screen")
+![Matches Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/matches.png?raw=true "Matches Screen")
+![Games Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/games.png?raw=true "Games Screen")
 ![Channels Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Channels.png?raw=true "Channels Screen")
 ![Settings Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Settings.png?raw=true "Settings Screen")
 ![Discord Match Embed](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/FlJmJP.png?raw=true "Discord Match Embed")
@@ -53,6 +53,8 @@ docker run -d \
 ## ✉️ Connect
 
 Need Help? Want to add more games?
+
+[Check the Docs](https://docs.matchexec.com)
 
 [Open an issue](https://github.com/slamanna212/MatchExec/issues/new/choose)
 
