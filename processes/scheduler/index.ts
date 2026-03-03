@@ -287,18 +287,22 @@ class MatchExecScheduler {
       const reminderMinutes = discordSettings.player_reminder_minutes;
 
       // Find matches that have player_notifications enabled, start times, and need reminders
+      // Compute threshold in JS to avoid template literal injection into SQL
+      const lookAheadMs = (reminderMinutes + 60) * 60 * 1000;
+      const thresholdDate = new Date(Date.now() + lookAheadMs).toISOString();
       const upcomingMatches = await this.db.all(
         `SELECT m.id, m.name, m.start_date, m.player_notifications
          FROM matches m
-         WHERE m.start_date IS NOT NULL 
+         WHERE m.start_date IS NOT NULL
          AND m.player_notifications = 1
          AND m.status IN ('gather', 'assign', 'battle')
-         AND datetime(m.start_date, '-${reminderMinutes} minutes') <= datetime('now', '+1 hour')
+         AND datetime(m.start_date) <= datetime(?)
          AND NOT EXISTS (
-           SELECT 1 FROM discord_player_reminder_queue dprq 
-           WHERE dprq.match_id = m.id 
+           SELECT 1 FROM discord_player_reminder_queue dprq
+           WHERE dprq.match_id = m.id
            AND dprq.status != 'failed'
-         )`
+         )`,
+        [thresholdDate]
       );
 
       for (const match of upcomingMatches) {
@@ -399,15 +403,6 @@ class MatchExecScheduler {
   }
 
   /**
-   * Check if announcement should be sent now
-   */
-  private shouldSendAnnouncementNow(announcementTime: Date): boolean {
-    const now = new Date();
-    const checkIntervalMs = 60 * 1000; // 1 minute buffer
-    return announcementTime <= now && announcementTime >= new Date(now.getTime() - checkIntervalMs);
-  }
-
-  /**
    * Check if announcement already exists in queue
    */
   private async hasExistingAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
@@ -434,17 +429,23 @@ class MatchExecScheduler {
     }
 
     const matchStartTime = new Date(match.start_date);
+    const now = new Date();
+    const lookAheadMs = 2 * 60 * 60 * 1000;  // 2 hours
+    const catchUpMs   = 30 * 60 * 1000;        // 30 minutes
 
     for (const announcement of announcements) {
       const { value, unit } = announcement;
       const millisecondsOffset = this.calculateAnnouncementOffset(value, unit);
       const announcementTime = new Date(matchStartTime.getTime() - millisecondsOffset);
 
-      if (this.shouldSendAnnouncementNow(announcementTime)) {
+      const isUpcoming = announcementTime <= new Date(now.getTime() + lookAheadMs);
+      const isNotTooOld = announcementTime >= new Date(now.getTime() - catchUpMs);
+
+      if (isUpcoming && isNotTooOld) {
         const exists = await this.hasExistingAnnouncement(match.id, announcement);
         if (!exists) {
           logger.debug(`📢 Sending timed announcement for match: ${match.name} (${value} ${unit} before start)`);
-          await this.queueTimedAnnouncement(match.id, announcement);
+          await this.queueTimedAnnouncement(match.id, announcement, announcementTime);
         }
       }
     }
@@ -452,13 +453,15 @@ class MatchExecScheduler {
 
   private async handleTimedAnnouncements() {
     try {
+      // Include matches whose start_date is within 30 minutes ago (catch-up window)
+      // to avoid permanently missing announcements that fired just before match start.
       const matchesWithAnnouncements = await this.db.all(`
         SELECT id, name, start_date, announcements
         FROM matches
         WHERE announcements IS NOT NULL
         AND start_date IS NOT NULL
         AND status IN ('created', 'gather', 'assign')
-        AND start_date > datetime('now')
+        AND datetime(start_date) >= datetime('now', '-30 minutes')
       `);
 
       for (const match of matchesWithAnnouncements) {
@@ -473,20 +476,20 @@ class MatchExecScheduler {
     }
   }
 
-  private async queueTimedAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
+  private async queueTimedAnnouncement(matchId: string, announcement: unknown, scheduledFor: Date): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
       const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-      
+
       // @ts-expect-error - Database run method typed as unknown
       // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_announcement_queue (
-          id, match_id, status, announcement_type, announcement_data
-        ) VALUES (?, ?, 'pending', 'timed', ?)
-      `, [announcementId, matchId, JSON.stringify(announcement)]);
-      
-      logger.debug(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before)`);
+          id, match_id, status, announcement_type, announcement_data, scheduled_for
+        ) VALUES (?, ?, 'pending', 'timed', ?, ?)
+      `, [announcementId, matchId, JSON.stringify(announcement), scheduledFor.toISOString()]);
+
+      logger.debug(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before, scheduled for ${scheduledFor.toISOString()})`);
       return true;
     } catch (error) {
       logger.error('❌ Error queuing timed announcement:', error);
