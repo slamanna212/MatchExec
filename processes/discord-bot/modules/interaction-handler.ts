@@ -470,7 +470,7 @@ export class InteractionHandler {
 
         // Create modal with team ID embedded in custom ID
         const modal = new ModalBuilder()
-          .setCustomId(`signup_form_team_${eventId}_${selectedTeamId}`)
+          .setCustomId(`signup_form_team:${eventId}:${selectedTeamId}`)
           .setTitle(`Sign Up - ${team.team_name}`);
 
         const rows: ActionRowBuilder<TextInputBuilder>[] = [];
