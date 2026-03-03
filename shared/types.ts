@@ -71,6 +71,7 @@ export interface Tournament {
   start_date?: Date;
   start_time?: Date;
   allow_player_team_selection?: boolean;
+  allow_match_editing?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -87,6 +88,8 @@ export interface TournamentTeamMember {
   team_id: string;
   user_id: string;
   username: string;
+  discord_user_id?: string;
+  avatar_url?: string;
   joined_at: Date;
 }
 
@@ -100,6 +103,7 @@ export interface MatchDbRow extends Match {
   rounds?: number;
   livestream_link?: string;
   player_notifications?: number; // SQLite stores booleans as integers
+  tournament_allow_match_editing?: number; // SQLite integer from JOIN with tournaments
 }
 
 export interface ParticipantDbRow {
@@ -108,6 +112,7 @@ export interface ParticipantDbRow {
   user_id: string;
   discord_user_id: string;
   username: string;
+  avatar_url?: string | null; // Discord avatar URL
   joined_at: Date;
   signup_data?: string; // JSON string
   team_assignment?: 'reserve' | 'blue' | 'red';
@@ -196,6 +201,7 @@ export interface MatchParticipant {
   match_id: string;
   user_id: string;
   username: string;
+  avatar_url?: string | null; // Discord avatar URL
   joined_at: Date | string;
   signup_data?: Record<string, unknown>;
 }

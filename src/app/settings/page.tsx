@@ -84,33 +84,37 @@ export default function SettingsPage() {
                 withBorder
                 style={{
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  transition: 'all 0.25s ease',
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  borderColor: `${category.color}22`,
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+                  e.currentTarget.style.boxShadow = `0 8px 28px ${category.color}44`;
+                  e.currentTarget.style.borderColor = `${category.color}55`;
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.12)';
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '';
+                  e.currentTarget.style.borderColor = `${category.color}22`;
                 }}
                 onClick={() => router.push(category.href)}
               >
                 <Group align="center" gap="md" style={{ width: '100%' }}>
                   <div
                     style={{
-                      backgroundColor: `${category.color}15`,
+                      background: `linear-gradient(135deg, ${category.color}30, ${category.color}15)`,
+                      border: `1px solid ${category.color}40`,
                       color: category.color,
                       padding: '12px',
-                      borderRadius: '8px',
+                      borderRadius: '10px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      flexShrink: 0
+                      flexShrink: 0,
                     }}
                   >
                     <IconComponent size="1.5rem" />

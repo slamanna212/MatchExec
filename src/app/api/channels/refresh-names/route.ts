@@ -34,6 +34,7 @@ export async function POST() {
     `);
 
     let updatedCount = 0;
+    let removedCount = 0;
     const errors: string[] = [];
 
     for (const channel of channels) {
@@ -60,6 +61,11 @@ export async function POST() {
             
             updatedCount++;
           }
+        } else if (response.status === 404) {
+          // Channel no longer exists on Discord — remove it from the database
+          await db.run(`DELETE FROM discord_channels WHERE id = ?`, [channel.id]);
+          removedCount++;
+          logger.info(`Removed deleted Discord channel ${channel.discord_channel_id} from database`);
         } else {
           const errorMsg = `Failed to refresh channel ${channel.discord_channel_id}: HTTP ${response.status}`;
           errors.push(errorMsg);
@@ -75,6 +81,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       updated_count: updatedCount,
+      removed_count: removedCount,
       total_channels: channels.length,
       errors: errors.length > 0 ? errors : undefined
     });

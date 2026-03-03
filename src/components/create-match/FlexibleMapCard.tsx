@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Box, Image, Text, Select, Button } from '@mantine/core';
+import { Card, Box, Text, Select, Button } from '@mantine/core';
 import type { GameMode, GameMapWithMode } from './useMatchForm';
 
 interface FlexibleMapCardProps {
@@ -21,68 +21,64 @@ export function FlexibleMapCard({
   return (
     <Card
       shadow="sm"
-      padding="md"
+      padding={0}
       radius="md"
       withBorder
     >
-      <Card.Section>
-        <Box
+      <Box
+        style={{
+          position: 'relative',
+          height: 160,
+          overflow: 'hidden',
+          borderRadius: '10px 10px 0 0',
+          backgroundImage: `url(${map.imageUrl})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundColor: 'var(--mantine-color-dark-6)',
+        }}
+      >
+        <div
           style={{
-            position: 'relative',
-            width: '100%',
-            aspectRatio: '16/9',
-            overflow: 'hidden',
-            borderRadius: 'var(--mantine-radius-md) var(--mantine-radius-md) 0 0'
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.1) 65%)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            padding: 12,
           }}
         >
-          {/* Blur background */}
-          <Box
+          <Text
+            fw={700}
+            size="sm"
             style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundImage: `url(${map.imageUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              filter: 'blur(10px)',
-              transform: 'scale(1.1)'
+              color: '#fff',
+              textShadow: '0 1px 3px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.5)',
             }}
-          />
-          {/* Main image */}
-          <Image
-            src={map.imageUrl}
-            alt={map.name}
-            style={{
-              position: 'relative',
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              zIndex: 1
-            }}
-            fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
-          />
-        </Box>
-      </Card.Section>
-      <Text fw={500} size="sm" mt="xs" mb="xs">{map.name}</Text>
-      <Select
-        placeholder="Select mode"
-        size="xs"
-        data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
-        value={selectedModeId || null}
-        onChange={onModeChange}
-        disabled={availableModes.length === 0}
-        mb="xs"
-      />
-      <Button
-        size="xs"
-        fullWidth
-        disabled={!selectedModeId}
-        onClick={() => selectedModeId && onAddMap(selectedModeId)}
-      >
-        Add Map
-      </Button>
+          >
+            {map.name}
+          </Text>
+        </div>
+      </Box>
+      <Box p="md">
+        <Select
+          placeholder="Select mode"
+          size="xs"
+          data={availableModes.map(mode => ({ value: mode.id, label: mode.name }))}
+          value={selectedModeId || null}
+          onChange={onModeChange}
+          disabled={availableModes.length === 0}
+          mb="xs"
+        />
+        <Button
+          size="xs"
+          fullWidth
+          disabled={!selectedModeId}
+          onClick={() => selectedModeId && onAddMap(selectedModeId)}
+        >
+          Add Map
+        </Button>
+      </Box>
     </Card>
   );
 }

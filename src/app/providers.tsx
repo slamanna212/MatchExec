@@ -47,6 +47,10 @@ const theme = createTheme({
       '#212529'
     ]
   },
+  headings: {
+    fontFamily: 'var(--font-outfit), var(--font-geist-sans), sans-serif',
+    fontWeight: '700',
+  },
   other: {
     bodyColor: '#e8ebec'
   }

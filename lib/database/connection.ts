@@ -12,11 +12,9 @@ export class Database {
 
   async connect(): Promise<void> {
     // If already connected, return immediately to prevent creating duplicate connections
-    if (this.db) {
-      return Promise.resolve();
-    }
+    if (this.db) return;
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       // Ensure the directory exists before creating the database file
       const dbDir = path.dirname(this.dbPath);
       if (!fs.existsSync(dbDir)) {
@@ -29,14 +27,17 @@ export class Database {
       }
 
       this.db = new sqlite3.Database(this.dbPath, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Don't log here to avoid circular dependency with logger
-          resolve();
-        }
+        if (err) reject(err);
+        else resolve();
       });
     });
+
+    // WAL mode allows concurrent reads while writing — much better for multi-process use.
+    // busy_timeout makes SQLite wait up to 5s on a locked DB instead of failing immediately.
+    // synchronous=NORMAL is safe with WAL and significantly faster than FULL.
+    await this.run('PRAGMA journal_mode=WAL');
+    await this.run('PRAGMA busy_timeout=5000');
+    await this.run('PRAGMA synchronous=NORMAL');
   }
 
   async close(): Promise<void> {
@@ -112,10 +113,18 @@ export class Database {
 }
 
 let dbInstance: Database | null = null;
+let dbInstanceEnvPath: string | undefined = undefined;
 
 export function getDatabase(): Database {
-  if (!dbInstance) {
+  const envPath = process.env.DATABASE_PATH;
+  if (!dbInstance || dbInstanceEnvPath !== envPath) {
     dbInstance = new Database();
+    dbInstanceEnvPath = envPath;
   }
   return dbInstance;
+}
+
+export function resetConnectionSingleton(): void {
+  dbInstance = null;
+  dbInstanceEnvPath = undefined;
 }

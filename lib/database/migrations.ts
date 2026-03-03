@@ -66,9 +66,21 @@ export class MigrationRunner {
     const sql = fs.readFileSync(migrationPath, 'utf8');
 
     try {
+      await this.db.run('BEGIN');
       await this.db.exec(sql);
       await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
+      await this.db.run('COMMIT');
     } catch (error) {
+      try {
+        await this.db.run('ROLLBACK');
+      } catch (rollbackError: unknown) {
+        // Suppress "no transaction is active" — SQLite implicitly aborts on SQLITE_IOERR,
+        // so ROLLBACK will fail with this message. It's not a real error.
+        const msg = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        if (!msg.includes('no transaction is active')) {
+          console.error(`Failed to rollback migration ${filename}:`, rollbackError);
+        }
+      }
       console.error(`Migration ${filename} failed:`, error);
       throw error;
     }

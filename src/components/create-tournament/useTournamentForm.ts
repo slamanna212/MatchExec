@@ -29,6 +29,7 @@ export interface TournamentFormData {
   eventImageUrl?: string;
   preCreatedTeams?: string[];
   allowPlayerTeamSelection?: boolean;
+  allowMatchEditing?: boolean;
 }
 
 /**
@@ -40,7 +41,8 @@ export function useTournamentForm() {
     roundsPerMatch: 3,
     ruleset: 'casual',
     preCreatedTeams: [],
-    allowPlayerTeamSelection: false
+    allowPlayerTeamSelection: false,
+    allowMatchEditing: true
   });
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -84,7 +86,8 @@ export function useTournamentForm() {
       roundsPerMatch: 3,
       ruleset: 'casual',
       preCreatedTeams: [],
-      allowPlayerTeamSelection: false
+      allowPlayerTeamSelection: false,
+      allowMatchEditing: true
     });
     sessionStorage.removeItem('tournamentFormData');
   };

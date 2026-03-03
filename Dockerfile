@@ -106,7 +106,6 @@ COPY --from=builder /app/node_modules/lodash.snakecase ./node_modules/lodash.sna
 COPY --from=builder /app/node_modules/ts-mixer ./node_modules/ts-mixer
 
 # Common dependencies (may be duplicated with standalone but needed for processes)
-COPY --from=builder /app/node_modules/undici ./node_modules/undici
 COPY --from=builder /app/node_modules/tslib ./node_modules/tslib
 
 # Native addon and build dependencies

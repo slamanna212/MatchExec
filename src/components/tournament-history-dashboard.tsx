@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -15,16 +16,17 @@ import {
   Grid,
   TextInput,
   Badge,
-  RingProgress
+  Image,
+  useMantineColorScheme
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
-import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
-import { TournamentDetailsModal } from './tournament-details-modal';
+import { StageRing } from './StageRing';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
   game_icon?: string;
   game_color?: string;
+  event_image_url?: string;
   participant_count?: number;
 }
 
@@ -37,16 +39,19 @@ const HistoryTournamentCard = memo(({
   tournament,
   onViewDetails
 }: HistoryTournamentCardProps) => {
+  const { colorScheme } = useMantineColorScheme();
+
   return (
     <Card
-      shadow="sm"
-      padding="lg"
+      shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+      padding={0}
       radius="md"
       withBorder
+      bg={colorScheme === 'light' ? 'white' : undefined}
       style={{
         cursor: 'pointer',
-        opacity: 0.9,
-        transition: 'all 0.2s ease'
+        transition: 'all 0.2s ease',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -54,11 +59,22 @@ const HistoryTournamentCard = memo(({
       }}
       onMouseOut={(e) => {
         e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.12)';
+        e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(tournament)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={tournament.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${tournament.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={tournament.game_icon}
           alt={tournament.game_name}
@@ -68,21 +84,12 @@ const HistoryTournamentCard = memo(({
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
-        <RingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
-              color: tournament.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
 
-      <Divider mb="md" />
+      <Divider mb="md" mx="lg" />
 
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+      <Stack gap="xs" px="lg" pb="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {tournament.description && (
             <Text size="sm" c="dimmed">{tournament.description}</Text>
@@ -94,11 +101,6 @@ const HistoryTournamentCard = memo(({
           <Badge size="sm" variant="light">
             {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
           </Badge>
-        </Group>
-
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds/Match:</Text>
-          <Text size="sm">{tournament.rounds_per_match}</Text>
         </Group>
 
         <Group justify="space-between">
@@ -128,11 +130,10 @@ const HistoryTournamentCard = memo(({
 HistoryTournamentCard.displayName = 'HistoryTournamentCard';
 
 export function TournamentHistoryDashboard() {
+  const router = useRouter();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedTournament, setSelectedTournament] = useState<TournamentWithGame | null>(null);
 
   const fetchCompletedTournaments = useCallback(async (silent = false) => {
     try {
@@ -193,9 +194,8 @@ export function TournamentHistoryDashboard() {
   }, [tournaments, searchQuery]);
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    setSelectedTournament(tournament);
-    setDetailsModalOpen(true);
-  }, []);
+    router.push(`/tournaments/${tournament.id}`);
+  }, [router]);
 
   // Animation variants for staggered entrance
   const containerVariants = {
@@ -303,11 +303,6 @@ export function TournamentHistoryDashboard() {
         </motion.div>
       )}
 
-      <TournamentDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        tournament={selectedTournament}
-      />
     </div>
   );
 }

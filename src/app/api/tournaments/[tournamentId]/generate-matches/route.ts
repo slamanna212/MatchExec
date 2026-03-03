@@ -3,13 +3,70 @@ import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type {
-  BracketAssignment 
+  BracketAssignment
 } from '@/lib/tournament-bracket';
-import { 
+import {
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
-  saveGeneratedMatches 
+  saveGeneratedMatches
 } from '@/lib/tournament-bracket';
+import type { Database } from '@/lib/database/connection';
+
+interface TournamentMatchRecord {
+  id: string;
+  tournament_id: string;
+  round: number;
+  bracket_type: 'winners' | 'losers' | 'final';
+  team1_id?: string;
+  team2_id?: string;
+  match_order: number;
+}
+
+interface GeneratedMatchData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  generatedMatches: any[];
+  tournamentMatches: TournamentMatchRecord[];
+}
+
+async function getBracketAssignments(db: Database, tournamentId: string, provided?: BracketAssignment[]): Promise<BracketAssignment[] | { error: string }> {
+  if (provided && provided.length > 0) return provided;
+  const teams = await db.all('SELECT id FROM tournament_teams WHERE tournament_id = ? ORDER BY created_at', [tournamentId]) as Team[];
+  if (teams.length < 2) return { error: 'At least 2 teams are required to generate matches' };
+  return teams.map((team, index) => ({ position: index, teamId: team.id }));
+}
+
+async function generateMatchesForFormat(tournament: Tournament, tournamentId: string, bracketAssignments: BracketAssignment[]): Promise<GeneratedMatchData | { error: string }> {
+  const startTime = tournament.start_time ? new Date(tournament.start_time) : undefined;
+  let matches;
+  if (tournament.format === 'single-elimination') {
+    matches = await generateSingleEliminationMatches(tournamentId, bracketAssignments, tournament.game_id, tournament.rounds_per_match, startTime);
+  } else if (tournament.format === 'double-elimination') {
+    matches = await generateDoubleEliminationMatches(tournamentId, bracketAssignments, tournament.game_id, tournament.rounds_per_match, startTime);
+  } else {
+    return { error: 'Invalid tournament format' };
+  }
+  const tournamentMatches: TournamentMatchRecord[] = matches.map((match, index) => ({
+    id: match.id,
+    tournament_id: tournamentId,
+    round: match.tournament_round,
+    bracket_type: match.tournament_bracket_type as 'winners' | 'losers' | 'final',
+    team1_id: match.team1_id,
+    team2_id: match.team2_id,
+    match_order: index + 1
+  }));
+  return { generatedMatches: matches, tournamentMatches };
+}
+
+async function queueMatchAnnouncements(db: Database, generatedMatches: { id: string }[]): Promise<void> {
+  for (const match of generatedMatches) {
+    try {
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      await db.run(`INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status) VALUES (?, ?, 'standard', 'pending')`, [announcementId, match.id]);
+    } catch (error) {
+      logger.error(`Failed to queue announcement for match ${match.id}:`, error);
+    }
+  }
+}
 
 interface Tournament {
   id: string;
@@ -39,147 +96,40 @@ export async function POST(
 
     const db = await getDbInstance();
 
-    // Get tournament details
-    const tournament = await db.get(
-      'SELECT * FROM tournaments WHERE id = ?',
-      [tournamentId]
-    ) as Tournament | undefined;
-
+    const tournament = await db.get('SELECT * FROM tournaments WHERE id = ?', [tournamentId]) as Tournament | undefined;
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
     }
 
     if (tournament.status !== 'assign') {
-      return NextResponse.json(
-        { error: 'Tournament must be in assign phase to generate matches' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Tournament must be in assign phase to generate matches' }, { status: 400 });
     }
 
-    // Check if matches already exist for this tournament
-    const existingMatches = await db.get(
-      'SELECT COUNT(*) as count FROM matches WHERE tournament_id = ?',
-      [tournamentId]
-    ) as MatchCount | undefined;
-
+    const existingMatches = await db.get('SELECT COUNT(*) as count FROM matches WHERE tournament_id = ?', [tournamentId]) as MatchCount | undefined;
     if (existingMatches && existingMatches.count > 0) {
-      return NextResponse.json(
-        { error: 'Matches have already been generated for this tournament' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Matches have already been generated for this tournament' }, { status: 400 });
     }
 
-    // Get tournament teams if no assignments provided
-    let bracketAssignments: BracketAssignment[];
-    
-    if (assignments && assignments.length > 0) {
-      bracketAssignments = assignments;
-    } else {
-      // Auto-assign teams in order they were created
-      const teams = await db.all(
-        'SELECT id FROM tournament_teams WHERE tournament_id = ? ORDER BY created_at',
-        [tournamentId]
-      ) as Team[];
-      
-      if (teams.length < 2) {
-        return NextResponse.json(
-          { error: 'At least 2 teams are required to generate matches' },
-          { status: 400 }
-        );
-      }
-
-      bracketAssignments = teams.map((team, index) => ({
-        position: index,
-        teamId: team.id
-      }));
+    const bracketAssignmentsResult = await getBracketAssignments(db, tournamentId, assignments);
+    if ('error' in bracketAssignmentsResult) {
+      return NextResponse.json({ error: bracketAssignmentsResult.error }, { status: 400 });
     }
 
-    // Validate bracket assignments
-    if (bracketAssignments.length < 2) {
-      return NextResponse.json(
-        { error: 'At least 2 teams must be assigned to bracket positions' },
-        { status: 400 }
-      );
+    if (bracketAssignmentsResult.length < 2) {
+      return NextResponse.json({ error: 'At least 2 teams must be assigned to bracket positions' }, { status: 400 });
     }
 
-    // Generate matches based on tournament format
-    let generatedMatches;
-    let tournamentMatches;
-
-    if (tournament.format === 'single-elimination') {
-      const matches = await generateSingleEliminationMatches(
-        tournamentId,
-        bracketAssignments,
-        tournament.game_id,
-        tournament.rounds_per_match,
-        tournament.start_time ? new Date(tournament.start_time) : undefined
-      );
-
-      generatedMatches = matches;
-
-      // Create tournament match relationships from generated matches
-      tournamentMatches = matches.map((match, index) => ({
-        id: match.id,
-        tournament_id: tournamentId,
-        round: match.tournament_round,
-        bracket_type: match.tournament_bracket_type as 'winners' | 'losers' | 'final',
-        team1_id: match.team1_id,
-        team2_id: match.team2_id,
-        match_order: index + 1
-      }));
-    } else if (tournament.format === 'double-elimination') {
-      const matches = await generateDoubleEliminationMatches(
-        tournamentId,
-        bracketAssignments,
-        tournament.game_id,
-        tournament.rounds_per_match,
-        tournament.start_time ? new Date(tournament.start_time) : undefined
-      );
-
-      generatedMatches = matches;
-
-      // Create tournament match relationships from generated matches
-      tournamentMatches = matches.map((match, index) => ({
-        id: match.id,
-        tournament_id: tournamentId,
-        round: match.tournament_round,
-        bracket_type: match.tournament_bracket_type as 'winners' | 'losers' | 'final',
-        team1_id: match.team1_id,
-        team2_id: match.team2_id,
-        match_order: index + 1
-      }));
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid tournament format' },
-        { status: 400 }
-      );
+    const matchData = await generateMatchesForFormat(tournament, tournamentId, bracketAssignmentsResult);
+    if ('error' in matchData) {
+      return NextResponse.json({ error: matchData.error }, { status: 400 });
     }
 
-    // Save matches to database
+    const { generatedMatches, tournamentMatches } = matchData;
+
     await saveGeneratedMatches(generatedMatches, tournamentMatches);
+    await queueMatchAnnouncements(db, generatedMatches);
 
-    // Queue Discord announcements for each generated match
-    for (const match of generatedMatches) {
-      try {
-        const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-        await db.run(`
-          INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
-          VALUES (?, ?, 'standard', 'pending')
-        `, [announcementId, match.id]);
-      } catch (error) {
-        logger.error(`Failed to queue announcement for match ${match.id}:`, error);
-        // Continue with other announcements even if one fails
-      }
-    }
-
-    // Keep tournament in 'assign' status - bracket is generated but tournament not started yet
-    await db.run(
-      'UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [tournamentId]
-    );
+    await db.run('UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [tournamentId]);
 
     return NextResponse.json({
       message: 'Tournament bracket generated successfully',

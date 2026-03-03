@@ -66,6 +66,31 @@ interface QueuedMapCode {
   created_at: string;
 }
 
+interface QueuedMatchEdit {
+  id: string;
+  match_id: string;
+  created_at: string;
+}
+
+interface MatchEditData {
+  id: string;
+  name: string;
+  description: string;
+  game_id: string;
+  rules: string;
+  maps: string | null;
+  livestream_link: string | null;
+  start_date: string | null;
+  event_image_url: string | null;
+}
+
+interface MatchMessageRecord {
+  message_id: string;
+  channel_id: string;
+  thread_id: string | null;
+  discord_event_id: string | null;
+}
+
 interface QueuedMatchWinner {
   id: string;
   match_id: string;
@@ -1103,55 +1128,94 @@ export class QueueProcessor {
     }
   }
 
+  private async handleTimedOutVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
+    if (!this.db) return;
+    const maxRetries = 3;
+    if (announcement.retry_count < maxRetries) {
+      await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'pending', retry_count = retry_count + 1, timeout_at = NULL, updated_at = datetime('now')
+        WHERE id = ?
+      `, [announcement.id]);
+      logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
+    } else {
+      await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'failed', completed_at = datetime('now'), error_message = 'Exceeded maximum retry attempts after timeout'
+        WHERE id = ?
+      `, [announcement.id]);
+      logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
+    }
+  }
+
+  private async processSingleVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
+    if (!this.db) return;
+    try {
+      const updateResult = await this.db.run(`
+        UPDATE discord_voice_announcement_queue
+        SET status = 'processing', timeout_at = datetime('now', '+2 minutes'),
+            first_attempted_at = COALESCE(first_attempted_at, datetime('now')), updated_at = datetime('now')
+        WHERE id = ? AND status = 'pending'
+      `, [announcement.id]);
+
+      if (updateResult.changes === 0) return;
+
+      if (announcement.announcement_type === 'welcome') {
+        const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`SELECT match_start_delay_seconds FROM discord_settings LIMIT 1`);
+        const delaySecs = settings?.match_start_delay_seconds ?? 45;
+        const elapsedSecs = (Date.now() - new Date(`${announcement.created_at}Z`).getTime()) / 1000;
+        if (elapsedSecs < delaySecs) {
+          await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'pending', timeout_at = NULL, updated_at = datetime('now') WHERE id = ?`, [announcement.id]);
+          logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
+          return;
+        }
+      }
+
+      if (!this.voiceHandler) {
+        logger.error('❌ VoiceHandler not available');
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, ['VoiceHandler not available', announcement.id]);
+        return;
+      }
+
+      logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
+
+      const result = await this.voiceHandler.playTeamAnnouncements(
+        announcement.blue_team_voice_channel,
+        announcement.red_team_voice_channel,
+        announcement.announcement_type,
+        announcement.first_team
+      );
+
+      if (result.success) {
+        await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'completed', completed_at = datetime('now') WHERE id = ?`, [announcement.id]);
+        logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
+      } else {
+        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [result.message, announcement.id]);
+        logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
+      }
+    } catch (error) {
+      logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
+      await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+    }
+  }
+
   async processVoiceAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      // First, handle timeouts for announcements stuck in 'processing'
       const timedOutAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
         SELECT id, match_id, announcement_type, retry_count
         FROM discord_voice_announcement_queue
-        WHERE status = 'processing'
-          AND timeout_at IS NOT NULL
-          AND datetime(timeout_at) < datetime('now')
+        WHERE status = 'processing' AND timeout_at IS NOT NULL AND datetime(timeout_at) < datetime('now')
       `);
 
       for (const announcement of timedOutAnnouncements) {
-        const maxRetries = 3;
-        if (announcement.retry_count < maxRetries) {
-          // Reset to pending for retry
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'pending',
-                retry_count = retry_count + 1,
-                timeout_at = NULL,
-                updated_at = datetime('now')
-            WHERE id = ?
-          `, [announcement.id]);
-
-          logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
-        } else {
-          // Max retries reached, mark as failed
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'failed',
-                completed_at = datetime('now'),
-                error_message = 'Exceeded maximum retry attempts after timeout'
-            WHERE id = ?
-          `, [announcement.id]);
-
-          logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
-        }
+        await this.handleTimedOutVoiceAnnouncement(announcement);
       }
 
-      // Clean up old completed/failed announcements (older than 1 hour)
-      await this.db.run(`
-        DELETE FROM discord_voice_announcement_queue
-        WHERE status IN ('completed', 'failed')
-          AND datetime(updated_at, '+1 hour') < datetime('now')
-      `);
+      await this.db.run(`DELETE FROM discord_voice_announcement_queue WHERE status IN ('completed', 'failed') AND datetime(updated_at, '+1 hour') < datetime('now')`);
 
-      // Now process pending announcements
       const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
         SELECT id, match_id, announcement_type, blue_team_voice_channel,
                red_team_voice_channel, first_team, created_at, retry_count,
@@ -1163,103 +1227,7 @@ export class QueueProcessor {
       `);
 
       for (const announcement of voiceAnnouncements) {
-        try {
-          // Immediately mark as processing to prevent duplicate processing
-          // Set timeout to 2 minutes from now
-          const updateResult = await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'processing',
-                timeout_at = datetime('now', '+2 minutes'),
-                first_attempted_at = COALESCE(first_attempted_at, datetime('now')),
-                updated_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [announcement.id]);
-
-          if (updateResult.changes === 0) {
-            continue;
-          }
-
-          // Check if this is a welcome announcement and if delay should be applied
-          if (announcement.announcement_type === 'welcome') {
-            // Get match start delay setting from discord_settings
-            const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`
-              SELECT match_start_delay_seconds FROM discord_settings LIMIT 1
-            `);
-
-            const delaySecs = settings?.match_start_delay_seconds ?? 45;
-
-            // Calculate if delay has elapsed
-            const createdAt = new Date(`${announcement.created_at  }Z`).getTime();
-            const now = Date.now();
-            const elapsedSecs = (now - createdAt) / 1000;
-
-            if (elapsedSecs < delaySecs) {
-              // Delay hasn't elapsed yet, mark back as pending and clear timeout
-              await this.db.run(`
-                UPDATE discord_voice_announcement_queue
-                SET status = 'pending',
-                    timeout_at = NULL,
-                    updated_at = datetime('now')
-                WHERE id = ?
-              `, [announcement.id]);
-
-              logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
-              continue;
-            }
-          }
-
-          if (!this.voiceHandler) {
-            logger.error('❌ VoiceHandler not available');
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'failed', completed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['VoiceHandler not available', announcement.id]);
-            continue;
-          }
-
-          logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
-
-          // Play the team announcements sequentially
-          const result = await this.voiceHandler.playTeamAnnouncements(
-            announcement.blue_team_voice_channel,
-            announcement.red_team_voice_channel,
-            announcement.announcement_type,
-            announcement.first_team
-          );
-
-          if (result.success) {
-            // Update the alternation tracker
-            await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
-
-            // Mark as completed
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'completed', completed_at = datetime('now')
-              WHERE id = ?
-            `, [announcement.id]);
-
-            logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
-          } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_voice_announcement_queue
-              SET status = 'failed', completed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, [result.message, announcement.id]);
-
-            logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
-          }
-        } catch (error) {
-          logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
-
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_voice_announcement_queue
-            SET status = 'failed', completed_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
-        }
+        await this.processSingleVoiceAnnouncement(announcement);
       }
     } catch (error) {
       logger.error('❌ Error processing voice announcement queue:', error);
@@ -1466,10 +1434,236 @@ export class QueueProcessor {
     }
   }
 
+  private updateEmbedTimeFields(embed: EmbedBuilder, startDate: string): void {
+    const startTime = new Date(startDate);
+    const unixTimestamp = Math.floor(startTime.getTime() / 1000);
+
+    const fields = embed.data.fields || [];
+    const timeIdx = fields.findIndex(f => f.name === '🕐 Match Time');
+    const countdownIdx = fields.findIndex(f => f.name === '⏰ Countdown');
+
+    const timeField = { name: '🕐 Match Time', value: `<t:${unixTimestamp}:F>`, inline: true };
+    const countdownField = { name: '⏰ Countdown', value: `<t:${unixTimestamp}:R>`, inline: true };
+
+    if (timeIdx !== -1) {
+      fields[timeIdx] = timeField;
+    }
+    if (countdownIdx !== -1) {
+      fields[countdownIdx] = countdownField;
+    }
+    if (timeIdx === -1 && countdownIdx === -1) {
+      embed.addFields(timeField, countdownField);
+    }
+  }
+
+  private async updateEmbedMapsField(
+    embed: EmbedBuilder,
+    mapsJson: string | null
+  ): Promise<{ maps: string[]; changed: boolean }> {
+    let maps: string[] = [];
+    if (mapsJson) {
+      try {
+        maps = JSON.parse(mapsJson);
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    const fields = embed.data.fields || [];
+    const mapsIdx = fields.findIndex(f => f.name === '🗺️ Maps');
+
+    if (maps.length > 0) {
+      const mapNames: string[] = [];
+      for (const mapId of maps) {
+        const baseMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const mapRow = await this.db!.get<{ name: string }>(`
+          SELECT name FROM game_maps WHERE id = ?
+        `, [baseMapId]);
+        mapNames.push(mapRow?.name ?? baseMapId);
+      }
+
+      const mapsValue = mapNames.map(n => `**${n}**`).join('\n');
+      const existingMapsValue = mapsIdx !== -1 ? fields[mapsIdx].value : null;
+      const changed = existingMapsValue !== mapsValue;
+
+      if (mapsIdx !== -1) {
+        fields[mapsIdx] = { name: '🗺️ Maps', value: mapsValue, inline: false };
+      } else {
+        embed.addFields({ name: '🗺️ Maps', value: mapsValue, inline: false });
+      }
+      return { maps, changed };
+    } 
+      let changed = false;
+      if (mapsIdx !== -1) {
+        fields.splice(mapsIdx, 1);
+        changed = true;
+      }
+      return { maps, changed };
+    
+  }
+
+  private async updateMatchScheduledEvent(
+    matchId: string,
+    matchData: MatchEditData,
+    messageRecord: MatchMessageRecord
+  ): Promise<void> {
+    if (!messageRecord.discord_event_id || !matchData.start_date || !this.settings?.guild_id) return;
+
+    try {
+      const guild = await this.client.guilds.fetch(this.settings.guild_id);
+      const scheduledEvent = await guild.scheduledEvents.fetch(messageRecord.discord_event_id);
+      if (scheduledEvent) {
+        const startTime = new Date(matchData.start_date);
+        const durationMinutes = (this.settings?.event_duration_minutes || 45);
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+
+        await scheduledEvent.edit({
+          name: matchData.name,
+          scheduledStartTime: startTime,
+          scheduledEndTime: endTime
+        });
+        logger.debug(`✅ Updated Discord scheduled event for match ${matchId}`);
+      }
+    } catch (eventError) {
+      logger.warning(`⚠️ Could not update Discord scheduled event for match ${matchId}:`, (eventError as Error)?.message);
+    }
+  }
+
+  private async updateMatchAnnouncementEmbed(
+    matchId: string,
+    matchData: MatchEditData,
+    messageRecord: MatchMessageRecord
+  ): Promise<void> {
+    try {
+      const channel = await this.fetchTextChannel(messageRecord.channel_id);
+      if (!channel) return;
+
+      const message = await channel.messages.fetch(messageRecord.message_id);
+      if (!message || message.embeds.length === 0) return;
+
+      const existingEmbed = EmbedBuilder.from(message.embeds[0]);
+
+      existingEmbed.setTitle(matchData.name);
+      if (matchData.description) {
+        existingEmbed.setDescription(matchData.description);
+      }
+
+      if (matchData.start_date) {
+        this.updateEmbedTimeFields(existingEmbed, matchData.start_date);
+      }
+
+      const { maps, changed: mapsChanged } = await this.updateEmbedMapsField(existingEmbed, matchData.maps);
+
+      const attachment = this.createEventAttachment(matchData.event_image_url ?? undefined, existingEmbed);
+
+      await message.edit({
+        content: null,
+        embeds: [existingEmbed],
+        components: message.components,
+        files: attachment ? [attachment] : []
+      });
+
+      logger.debug(`✅ Updated Discord embed for match ${matchId}`);
+
+      if (mapsChanged) {
+        if (messageRecord.thread_id) {
+          await this.deleteDiscordThread(messageRecord.thread_id);
+        }
+
+        let newThreadId: string | null = null;
+        if (maps.length > 0 && this.announcementHandler) {
+          const newThread = await this.announcementHandler.createMapsThread(
+            message,
+            matchData.name,
+            matchData.game_id,
+            maps,
+            matchId
+          );
+          newThreadId = newThread?.id ?? null;
+        }
+
+        await this.db!.run(`
+          UPDATE discord_match_messages SET thread_id = ?
+          WHERE match_id = ? AND message_type = 'announcement'
+        `, [newThreadId, matchId]);
+      }
+    } catch (embedError) {
+      logger.error(`❌ Error updating embed for match ${matchId}:`, embedError);
+    }
+  }
+
+  private async processSingleMatchEdit(edit: QueuedMatchEdit): Promise<void> {
+    const updateResult = await this.db!.run(`
+      UPDATE discord_match_edit_queue
+      SET status = 'processing', processed_at = datetime('now')
+      WHERE id = ? AND status = 'pending'
+    `, [edit.id]);
+
+    if (updateResult.changes === 0) return;
+
+    const matchId = edit.match_id;
+
+    const matchData = await this.db!.get<MatchEditData>(`
+      SELECT id, name, description, game_id, rules, maps, livestream_link, start_date, event_image_url
+      FROM matches WHERE id = ?
+    `, [matchId]);
+
+    if (!matchData) {
+      throw new Error(`Match ${matchId} not found`);
+    }
+
+    const messageRecord = await this.db!.get<MatchMessageRecord>(`
+      SELECT message_id, channel_id, thread_id, discord_event_id
+      FROM discord_match_messages
+      WHERE match_id = ? AND message_type = 'announcement'
+      LIMIT 1
+    `, [matchId]);
+
+    if (messageRecord) {
+      await this.updateMatchAnnouncementEmbed(matchId, matchData, messageRecord);
+      await this.updateMatchScheduledEvent(matchId, matchData, messageRecord);
+    }
+
+    await this.db!.run(`
+      UPDATE discord_match_edit_queue
+      SET status = 'completed', processed_at = datetime('now')
+      WHERE id = ?
+    `, [edit.id]);
+  }
+
+  async processMatchEditQueue() {
+    if (!this.client.isReady() || !this.db) return;
+
+    try {
+      const edits = await this.db.all<QueuedMatchEdit>(`
+        SELECT id, match_id, created_at
+        FROM discord_match_edit_queue
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 5
+      `);
+
+      for (const edit of edits) {
+        try {
+          await this.processSingleMatchEdit(edit);
+        } catch (error) {
+          logger.error(`❌ Error processing match edit ${edit.id}:`, error);
+          await this.db.run(`
+            UPDATE discord_match_edit_queue
+            SET status = 'failed', processed_at = datetime('now'), error_message = ?
+            WHERE id = ?
+          `, [error instanceof Error ? error.message : 'Unknown error', edit.id]);
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing match edit queue:', error);
+    }
+  }
+
   async processAllQueues() {
     await Promise.all([
       this.processAnnouncementQueue(),
-      this.processDeletionQueue(), 
+      this.processDeletionQueue(),
       this.processStatusUpdateQueue(),
       this.processReminderQueue(),
       this.processPlayerReminderQueue(),
@@ -1477,7 +1671,8 @@ export class QueueProcessor {
       this.processVoiceAnnouncementQueue(),
       this.processMapCodeQueue(),
       this.processMatchWinnerNotificationQueue(),
-      this.processDiscordBotRequests()
+      this.processDiscordBotRequests(),
+      this.processMatchEditQueue()
     ]);
   }
 

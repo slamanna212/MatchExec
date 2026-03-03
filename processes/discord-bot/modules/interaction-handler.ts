@@ -171,6 +171,8 @@ async function showSignupModal(
 }
 
 export class InteractionHandler {
+  private pendingTeamSelections = new Map<string, { eventId: string; teamId: string }>();
+
   constructor(
     private client: Client,
     private db: Database,
@@ -345,6 +347,13 @@ export class InteractionHandler {
       return;
     }
 
+    // Retrieve and consume pending team selection (stored when user chose a team from the dropdown)
+    const pending = this.pendingTeamSelections.get(interaction.user.id);
+    this.pendingTeamSelections.delete(interaction.user.id);
+    if (pending && pending.eventId === parsedId.eventId && !parsedId.selectedTeamId) {
+      parsedId.selectedTeamId = pending.teamId;
+    }
+
     logger.debug('Parsed signup modal ID:', { eventId: parsedId.eventId, isTournament: parsedId.isTournament, teamId: parsedId.selectedTeamId });
 
     try {
@@ -375,7 +384,7 @@ export class InteractionHandler {
       const { signupData, displayUsername } = collectFormData(interaction, signupForm);
 
       // Insert participant into database
-      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData);
+      await insertParticipant(this.db, parsedId, interaction, displayUsername, signupData, this.client);
 
       // Get participant count
       const participantCount = await getParticipantCount(this.db, parsedId.eventId, parsedId.isTournament);
@@ -468,9 +477,10 @@ export class InteractionHandler {
           return;
         }
 
-        // Create modal with team ID embedded in custom ID
+        // Create modal - team selection stored in-memory until modal is submitted
+        this.pendingTeamSelections.set(interaction.user.id, { eventId, teamId: selectedTeamId });
         const modal = new ModalBuilder()
-          .setCustomId(`signup_form_team_${eventId}_${selectedTeamId}`)
+          .setCustomId(`signup_form_${eventId}`)
           .setTitle(`Sign Up - ${team.team_name}`);
 
         const rows: ActionRowBuilder<TextInputBuilder>[] = [];

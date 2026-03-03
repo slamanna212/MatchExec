@@ -422,13 +422,23 @@ export class AnnouncementHandler {
         const extension = path.extname(imagePath).slice(1);
         const fileName = `event_image.${extension}`;
 
-        const attachment = new AttachmentBuilder(imagePath, { name: fileName });
+        // Read file and create attachment with explicit buffer
+        const imageBuffer = await fs.promises.readFile(imagePath);
+
+        // Ensure buffer is valid before creating attachment
+        if (!imageBuffer || imageBuffer.length === 0) {
+          logger.error(`❌ Image buffer is empty or null for ${imagePath}`);
+          return undefined;
+        }
+
+        const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
         embed.setImage(`attachment://${fileName}`);
 
+        logger.debug(`✅ Created image attachment: ${fileName} (${imageBuffer.length} bytes)`);
         return attachment;
-      } 
+      }
         logger.warning(`⚠️ Event image not found: ${imagePath}`);
-      
+
     } catch (error) {
       logger.error(`❌ Error handling event image ${eventImageUrl}:`, error);
     }
@@ -568,16 +578,23 @@ export class AnnouncementHandler {
   /**
    * Create map image attachment if available
    */
-  private createMapImageAttachment2(
+  private async createMapImageAttachment2(
     imageUrl: string,
     mapName: string
-  ): { attachment: AttachmentBuilder; attachmentName: string } | null {
+  ): Promise<{ attachment: AttachmentBuilder; attachmentName: string } | null> {
     try {
       const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
 
       if (fs.existsSync(imagePath)) {
         const attachmentName = `${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
-        const attachment = new AttachmentBuilder(imagePath, { name: attachmentName });
+        const imageBuffer = await fs.promises.readFile(imagePath);
+
+        if (!imageBuffer || imageBuffer.length === 0) {
+          logger.error(`❌ Map image buffer is empty for ${mapName}`);
+          return null;
+        }
+
+        const attachment = new AttachmentBuilder(imageBuffer, { name: attachmentName });
         return { attachment, attachmentName };
       }
     } catch (error) {
@@ -602,7 +619,7 @@ export class AnnouncementHandler {
       const embed = this.buildMapEmbed(mapData, modeName, gameColor, mapNumber, mapNote);
 
       if (mapData.image_url) {
-        const imageResult = this.createMapImageAttachment2(mapData.image_url, mapData.name);
+        const imageResult = await this.createMapImageAttachment2(mapData.image_url, mapData.name);
         if (imageResult) {
           embed.setImage(`attachment://${imageResult.attachmentName}`);
           return { embed, attachment: imageResult.attachment };
@@ -830,14 +847,21 @@ export class AnnouncementHandler {
   /**
    * Create reminder image attachment
    */
-  private createReminderImageAttachment(imageUrl: string): AttachmentBuilder | undefined {
+  private async createReminderImageAttachment(imageUrl: string): Promise<AttachmentBuilder | undefined> {
     if (!imageUrl || !imageUrl.trim()) return undefined;
 
     try {
       const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
 
       if (fs.existsSync(imagePath)) {
-        return new AttachmentBuilder(imagePath, {
+        const imageBuffer = await fs.promises.readFile(imagePath);
+
+        if (!imageBuffer || imageBuffer.length === 0) {
+          logger.error(`❌ Reminder image buffer is empty`);
+          return undefined;
+        }
+
+        return new AttachmentBuilder(imageBuffer, {
           name: `reminder_image.${path.extname(imagePath).slice(1)}`
         });
       }
@@ -875,7 +899,7 @@ export class AnnouncementHandler {
 
     await this.addOriginalAnnouncementLink(embed, eventData.id);
 
-    const attachment = this.createReminderImageAttachment(eventData.event_image_url || '');
+    const attachment = await this.createReminderImageAttachment(eventData.event_image_url || '');
     if (attachment && eventData.event_image_url) {
       embed.setImage(`attachment://reminder_image.${path.extname(eventData.event_image_url).slice(1)}`);
     }
@@ -979,7 +1003,7 @@ export class AnnouncementHandler {
     await this.addMatchLinkIfNeeded(embed, eventData);
     this.addLivestreamFieldIfNeeded(embed, eventData);
 
-    const attachment = this.attachEventImageIfNeeded(embed, eventData);
+    const attachment = await this.attachEventImageIfNeeded(embed, eventData);
 
     return { embed, attachment };
   }
@@ -1092,10 +1116,10 @@ export class AnnouncementHandler {
     }]);
   }
 
-  private attachEventImageIfNeeded(embed: EmbedBuilder, eventData: any): AttachmentBuilder | undefined {
+  private async attachEventImageIfNeeded(embed: EmbedBuilder, eventData: any): Promise<AttachmentBuilder | undefined> {
     if (!eventData.event_image_url) return undefined;
 
-    const attachment = attachEventImage(eventData.event_image_url);
+    const attachment = await attachEventImage(eventData.event_image_url);
     if (!attachment) return undefined;
 
     const imageName = getImageAttachmentName(eventData.event_image_url);
@@ -1275,13 +1299,20 @@ export class AnnouncementHandler {
   /**
    * Create map image attachment for embed
    */
-  private createMapImageAttachment(mapImageUrl: string, mapName: string): AttachmentBuilder | undefined {
+  private async createMapImageAttachment(mapImageUrl: string, mapName: string): Promise<AttachmentBuilder | undefined> {
     try {
       const imagePath = path.join(process.cwd(), 'public', mapImageUrl.replace(/^\//, ''));
 
       if (fs.existsSync(imagePath)) {
         const attachmentName = `map_score_${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
-        return new AttachmentBuilder(imagePath, { name: attachmentName });
+        const imageBuffer = await fs.promises.readFile(imagePath);
+
+        if (!imageBuffer || imageBuffer.length === 0) {
+          logger.error(`❌ Map score image buffer is empty`);
+          return undefined;
+        }
+
+        return new AttachmentBuilder(imageBuffer, { name: attachmentName });
       }
     } catch (error) {
       logger.error(`❌ Error handling map image for score notification:`, error);
@@ -1344,7 +1375,7 @@ export class AnnouncementHandler {
     // Add map image if available
     let attachment: AttachmentBuilder | undefined;
     if (metadata.mapImageUrl) {
-      attachment = this.createMapImageAttachment(metadata.mapImageUrl, metadata.mapName);
+      attachment = await this.createMapImageAttachment(metadata.mapImageUrl, metadata.mapName);
       if (attachment) {
         const attachmentName = `map_score_${metadata.mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(metadata.mapImageUrl).slice(1)}`;
         embed.setImage(`attachment://${attachmentName}`);

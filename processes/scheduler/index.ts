@@ -3,11 +3,13 @@ import { waitForDatabaseReady } from '../../lib/database';
 import * as cron from 'node-cron';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
+import { AvatarUpdateJob } from './jobs/update-avatars';
 
 class MatchExecScheduler {
   private isRunning = false;
   private db: unknown;
   private cronJobs: cron.ScheduledTask[] = [];
+  private avatarUpdateJob: AvatarUpdateJob | null = null;
 
   async start() {
     logger.debug('🕐 Starting MatchExec Scheduler...');
@@ -65,7 +67,11 @@ class MatchExecScheduler {
         
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
         this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
-        
+
+        // Initialize and run avatar update job every 2 hours
+        this.avatarUpdateJob = new AvatarUpdateJob(this.db);
+        this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
+
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
@@ -82,6 +88,10 @@ class MatchExecScheduler {
       }
       // Run voice channel cleanup every 5 minutes
       this.startCronJob('Voice Channel Cleanup', '*/5 * * * *', this.cleanupVoiceChannels.bind(this));
+
+      // Initialize and run avatar update job every 2 hours
+      this.avatarUpdateJob = new AvatarUpdateJob(this.db);
+      this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {

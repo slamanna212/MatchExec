@@ -4,28 +4,118 @@ on:
   pull_request:
     branches: [main, dev]
 
+permissions:
+  contents: read
+
 jobs:
-  lint-and-build:
+  lint-and-typecheck:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Run lint
+      - name: Run ESLint
+        id: eslint
         run: npm run lint
-
-      - name: Type check
+        continue-on-error: true
+      - name: Run TypeScript check
+        id: typecheck
         run: npm run typecheck
+        continue-on-error: true
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Lint & Type Check" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.eslint.outcome }}" = "success" ]; then
+            echo "- ✅ ESLint" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ ESLint failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.typecheck.outcome }}" = "success" ]; then
+            echo "- ✅ TypeScript" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ TypeScript failed" >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Fail if errors
+        if: steps.eslint.outcome == 'failure' || steps.typecheck.outcome == 'failure'
+        run: exit 1
 
-      - name: Build application
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests with coverage
+        run: npx vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/unit.junit.xml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/coverage-final.json
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: test-results/unit.junit.xml
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run integration tests
+        run: npx vitest run tests/integration --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/integration.junit.xml
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: test-results/integration.junit.xml
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test, integration-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Next.js application
+        id: build
         run: npm run build
+        continue-on-error: true
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Build" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.build.outcome }}" = "success" ]; then
+            echo "✅ Next.js build succeeded" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Next.js build failed" >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1

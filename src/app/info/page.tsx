@@ -17,18 +17,18 @@ export default function InfoPage() {
 
             <Stack gap="md">
               <Text>
-                Our wiki is full of info about MatchExec
+                Our documentation is full of info about MatchExec
               </Text>
-              
+
               <Group justify="flex-start">
                 <Button
                   leftSection={<IconBook size="1rem" />}
                   component="a"
-                  href="https://github.com/slamanna212/MatchExec/wiki"
+                  href="https://docs.matchexec.com/docs/getting-started/getting-started/"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Wiki
+                  Documentation
                 </Button>
               </Group>
             </Stack>

@@ -11,12 +11,25 @@ async function initializeDatabase(): Promise<Database> {
 }
 
 let dbPromise: Promise<Database> | null = null;
+let dbPromiseEnvPath: string | undefined = undefined;
 
 export function getDbInstance() {
-  if (!dbPromise) {
+  const envPath = process.env.DATABASE_PATH;
+  if (!dbPromise || dbPromiseEnvPath !== envPath) {
+    dbPromiseEnvPath = envPath;
     dbPromise = initializeDatabase();
   }
   return dbPromise;
+}
+
+export function resetDbSingleton(): void {
+  dbPromise = null;
+  dbPromiseEnvPath = undefined;
+}
+
+export function setDbForTesting(db: Database): void {
+  dbPromise = Promise.resolve(db);
+  dbPromiseEnvPath = process.env.DATABASE_PATH;
 }
 
 // Note: Auto-initialization removed to prevent conflicts during startup

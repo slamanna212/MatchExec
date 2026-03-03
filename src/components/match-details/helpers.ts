@@ -83,3 +83,20 @@ export function extractModeNameFromMapId(cleanMapId: string): string {
 export function cleanMapId(mapId: string): string {
   return mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
 }
+
+/**
+ * Format a DB timestamp for display using a consistent locale string format
+ */
+export function formatTimestamp(
+  timestamp: string | null | undefined,
+  parseDbTimestamp: (ts: string | null | undefined) => Date | null
+): string {
+  return parseDbTimestamp(timestamp)?.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }) || 'N/A';
+}

@@ -2,23 +2,23 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  Card, 
-  Text, 
-  Button, 
+  Card,
+  Text,
+  Button,
   Avatar,
   Divider,
   Loader,
   Group,
   Stack,
   Grid,
-  RingProgress,
+  Image,
   TextInput
 } from '@mantine/core';
-import type { Match, SignupConfig, ReminderData } from '@/shared/types';
-import { MATCH_FLOW_STEPS } from '@/shared/types';
-import { MatchDetailsModal } from './match-details-modal';
+import type { Match } from '@/shared/types';
+import { StageRing } from './StageRing';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -43,6 +43,7 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  event_image_url?: string;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -51,25 +52,21 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
 
 interface HistoryMatchCardProps {
   match: MatchWithGame;
-  mapNames: {[key: string]: string};
   onViewDetails: (match: MatchWithGame) => void;
-  formatMapName: (mapId: string) => string;
 }
 
-const HistoryMatchCard = memo(({ 
-  match, 
-  mapNames, 
-  onViewDetails, 
-  formatMapName 
+const HistoryMatchCard = memo(({
+  match,
+  onViewDetails
 }: HistoryMatchCardProps) => {
   return (
-    <Card 
-      shadow="sm" 
-      padding="lg" 
-      radius="md" 
+    <Card
+      shadow="sm"
+      padding={0}
+      radius="md"
       withBorder
-      style={{ 
-        cursor: 'pointer', 
+      style={{
+        cursor: 'pointer',
         opacity: 0.9,
         transition: 'all 0.2s ease'
       }}
@@ -83,7 +80,18 @@ const HistoryMatchCard = memo(({
       }}
       onClick={() => onViewDetails(match)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={match.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${match.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover' }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={match.game_icon}
           alt={match.game_name}
@@ -93,54 +101,18 @@ const HistoryMatchCard = memo(({
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
         </Stack>
-        <RingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: MATCH_FLOW_STEPS[match.status]?.progress || 0,
-              color: match.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={match.status} gameColor={match.game_color} />
       </Group>
-      
-      <Divider mb="md" />
-      
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
+
+      <Divider mb="md" mx="lg" />
+
+      <Stack gap="xs" px="lg" pb="lg" style={{ minHeight: '100px' }}>
         <div style={{ minHeight: '20px' }}>
           {match.description && (
             <Text size="sm" c="dimmed">{match.description}</Text>
           )}
         </div>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rules:</Text>
-          <Text size="sm" tt="capitalize">{match.rules || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds:</Text>
-          <Text size="sm">{match.rounds || 'Not specified'}</Text>
-        </Group>
-        
-        <Group justify="space-between" align="center">
-          <Text size="sm" c="dimmed">Maps:</Text>
-          <Text size="sm" ta="right" style={{ maxWidth: '60%' }} truncate="end">
-            {match.maps && match.maps.length > 0 ? (
-              (() => {
-                const cleanMapId = match.maps[0].replace(/-\d+$/, '');
-                const mapName = mapNames[cleanMapId] || formatMapName(cleanMapId);
-                return match.maps.length > 1
-                  ? `${mapName} +${match.maps.length - 1} more`
-                  : mapName;
-              })()
-            ) : (
-              'None selected'
-            )}
-          </Text>
-        </Group>
-        
+
         <Group justify="space-between">
           <Text size="sm" c="dimmed">Max Participants:</Text>
           <Text size="sm">{match.max_participants}</Text>
@@ -158,22 +130,10 @@ const HistoryMatchCard = memo(({
 HistoryMatchCard.displayName = 'HistoryMatchCard';
 
 export function MatchHistoryDashboard() {
+  const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<MatchWithGame | null>(null);
-  const [participants, setParticipants] = useState<{
-    id: string;
-    user_id: string;
-    username: string;
-    joined_at: string;
-    signup_data: Record<string, unknown>;
-  }[]>([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(30);
-  const [reminders, setReminders] = useState<ReminderData[]>([]);
-  const [remindersLoading, setRemindersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMatches = useCallback(async (silent = false) => {
@@ -240,7 +200,7 @@ export function MatchHistoryDashboard() {
     return () => clearInterval(intervalId);
   }, [refreshInterval, fetchMatches]);
 
-  const formatMapName = useCallback((mapId: string) => {
+  const _formatMapName = useCallback((mapId: string) => {
     // Convert map ID to proper display name
     // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
     return mapId
@@ -249,9 +209,9 @@ export function MatchHistoryDashboard() {
       .join(' ');
   }, []);
 
-  const [mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
-  const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
+  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
+  const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
+  const [_mapNotes, _setMapNotes] = useState<{[key: string]: string}>({});
 
   const fetchMapNames = async (gameId: string) => {
     try {
@@ -341,85 +301,9 @@ export function MatchHistoryDashboard() {
     });
   }, [matches]);
 
-  const fetchParticipants = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setParticipantsLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/participants`);
-      if (response.ok) {
-        const data = await response.json();
-        setParticipants(data.participants || []);
-        setSignupConfig(data.signupConfig || null);
-      } else {
-        logger.error('Failed to fetch participants');
-        if (!silent) {
-          setParticipants([]);
-          setSignupConfig(null);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching participants:', error);
-      if (!silent) {
-        setParticipants([]);
-        setSignupConfig(null);
-      }
-    } finally {
-      if (!silent) {
-        setParticipantsLoading(false);
-      }
-    }
-  }, []);
-
-  const fetchReminders = useCallback(async (matchId: string, silent = false) => {
-    if (!silent) {
-      setRemindersLoading(true);
-    }
-    try {
-      const response = await fetch(`/api/matches/${matchId}/reminders`);
-      if (response.ok) {
-        const data = await response.json();
-        setReminders(data.reminders || []);
-      } else {
-        logger.error('Failed to fetch reminders');
-        if (!silent) {
-          setReminders([]);
-        }
-      }
-    } catch (error) {
-      logger.error('Error fetching reminders:', error);
-      if (!silent) {
-        setReminders([]);
-      }
-    } finally {
-      if (!silent) {
-        setRemindersLoading(false);
-      }
-    }
-  }, []);
-
-  const fetchMapNotes = useCallback(async (matchId: string) => {
-    try {
-      const response = await fetch(`/api/matches/${matchId}/map-notes`);
-      if (response.ok) {
-        const data = await response.json();
-        setMapNotes(data.notes || {});
-      } else {
-        setMapNotes({});
-      }
-    } catch (error) {
-      logger.error('Error fetching map notes:', error);
-      setMapNotes({});
-    }
-  }, []);
-
   const handleViewDetails = useCallback((match: MatchWithGame) => {
-    setSelectedMatch(match);
-    setDetailsModalOpen(true);
-    fetchParticipants(match.id);
-    fetchReminders(match.id);
-    fetchMapNotes(match.id);
-  }, [fetchParticipants, fetchReminders, fetchMapNotes]);
+    router.push(`/matches/history/${match.id}`);
+  }, [router]);
 
   // Filter matches based on search query
   const filteredMatches = useMemo(() => {
@@ -465,14 +349,12 @@ export function MatchHistoryDashboard() {
         >
           <HistoryMatchCard
             match={match}
-            mapNames={mapNames}
             onViewDetails={handleViewDetails}
-            formatMapName={formatMapName}
           />
         </motion.div>
       </Grid.Col>
     ));
-  }, [filteredMatches, mapNames, handleViewDetails, formatMapName]);
+  }, [filteredMatches, handleViewDetails]);
 
 
   if (loading) {
@@ -539,27 +421,6 @@ export function MatchHistoryDashboard() {
           </Grid>
         </motion.div>
       )}
-
-      <MatchDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        title="Match History Details"
-        selectedMatch={selectedMatch}
-        participants={participants}
-        participantsLoading={participantsLoading}
-        signupConfig={signupConfig}
-        reminders={reminders}
-        remindersLoading={remindersLoading}
-        mapDetails={mapDetails}
-        mapNotes={mapNotes}
-        formatMapName={formatMapName}
-        parseDbTimestamp={parseDbTimestamp}
-        showTabs={true}
-        showDeleteButton={false}
-        showAssignButton={false}
-        onDelete={() => {}}
-        onAssign={() => {}}
-      />
     </div>
   );
 }

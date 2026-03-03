@@ -16,14 +16,12 @@ import {
   Grid,
   TextInput,
   useMantineColorScheme,
-  Badge
+  Badge,
+  Image
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
-import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
-import { TournamentDetailsModal } from './tournament-details-modal';
-import { AssignTournamentTeamsModal } from './assign-tournament-teams-modal';
-import { AnimatedRingProgress } from './AnimatedRingProgress';
+import { StageRing } from './StageRing';
 import { notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -43,6 +41,7 @@ interface TournamentWithGame extends Tournament {
   game_name?: string;
   game_icon?: string;
   game_color?: string;
+  event_image_url?: string;
   participant_count?: number;
   has_bracket?: boolean;
 }
@@ -60,29 +59,44 @@ const TournamentCard = memo(({
 }: TournamentCardProps) => {
   const { colorScheme } = useMantineColorScheme();
   
+  const accentColor = tournament.game_color || '#7c3aed';
+
   return (
-    <Card 
+    <Card
       shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-      padding="lg" 
-      radius="md" 
+      padding={0}
+      radius="md"
       withBorder
       bg={colorScheme === 'light' ? 'white' : undefined}
-      style={{ 
+      style={{
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
+        transition: 'all 0.25s ease',
+        borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : `${accentColor}33`,
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        e.currentTarget.style.transform = 'translateY(-4px) scale(1.01)';
+        e.currentTarget.style.boxShadow = `0 12px 32px ${accentColor}44`;
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
         e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(tournament)}
     >
-      <Group mb="md">
+      <Card.Section style={{ height: 140, overflow: 'hidden' }}>
+        <Image
+          src={tournament.event_image_url || '/assets/placeholder-cover.png'}
+          alt={`${tournament.name} event image`}
+          h={140}
+          w="100%"
+          fit="cover"
+          style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
+          onMouseOver={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.04)'; }}
+          onMouseOut={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
+        />
+      </Card.Section>
+
+      <Group mb="md" p="lg" pb={0}>
         <Avatar
           src={tournament.game_icon}
           alt={tournament.game_name}
@@ -92,58 +106,52 @@ const TournamentCard = memo(({
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
-        <AnimatedRingProgress
-          size={50}
-          thickness={4}
-          sections={[
-            {
-              value: TOURNAMENT_FLOW_STEPS[tournament.status]?.progress || 0,
-              color: tournament.game_color || '#95a5a6'
-            }
-          ]}
-        />
+        <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
-      
-      <Divider mb="md" />
-      
-      <Stack gap="xs" style={{ minHeight: '140px' }}>
-        <div style={{ minHeight: '20px' }}>
-          {tournament.description && (
-            <Text size="sm" c="dimmed">{tournament.description}</Text>
-          )}
-        </div>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Format:</Text>
-          <Badge size="sm" variant="light">
-            {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
-          </Badge>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Rounds/Match:</Text>
-          <Text size="sm">{tournament.rounds_per_match}</Text>
-        </Group>
-        
-        <Group justify="space-between">
-          <Text size="sm" c="dimmed">Participants:</Text>
-          <Text size="sm">
-            {tournament.participant_count || 0}
-            {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
-          </Text>
-        </Group>
 
-        {tournament.start_time && (
-          <Group justify="space-between">
-            <Text size="sm" c="dimmed">Start:</Text>
-            <Text size="sm">{parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()}</Text>
-          </Group>
+      <Stack gap="xs" px="lg">
+        {tournament.description && (
+          <Text size="sm" c="dimmed">{tournament.description}</Text>
         )}
+
+        <Divider mb="xs" />
+
+        <Group gap="xl" justify="center">
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Format</Text>
+            <Badge size="sm" variant="light">
+              {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
+            </Badge>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Participants</Text>
+            <Text size="sm" fw={500}>
+              {tournament.participant_count || 0}
+              {tournament.max_participants ? ` / ${tournament.max_participants}` : ''}
+            </Text>
+          </Stack>
+          <Stack gap={2} align="center">
+            <Text size="xs" c="dimmed">Starts</Text>
+            <Text size="sm" fw={500}>
+              {tournament.start_time
+                ? parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()
+                : 'N/A'}
+            </Text>
+          </Stack>
+        </Group>
       </Stack>
-      
-      <Divider mt="md" mb="md" />
-      
-      <Group justify="space-between" align="center">
+
+      <Group mt="md" px="lg" pb="lg" grow>
+        <Button
+          size="sm"
+          color={tournament.game_color || 'blue'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(tournament);
+          }}
+        >
+          Details
+        </Button>
         {getNextStatusButton(tournament)}
       </Group>
     </Card>
@@ -160,10 +168,6 @@ export function TournamentDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedTournament, setSelectedTournament] = useState<TournamentWithGame | null>(null);
-  const [assignTeamsModalOpen, setAssignTeamsModalOpen] = useState(false);
-  const [selectedTournamentForAssignment, setSelectedTournamentForAssignment] = useState<TournamentWithGame | null>(null);
 
   const fetchTournaments = useCallback(async (silent = false) => {
     try {
@@ -230,9 +234,8 @@ export function TournamentDashboard() {
   };
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    setSelectedTournament(tournament);
-    setDetailsModalOpen(true);
-  }, []);
+    router.push(`/tournaments/${tournament.id}`);
+  }, [router]);
 
   const handleStatusTransition = async (tournamentId: string, newStatus: string) => {
     const notificationId = `tournament-transition-${tournamentId}`;
@@ -295,36 +298,6 @@ export function TournamentDashboard() {
         message: 'Failed to update tournament status'
       });
     }
-  };
-
-  const handleDeleteTournament = async (tournament: TournamentWithGame) => {
-    try {
-      const response = await fetch(`/api/tournaments/${tournament.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        setTournaments(prev => prev.filter(t => t.id !== tournament.id));
-        setDetailsModalOpen(false);
-      } else {
-        const error = await response.json();
-        notificationHelper.error({
-          title: 'Delete Failed',
-          message: error.error || 'Failed to delete tournament'
-        });
-      }
-    } catch (error) {
-      logger.error('Error deleting tournament:', error);
-      notificationHelper.error({
-        title: 'Connection Error',
-        message: 'Failed to delete tournament'
-      });
-    }
-  };
-
-  const handleAssignTeamsFromModal = (tournament: TournamentWithGame) => {
-    setSelectedTournamentForAssignment(tournament);
-    setAssignTeamsModalOpen(true);
   };
 
   const handleProgressTournament = useCallback(async (tournamentId: string) => {
@@ -424,143 +397,75 @@ export function TournamentDashboard() {
     switch (tournament.status) {
       case 'created':
         return (
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               handleStatusTransition(tournament.id, 'gather');
             }}
-            style={{ flex: 1 }}
           >
             Open Signups
           </Button>
         );
       case 'gather':
         return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedTournamentForAssignment(tournament);
-                setAssignTeamsModalOpen(true);
-              }}
-              style={{ flex: 1 }}
-            >
-              Assign
-            </Button>
-            <Button
-              size="sm"
-              color="orange"
-              onClick={(e) => {
-                e.stopPropagation();
-                modals.openConfirmModal({
-                  title: 'Close Signups',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
-                    </Text>
-                  ),
-                  labels: { confirm: 'Close Signups', cancel: 'Cancel' },
-                  confirmProps: { color: 'orange' },
-                  onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
-                });
-              }}
-              style={{ flex: 1 }}
-            >
-              Close Signups
-            </Button>
-          </Group>
+          <Button
+            size="sm"
+            color="orange"
+            onClick={(e) => {
+              e.stopPropagation();
+              modals.openConfirmModal({
+                title: 'Close Signups',
+                children: (
+                  <Text size="sm">
+                    Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new teams from joining the tournament.
+                  </Text>
+                ),
+                labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+                confirmProps: { color: 'orange' },
+                onConfirm: () => handleStatusTransition(tournament.id, 'assign'),
+              });
+            }}
+          >
+            Close Signups
+          </Button>
         );
       case 'assign':
-        return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedTournamentForAssignment(tournament);
-                setAssignTeamsModalOpen(true);
-              }}
-              style={{ flex: 1 }}
-            >
-              Assign
-            </Button>
-            {tournament.has_bracket ? (
-              <Button
-                size="sm"
-                color="green"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStatusTransition(tournament.id, 'battle');
-                }}
-                style={{ flex: 1 }}
-              >
-                Start Tournament
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                color="blue"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleGenerateBracket(tournament.id);
-                }}
-                style={{ flex: 1 }}
-              >
-                Bracket
-              </Button>
-            )}
-          </Group>
+        return tournament.has_bracket ? (
+          <Button
+            size="sm"
+            color="green"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusTransition(tournament.id, 'battle');
+            }}
+          >
+            Start Tournament
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            color="blue"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGenerateBracket(tournament.id);
+            }}
+          >
+            Generate Bracket
+          </Button>
         );
       case 'battle':
         return (
-          <Group gap="xs" style={{ flex: 1 }}>
-            <Button
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleProgressTournament(tournament.id);
-              }}
-              style={{ flex: 1 }}
-              color="green"
-            >
-              Next Round
-            </Button>
-            <Button
-              size="sm"
-              color="red"
-              onClick={(e) => {
-                e.stopPropagation();
-                modals.openConfirmModal({
-                  title: 'End Tournament',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to end &quot;{tournament.name}&quot;? This will mark the tournament as complete.
-                    </Text>
-                  ),
-                  labels: { confirm: 'End Tournament', cancel: 'Cancel' },
-                  confirmProps: { color: 'red' },
-                  onConfirm: () => handleStatusTransition(tournament.id, 'complete'),
-                });
-              }}
-              style={{ flex: 1 }}
-            >
-              End Tournament
-            </Button>
-          </Group>
-        );
-      case 'complete':
-        return (
-          <Text size="sm" c="green" fw={500} ta="center" style={{ flex: 1 }}>
-            Tournament Complete
-          </Text>
-        );
-      case 'cancelled':
-        return (
-          <Text size="sm" c="red" fw={500} ta="center" style={{ flex: 1 }}>
-            Tournament Cancelled
-          </Text>
+          <Button
+            size="sm"
+            color="green"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleProgressTournament(tournament.id);
+            }}
+          >
+            Next Round
+          </Button>
         );
       default:
         return null;
@@ -677,20 +582,6 @@ export function TournamentDashboard() {
         </motion.div>
       )}
 
-      <TournamentDetailsModal
-        opened={detailsModalOpen}
-        onClose={() => setDetailsModalOpen(false)}
-        tournament={selectedTournament}
-        onDelete={handleDeleteTournament}
-        onAssign={handleAssignTeamsFromModal}
-      />
-
-      <AssignTournamentTeamsModal
-        isOpen={assignTeamsModalOpen}
-        onClose={() => setAssignTeamsModalOpen(false)}
-        tournamentId={selectedTournamentForAssignment?.id || ''}
-        tournamentName={selectedTournamentForAssignment?.name || ''}
-      />
     </div>
   );
 }

@@ -26,8 +26,8 @@ Create a Match, and MatchExec handles the rest!
 
 ## 📷 Screenshots
 
-![Matches Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Matches.png?raw=true "Matches Screen")
-![Games Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Games.png?raw=true "Games Screen")
+![Matches Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/matches.png?raw=true "Matches Screen")
+![Games Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/games.png?raw=true "Games Screen")
 ![Channels Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Channels.png?raw=true "Channels Screen")
 ![Settings Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Settings.png?raw=true "Settings Screen")
 ![Discord Match Embed](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/FlJmJP.png?raw=true "Discord Match Embed")
@@ -37,7 +37,7 @@ Create a Match, and MatchExec handles the rest!
 
 ## 🛸 Get Started
 
-Checking out our dedicated [Wiki page](https://github.com/slamanna212/MatchExec/wiki/Setting-Up-MatchExec) is recommended, but TLDR:
+Documentation is [available here](https://docs.matchexec.com/docs/getting-started/getting-started/) Reading it is recommended, but TLDR:
 
 ```
 docker run -d \
@@ -48,31 +48,13 @@ docker run -d \
   -v $(pwd)/uploads:/app/public/uploads \
   ghcr.io/slamanna212/matchexec:latest
 ```
-
----
-
-## 🧪 Contributing
-
-First, run the development server:
-
-```bash
-npm install
-```
-
-The, start the dev server
-
-```bash
-npm run dev:all
-```
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-**All pull requests must target the dev branch, and pass Lint and Build checks.**
-
 ---
 
 ## ✉️ Connect
 
 Need Help? Want to add more games?
+
+[Check the Docs](https://docs.matchexec.com)
 
 [Open an issue](https://github.com/slamanna212/MatchExec/issues/new/choose)
 

@@ -11,6 +11,50 @@ import {
   handleEndTransition
 } from '../../../../../lib/tournament-transition-handlers';
 import { handleTournamentAssignTransition } from '../../../../../lib/transition-handlers';
+import type { Database } from '@/lib/database/connection';
+
+function validateNewStatus(newStatus: string | undefined): string | null {
+  if (!newStatus || !TOURNAMENT_FLOW_STEPS[newStatus as keyof typeof TOURNAMENT_FLOW_STEPS]) {
+    return 'Invalid status provided';
+  }
+  return null;
+}
+
+function validateTournamentStatusTransition(currentTournament: Tournament, newStatus: string): string | null {
+  const currentStep = TOURNAMENT_FLOW_STEPS[currentTournament.status as keyof typeof TOURNAMENT_FLOW_STEPS];
+  const newStep = TOURNAMENT_FLOW_STEPS[newStatus as keyof typeof TOURNAMENT_FLOW_STEPS];
+  if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
+    return 'Cannot move backwards in tournament flow';
+  }
+  return null;
+}
+
+async function validateBattleRequirements(db: Database, tournamentId: string): Promise<string | null> {
+  const teamCount = await db.get<{ count: number }>(`SELECT COUNT(*) as count FROM tournament_teams WHERE tournament_id = ?`, [tournamentId]);
+  const memberCount = await db.get<{ count: number }>(`SELECT COUNT(*) as count FROM tournament_team_members ttm JOIN tournament_teams tt ON ttm.team_id = tt.id WHERE tt.tournament_id = ?`, [tournamentId]);
+  if (!teamCount || teamCount.count < 2) return 'At least 2 teams are required to start tournament battles';
+  if (!memberCount || memberCount.count === 0) return 'Teams must have members assigned before starting tournament battles';
+  return null;
+}
+
+async function executeTournamentStatusActions(db: Database, tournamentId: string, newStatus: string): Promise<void> {
+  switch (newStatus) {
+    case 'gather':
+      await handleGatherTransition(db, tournamentId);
+      break;
+    case 'assign':
+      await handleAssignTransition(db, tournamentId);
+      await handleTournamentAssignTransition(tournamentId);
+      break;
+    case 'battle':
+      await handleBattleTransition(db, tournamentId);
+      break;
+    case 'complete':
+    case 'cancelled':
+      await handleEndTransition(db, tournamentId, newStatus);
+      break;
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -20,96 +64,34 @@ export async function POST(
     const { tournamentId } = await params;
     const { newStatus } = await request.json();
 
-    if (!newStatus || !TOURNAMENT_FLOW_STEPS[newStatus as keyof typeof TOURNAMENT_FLOW_STEPS]) {
-      return NextResponse.json(
-        { error: 'Invalid status provided' },
-        { status: 400 }
-      );
+    const statusError = validateNewStatus(newStatus);
+    if (statusError) {
+      return NextResponse.json({ error: statusError }, { status: 400 });
     }
 
     const db = await getDbInstance();
-    
-    // Get current tournament data
-    const currentTournament = await db.get<Tournament>(` 
-      SELECT * FROM tournaments WHERE id = ?
-    `, [tournamentId]);
 
+    const currentTournament = await db.get<Tournament>(`SELECT * FROM tournaments WHERE id = ?`, [tournamentId]);
     if (!currentTournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
     }
 
-    // Validate status transition (basic flow validation)
-    const currentStep = TOURNAMENT_FLOW_STEPS[currentTournament.status as keyof typeof TOURNAMENT_FLOW_STEPS];
-    const newStep = TOURNAMENT_FLOW_STEPS[newStatus as keyof typeof TOURNAMENT_FLOW_STEPS];
-
-    if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
-      return NextResponse.json(
-        { error: 'Cannot move backwards in tournament flow' },
-        { status: 400 }
-      );
+    const transitionError = validateTournamentStatusTransition(currentTournament, newStatus);
+    if (transitionError) {
+      return NextResponse.json({ error: transitionError }, { status: 400 });
     }
 
-    // Additional validation for specific transitions
     if (newStatus === 'battle') {
-      // Check if teams are assigned for tournament to start battle phase
-      const teamCount = await db.get<{ count: number }>(`
-        SELECT COUNT(*) as count FROM tournament_teams WHERE tournament_id = ?
-      `, [tournamentId]);
-      
-      const memberCount = await db.get<{ count: number }>(`
-        SELECT COUNT(*) as count FROM tournament_team_members ttm
-        JOIN tournament_teams tt ON ttm.team_id = tt.id
-        WHERE tt.tournament_id = ?
-      `, [tournamentId]);
-      
-      if (!teamCount || teamCount.count < 2) {
-        return NextResponse.json(
-          { error: 'At least 2 teams are required to start tournament battles' },
-          { status: 400 }
-        );
-      }
-
-      if (!memberCount || memberCount.count === 0) {
-        return NextResponse.json(
-          { error: 'Teams must have members assigned before starting tournament battles' },
-          { status: 400 }
-        );
+      const battleError = await validateBattleRequirements(db, tournamentId);
+      if (battleError) {
+        return NextResponse.json({ error: battleError }, { status: 400 });
       }
     }
 
-    // Update tournament status
-    await db.run(`
-      UPDATE tournaments 
-      SET status = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [newStatus, tournamentId]);
-
+    await db.run(`UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [newStatus, tournamentId]);
     logger.debug(`🏆 Tournament ${tournamentId} transitioned from ${currentTournament.status} to ${newStatus}`);
 
-    // Handle status-specific actions using handlers
-    switch (newStatus) {
-      case 'gather':
-        await handleGatherTransition(db, tournamentId);
-        break;
-
-      case 'assign':
-        await handleAssignTransition(db, tournamentId);
-        // Queue Discord status updates for all tournament matches to close signups
-        await handleTournamentAssignTransition(tournamentId);
-        break;
-
-      case 'battle':
-        await handleBattleTransition(db, tournamentId);
-        break;
-
-      case 'complete':
-      case 'cancelled':
-        await handleEndTransition(db, tournamentId, newStatus);
-        break;
-    }
+    await executeTournamentStatusActions(db, tournamentId, newStatus);
 
     // Get updated tournament data with game info
     const updatedTournament = await db.get<Tournament & {
