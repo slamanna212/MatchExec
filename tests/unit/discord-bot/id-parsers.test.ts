@@ -2,6 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { parseModalCustomId } from '../../../processes/discord-bot/utils/id-parsers';
 
 describe('parseModalCustomId', () => {
+  describe('team-based tournament signup — legacy underscore format (backward compat)', () => {
+    it('parses the exact failing format from production logs', () => {
+      const customId =
+        'signup_form_team_tournament_1772497617996_obkfu5quc_team_1772497618778_zzc5dryj9';
+      const result = parseModalCustomId(customId);
+
+      expect(result).not.toBeNull();
+      expect(result!.eventId).toBe('tournament_1772497617996_obkfu5quc');
+      expect(result!.selectedTeamId).toBe('team_1772497618778_zzc5dryj9');
+      expect(result!.isTournament).toBe(true);
+    });
+  });
+
   describe('team-based tournament signup (colon delimiter)', () => {
     it('parses a real team-based tournament modal custom ID correctly', () => {
       const eventId = 'tournament_1772497617996_obkfu5quc';
@@ -61,6 +74,32 @@ describe('parseModalCustomId', () => {
       const result = parseModalCustomId('signup_form_match_123_abc');
 
       expect(result!.isTournament).toBe(false);
+    });
+  });
+
+  describe('round-trip: custom ID format matches parser expectations', () => {
+    it('parses the custom ID format produced by the current handleStringSelectMenu code', () => {
+      // The current code produces: signup_form_${eventId} (no team in ID)
+      // teamId comes from the in-memory map, not the custom ID
+      const eventId = 'tournament_1772497617996_obkfu5quc';
+      const customId = `signup_form_${eventId}`;
+      const result = parseModalCustomId(customId);
+
+      expect(result).not.toBeNull();
+      expect(result!.eventId).toBe(eventId);
+      expect(result!.isTournament).toBe(true);
+      expect(result!.selectedTeamId).toBeNull();
+    });
+
+    it('parses match signup format produced by handleStringSelectMenu', () => {
+      const eventId = 'match_1772497617996_abc123';
+      const customId = `signup_form_${eventId}`;
+      const result = parseModalCustomId(customId);
+
+      expect(result).not.toBeNull();
+      expect(result!.eventId).toBe(eventId);
+      expect(result!.isTournament).toBe(false);
+      expect(result!.selectedTeamId).toBeNull();
     });
   });
 

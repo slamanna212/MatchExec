@@ -22,12 +22,23 @@ export function parseModalCustomId(customId: string): ParsedModalId | null {
     let selectedTeamId: string | null = null;
 
     if (isTeamBased) {
-      // Format: signup_form_team:<eventId>:<selectedTeamId>
+      // New format: signup_form_team:<eventId>:<selectedTeamId>
       const rest = customId.slice('signup_form_team:'.length);
       const colonIdx = rest.indexOf(':');
       if (colonIdx !== -1) {
         eventId = rest.slice(0, colonIdx);
         selectedTeamId = rest.slice(colonIdx + 1);
+      }
+    } else if (customId.startsWith('signup_form_team_')) {
+      // Legacy format: signup_form_team_<eventId>_<teamId>
+      // IDs follow the pattern: tournament_<timestamp>_<random> and team_<timestamp>_<random>
+      // Use regex to reliably extract them despite all-underscore separators
+      const legacyMatch = customId.match(
+        /^signup_form_team_((?:tournament|match)_\d+_[a-z0-9]+)_(team_\d+_[a-z0-9]+)$/
+      );
+      if (legacyMatch) {
+        eventId = legacyMatch[1];
+        selectedTeamId = legacyMatch[2];
       }
     } else {
       // Format: signup_form_<eventId>
