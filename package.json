@@ -62,7 +62,7 @@
     "uuid": "13.0.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "3.3.4",
+    "@eslint/eslintrc": "3.3.5",
     "@tailwindcss/postcss": "4.2.1",
     "@types/express": "5.0.6",
     "@types/node": "25.3.3",
