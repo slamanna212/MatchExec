@@ -10,7 +10,7 @@ permissions:
 jobs:
   lint-and-typecheck:
     name: Lint & Type Check
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,7 +73,7 @@ jobs:
 
   integration-test:
     name: Integration Tests
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -93,7 +93,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     needs: [lint-and-typecheck, test, integration-test]
     steps:
       - uses: actions/checkout@v4
