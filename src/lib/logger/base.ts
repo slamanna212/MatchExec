@@ -19,11 +19,14 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   critical: 4,
 };
 
+export type LogFormat = 'text' | 'json';
+
 export abstract class BaseLogger {
   protected currentLevel: LogLevel = 'warning';
   protected levelCache: { level: LogLevel; timestamp: number } | null = null;
   protected cacheDuration = 5000; // 5 seconds
   protected supportsColor: boolean;
+  protected logFormat: LogFormat;
   protected reloadInterval: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -33,6 +36,10 @@ export abstract class BaseLogger {
       process.stdout &&
       process.stdout.isTTY !== false &&
       process.env.TERM !== 'dumb';
+
+    // Determine log format from environment variable (infrastructure-level config)
+    const envFormat = typeof process !== 'undefined' ? process.env.LOG_FORMAT : undefined;
+    this.logFormat = envFormat === 'json' ? 'json' : 'text';
 
     // Load initial level from database (async, completes in background)
     this.loadLogLevel();
@@ -77,8 +84,62 @@ export abstract class BaseLogger {
     return `[${timestamp}] ${levelStr} ${message}`;
   }
 
+  protected formatJsonMessage(level: LogLevel, args: unknown[]): string {
+    const entry: Record<string, unknown> = {
+      timestamp: new Date().toISOString(),
+      level: level,
+      severity: LOG_LEVELS[level],
+    };
+
+    // Separate errors from other args
+    const errors: Error[] = [];
+    const messages: string[] = [];
+
+    for (const arg of args) {
+      if (arg instanceof Error) {
+        errors.push(arg);
+      } else if (typeof arg === 'object' && arg !== null) {
+        // Merge object properties directly into the log entry
+        Object.assign(entry, arg);
+      } else {
+        messages.push(String(arg));
+      }
+    }
+
+    if (messages.length > 0) {
+      entry.message = messages.join(' ');
+    }
+
+    if (errors.length > 0) {
+      const err = errors[0];
+      entry.error = {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+      };
+    }
+
+    return JSON.stringify(entry);
+  }
+
   protected log(level: LogLevel, args: unknown[]): void {
     if (!this.shouldLog(level)) {
+      return;
+    }
+
+    if (this.logFormat === 'json') {
+      const jsonLine = this.formatJsonMessage(level, args);
+      // In JSON mode, always use console.log for consistent machine parsing
+      // (stderr vs stdout distinction is handled by log level field)
+      switch (level) {
+        case 'error':
+        case 'critical':
+          console.error(jsonLine);
+          break;
+        default:
+          console.log(jsonLine);
+          break;
+      }
       return;
     }
 

@@ -538,12 +538,24 @@ class MatchExecScheduler {
   }
 
   async stop() {
-    logger.debug('🛑 Stopping scheduler...');
+    logger.info('🛑 Stopping scheduler...');
     this.isRunning = false;
-    
+
     // Stop all cron jobs
     this.cronJobs.forEach(job => job.stop());
     this.cronJobs = [];
+
+    // Close database connection
+    if (this.db) {
+      try {
+        await (this.db as { close: () => Promise<void> }).close();
+        logger.info('✅ Database connection closed');
+      } catch (error) {
+        logger.error('Error closing database connection:', error);
+      }
+    }
+
+    logger.info('✅ Scheduler shutdown complete');
   }
 
   async reloadSettings() {
