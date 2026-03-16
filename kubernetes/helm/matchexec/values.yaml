@@ -1,0 +1,130 @@
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+image:
+  # -- Container image repository
+  repository: matchexec
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to Chart.appVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Seconds to wait for graceful shutdown before SIGKILL
+terminationGracePeriodSeconds: 30
+
+# -- Name of an existing Secret to load as environment variables.
+# Use this to reference a Secret you manage outside of this chart
+# (e.g. sealed-secrets, external-secrets).
+existingSecret: ""
+
+# -- Inline secret values. Ignored when existingSecret is set.
+# These are created as a Kubernetes Secret and mounted as env vars.
+# Example:
+#   secret:
+#     DISCORD_BOT_TOKEN: "your-token-here"
+secret: {}
+
+# -- Extra plain-text environment variables (non-sensitive config)
+env: {}
+  # TZ: "America/New_York"
+
+logging:
+  # -- Enable JSON structured logging (recommended for K8s log aggregation)
+  json: true
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+
+ingress:
+  # -- Enable ingress
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts: []
+    # - host: matchexec.example.com
+    #   paths:
+    #     - path: /
+    #       pathType: Prefix
+  tls: []
+    # - secretName: matchexec-tls
+    #   hosts:
+    #     - matchexec.example.com
+
+persistence:
+  # -- Enable persistent storage for the SQLite database
+  enabled: true
+  # -- Use an existing PVC instead of creating one
+  existingClaim: ""
+  # -- Storage class (use "-" for default)
+  storageClass: ""
+  # -- Access mode
+  accessMode: ReadWriteOnce
+  # -- Volume size
+  size: 1Gi
+
+probes:
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    # -- Allow up to 60s for initial startup (migrations, seeding)
+    failureThreshold: 12
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+metrics:
+  serviceMonitor:
+    # -- Create a Prometheus ServiceMonitor
+    enabled: false
+    # -- Scrape interval
+    interval: 30s
+    # -- Scrape timeout
+    scrapeTimeout: 10s
+    # -- Additional labels for ServiceMonitor (e.g. for Prometheus selector)
+    labels: {}
+
+  grafana:
+    # -- Create a ConfigMap with the Grafana dashboard JSON
+    dashboardConfigMap: false
+    # -- Labels for the dashboard ConfigMap.
+    # The default label makes it auto-discoverable by the Grafana sidecar.
+    labels:
+      grafana_dashboard: "1"
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
