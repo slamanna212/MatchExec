@@ -17,8 +17,19 @@ describe('Database Seeder', () => {
       fs.unlinkSync(testDbPath);
     }
 
+    // Ensure directory exists
+    const dbDir = path.dirname(testDbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     // Create and migrate database
-    db = new sqlite3.Database(testDbPath);
+    db = await new Promise<sqlite3.Database>((resolve, reject) => {
+      const instance = new sqlite3.Database(testDbPath, (err) => {
+        if (err) reject(err);
+        else resolve(instance);
+      });
+    });
     const migrationsDir = path.join(process.cwd(), 'migrations');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))

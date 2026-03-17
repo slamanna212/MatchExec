@@ -110,7 +110,7 @@ export class SignupFormLoader {
     };
   }
 
-  static clearCache(gameId?: string) {
+  static clearCache(gameId?: string): void {
     if (gameId) {
       this.cache.delete(gameId);
     } else {

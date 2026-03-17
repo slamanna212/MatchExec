@@ -88,29 +88,29 @@ export class AvatarUpdateJob {
       const failedUserIds: string[] = [];
 
       // Update each user's avatar
-      for (const { discord_user_id } of participants) {
+      for (const { discord_user_id: discordUserId } of participants) {
         try {
-          const avatarUrl = await getDiscordAvatarUrl(this.discordClient, discord_user_id);
+          const avatarUrl = await getDiscordAvatarUrl(this.discordClient, discordUserId);
 
           // Update all records for this user - success resets failure count
           await this.db.run(`
             UPDATE match_participants
             SET avatar_url = ?, last_avatar_check = CURRENT_TIMESTAMP, failed_avatar_checks = 0
             WHERE discord_user_id = ?
-          `, [avatarUrl, discord_user_id]);
+          `, [avatarUrl, discordUserId]);
 
           updated++;
         } catch (error) {
-          logger.error(`Failed to update avatar for user ${discord_user_id}:`, error);
+          logger.error(`Failed to update avatar for user ${discordUserId}:`, error);
           failed++;
-          failedUserIds.push(discord_user_id);
+          failedUserIds.push(discordUserId);
 
           // Update last_avatar_check but do NOT overwrite avatar_url
           await this.db.run(`
             UPDATE match_participants
             SET last_avatar_check = CURRENT_TIMESTAMP
             WHERE discord_user_id = ?
-          `, [discord_user_id]);
+          `, [discordUserId]);
         }
       }
 

@@ -33,7 +33,7 @@ export function createMigrationRunner(
   db: Database,
   migrationsDir = path.join(process.cwd(), 'migrations'),
   logger: UmzugLogger | undefined = console
-) {
+): Umzug {
   return new Umzug({
     migrations: {
       glob: ['*.sql', { cwd: migrationsDir }],

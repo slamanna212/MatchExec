@@ -21,7 +21,18 @@ describe('Database Migrations', () => {
       fs.unlinkSync(testDbPath);
     }
 
-    const db = new sqlite3.Database(testDbPath);
+    // Ensure directory exists
+    const dbDir = path.dirname(testDbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
+    const db = await new Promise<sqlite3.Database>((resolve, reject) => {
+      const instance = new sqlite3.Database(testDbPath, (err) => {
+        if (err) reject(err);
+        else resolve(instance);
+      });
+    });
     const migrationsDir = path.join(process.cwd(), 'migrations');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
@@ -203,7 +214,18 @@ describe('Database Migrations', () => {
       fs.unlinkSync(testDbPath);
     }
 
-    const db = new sqlite3.Database(testDbPath);
+    // Ensure directory exists
+    const dbDir2 = path.dirname(testDbPath);
+    if (!fs.existsSync(dbDir2)) {
+      fs.mkdirSync(dbDir2, { recursive: true });
+    }
+
+    const db = await new Promise<sqlite3.Database>((resolve, reject) => {
+      const instance = new sqlite3.Database(testDbPath, (err) => {
+        if (err) reject(err);
+        else resolve(instance);
+      });
+    });
     const migrationsDir = path.join(process.cwd(), 'migrations');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
