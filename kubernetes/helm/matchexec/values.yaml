@@ -31,7 +31,6 @@ secret: {}
 
 # -- Extra plain-text environment variables (non-sensitive config)
 env: {}
-  # TZ: "America/New_York"
 
 logging:
   # -- Enable JSON structured logging (recommended for K8s log aggregation)
