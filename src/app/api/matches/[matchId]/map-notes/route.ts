@@ -16,6 +16,10 @@ export async function POST(
       return NextResponse.json({ error: 'Map ID is required' }, { status: 400 });
     }
 
+    if (note !== undefined && note !== null && typeof note === 'string' && note.length > 64) {
+      return NextResponse.json({ error: 'note must be 64 characters or fewer' }, { status: 400 });
+    }
+
     const db = await getDbInstance();
     
     // Check if the match exists

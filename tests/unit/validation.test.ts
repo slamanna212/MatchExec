@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   validateRequiredFields,
+  validateMaxLength,
+  validateNumberRange,
+  validateEnum,
   safeJSONParse,
   safeJSONStringify
 } from '@/lib/utils/validation';
@@ -140,6 +143,108 @@ describe('Validation Utilities', () => {
         expect(result.error).toContain('name');
         expect(result.error).toContain('gameId');
       }
+    });
+  });
+
+  describe('validateMaxLength', () => {
+    it('should return valid for undefined (optional field)', () => {
+      expect(validateMaxLength(undefined, 100, 'name').valid).toBe(true);
+    });
+
+    it('should return valid for null (optional field)', () => {
+      expect(validateMaxLength(null, 100, 'name').valid).toBe(true);
+    });
+
+    it('should return valid when string is within limit', () => {
+      expect(validateMaxLength('hello', 10, 'name').valid).toBe(true);
+    });
+
+    it('should return valid when string equals max length exactly', () => {
+      expect(validateMaxLength('12345', 5, 'name').valid).toBe(true);
+    });
+
+    it('should return invalid when string exceeds max length', () => {
+      const result = validateMaxLength('toolong', 5, 'name');
+      expect(result.valid).toBe(false);
+      if (!result.valid) expect(result.error).toContain('name');
+    });
+
+    it('should return invalid for non-string value', () => {
+      const result = validateMaxLength(123, 10, 'name');
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validateNumberRange', () => {
+    it('should return valid for undefined (optional field)', () => {
+      expect(validateNumberRange(undefined, 1, 9, 'rounds').valid).toBe(true);
+    });
+
+    it('should return valid for null (optional field)', () => {
+      expect(validateNumberRange(null, 1, 9, 'rounds').valid).toBe(true);
+    });
+
+    it('should return valid when number is within range', () => {
+      expect(validateNumberRange(5, 1, 9, 'rounds').valid).toBe(true);
+    });
+
+    it('should return valid at min boundary', () => {
+      expect(validateNumberRange(1, 1, 9, 'rounds').valid).toBe(true);
+    });
+
+    it('should return valid at max boundary', () => {
+      expect(validateNumberRange(9, 1, 9, 'rounds').valid).toBe(true);
+    });
+
+    it('should return invalid when number is below min', () => {
+      const result = validateNumberRange(0, 1, 9, 'rounds');
+      expect(result.valid).toBe(false);
+      if (!result.valid) expect(result.error).toContain('rounds');
+    });
+
+    it('should return invalid when number is above max', () => {
+      const result = validateNumberRange(10, 1, 9, 'rounds');
+      expect(result.valid).toBe(false);
+    });
+
+    it('should return invalid for non-numeric value', () => {
+      const result = validateNumberRange('abc', 1, 9, 'rounds');
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validateEnum', () => {
+    const allowedValues = ['casual', 'competitive'] as const;
+
+    it('should return valid for undefined (optional field)', () => {
+      expect(validateEnum(undefined, allowedValues, 'rules').valid).toBe(true);
+    });
+
+    it('should return valid for null (optional field)', () => {
+      expect(validateEnum(null, allowedValues, 'rules').valid).toBe(true);
+    });
+
+    it('should return valid for an allowed value', () => {
+      expect(validateEnum('casual', allowedValues, 'rules').valid).toBe(true);
+    });
+
+    it('should return valid for another allowed value', () => {
+      expect(validateEnum('competitive', allowedValues, 'rules').valid).toBe(true);
+    });
+
+    it('should return invalid for a value not in the list', () => {
+      const result = validateEnum('tournament', allowedValues, 'rules');
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.error).toContain('rules');
+        expect(result.error).toContain('casual');
+        expect(result.error).toContain('competitive');
+      }
+    });
+
+    it('should return invalid for non-string value', () => {
+      const result = validateEnum(123, allowedValues, 'rules');
+      expect(result.valid).toBe(false);
     });
   });
 
