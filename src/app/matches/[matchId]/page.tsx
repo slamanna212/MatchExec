@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
 import { useHotkeys } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
-import { Loader, Container, Text, Center, Stack } from '@mantine/core';
+import { Skeleton, Container, Text, Center, Stack, Grid } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
@@ -427,9 +427,19 @@ export default function MatchPage({
   if (loading) {
     return (
       <Container>
-        <Center style={{ minHeight: '400px' }}>
-          <Loader size="lg" />
-        </Center>
+        <Grid mt="md">
+          <Grid.Col span={{ base: 12, md: 4 }}>
+            <Stack>
+              <Skeleton height={200} radius="md" />
+              <Skeleton height={250} radius="md" />
+              <Skeleton height={120} radius="md" />
+            </Stack>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 8 }}>
+            <Skeleton height={40} radius="sm" mb="md" />
+            <Skeleton height={400} radius="md" />
+          </Grid.Col>
+        </Grid>
       </Container>
     );
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, NumberInput, Select } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, NumberInput, Select, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { notificationHelper } from '@/lib/notifications';
@@ -147,6 +147,17 @@ export default function ApplicationSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Stack key={i} gap={4}>
+                  <Skeleton height={14} width={120} />
+                  <Skeleton height={36} />
+                </Stack>
+              ))}
+              <Group justify="flex-end"><Skeleton height={36} width={180} /></Group>
+            </Stack>
+          ) : (
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <NumberInput
@@ -209,9 +220,19 @@ export default function ApplicationSettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
         </Card>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              <Stack gap={4}>
+                <Skeleton height={14} width={120} />
+                <Skeleton height={36} />
+              </Stack>
+              <Group justify="flex-end"><Skeleton height={36} width={180} /></Group>
+            </Stack>
+          ) : (
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <div>
@@ -241,6 +262,7 @@ export default function ApplicationSettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
         </Card>
       </Stack>
     </div>
