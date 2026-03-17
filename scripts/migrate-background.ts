@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { getDatabase } from '../lib/database/connection';
-import { MigrationRunner } from '../lib/database/migrations';
+import { createMigrationRunner } from '../lib/database/migrations';
 import { DatabaseSeeder } from '../lib/database/seeder';
 import { markDbNotReady, markDbReady } from '../lib/database/status';
 
@@ -18,8 +18,8 @@ async function runMigrationsInBackground() {
     markDbNotReady('Running migrations...');
 
     // Run migrations
-    const migrationRunner = new MigrationRunner(db);
-    await migrationRunner.runMigrations();
+    const migrationRunner = createMigrationRunner(db);
+    await migrationRunner.up();
 
     // Seed database with game data
     const seeder = new DatabaseSeeder(db);

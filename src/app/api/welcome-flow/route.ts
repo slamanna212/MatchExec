@@ -43,9 +43,19 @@ export async function GET(): Promise<NextResponse> {
   }
 }
 
+const SETUP_TYPE_VALUES = ['pro_mode', 'get_started'] as const;
+
 export async function PUT(request: Request): Promise<NextResponse> {
   try {
     const { setupType } = await request.json();
+
+    if (!SETUP_TYPE_VALUES.includes(setupType)) {
+      return NextResponse.json(
+        { error: `setupType must be one of: ${SETUP_TYPE_VALUES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const db = await getDbInstance();
 
     const metadata = {

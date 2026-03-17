@@ -95,6 +95,13 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    if (teamName.length > 100) {
+      return NextResponse.json(
+        { error: 'teamName must be 100 characters or fewer' },
+        { status: 400 }
+      );
+    }
     
     const db = await getDbInstance();
     

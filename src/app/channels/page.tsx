@@ -1,7 +1,7 @@
 'use client'
 
 
-import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Loader, Center, Title, useMantineColorScheme } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Checkbox, Skeleton, Title, useMantineColorScheme } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { useEffect, useState } from 'react';
@@ -157,9 +157,40 @@ export default function ChannelsPage() {
 
   if (loading) {
     return (
-      <Center h={400}>
-        <Loader size="lg" />
-      </Center>
+      <div className="max-w-6xl mx-auto">
+        <Stack gap="xl">
+          <Card shadow="sm" padding="lg" radius="md" withBorder style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <Skeleton height={14} width={160} mb="xs" mx="auto" />
+            <Group gap="lg" justify="center" wrap="wrap" mt="md">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Stack key={i} gap="xs" align="center">
+                  <Skeleton height={14} width={80} />
+                  <Skeleton height={16} width={16} circle />
+                </Stack>
+              ))}
+            </Group>
+          </Card>
+          <Grid>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
+                <Card shadow="sm" padding="lg" radius="md" withBorder>
+                  <Stack gap="md">
+                    <Skeleton height={16} width="60%" />
+                    <Group gap="xs">
+                      <Skeleton height={20} width={90} radius="xl" />
+                      <Skeleton height={20} width={70} radius="xl" />
+                    </Group>
+                    <Group gap="xs" justify="flex-end">
+                      <Skeleton height={34} width={34} radius="sm" />
+                      <Skeleton height={34} width={34} radius="sm" />
+                    </Group>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
+        </Stack>
+      </div>
     );
   }
 

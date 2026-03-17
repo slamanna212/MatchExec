@@ -3,7 +3,7 @@ import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { Database } from '../../../lib/database/connection';
-import { MigrationRunner } from '../../../lib/database/migrations';
+import { createMigrationRunner } from '../../../lib/database/migrations';
 
 describe('Database Migrations', () => {
   const testDbPath = path.join(process.cwd(), 'app_data', 'data', 'migration-test.db');
@@ -133,71 +133,32 @@ describe('Database Migrations', () => {
   });
 
   it('should be idempotent (running twice should not error)', async () => {
-    // Note: Some migrations (like 004_fix_voice_alternation_schema.sql) are NOT idempotent
-    // because they use ALTER TABLE ADD COLUMN without IF NOT EXISTS.
-    // This test verifies that the CREATE TABLE IF NOT EXISTS statements work correctly.
+    const idempotencyDbPath = path.join(process.cwd(), 'app_data', 'data', 'idempotency-test.db');
 
-    // Clean up
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    for (const p of [idempotencyDbPath, `${idempotencyDbPath}-wal`, `${idempotencyDbPath}-shm`]) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
     }
 
-    const db = new sqlite3.Database(testDbPath);
-    const migrationsDir = path.join(process.cwd(), 'migrations');
-    const migrationFiles = fs.readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
+    const db = new Database(idempotencyDbPath);
+    await db.connect();
 
-    // Filter to only test migrations that should be idempotent (CREATE TABLE IF NOT EXISTS)
-    // These migrations use ALTER TABLE ADD COLUMN which is not idempotent
-    // (SQLite does not support IF NOT EXISTS for ADD COLUMN)
-    const idempotentMigrations = migrationFiles.filter(f =>
-      !f.includes('004_fix_voice_alternation_schema.sql') && // ALTER TABLE ADD COLUMN
-      !f.includes('005_tournament_system.sql') && // ALTER TABLE statements
-      !f.includes('006_position_based_scoring.sql') && // May have ALTER TABLE
-      !f.includes('007_v0_6.sql') && // ALTER TABLE ADD COLUMN + DROP/RECREATE tables
-      !f.includes('008_UI_Updates.sql') // ALTER TABLE ADD COLUMN
-    );
+    try {
+      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const runner = createMigrationRunner(db, migrationsDir, undefined);
 
-    // Run migrations first time
-    for (const file of idempotentMigrations) {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      await new Promise<void>((resolve, reject) => {
-        db.exec(sql, (err) => {
-          if (err) reject(new Error(`First run - Migration ${file} failed: ${err.message}`));
-          else resolve();
-        });
-      });
-    }
+      await runner.up(); // First pass: applies all migrations, records in tracking table
+      await runner.up(); // Second pass: all already tracked — no SQL executed, no errors
 
-    // Run migrations second time - should not error due to IF NOT EXISTS clauses
-    for (const file of idempotentMigrations) {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      await new Promise<void>((resolve, reject) => {
-        db.exec(sql, (err) => {
-          if (err) reject(new Error(`Second run - Migration ${file} failed: ${err.message}`));
-          else resolve();
-        });
-      });
-    }
-
-    // Verify tables still exist after double-run
-    const tables = await new Promise<any[]>((resolve, reject) => {
-      db.all(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-        (err, rows) => err ? reject(err) : resolve(rows)
+      const tables = await db.all<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
       );
-    });
-
-    expect(tables.length).toBeGreaterThan(0);
-
-    // Close database
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      expect(tables.length).toBeGreaterThan(0);
+    } finally {
+      await db.close();
+      for (const p of [idempotencyDbPath, `${idempotencyDbPath}-wal`, `${idempotencyDbPath}-shm`]) {
+        if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { } }
+      }
+    }
   });
 
   it('should record all migrations in tracking table when using MigrationRunner', async () => {
@@ -217,8 +178,8 @@ describe('Database Migrations', () => {
         .filter(f => f.endsWith('.sql'))
         .sort();
 
-      const runner = new MigrationRunner(db, migrationsDir);
-      await runner.runMigrations();
+      const runner = createMigrationRunner(db, migrationsDir, undefined);
+      await runner.up();
 
       // Verify all migrations are recorded (catches partial-application bugs)
       const migrationRecords = await db.all<{ filename: string }>('SELECT filename FROM migrations ORDER BY filename');

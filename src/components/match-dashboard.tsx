@@ -10,7 +10,7 @@ import {
   Button,
   Avatar,
   Divider,
-  Loader,
+  Skeleton,
   Group,
   Stack,
   Grid,
@@ -217,6 +217,28 @@ const MatchCard = memo(({
 });
 
 MatchCard.displayName = 'MatchCard';
+
+function SkeletonCard() {
+  return (
+    <Card shadow="sm" padding={0} radius="md" withBorder>
+      <Card.Section><Skeleton height={140} /></Card.Section>
+      <Stack p="lg" gap="xs">
+        <Group>
+          <Skeleton height={40} width={40} radius="md" />
+          <Stack gap={4} style={{ flex: 1 }}>
+            <Skeleton height={16} width="70%" />
+            <Skeleton height={12} width="40%" />
+          </Stack>
+        </Group>
+        <Skeleton height={12} width="60%" />
+        <Group grow mt="sm">
+          <Skeleton height={32} radius="sm" />
+          <Skeleton height={32} radius="sm" />
+        </Group>
+      </Stack>
+    </Card>
+  );
+}
 
 export function MatchDashboard() {
   const router = useRouter();
@@ -531,8 +553,14 @@ export function MatchDashboard() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader size="lg" />
+      <div className="container mx-auto p-6 max-w-6xl">
+        <Grid>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
+              <SkeletonCard />
+            </Grid.Col>
+          ))}
+        </Grid>
       </div>
     );
   }
