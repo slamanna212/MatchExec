@@ -156,7 +156,8 @@ describe('Database Migrations', () => {
       !f.includes('005_tournament_system.sql') && // ALTER TABLE statements
       !f.includes('006_position_based_scoring.sql') && // May have ALTER TABLE
       !f.includes('007_v0_6.sql') && // ALTER TABLE ADD COLUMN + DROP/RECREATE tables
-      !f.includes('008_UI_Updates.sql') // ALTER TABLE ADD COLUMN
+      !f.includes('008_UI_Updates.sql') && // ALTER TABLE ADD COLUMN
+      !f.includes('009_update071.sql') // ALTER TABLE ADD COLUMN
     );
 
     // Run migrations first time
