@@ -109,7 +109,8 @@
             "name": "Sanctum Sanctorum",
             "type": "Doom Match",
             "location": "Empire of Eternal Night",
-            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/sanctum-sanctorum.webp"
+            "thumbnailUrl": "/public/assets/games/marvelrivals/maps/sanctum-sanctorum.webp",
+            "tournament_enabled": false
           }
   ]
         

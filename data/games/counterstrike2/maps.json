@@ -117,6 +117,7 @@
     "id": "custom-map",
     "name": "Custom Map",
     "location": "Custom",
-    "thumbnailUrl": "/public/assets/games/cs2/maps/custom-map.jpg"
+    "thumbnailUrl": "/public/assets/games/cs2/maps/custom-map.jpg",
+    "tournament_enabled": false
   }
 ]
