@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { Database } from '../../../lib/database/connection';
 
 describe('Database Schema Validation', () => {
   const testDbPath = path.join(process.cwd(), 'app_data', 'data', 'schema-test.db');
-  let db: sqlite3.Database;
+  let db: Database;
 
   beforeAll(async () => {
     // Clean up
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
     }
 
     // Ensure directory exists
@@ -20,12 +20,9 @@ describe('Database Schema Validation', () => {
     }
 
     // Create and migrate database
-    db = await new Promise<sqlite3.Database>((resolve, reject) => {
-      const instance = new sqlite3.Database(testDbPath, (err) => {
-        if (err) reject(err);
-        else resolve(instance);
-      });
-    });
+    db = new Database(testDbPath);
+    await db.connect();
+
     const migrationsDir = path.join(process.cwd(), 'migrations');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
@@ -33,26 +30,17 @@ describe('Database Schema Validation', () => {
 
     for (const file of migrationFiles) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      await new Promise<void>((resolve, reject) => {
-        db.exec(sql, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      await db.exec(sql);
     }
   });
 
   afterAll(async () => {
-    // Close and clean up
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
 
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(p)) {
+        try { fs.unlinkSync(p); } catch { }
+      }
     }
   });
 
@@ -276,33 +264,17 @@ describe('Database Schema Validation', () => {
 
   // Helper functions
   async function getTableColumns(tableName: string): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      db.all(`PRAGMA table_info(${tableName})`, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    return db.all(`PRAGMA table_info(${tableName})`);
   }
 
   async function getTableForeignKeys(tableName: string): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      db.all(`PRAGMA foreign_key_list(${tableName})`, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    return db.all(`PRAGMA foreign_key_list(${tableName})`);
   }
 
   async function getTableIndexes(tableName: string): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      db.all(
-        `SELECT * FROM sqlite_master WHERE type='index' AND tbl_name=?`,
-        [tableName],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
+    return db.all(
+      `SELECT * FROM sqlite_master WHERE type='index' AND tbl_name=?`,
+      [tableName]
+    );
   }
 });
