@@ -91,6 +91,87 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: test-results/integration.junit.xml
 
+  docker-test:
+    name: Docker Integration Test
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
+    needs: [lint-and-typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build Docker image
+        id: build
+        run: |
+          docker build -t matchexec:pr-test .
+          echo "BUILD_STATUS=✅ Success" >> $GITHUB_ENV
+        continue-on-error: true
+      - name: Set build failure status
+        if: steps.build.outcome == 'failure'
+        run: echo "BUILD_STATUS=❌ Failed" >> $GITHUB_ENV
+      - name: Run container
+        id: start
+        run: |
+          docker run -d \
+            --name matchexec-test \
+            -p 3000:3000 \
+            -e DISCORD_TOKEN=placeholder \
+            matchexec:pr-test
+          echo "START_STATUS=✅ Success" >> $GITHUB_ENV
+        continue-on-error: true
+      - name: Set start failure status
+        if: steps.start.outcome == 'failure'
+        run: echo "START_STATUS=❌ Failed" >> $GITHUB_ENV
+      - name: Wait for app to be healthy
+        id: health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then
+              echo "App is up"
+              echo "HEALTH_STATUS=✅ Healthy" >> $GITHUB_ENV
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "HEALTH_STATUS=❌ Timed out" >> $GITHUB_ENV
+          exit 1
+        continue-on-error: true
+      - name: Capture container logs
+        if: always()
+        run: |
+          docker logs matchexec-test > docker-output.log 2>&1 || true
+          docker inspect matchexec-test --format '{{json .State}}' > container-state.json 2>/dev/null || echo '{}' > container-state.json
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-test-logs
+          path: |
+            docker-output.log
+            container-state.json
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Docker Integration Test" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Build | ${BUILD_STATUS:-⚠️ Not run} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Start | ${START_STATUS:-⚠️ Not run} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Port 3000 Health Check | ${HEALTH_STATUS:-⚠️ Not run} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Container Logs (last 100 lines)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -100 docker-output.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no logs captured)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop matchexec-test || true
+          docker rm matchexec-test || true
+          docker rmi matchexec:pr-test || true
+      - name: Fail if health check failed
+        if: steps.health.outcome == 'failure' || steps.build.outcome == 'failure'
+        run: exit 1
+
   build:
     name: Build
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
