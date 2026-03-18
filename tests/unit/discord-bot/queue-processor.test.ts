@@ -202,6 +202,48 @@ describe('QueueProcessor', () => {
 
       expect(announcement.status).toBe('completed');
     });
+
+    it('should process timed announcements (type = timed)', async () => {
+      const match = await createMatch(game.id, mode.id, {
+        start_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      });
+
+      await db.run(`
+        INSERT INTO discord_announcement_queue
+          (id, match_id, status, announcement_type, announcement_data, scheduled_for, created_at)
+        VALUES (?, ?, 'pending', 'timed', ?, datetime('now', '-1 minute'), datetime('now'))
+      `, ['timed-1', match.id, JSON.stringify({ id: '1hour', value: 1, unit: 'hours' })]);
+
+      await queueProcessor.processAnnouncementQueue();
+
+      const announcement = await db.get(`
+        SELECT status FROM discord_announcement_queue WHERE id = ?
+      `, ['timed-1']);
+
+      expect(announcement.status).toBe('completed');
+      expect(mockAnnouncementHandler.postTimedReminder).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not process timed announcements before their scheduled_for time', async () => {
+      const match = await createMatch(game.id, mode.id, {
+        start_date: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+      });
+
+      await db.run(`
+        INSERT INTO discord_announcement_queue
+          (id, match_id, status, announcement_type, announcement_data, scheduled_for, created_at)
+        VALUES (?, ?, 'pending', 'timed', ?, datetime('now', '+1 hour'), datetime('now'))
+      `, ['timed-future', match.id, JSON.stringify({ id: '3hour', value: 3, unit: 'hours' })]);
+
+      await queueProcessor.processAnnouncementQueue();
+
+      const announcement = await db.get(`
+        SELECT status FROM discord_announcement_queue WHERE id = ?
+      `, ['timed-future']);
+
+      expect(announcement.status).toBe('pending');
+      expect(mockAnnouncementHandler.postTimedReminder).not.toHaveBeenCalled();
+    });
   });
 
   describe('processVoiceAnnouncementQueue', () => {

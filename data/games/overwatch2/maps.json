@@ -221,7 +221,8 @@
       "name": "Workshop Map",
       "type": "Workshop",
       "location": "Everywhere",
-      "thumbnailUrl": "/public/assets/games/overwatch2/maps/ow2-workshop.jpg"
-    }    
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/ow2-workshop.jpg",
+      "tournament_enabled": false
+    }
 ]
   

@@ -1,6 +1,6 @@
 'use client'
 
-import { Stack, Card, Group, Avatar, Text, Badge, Loader, Grid } from '@mantine/core';
+import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid } from '@mantine/core';
 
 interface MatchParticipant {
   id: string;
@@ -153,9 +153,38 @@ export function ParticipantsList({
 
   if (loading) {
     return (
-      <div className="flex justify-center py-4">
-        <Loader size="md" />
-      </div>
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Stack gap="xs">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} shadow="sm" padding="md" radius="md" withBorder>
+                <Group gap="md">
+                  <Skeleton height={50} width={50} circle />
+                  <Stack gap={4} style={{ flex: 1 }}>
+                    <Skeleton height={14} width="60%" />
+                    <Skeleton height={12} width="40%" />
+                  </Stack>
+                </Group>
+              </Card>
+            ))}
+          </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Stack gap="xs">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} shadow="sm" padding="md" radius="md" withBorder>
+                <Group gap="md">
+                  <Skeleton height={50} width={50} circle />
+                  <Stack gap={4} style={{ flex: 1 }}>
+                    <Skeleton height={14} width="60%" />
+                    <Skeleton height={12} width="40%" />
+                  </Stack>
+                </Group>
+              </Card>
+            ))}
+          </Stack>
+        </Grid.Col>
+      </Grid>
     );
   }
 

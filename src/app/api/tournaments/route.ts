@@ -4,6 +4,9 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
+import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+
+const RULESET_VALUES = ['casual', 'competitive'] as const;
 
 interface TournamentBody {
   name: string;
@@ -28,6 +31,17 @@ function validateTournamentBody(body: Partial<TournamentBody>): string | null {
   if (!['single-elimination', 'double-elimination'].includes(body.format)) {
     return 'Invalid format. Must be single-elimination or double-elimination';
   }
+
+  for (const check of [
+    validateMaxLength(body.name, 255, 'name'),
+    validateMaxLength(body.description, 1000, 'description'),
+    validateEnum(body.ruleset, RULESET_VALUES, 'ruleset'),
+    validateNumberRange(body.roundsPerMatch, 1, 9, 'roundsPerMatch'),
+    validateNumberRange(body.maxParticipants, 4, 256, 'maxParticipants'),
+  ]) {
+    if (!check.valid) return check.error;
+  }
+
   return null;
 }
 

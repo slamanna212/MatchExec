@@ -408,10 +408,11 @@ export class QueueProcessor {
              COALESCE(m.start_date, t.start_time) as start_date,
              COALESCE(m.rules, 'casual') as rules
       FROM discord_announcement_queue daq
-      LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start'))
+      LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start', 'timed'))
       LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
       LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
       WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
+      AND (daq.scheduled_for IS NULL OR datetime(daq.scheduled_for) <= datetime('now'))
       ORDER BY daq.created_at ASC
       LIMIT 5
     `);

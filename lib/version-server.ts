@@ -1,6 +1,6 @@
 import pkg from '../package.json';
 
-export function getVersionInfo() {
+export function getVersionInfo(): { version: string; branch: string; commitHash: string; isDev: boolean } {
   const baseVersion = pkg.version;
   
   // Always use fallback in production/Docker to avoid git errors

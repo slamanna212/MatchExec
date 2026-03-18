@@ -6,6 +6,7 @@ import { GET as getGames } from '@/app/api/games/route';
 import { GET as getGame } from '@/app/api/games/[gameId]/route';
 import { GET as getGameModes } from '@/app/api/games/[gameId]/modes/route';
 import { GET as getGameMaps } from '@/app/api/games/[gameId]/modes/[modeId]/maps/route';
+import { PATCH as patchMapsByGame } from '@/app/api/games/[gameId]/maps/route';
 
 describe('Games API', () => {
   describe('GET /api/games', () => {
@@ -202,6 +203,71 @@ describe('Games API', () => {
 
       expect(status).toBe(200);
       expect(data).toEqual([]);
+    });
+  });
+
+  describe('PATCH /api/games/[gameId]/maps', () => {
+    it('should update tournament_enabled and return success', async () => {
+      const game = await createGame();
+      const mode = await createGameMode(game.id);
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO game_maps (id, game_id, mode_id, name, tournament_enabled) VALUES (?, ?, ?, ?, ?)',
+          ['hanamura', game.id, (mode as any).id, 'Hanamura', 1],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('PATCH', `/api/games/${game.id}/maps`, {
+        updates: [{ name: 'Hanamura', tournament_enabled: 0 }],
+      });
+      const response = await patchMapsByGame(request, createRouteParams({ gameId: String(game.id) }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.updated).toBe(1);
+
+      const row = await new Promise<any>((resolve, reject) => {
+        db.get('SELECT tournament_enabled FROM game_maps WHERE id = ?', ['hanamura'], (err, r) => (err ? reject(err) : resolve(r)));
+      });
+      expect(row.tournament_enabled).toBe(0);
+    });
+
+    it('should return 400 when updates array is missing', async () => {
+      const game = await createGame();
+
+      const request = createMockRequest('PATCH', `/api/games/${game.id}/maps`, {});
+      const response = await patchMapsByGame(request, createRouteParams({ gameId: String(game.id) }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should return 400 when updates array is empty', async () => {
+      const game = await createGame();
+
+      const request = createMockRequest('PATCH', `/api/games/${game.id}/maps`, { updates: [] });
+      const response = await patchMapsByGame(request, createRouteParams({ gameId: String(game.id) }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should return 200 with zero updated for unknown map name', async () => {
+      const game = await createGame();
+
+      const request = createMockRequest('PATCH', `/api/games/${game.id}/maps`, {
+        updates: [{ name: 'NonExistentMap', tournament_enabled: 0 }],
+      });
+      const response = await patchMapsByGame(request, createRouteParams({ gameId: String(game.id) }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.updated).toBe(0);
     });
   });
 

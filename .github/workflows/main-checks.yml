@@ -10,7 +10,7 @@ permissions:
 jobs:
   full-test-suite:
     name: Full Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

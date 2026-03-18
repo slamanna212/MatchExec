@@ -1,36 +1,12 @@
+import { Umzug } from 'umzug';
 import fs from 'fs';
 import path from 'path';
 import type { Database } from './connection';
 
-export class MigrationRunner {
-  private db: Database;
-  private migrationsDir: string;
+class SQLiteStorage {
+  constructor(private readonly db: Database) {}
 
-  constructor(db: Database, migrationsDir = './migrations') {
-    this.db = db;
-    this.migrationsDir = migrationsDir;
-  }
-
-  async runMigrations(): Promise<void> {
-
-    // Ensure migrations table exists
-    await this.createMigrationsTable();
-
-    // Get all migration files
-    const migrationFiles = this.getMigrationFiles();
-    
-    // Get already executed migrations
-    const executedMigrations = await this.getExecutedMigrations();
-
-    for (const file of migrationFiles) {
-      if (!executedMigrations.includes(file)) {
-        await this.executeMigration(file);
-      }
-    }
-
-  }
-
-  private async createMigrationsTable(): Promise<void> {
+  async executed(): Promise<string[]> {
     await this.db.run(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,51 +14,50 @@ export class MigrationRunner {
         executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    const rows = await this.db.all<{ filename: string }>('SELECT filename FROM migrations ORDER BY filename');
+    return rows.map(r => r.filename);
   }
 
-  private getMigrationFiles(): string[] {
-    if (!fs.existsSync(this.migrationsDir)) {
-      return [];
-    }
-
-    return fs.readdirSync(this.migrationsDir)
-      .filter(file => file.endsWith('.sql'))
-      .sort();
+  async logMigration({ name }: { name: string }): Promise<void> {
+    await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [name]);
   }
 
-  private async getExecutedMigrations(): Promise<string[]> {
-    try {
-      const rows = await this.db.all<{ filename: string }>('SELECT filename FROM migrations');
-      return rows.map(row => row.filename);
-    } catch {
-      // If migrations table doesn't exist yet, return empty array
-      return [];
-    }
+  async unlogMigration({ name }: { name: string }): Promise<void> {
+    await this.db.run('DELETE FROM migrations WHERE filename = ?', [name]);
   }
+}
 
-  private async executeMigration(filename: string): Promise<void> {
+type UmzugLogger = Record<'debug' | 'info' | 'error' | 'warn', (msg: unknown) => void>;
 
-    const migrationPath = path.join(this.migrationsDir, filename);
-    const sql = fs.readFileSync(migrationPath, 'utf8');
-
-    try {
-      await this.db.run('BEGIN');
-      await this.db.exec(sql);
-      await this.db.run('INSERT INTO migrations (filename) VALUES (?)', [filename]);
-      await this.db.run('COMMIT');
-    } catch (error) {
-      try {
-        await this.db.run('ROLLBACK');
-      } catch (rollbackError: unknown) {
-        // Suppress "no transaction is active" — SQLite implicitly aborts on SQLITE_IOERR,
-        // so ROLLBACK will fail with this message. It's not a real error.
-        const msg = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-        if (!msg.includes('no transaction is active')) {
-          console.error(`Failed to rollback migration ${filename}:`, rollbackError);
-        }
-      }
-      console.error(`Migration ${filename} failed:`, error);
-      throw error;
-    }
-  }
+export function createMigrationRunner(
+  db: Database,
+  migrationsDir = path.join(process.cwd(), 'migrations'),
+  logger: UmzugLogger | undefined = console
+): Umzug {
+  return new Umzug({
+    migrations: {
+      glob: ['*.sql', { cwd: migrationsDir }],
+      resolve: ({ name, path: filePath }) => ({
+        name,
+        up: async () => {
+          const sql = fs.readFileSync(filePath!, 'utf8');
+          try {
+            await db.run('BEGIN');
+            await db.exec(sql);
+            await db.run('COMMIT');
+          } catch (error) {
+            await db.run('ROLLBACK').catch((e: unknown) => {
+              const msg = e instanceof Error ? e.message : String(e);
+              if (!msg.includes('no transaction is active')) {
+                console.error(`Failed to rollback migration ${name}:`, e);
+              }
+            });
+            throw error;
+          }
+        },
+      }),
+    },
+    storage: new SQLiteStorage(db),
+    logger,
+  });
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import sqlite3 from 'sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { Database } from '../../../lib/database/connection';
 
 // Note: This is a structural test that validates the seeder's expected database
 // behavior (schema, constraints, idempotency) using manual INSERT statements.
@@ -9,16 +9,24 @@ import path from 'path';
 // file-reading or parsing logic would not be caught by these tests.
 describe('Database Seeder', () => {
   const testDbPath = path.join(process.cwd(), 'app_data', 'data', 'seeder-test.db');
-  let db: sqlite3.Database;
+  let db: Database;
 
   beforeAll(async () => {
     // Clean up
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+
+    // Ensure directory exists
+    const dbDir = path.dirname(testDbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
     }
 
     // Create and migrate database
-    db = new sqlite3.Database(testDbPath);
+    db = new Database(testDbPath);
+    await db.connect();
+
     const migrationsDir = path.join(process.cwd(), 'migrations');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
@@ -26,26 +34,17 @@ describe('Database Seeder', () => {
 
     for (const file of migrationFiles) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      await new Promise<void>((resolve, reject) => {
-        db.exec(sql, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      await db.exec(sql);
     }
   });
 
   afterAll(async () => {
-    // Close and clean up
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
 
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(p)) {
+        try { fs.unlinkSync(p); } catch { }
+      }
     }
   });
 
@@ -132,10 +131,6 @@ describe('Database Seeder', () => {
 
   describe('Seeding Process', () => {
     it('should seed games into database', async () => {
-      // Note: This test assumes seeding has run via normal app startup or migration
-      // In a real implementation, you would call the seeder function here
-
-      // For now, we manually seed to test the structure
       const gamesDataDir = path.join(process.cwd(), 'data', 'games');
       const gameDirs = fs.readdirSync(gamesDataDir, { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
@@ -145,37 +140,28 @@ describe('Database Seeder', () => {
         const gameJsonPath = path.join(gamesDataDir, gameId, 'game.json');
         const gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf-8'));
 
-        // Insert game using the actual schema
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT OR IGNORE INTO games (id, name, genre, developer, version, icon_url, cover_url, color, min_players, max_players, max_signups, map_codes_supported)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              gameData.id,
-              gameData.name,
-              gameData.genre || null,
-              gameData.developer || null,
-              gameData.patch || null,
-              gameData.assets?.iconUrl || null,
-              gameData.assets?.coverUrl || null,
-              gameData.color || null,
-              gameData.minPlayers || null,
-              gameData.maxPlayers || null,
-              gameData.maxSignups || null,
-              gameData.mapCodesSupported ? 1 : 0
-            ],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.run(
+          `INSERT OR IGNORE INTO games (id, name, genre, developer, version, icon_url, cover_url, color, min_players, max_players, max_signups, map_codes_supported)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            gameData.id,
+            gameData.name,
+            gameData.genre || null,
+            gameData.developer || null,
+            gameData.patch || null,
+            gameData.assets?.iconUrl || null,
+            gameData.assets?.coverUrl || null,
+            gameData.color || null,
+            gameData.minPlayers || null,
+            gameData.maxPlayers || null,
+            gameData.maxSignups || null,
+            gameData.mapCodesSupported ? 1 : 0
+          ]
+        );
       }
 
       // Verify games were seeded
-      const games = await new Promise<any[]>((resolve, reject) => {
-        db.all('SELECT * FROM games', (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      });
+      const games = await db.all<any>('SELECT * FROM games');
 
       expect(games.length).toBeGreaterThanOrEqual(6);
 
@@ -199,13 +185,10 @@ describe('Database Seeder', () => {
         const gameJsonPath = path.join(gamesDataDir, gameId, 'game.json');
         const gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf-8'));
 
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT OR IGNORE INTO games (id, name, genre, icon_url) VALUES (?, ?, ?, ?)`,
-            [gameData.id, gameData.name, gameData.genre || null, gameData.assets?.iconUrl || null],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.run(
+          `INSERT OR IGNORE INTO games (id, name, genre, icon_url) VALUES (?, ?, ?, ?)`,
+          [gameData.id, gameData.name, gameData.genre || null, gameData.assets?.iconUrl || null]
+        );
       }
 
       // Seed modes
@@ -214,28 +197,19 @@ describe('Database Seeder', () => {
         const modesData = JSON.parse(fs.readFileSync(modesJsonPath, 'utf-8'));
 
         for (const mode of modesData) {
-          await new Promise<void>((resolve, reject) => {
-            db.run(
-              `INSERT OR IGNORE INTO game_modes (id, game_id, name, description, scoring_type) VALUES (?, ?, ?, ?, ?)`,
-              [mode.id, gameId, mode.name, mode.description || null, mode.scoringType || 'Normal'],
-              (err) => err ? reject(err) : resolve()
-            );
-          });
+          await db.run(
+            `INSERT OR IGNORE INTO game_modes (id, game_id, name, description, scoring_type) VALUES (?, ?, ?, ?, ?)`,
+            [mode.id, gameId, mode.name, mode.description || null, mode.scoringType || 'Normal']
+          );
         }
       }
 
       // Verify modes are linked correctly
-      const modes = await new Promise<any[]>((resolve, reject) => {
-        db.all(
-          `SELECT gm.*, g.id as game_id_check
-           FROM game_modes gm
-           JOIN games g ON gm.game_id = g.id`,
-          (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      });
+      const modes = await db.all<any>(
+        `SELECT gm.*, g.id as game_id_check
+         FROM game_modes gm
+         JOIN games g ON gm.game_id = g.id`
+      );
 
       expect(modes.length).toBeGreaterThan(0);
 
@@ -257,25 +231,19 @@ describe('Database Seeder', () => {
         const gameJsonPath = path.join(gamesDataDir, gameId, 'game.json');
         const gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf-8'));
 
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
-            [gameData.id, gameData.name, gameData.genre || null],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.run(
+          `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
+          [gameData.id, gameData.name, gameData.genre || null]
+        );
 
         const modesJsonPath = path.join(gamesDataDir, gameId, 'modes.json');
         const modesData = JSON.parse(fs.readFileSync(modesJsonPath, 'utf-8'));
 
         for (const mode of modesData) {
-          await new Promise<void>((resolve, reject) => {
-            db.run(
-              `INSERT OR IGNORE INTO game_modes (id, game_id, name, scoring_type) VALUES (?, ?, ?, ?)`,
-              [mode.id, gameId, mode.name, mode.scoringType || 'Normal'],
-              (err) => err ? reject(err) : resolve()
-            );
-          });
+          await db.run(
+            `INSERT OR IGNORE INTO game_modes (id, game_id, name, scoring_type) VALUES (?, ?, ?, ?)`,
+            [mode.id, gameId, mode.name, mode.scoringType || 'Normal']
+          );
         }
       }
 
@@ -285,28 +253,19 @@ describe('Database Seeder', () => {
         const mapsData = JSON.parse(fs.readFileSync(mapsJsonPath, 'utf-8'));
 
         for (const map of mapsData) {
-          await new Promise<void>((resolve, reject) => {
-            db.run(
-              `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name, location, image_url) VALUES (?, ?, ?, ?, ?, ?)`,
-              [map.id, gameId, map.type, map.name, map.location || null, map.thumbnailUrl || null],
-              (err) => err ? reject(err) : resolve()
-            );
-          });
+          await db.run(
+            `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name, location, image_url) VALUES (?, ?, ?, ?, ?, ?)`,
+            [map.id, gameId, map.type, map.name, map.location || null, map.thumbnailUrl || null]
+          );
         }
       }
 
       // Verify maps are linked correctly
-      const maps = await new Promise<any[]>((resolve, reject) => {
-        db.all(
-          `SELECT gmap.*, g.id as game_id_check
-           FROM game_maps gmap
-           JOIN games g ON gmap.game_id = g.id`,
-          (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      });
+      const maps = await db.all<any>(
+        `SELECT gmap.*, g.id as game_id_check
+         FROM game_maps gmap
+         JOIN games g ON gmap.game_id = g.id`
+      );
 
       expect(maps.length).toBeGreaterThan(0);
 
@@ -331,42 +290,28 @@ describe('Database Seeder', () => {
         const gameJsonPath = path.join(gamesDataDir, gameId, 'game.json');
         const gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf-8'));
 
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
-            [gameData.id, gameData.name, gameData.genre || null],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.run(
+          `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
+          [gameData.id, gameData.name, gameData.genre || null]
+        );
       }
 
-      const gamesCountFirst = await new Promise<number>((resolve, reject) => {
-        db.get('SELECT COUNT(*) as count FROM games', (err, row: any) => {
-          if (err) reject(err);
-          else resolve(row.count);
-        });
-      });
+      const gamesFirst = await db.get<any>('SELECT COUNT(*) as count FROM games');
+      const gamesCountFirst = gamesFirst!.count;
 
       // Seed games second time (should use INSERT OR IGNORE)
       for (const gameId of gameDirs) {
         const gameJsonPath = path.join(gamesDataDir, gameId, 'game.json');
         const gameData = JSON.parse(fs.readFileSync(gameJsonPath, 'utf-8'));
 
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
-            [gameData.id, gameData.name, gameData.genre || null],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
+        await db.run(
+          `INSERT OR IGNORE INTO games (id, name, genre) VALUES (?, ?, ?)`,
+          [gameData.id, gameData.name, gameData.genre || null]
+        );
       }
 
-      const gamesCountSecond = await new Promise<number>((resolve, reject) => {
-        db.get('SELECT COUNT(*) as count FROM games', (err, row: any) => {
-          if (err) reject(err);
-          else resolve(row.count);
-        });
-      });
+      const gamesSecond = await db.get<any>('SELECT COUNT(*) as count FROM games');
+      const gamesCountSecond = gamesSecond!.count;
 
       // Count should be the same - no duplicates
       expect(gamesCountSecond).toBe(gamesCountFirst);

@@ -45,6 +45,7 @@ interface MapData {
   type: string;
   location?: string;
   thumbnailUrl?: string;
+  tournament_enabled?: boolean;
 }
 
 interface VoiceData {
@@ -286,16 +287,17 @@ export class DatabaseSeeder {
     for (const map of mapsData) {
       const mapWithModes = map as MapData & { supportedModes?: string[] };
       const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+      const tournamentEnabled = map.tournament_enabled ?? true;
 
       if (mapWithModes.supportedModes && Array.isArray(mapWithModes.supportedModes)) {
         // Create an entry for each supported mode
         for (const modeId of mapWithModes.supportedModes) {
           const mapIdWithMode = `${map.id}-${modeId}`;
-          await this.insertMap(mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null);
+          await this.insertMap(mapIdWithMode, gameId, map.name, modeId, imageUrl, map.location || null, tournamentEnabled);
         }
       } else {
         // Fallback: create with null mode_id
-        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null, tournamentEnabled);
       }
     }
   }
@@ -305,16 +307,17 @@ export class DatabaseSeeder {
 
     for (const map of mapsData) {
       const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+      const tournamentEnabled = map.tournament_enabled ?? true;
 
       if (modes.length > 0) {
         // Create an entry for each map-mode combination
         for (const mode of modes) {
           const mapIdWithMode = `${map.id}-${mode.id}`;
-          await this.insertMap(mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null);
+          await this.insertMap(mapIdWithMode, gameId, map.name, mode.id, imageUrl, map.location || null, tournamentEnabled);
         }
       } else {
         // Fallback: create with null mode_id
-        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null);
+        await this.insertMap(map.id, gameId, map.name, null, imageUrl, map.location || null, tournamentEnabled);
       }
     }
   }
@@ -323,8 +326,9 @@ export class DatabaseSeeder {
     for (const map of mapsData) {
       const modeId = this.convertMapTypeToModeId(map.type);
       const imageUrl = this.fixImageUrl(map.thumbnailUrl);
+      const tournamentEnabled = map.tournament_enabled ?? true;
 
-      await this.insertMap(map.id, gameId, map.name, modeId, imageUrl, map.location || null);
+      await this.insertMap(map.id, gameId, map.name, modeId, imageUrl, map.location || null, tournamentEnabled);
     }
   }
 
@@ -339,12 +343,13 @@ export class DatabaseSeeder {
     name: string,
     modeId: string | null,
     imageUrl: string | null,
-    location: string | null
+    location: string | null,
+    tournamentEnabled = true
   ): Promise<void> {
     await this.db.run(`
-      INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [id, gameId, name, modeId, imageUrl, location]);
+      INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, tournament_enabled, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [id, gameId, name, modeId, imageUrl, location, tournamentEnabled ? 1 : 0]);
   }
 
   private async updateDataVersion(gameId: string, dataVersion: string): Promise<void> {

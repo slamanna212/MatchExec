@@ -798,7 +798,7 @@ export class AnnouncementHandler {
    */
   private formatTimeAwayText(timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' }): string {
     const { value, unit } = timingInfo;
-    return `${value} ${unit}${value > 1 ? '' : unit === 'hours' ? '' : ''}`;
+    return `${value} ${unit}`;
   }
 
   /**
@@ -1335,9 +1335,9 @@ export class AnnouncementHandler {
     const metadata = await this.fetchMapScoreMetadata(scoreData.gameId, scoreData.matchId, scoreData.mapId);
 
     // Determine winning team display name
-    const winningTeamDisplay = (scoreData.winner === 'team1' && metadata.team1Name) ? metadata.team1Name :
-                                (scoreData.winner === 'team2' && metadata.team2Name) ? metadata.team2Name :
-                                scoreData.winningTeamName;
+    let winningTeamDisplay = scoreData.winningTeamName;
+    if (scoreData.winner === 'team1' && metadata.team1Name) winningTeamDisplay = metadata.team1Name;
+    else if (scoreData.winner === 'team2' && metadata.team2Name) winningTeamDisplay = metadata.team2Name;
 
     // Build embed
     const mapProgress = metadata.totalMaps > 0 ? `${scoreData.gameNumber}/${metadata.totalMaps}` : scoreData.gameNumber.toString();
@@ -1575,9 +1575,9 @@ export class AnnouncementHandler {
     );
 
     // Determine winning team display name
-    const winningTeamDisplay = (winnerData.winner === 'team1' && team1Name) ? team1Name :
-                                (winnerData.winner === 'team2' && team2Name) ? team2Name :
-                                winnerData.winningTeamName;
+    let winningTeamDisplay = winnerData.winningTeamName;
+    if (winnerData.winner === 'team1' && team1Name) winningTeamDisplay = team1Name;
+    else if (winnerData.winner === 'team2' && team2Name) winningTeamDisplay = team2Name;
 
     // Generate title and description
     const { title, description } = this.generateWinnerTitleDescription(winnerData, winningTeamDisplay);

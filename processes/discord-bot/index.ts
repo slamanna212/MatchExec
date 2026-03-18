@@ -204,7 +204,21 @@ class MatchExecBot {
 
       // Start periodic tasks
       this.startPeriodicTasks();
-      
+
+      // Send initial heartbeat
+      try {
+        const now = new Date().toISOString();
+        await this.db.run(
+          `INSERT INTO app_settings (setting_key, setting_value, updated_at)
+           VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
+          ['discord_bot_last_heartbeat', now, now]
+        );
+        logger.debug('💓 Initial Discord bot heartbeat sent');
+      } catch (error) {
+        logger.error('Failed to send initial Discord bot heartbeat:', error);
+      }
+
       return true;
 
     } catch (error) {
@@ -232,6 +246,24 @@ class MatchExecBot {
         }
       }
     }, 30000);
+
+    // Discord bot heartbeat every 5 minutes
+    setInterval(async () => {
+      if (this.db && this.isReady) {
+        try {
+          const now = new Date().toISOString();
+          await this.db.run(
+            `INSERT INTO app_settings (setting_key, setting_value, updated_at)
+             VALUES (?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
+            ['discord_bot_last_heartbeat', now, now]
+          );
+          logger.debug('💓 Discord bot heartbeat sent');
+        } catch (error) {
+          logger.error('Failed to persist Discord bot heartbeat:', error);
+        }
+      }
+    }, 300000);
 
     // Queue processing every 3 seconds (faster pickup for tournament matches)
     setInterval(async () => {
@@ -326,6 +358,7 @@ class MatchExecBot {
   }
 
   private async shutdown() {
+    logger.info('🛑 Discord bot shutting down gracefully...');
 
     if (this.healthMonitor) {
       this.healthMonitor.stop();
@@ -339,6 +372,17 @@ class MatchExecBot {
       this.client.destroy();
     }
 
+    // Close database connection
+    if (this.db) {
+      try {
+        await this.db.close();
+        logger.info('✅ Database connection closed');
+      } catch (error) {
+        logger.error('Error closing database connection:', error);
+      }
+    }
+
+    logger.info('✅ Discord bot shutdown complete');
     process.exit(0);
   }
 

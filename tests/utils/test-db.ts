@@ -246,24 +246,11 @@ export async function teardownTestDatabase(): Promise<void> {
     testDbWrapper = null;
   }
 
-  // Clean up all test databases for this worker (including WAL/SHM companion files)
+  // Clean up only this worker's database files (WAL/SHM companion files included).
+  // Do NOT delete other workers' databases — they may still be running in parallel.
   for (const filePath of [TEST_DB_PATH, `${TEST_DB_PATH}-wal`, `${TEST_DB_PATH}-shm`]) {
     if (fs.existsSync(filePath)) {
       try { fs.unlinkSync(filePath); } catch { }
-    }
-  }
-
-  // Also clean up any other worker databases (in case of cleanup from main process)
-  const dataDir = path.join(process.cwd(), 'app_data', 'data');
-  if (fs.existsSync(dataDir)) {
-    const files = fs.readdirSync(dataDir);
-    for (const file of files) {
-      if (file.startsWith('test-matchexec-') && file.endsWith('.db')) {
-        const dbPath = path.join(dataDir, file);
-        for (const filePath of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-          try { fs.unlinkSync(filePath); } catch { }
-        }
-      }
     }
   }
 }

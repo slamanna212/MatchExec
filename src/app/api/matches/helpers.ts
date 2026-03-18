@@ -3,7 +3,7 @@
  */
 
 import type { MatchDbRow } from '@/shared/types';
-import { validateRequiredFields, safeJSONParse } from '@/lib/utils/validation';
+import { validateRequiredFields, validateMaxLength, validateNumberRange, validateEnum, safeJSONParse } from '@/lib/utils/validation';
 import type { ValidationResult } from '@/lib/utils/validation';
 import type { Database } from '@/lib/database/connection';
 
@@ -29,11 +29,26 @@ export interface PreparedMatchData {
   startDateTime: string | null;
 }
 
+const RULES_VALUES = ['casual', 'competitive'] as const;
+
 /**
  * Validate match creation request
  */
 export function validateMatchRequest(body: MatchRequestBody): ValidationResult {
-  return validateRequiredFields(body as unknown as Record<string, unknown>, ['name', 'gameId']);
+  const required = validateRequiredFields(body as unknown as Record<string, unknown>, ['name', 'gameId']);
+  if (!required.valid) return required;
+
+  for (const check of [
+    validateMaxLength(body.name, 255, 'name'),
+    validateMaxLength(body.description, 1000, 'description'),
+    validateMaxLength(body.livestreamLink, 500, 'livestreamLink'),
+    validateEnum(body.rules, RULES_VALUES, 'rules'),
+    validateNumberRange(body.rounds, 1, 9, 'rounds'),
+  ]) {
+    if (!check.valid) return check;
+  }
+
+  return { valid: true };
 }
 
 /**
