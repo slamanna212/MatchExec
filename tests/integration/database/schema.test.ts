@@ -184,6 +184,7 @@ describe('Database Schema Validation', () => {
       expect(columnNames).toContain('mode_id');
       expect(columnNames).toContain('name');
       expect(columnNames).toContain('image_url');
+      expect(columnNames).toContain('tournament_enabled');
       expect(columnNames).toContain('created_at');
     });
 
