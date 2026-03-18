@@ -32,7 +32,8 @@ import {
   IconVolume,
   IconInfoCircle,
   IconHome,
-  IconSwords
+  IconSwords,
+  IconDatabaseExport
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -153,6 +154,7 @@ export function Navigation({ children }: NavigationProps) {
       paint: IconPaint,
       info: IconInfoCircle,
       code: IconCode,
+      database: IconDatabaseExport,
     };
     return iconMap[name] || IconHome;
   };
@@ -190,7 +192,8 @@ export function Navigation({ children }: NavigationProps) {
         { label: 'Announcer', href: '/settings/announcer', iconName: 'volume' },
         { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
         { label: 'Discord', href: '/settings/discord', iconName: 'discord' },
-        { label: 'UI', href: '/settings/ui', iconName: 'paint' }
+        { label: 'UI', href: '/settings/ui', iconName: 'paint' },
+        { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' }
       ]
     },
     { label: 'Info', href: '/info', iconName: 'info' },
