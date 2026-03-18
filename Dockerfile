@@ -105,6 +105,9 @@ COPY --from=builder /app/node_modules/lodash ./node_modules/lodash
 COPY --from=builder /app/node_modules/lodash.snakecase ./node_modules/lodash.snakecase
 COPY --from=builder /app/node_modules/ts-mixer ./node_modules/ts-mixer
 
+# Migration runner dependency
+COPY --from=builder /app/node_modules/umzug ./node_modules/umzug
+
 # Common dependencies (may be duplicated with standalone but needed for processes)
 COPY --from=builder /app/node_modules/tslib ./node_modules/tslib
 
