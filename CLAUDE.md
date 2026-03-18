@@ -121,6 +121,27 @@ The container uses s6-overlay v3 to manage processes:
 - **Process restart**: Failed processes are automatically restarted
 - **User management**: Processes run as non-root user for security
 
+### Adding Process Dependencies (Docker)
+
+When a Discord bot or scheduler process needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
+
+1. **Add the package to `package.json`** as a normal dependency (Dependabot/npm update manages versions here)
+2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs` or `esbuild.scheduler.config.mjs`)
+3. **Add the package name** to the `PROCESS_DEPS` array in `scripts/collect-process-deps.mjs`
+
+The collect script automatically traces transitive dependencies — you only need to add the top-level package name. Versions are pulled from the main `node_modules/` (managed by `package-lock.json`), so there's nothing else to keep in sync.
+
+**When you DON'T need to update the collect script:**
+- Pure JS packages that esbuild can bundle (just don't add them to `external`)
+- Packages already in Next.js standalone output (e.g., `sqlite3` — used by the web app)
+- Dev dependencies (not in the Docker image)
+
+**Testing:** After changes, build the Docker image and verify all processes start:
+```bash
+docker build -t matchexec:test .
+docker run --rm -p 3000:3000 --env-file .env matchexec:test
+```
+
 ## Project Structure
 
 ├── src/

@@ -1,0 +1,26 @@
+MatchExec has been deployed!
+
+1. Access the web interface:
+{{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- end }}
+{{- else }}
+  kubectl port-forward svc/{{ include "matchexec.fullname" . }} 3000:{{ .Values.service.port }}
+  Then visit: http://localhost:3000
+{{- end }}
+
+2. Health endpoints:
+   - Liveness:  /api/health
+   - Readiness: /api/health/ready
+   - Metrics:   /api/metrics
+
+{{- if .Values.metrics.serviceMonitor.enabled }}
+
+3. Prometheus ServiceMonitor is enabled — metrics will be scraped automatically.
+{{- end }}
+{{- if .Values.metrics.grafana.dashboardConfigMap }}
+
+4. Grafana dashboard ConfigMap deployed — configure your Grafana sidecar to
+   pick up ConfigMaps with label: {{ .Values.metrics.grafana.labels | toJson }}
+{{- end }}

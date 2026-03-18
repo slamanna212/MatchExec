@@ -3,6 +3,6 @@
 echo "Running database migrations and seeding..."
 
 cd /app
-tsx scripts/migrate-background.ts
+node dist/migrator.js
 
 echo "Database initialization completed"

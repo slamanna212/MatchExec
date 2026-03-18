@@ -3,6 +3,14 @@ import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { DiscordSettingsDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { validateNumberRange } from '@/lib/utils/validation';
+
+const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> = [
+  { key: 'event_duration_minutes', min: 5, max: 720 },
+  { key: 'match_reminder_minutes', min: 1, max: 1440 },
+  { key: 'player_reminder_minutes', min: 1, max: 10080 },
+  { key: 'voice_channel_cleanup_delay_minutes', min: 0, max: 1440 },
+];
 
 /**
  * Field configuration for Discord settings updates
@@ -169,6 +177,15 @@ export async function PUT(request: NextRequest) {
   try {
     const db = await getDbInstance();
     const body = await request.json();
+
+    for (const field of DISCORD_DURATION_FIELDS) {
+      if (body[field.key] !== undefined) {
+        const check = validateNumberRange(body[field.key], field.min, field.max, field.key);
+        if (!check.valid) {
+          return NextResponse.json({ error: check.error }, { status: 400 });
+        }
+      }
+    }
 
     // First ensure we have a settings row
     await db.run(`

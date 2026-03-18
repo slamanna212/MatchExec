@@ -11,7 +11,7 @@ import {
   SimpleGrid,
   Avatar,
   Divider,
-  Loader,
+  Skeleton,
   SegmentedControl,
   Button
 } from '@mantine/core';
@@ -132,9 +132,28 @@ export function TournamentContentPanel({
       {activeTab === 'teams' && (
         <Stack gap="md">
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              <Loader size="md" />
-            </div>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i} withBorder p="md" style={{ minHeight: '200px' }}>
+                  <Stack gap="sm">
+                    <Group>
+                      <Skeleton height={20} width={20} />
+                      <Skeleton height={16} style={{ flex: 1 }} />
+                      <Skeleton height={20} width={70} radius="xl" />
+                    </Group>
+                    <Skeleton height={1} />
+                    <Stack gap="xs">
+                      {Array.from({ length: 3 }).map((_, j) => (
+                        <Group key={j} gap="sm">
+                          <Skeleton height={26} width={26} circle />
+                          <Skeleton height={14} width="50%" />
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
           ) : teams.length > 0 ? (
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
               {teams.map((team, teamIndex) => {
@@ -216,9 +235,25 @@ export function TournamentContentPanel({
       {activeTab === 'standings' && (
         <Stack gap="md">
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              <Loader size="md" />
-            </div>
+            <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Card key={i} withBorder p="md">
+                  <Group justify="space-between">
+                    <Group gap="md">
+                      <Skeleton height={40} width={40} circle />
+                      <Stack gap={4}>
+                        <Skeleton height={14} width={120} />
+                        <Skeleton height={12} width={80} />
+                      </Stack>
+                    </Group>
+                    <Group gap="lg">
+                      <Skeleton height={40} width={40} />
+                      <Skeleton height={40} width={40} />
+                    </Group>
+                  </Group>
+                </Card>
+              ))}
+            </Stack>
           ) : standings.length > 0 ? (
             <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
               {standings.map((team, index) => (

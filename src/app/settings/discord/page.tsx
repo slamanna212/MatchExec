@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
@@ -130,6 +130,17 @@ export default function DiscordSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Stack key={i} gap={4}>
+                  <Skeleton height={14} width={120} />
+                  <Skeleton height={36} />
+                </Stack>
+              ))}
+              <Group justify="flex-end"><Skeleton height={36} width={160} /></Group>
+            </Stack>
+          ) : (
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <Group align="end">
@@ -261,6 +272,7 @@ export default function DiscordSettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
         </Card>
       </Stack>
     </div>

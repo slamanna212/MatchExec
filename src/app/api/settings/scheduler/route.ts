@@ -4,8 +4,31 @@ import { getDbInstance } from '../../../../lib/database-init';
 import type { SchedulerSettings } from '@/shared/types';
 import { logger } from '@/lib/logger';
 
+const CRON_PART_RANGES = [
+  { name: 'second',     min: 0, max: 59 },
+  { name: 'minute',     min: 0, max: 59 },
+  { name: 'hour',       min: 0, max: 23 },
+  { name: 'day',        min: 1, max: 31 },
+  { name: 'month',      min: 1, max: 12 },
+  { name: 'dayOfWeek',  min: 0, max: 7  },
+] as const;
+
 /**
- * Validates a cron expression has exactly 6 parts
+ * Returns true if a single cron part token is valid (*, *\/n, or a number in range).
+ */
+function isValidCronPart(token: string, min: number, max: number): boolean {
+  if (token === '*') return true;
+  const stepMatch = token.match(/^\*\/(\d+)$/);
+  if (stepMatch) {
+    const step = Number(stepMatch[1]);
+    return step >= 1 && step <= max;
+  }
+  const num = Number(token);
+  return Number.isInteger(num) && num >= min && num <= max;
+}
+
+/**
+ * Validates a cron expression has exactly 6 parts and each part is in range
  */
 function validateCronExpression(cronExpression: string, fieldName: string): { valid: boolean; error?: string } {
   const cronParts = cronExpression.split(' ');
@@ -14,6 +37,15 @@ function validateCronExpression(cronExpression: string, fieldName: string): { va
       valid: false,
       error: `Invalid cron expression for ${fieldName}. Expected 6 parts (second minute hour day month dayOfWeek)`
     };
+  }
+  for (let i = 0; i < CRON_PART_RANGES.length; i++) {
+    const { name, min, max } = CRON_PART_RANGES[i];
+    if (!isValidCronPart(cronParts[i], min, max)) {
+      return {
+        valid: false,
+        error: `Invalid cron expression for ${fieldName}: ${name} part "${cronParts[i]}" is out of range (${min}–${max})`
+      };
+    }
   }
   return { valid: true };
 }

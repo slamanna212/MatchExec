@@ -1,6 +1,6 @@
 'use client'
 
-import { Stack, Text, Loader, Group } from '@mantine/core';
+import { Stack, Card, Text, Skeleton } from '@mantine/core';
 import { ReminderCard } from './ReminderCard';
 
 interface ReminderData {
@@ -33,9 +33,17 @@ export function RemindersList({
 }: RemindersListProps) {
   if (loading) {
     return (
-      <Group justify="center" py="md">
-        <Loader size="sm" />
-      </Group>
+      <Stack gap="md" align="center" py="md">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i} shadow="sm" padding="md" radius="md" withBorder style={{ width: '100%', maxWidth: 400 }}>
+            <Stack gap="xs">
+              <Skeleton height={16} width="50%" />
+              <Skeleton height={12} width="70%" />
+              <Skeleton height={20} width={60} radius="xl" />
+            </Stack>
+          </Card>
+        ))}
+      </Stack>
     );
   }
 

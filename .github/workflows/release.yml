@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check-version:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
     if: "!contains(github.event.head_commit.message, '[skip release]')"
     outputs:
       version: ${{ steps.package_version.outputs.version }}
@@ -38,7 +38,7 @@ jobs:
         fi
 
   build:
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform == 'amd64' && github.actor == 'slamanna212' && 'rapture-matchexec' || matrix.runner }}
     needs: check-version
     if: needs.check-version.outputs.tag_exists == 'false'
     permissions:
@@ -57,19 +57,26 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-        
+
+    - name: Set up Docker
+      run: |
+        if ! command -v docker &> /dev/null; then
+          curl -fsSL https://get.docker.com | sudo sh
+        fi
+        sudo chmod 666 /var/run/docker.sock
+
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
+      uses: docker/setup-buildx-action@v4
+
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GHCR_TOKEN }}
-        
+
     - name: Build and push production Docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         platforms: linux/${{ matrix.platform }}
@@ -81,7 +88,7 @@ jobs:
         cache-to: type=gha,mode=max
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
     needs: [check-version, build]
     if: needs.check-version.outputs.tag_exists == 'false'
     permissions:
@@ -91,14 +98,21 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-      
+
+    - name: Set up Docker
+      run: |
+        if ! command -v docker &> /dev/null; then
+          curl -fsSL https://get.docker.com | sudo sh
+        fi
+        sudo chmod 666 /var/run/docker.sock
+
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GHCR_TOKEN }}
-        
+
     - name: Create and push manifest
       run: |
         docker buildx imagetools create -t ghcr.io/${{ github.actor }}/matchexec:v${{ needs.check-version.outputs.version }} \

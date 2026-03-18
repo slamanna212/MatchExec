@@ -13,7 +13,7 @@ async function initializeDatabase(): Promise<Database> {
 let dbPromise: Promise<Database> | null = null;
 let dbPromiseEnvPath: string | undefined = undefined;
 
-export function getDbInstance() {
+export function getDbInstance(): Promise<Database> {
   const envPath = process.env.DATABASE_PATH;
   if (!dbPromise || dbPromiseEnvPath !== envPath) {
     dbPromiseEnvPath = envPath;

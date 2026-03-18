@@ -15,9 +15,15 @@ await esbuild.build({
   external: [
     // Native modules
     'sqlite3',
+    'bufferutil',
 
-    // Cron library
-    'node-cron',
+    // Discord.js (used by avatar update job, has native deps)
+    'discord.js',
+    '@discordjs/voice',
+    '@discordjs/rest',
+    '@discordjs/builders',
+    '@discordjs/util',
+    '@discordjs/ws',
 
     // Node.js built-ins (automatically external, but explicit for clarity)
     'fs',

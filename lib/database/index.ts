@@ -1,5 +1,5 @@
 import { Database, getDatabase } from './connection';
-import { MigrationRunner } from './migrations';
+import { createMigrationRunner } from './migrations';
 import { DatabaseSeeder } from './seeder';
 import { readDbStatus } from './status';
 
@@ -10,8 +10,8 @@ export async function initializeDatabase(): Promise<Database> {
   await db.connect();
   
   // Run migrations
-  const migrationRunner = new MigrationRunner(db);
-  await migrationRunner.runMigrations();
+  const migrationRunner = createMigrationRunner(db);
+  await migrationRunner.up();
   
   // Seed database with game data
   const seeder = new DatabaseSeeder(db);

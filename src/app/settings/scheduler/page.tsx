@@ -1,6 +1,6 @@
 'use client'
 
-import { Text, Stack, Group } from '@mantine/core';
+import { Text, Stack, Group, Card, Skeleton } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
@@ -90,13 +90,33 @@ export default function SchedulerSettingsPage() {
           </Group>
         </div>
 
-        <SchedulerConfig
-          value={schedulerSettings}
-          onChange={setSchedulerSettings}
-          onSubmit={handleSchedulerSubmit}
-          loading={loading}
-          saving={saving}
-        />
+        {loading ? (
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Stack gap="lg">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Stack key={i} gap="xs">
+                  <Skeleton height={14} width={120} />
+                  <Skeleton height={12} width={200} />
+                  <Group gap="xs">
+                    <Skeleton height={36} width={80} />
+                    <Skeleton height={36} width={100} />
+                  </Group>
+                </Stack>
+              ))}
+              <Group justify="flex-end">
+                <Skeleton height={36} width={180} />
+              </Group>
+            </Stack>
+          </Card>
+        ) : (
+          <SchedulerConfig
+            value={schedulerSettings}
+            onChange={setSchedulerSettings}
+            onSubmit={handleSchedulerSubmit}
+            loading={loading}
+            saving={saving}
+          />
+        )}
       </Stack>
     </div>
   );

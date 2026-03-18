@@ -50,6 +50,47 @@ export function safeJSONParse<T>(
 }
 
 /**
+ * Validate a string field does not exceed maxLength.
+ * Returns valid if value is undefined or null (optional field).
+ */
+export function validateMaxLength(value: unknown, maxLength: number, fieldName: string): ValidationResult {
+  if (value === undefined || value === null) return { valid: true };
+  if (typeof value !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (value.length > maxLength) {
+    return { valid: false, error: `${fieldName} must be ${maxLength} characters or fewer` };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validate a numeric field is within [min, max].
+ * Returns valid if value is undefined or null (optional field).
+ */
+export function validateNumberRange(value: unknown, min: number, max: number, fieldName: string): ValidationResult {
+  if (value === undefined || value === null) return { valid: true };
+  const num = typeof value === 'string' ? Number(value) : value;
+  if (typeof num !== 'number' || isNaN(num as number)) {
+    return { valid: false, error: `${fieldName} must be a number` };
+  }
+  if ((num as number) < min || (num as number) > max) {
+    return { valid: false, error: `${fieldName} must be between ${min} and ${max}` };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validate a field is one of the allowed enum values.
+ * Returns valid if value is undefined or null (optional field).
+ */
+export function validateEnum(value: unknown, allowedValues: readonly string[], fieldName: string): ValidationResult {
+  if (value === undefined || value === null) return { valid: true };
+  if (typeof value !== 'string' || !allowedValues.includes(value)) {
+    return { valid: false, error: `${fieldName} must be one of: ${allowedValues.join(', ')}` };
+  }
+  return { valid: true };
+}
+
+/**
  * Safely stringify JSON with error handling
  */
 export function safeJSONStringify(value: unknown): string {

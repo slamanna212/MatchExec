@@ -347,7 +347,9 @@ export class ReminderHandler {
    * Get team display info
    */
   private getTeamDisplayInfo(teamAssignment: string): { emoji: string; name: string } {
-    const emoji = teamAssignment === 'blue' ? '🔵' : teamAssignment === 'red' ? '🔴' : '🟡';
+    let emoji = '🟡';
+    if (teamAssignment === 'blue') emoji = '🔵';
+    else if (teamAssignment === 'red') emoji = '🔴';
     const name = teamAssignment.charAt(0).toUpperCase() + teamAssignment.slice(1);
     return { emoji, name };
   }
@@ -587,8 +589,9 @@ export class ReminderHandler {
 
     // Add team assignment if available
     if (participant.team_assignment && participant.team_assignment !== 'unassigned') {
-      const teamEmoji = participant.team_assignment === 'blue' ? '🔵' : 
-                       participant.team_assignment === 'red' ? '🔴' : '🟡';
+      let teamEmoji = '🟡';
+      if (participant.team_assignment === 'blue') teamEmoji = '🔵';
+      else if (participant.team_assignment === 'red') teamEmoji = '🔴';
       const teamName = participant.team_assignment.charAt(0).toUpperCase() + participant.team_assignment.slice(1);
       
       embed.addFields({ 

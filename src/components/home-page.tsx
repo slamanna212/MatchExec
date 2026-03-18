@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar } from '@mantine/core';
+import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar, Skeleton } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
@@ -320,7 +320,16 @@ export function HomePage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {pagedRows.length > 0 ? (
+                {loading && Array.from({ length: 8 }).map((_, i) => (
+                  <Table.Tr key={`sk-${i}`}>
+                    <Table.Td><Skeleton height={18} /></Table.Td>
+                    <Table.Td style={{ width: 56, textAlign: 'center' }}><Skeleton height={18} width={28} mx="auto" /></Table.Td>
+                    <Table.Td className="hidden md:table-cell"><Skeleton height={18} /></Table.Td>
+                    <Table.Td className="hidden md:table-cell"><Skeleton height={18} /></Table.Td>
+                    <Table.Td className="hidden md:table-cell"><Skeleton height={18} /></Table.Td>
+                  </Table.Tr>
+                ))}
+                {!loading && pagedRows.length > 0 ? (
                   pagedRows.map((row) => (
                     <Table.Tr
                       key={row.key}
@@ -354,8 +363,8 @@ export function HomePage() {
                     </Table.Tr>
                   ))
                 ) : null}
-                {/* Always show at least 1 row */}
-                {pagedRows.length === 0 && (
+                {/* Always show at least 1 row when not loading */}
+                {!loading && pagedRows.length === 0 && (
                   <Table.Tr>
                     <Table.Td><Text size="sm" c="dimmed">&nbsp;</Text></Table.Td>
                     <Table.Td />
@@ -429,21 +438,25 @@ export function HomePage() {
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
                       {stat.title}
                     </Text>
-                    <Text
-                      fw={800}
-                      size="xl"
-                      mt="xs"
-                      style={{
-                        background: `linear-gradient(135deg, ${stat.color}, ${stat.color}99)`,
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text',
-                        fontFamily: 'var(--font-outfit, sans-serif)',
-                        fontSize: '1.75rem',
-                      }}
-                    >
-                      {loading ? '...' : <AnimatedCounter value={stat.value} />}
-                    </Text>
+                    {loading ? (
+                      <Skeleton height={28} width={60} mt="xs" />
+                    ) : (
+                      <Text
+                        fw={800}
+                        size="xl"
+                        mt="xs"
+                        style={{
+                          background: `linear-gradient(135deg, ${stat.color}, ${stat.color}99)`,
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          backgroundClip: 'text',
+                          fontFamily: 'var(--font-outfit, sans-serif)',
+                          fontSize: '1.75rem',
+                        }}
+                      >
+                        <AnimatedCounter value={stat.value} />
+                      </Text>
+                    )}
                   </div>
                   <div
                     style={{

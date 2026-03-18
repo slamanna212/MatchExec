@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Checkbox, Box, Grid, NumberInput } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, Checkbox, Box, Grid, NumberInput, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2 } from '@tabler/icons-react';
@@ -128,6 +128,19 @@ export default function AnnouncerSettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              <Stack gap={4}>
+                <Skeleton height={14} width={140} />
+                <Skeleton height={20} width="100%" />
+              </Stack>
+              <Stack gap={4}>
+                <Skeleton height={14} width={120} />
+                <Skeleton height={36} />
+              </Stack>
+              <Group justify="flex-end"><Skeleton height={36} width={160} /></Group>
+            </Stack>
+          ) : (
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <Checkbox
@@ -190,6 +203,7 @@ export default function AnnouncerSettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
         </Card>
       </Stack>
     </div>

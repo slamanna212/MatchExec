@@ -5,6 +5,9 @@ import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { parseMatchResponse } from '../helpers';
 import type { Database } from '@/lib/database/connection';
+import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+
+const RULES_VALUES = ['casual', 'competitive'] as const;
 
 function getMatchEditPermissionError(existingMatch: { status: string; tournament_allow_match_editing?: number }): { error: string; status: number } | null {
   if (['battle', 'complete', 'cancelled'].includes(existingMatch.status)) {
@@ -116,6 +119,16 @@ export async function PUT(
     const nameError = validateMatchName(name);
     if (nameError) {
       return NextResponse.json({ error: nameError }, { status: 400 });
+    }
+
+    for (const check of [
+      validateMaxLength(name, 255, 'name'),
+      validateMaxLength(description, 1000, 'description'),
+      validateMaxLength(livestreamLink, 500, 'livestreamLink'),
+      validateEnum(rules, RULES_VALUES, 'rules'),
+      validateNumberRange(rounds, 1, 9, 'rounds'),
+    ]) {
+      if (!check.valid) return NextResponse.json({ error: check.error }, { status: 400 });
     }
 
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;

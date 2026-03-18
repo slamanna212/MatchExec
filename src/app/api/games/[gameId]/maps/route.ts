@@ -9,9 +9,9 @@ export async function GET(
   try {
     const db = await getDbInstance();
     const { gameId } = await params;
-    
+
     logger.debug('[DEBUG] Fetching maps for gameId:', gameId);
-    
+
     // For CS2, use a special query to group by map name and show supported modes
     if (gameId === 'cs2') {
       logger.debug('[DEBUG] Using CS2 special handling');
@@ -24,14 +24,15 @@ export async function GET(
             gm.location,
             GROUP_CONCAT(DISTINCT gmo.name) as modeName,
             'Supports: ' || GROUP_CONCAT(DISTINCT gmo.name) as modeDescription,
-            GROUP_CONCAT(DISTINCT gmo.name) as supportedModes
+            GROUP_CONCAT(DISTINCT gmo.name) as supportedModes,
+            MIN(gm.tournament_enabled) as tournament_enabled
           FROM game_maps gm
           LEFT JOIN game_modes gmo ON gm.mode_id = gmo.id
           WHERE gm.game_id = ?
           GROUP BY gm.name, gm.image_url, gm.location
           ORDER BY gm.name ASC
         `, [gameId]);
-        
+
         logger.debug('[DEBUG] CS2 maps result:', maps);
         return NextResponse.json(maps);
       } catch (cs2Error) {
@@ -39,7 +40,7 @@ export async function GET(
         throw cs2Error;
       }
     }
-    
+
     // Check if this game supports all modes
     const gameInfo = await db.get<{ supportsAllModes: boolean }>(`
       SELECT supports_all_modes as supportsAllModes
@@ -48,7 +49,7 @@ export async function GET(
     `, [gameId]);
 
     let maps;
-    
+
     if (gameInfo?.supportsAllModes) {
       // For games that support all modes, show unique maps only (deduplicated)
       maps = await db.all(`
@@ -59,7 +60,8 @@ export async function GET(
           gm.image_url as imageUrl,
           gm.location,
           'All Modes' as modeName,
-          'Available for all game modes' as modeDescription
+          'Available for all game modes' as modeDescription,
+          MIN(gm.tournament_enabled) as tournament_enabled
         FROM game_maps gm
         WHERE gm.game_id = ?
         GROUP BY gm.name, gm.image_url, gm.location
@@ -68,14 +70,15 @@ export async function GET(
     } else {
       // For games with specific mode-map combinations, show all combinations
       maps = await db.all(`
-        SELECT 
+        SELECT
           gm.id,
           gm.name,
           gm.mode_id as modeId,
           gm.image_url as imageUrl,
           gm.location,
           gmo.name as modeName,
-          gmo.description as modeDescription
+          gmo.description as modeDescription,
+          gm.tournament_enabled
         FROM game_maps gm
         LEFT JOIN game_modes gmo ON gm.mode_id = gmo.id
         WHERE gm.game_id = ?
@@ -88,6 +91,47 @@ export async function GET(
     logger.error('Error fetching maps:', error);
     return NextResponse.json(
       { error: 'Failed to fetch maps' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ gameId: string }> }
+) {
+  try {
+    const db = await getDbInstance();
+    const { gameId } = await params;
+    const body = await request.json();
+
+    if (!body || !Array.isArray(body.updates) || body.updates.length === 0) {
+      return NextResponse.json(
+        { error: 'Missing or invalid updates array' },
+        { status: 400 }
+      );
+    }
+
+    let updated = 0;
+    for (const item of body.updates) {
+      if (typeof item.name !== 'string' || (item.tournament_enabled !== 0 && item.tournament_enabled !== 1)) {
+        return NextResponse.json(
+          { error: 'Each update must have name (string) and tournament_enabled (0 or 1)' },
+          { status: 400 }
+        );
+      }
+      const result = await db.run(
+        `UPDATE game_maps SET tournament_enabled = ?, updated_at = datetime('now') WHERE game_id = ? AND name = ?`,
+        [item.tournament_enabled, gameId, item.name]
+      );
+      updated += result.changes ?? 0;
+    }
+
+    return NextResponse.json({ success: true, updated });
+  } catch (error) {
+    logger.error('Error updating tournament-enabled maps:', error);
+    return NextResponse.json(
+      { error: 'Failed to update maps' },
       { status: 500 }
     );
   }

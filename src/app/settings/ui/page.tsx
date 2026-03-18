@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, NumberInput } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, NumberInput, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
@@ -90,6 +90,15 @@ export default function UISettingsPage() {
         </div>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              <Stack gap={4}>
+                <Skeleton height={14} width={120} />
+                <Skeleton height={36} />
+              </Stack>
+              <Group justify="flex-end"><Skeleton height={36} width={120} /></Group>
+            </Stack>
+          ) : (
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <NumberInput
@@ -109,6 +118,7 @@ export default function UISettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
         </Card>
       </Stack>
     </div>
