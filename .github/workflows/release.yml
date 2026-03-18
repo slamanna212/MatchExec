@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check-version:
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip release]')"
     outputs:
       version: ${{ steps.package_version.outputs.version }}
@@ -88,7 +88,7 @@ jobs:
         cache-to: type=gha,mode=max
 
   release:
-    runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     needs: [check-version, build]
     if: needs.check-version.outputs.tag_exists == 'false'
     permissions:
