@@ -2,13 +2,14 @@
 
 import { Card, Text, Stack, Group } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import { 
-  IconAdjustments, 
-  IconVolume, 
-  IconClock, 
-  IconBrandDiscord, 
+import {
+  IconAdjustments,
+  IconVolume,
+  IconClock,
+  IconBrandDiscord,
   IconPaint,
-  IconSettings
+  IconSettings,
+  IconDatabaseExport,
 } from '@tabler/icons-react';
 
 const settingsCategories = [
@@ -46,6 +47,13 @@ const settingsCategories = [
     href: '/settings/ui',
     icon: IconPaint,
     color: '#f39c12',
+  },
+  {
+    title: 'Backup & Restore',
+    description: 'Export or import the full database, with optional encryption',
+    href: '/settings/backup-restore',
+    icon: IconDatabaseExport,
+    color: '#16a085',
   },
 ];
 
