@@ -95,7 +95,8 @@ resources:
     cpu: 100m
     memory: 256Mi
   limits:
-    memory: 512Mi
+    cpu: 500m
+    memory: 1Gi
 
 metrics:
   serviceMonitor:
