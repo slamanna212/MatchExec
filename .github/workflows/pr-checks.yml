@@ -172,6 +172,31 @@ jobs:
         if: steps.health.outcome == 'failure' || steps.build.outcome == 'failure'
         run: exit 1
 
+  helm-version-sync:
+    name: Helm Version Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check appVersion matches package.json version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          CHART_APP_VERSION=$(grep '^appVersion:' kubernetes/helm/matchexec/Chart.yaml | sed 's/appVersion: *"\?\([^"]*\)"\?/\1/')
+          echo "package.json version:   $PKG_VERSION"
+          echo "Chart.yaml appVersion:  $CHART_APP_VERSION"
+          echo "## Helm Version Sync" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Version |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| package.json | \`$PKG_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart.yaml appVersion | \`$CHART_APP_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "$PKG_VERSION" != "$CHART_APP_VERSION" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Version mismatch — update \`appVersion\` in \`kubernetes/helm/matchexec/Chart.yaml\` to match \`package.json\`" >> $GITHUB_STEP_SUMMARY
+            echo "Error: appVersion \"$CHART_APP_VERSION\" in Chart.yaml does not match version \"$PKG_VERSION\" in package.json"
+            exit 1
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Versions match" >> $GITHUB_STEP_SUMMARY
+
   build:
     name: Build
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
