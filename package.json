@@ -76,7 +76,7 @@
     "esbuild": "0.27.4",
     "eslint": "9.39.4",
     "eslint-config-next": "16.1.7",
-    "happy-dom": "20.8.3",
+    "happy-dom": "20.8.4",
     "husky": "9.1.7",
     "lint-staged": "16.3.1",
     "tailwindcss": "4.2.1",
