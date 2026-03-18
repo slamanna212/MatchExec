@@ -17,7 +17,6 @@ COPY data ./data
 COPY migrations ./migrations
 COPY scripts ./scripts
 COPY processes ./processes
-COPY processes-package.json ./
 COPY src ./src
 COPY public ./public
 COPY *.config.* ./
@@ -28,6 +27,9 @@ RUN npm run build
 
 # Prune dev dependencies while we still have build tools (needed for native modules on ARM)
 RUN npm prune --omit=dev
+
+# Collect only the process-specific deps (and their transitive deps) from node_modules
+RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
 
 FROM node:24-alpine AS runner
 WORKDIR /app
@@ -40,9 +42,7 @@ RUN apk add --no-cache \
     tzdata \
     git \
     curl \
-    ffmpeg \
-    && npm install -g pm2 tsx \
-    && npm cache clean --force
+    ffmpeg
 
 # Install s6-overlay
 ARG S6_OVERLAY_VERSION=3.2.0.3
@@ -84,38 +84,8 @@ COPY --chmod=755 scripts/run-migrations.sh ./scripts/
 # Copy package files for reference
 COPY --from=builder /app/package.json /app/package-lock.json ./
 
-# Copy ONLY the process-specific dependencies that aren't in Next.js standalone
-# Standalone already has: sqlite3, and other common packages
-# We need to add: Discord.js ecosystem and their dependencies
-COPY --from=builder /app/node_modules/discord.js ./node_modules/discord.js
-COPY --from=builder /app/node_modules/@discordjs ./node_modules/@discordjs
-COPY --from=builder /app/node_modules/@snazzah ./node_modules/@snazzah
-COPY --from=builder /app/node_modules/bufferutil ./node_modules/bufferutil
-COPY --from=builder /app/node_modules/node-cron ./node_modules/node-cron
-
-# Copy Discord.js dependencies (all of them to avoid missing module errors)
-COPY --from=builder /app/node_modules/@sapphire ./node_modules/@sapphire
-COPY --from=builder /app/node_modules/@vladfrangu ./node_modules/@vladfrangu
-COPY --from=builder /app/node_modules/discord-api-types ./node_modules/discord-api-types
-COPY --from=builder /app/node_modules/ws ./node_modules/ws
-COPY --from=builder /app/node_modules/prism-media ./node_modules/prism-media
-COPY --from=builder /app/node_modules/magic-bytes.js ./node_modules/magic-bytes.js
-COPY --from=builder /app/node_modules/fast-deep-equal ./node_modules/fast-deep-equal
-COPY --from=builder /app/node_modules/lodash ./node_modules/lodash
-COPY --from=builder /app/node_modules/lodash.snakecase ./node_modules/lodash.snakecase
-COPY --from=builder /app/node_modules/ts-mixer ./node_modules/ts-mixer
-
-# Migration runner dependency
-COPY --from=builder /app/node_modules/umzug ./node_modules/umzug
-
-# Common dependencies (may be duplicated with standalone but needed for processes)
-COPY --from=builder /app/node_modules/tslib ./node_modules/tslib
-
-# Native addon and build dependencies
-COPY --from=builder /app/node_modules/node-addon-api ./node_modules/node-addon-api
-COPY --from=builder /app/node_modules/node-gyp-build ./node_modules/node-gyp-build
-COPY --from=builder /app/node_modules/bindings ./node_modules/bindings
-COPY --from=builder /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
+# Copy process-specific dependencies (auto-collected with transitive deps)
+COPY --from=builder /tmp/process-deps/node_modules ./node_modules/
 
 # Copy s6-overlay configuration
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
