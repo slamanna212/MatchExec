@@ -129,7 +129,7 @@ const MatchCard = memo(({
           alt={match.game_name}
           size="md"
         />
-        <Stack gap="xs" style={{ flex: 1 }}>
+        <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
           {match.tournament_name && (

@@ -103,7 +103,7 @@ const TournamentCard = memo(({
           alt={tournament.game_name}
           size="md"
         />
-        <Stack gap="xs" style={{ flex: 1 }}>
+        <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
