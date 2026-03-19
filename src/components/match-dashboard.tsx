@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -116,6 +116,7 @@ const MatchCard = memo(({
           h={140}
           w="100%"
           fit="cover"
+          loading="lazy"
           style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
           onMouseOver={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.04)'; }}
           onMouseOut={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
@@ -248,6 +249,7 @@ export function MatchDashboard() {
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
   const [searchQuery, setSearchQuery] = useState('');
   const [transitioning, setTransitioning] = useState<Set<string>>(new Set());
+  const etagRef = useRef<string | null>(null);
 
   /**
    * Check if a match has changed
@@ -277,7 +279,17 @@ export function MatchDashboard() {
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
-      const response = await fetch('/api/matches');
+      const headers: Record<string, string> = {};
+      if (silent && etagRef.current) {
+        headers['If-None-Match'] = etagRef.current;
+      }
+      const response = await fetch('/api/matches', { headers });
+
+      if (response.status === 304) return; // Nothing changed
+
+      const newEtag = response.headers.get('etag');
+      if (newEtag) etagRef.current = newEtag;
+
       if (response.ok) {
         const data = await response.json();
         setMatches(prevMatches => {
