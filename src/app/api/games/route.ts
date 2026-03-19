@@ -28,7 +28,11 @@ export async function GET() {
       ORDER BY g.name
     `);
 
-    return NextResponse.json(games);
+    return NextResponse.json(games, {
+      headers: {
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     logger.error('Error fetching games:', error);
     return NextResponse.json(

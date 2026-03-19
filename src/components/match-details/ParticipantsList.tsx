@@ -87,7 +87,7 @@ export function ParticipantsList({
         padding="md"
         radius="md"
         withBorder
-        style={getTeamCardStyles(teamColor)}
+        style={{ ...getTeamCardStyles(teamColor), contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
       >
         <Group align="center" gap="md" wrap="nowrap">
           <Avatar size="lg" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>

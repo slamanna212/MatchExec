@@ -6,23 +6,23 @@ export async function GET() {
   try {
     const db = await getDbInstance();
 
-    // Get total matches (including tournament matches)
-    const matchCountResult = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM matches');
-    const totalMatches = matchCountResult?.count || 0;
-
-    // Get total tournaments
-    const tournamentCountResult = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM tournaments');
-    const totalTournaments = tournamentCountResult?.count || 0;
-
-    // Get total signups (match participants + tournament participants)
-    const matchParticipantsResult = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM match_participants');
-    const tournamentParticipantsResult = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM tournament_participants');
-    const totalSignups = (matchParticipantsResult?.count || 0) + (tournamentParticipantsResult?.count || 0);
+    const row = await db.get<{
+      totalMatches: number;
+      totalTournaments: number;
+      matchParticipants: number;
+      tournamentParticipants: number;
+    }>(`
+      SELECT
+        (SELECT COUNT(*) FROM matches) as totalMatches,
+        (SELECT COUNT(*) FROM tournaments) as totalTournaments,
+        (SELECT COUNT(*) FROM match_participants) as matchParticipants,
+        (SELECT COUNT(*) FROM tournament_participants) as tournamentParticipants
+    `);
 
     return NextResponse.json({
-      totalMatches,
-      totalTournaments,
-      totalSignups
+      totalMatches: row?.totalMatches || 0,
+      totalTournaments: row?.totalTournaments || 0,
+      totalSignups: (row?.matchParticipants || 0) + (row?.tournamentParticipants || 0),
     });
   } catch (error) {
     logger.error('Error fetching stats:', error);

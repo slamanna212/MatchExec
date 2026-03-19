@@ -89,9 +89,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const limit = limitParam ? parseInt(limitParam, 10) : null;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
     const db = await getDbInstance();
-    
+
     let query = `
       SELECT
         t.*,
@@ -114,21 +118,37 @@ export async function GET(request: NextRequest) {
       LEFT JOIN tournament_teams tt ON t.id = tt.tournament_id
       LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
     `;
-    
-    const params: string[] = [];
-    
+
+    const params: (string | number)[] = [];
+
     if (status === 'complete') {
       query += ` WHERE t.status = 'complete'`;
     } else {
       // Default behavior: show all tournaments EXCEPT completed ones
       query += ` WHERE t.status != 'complete'`;
     }
-    
-    query += ` GROUP BY t.id ORDER BY t.start_time ASC`;
-    
+
+    query += ` GROUP BY t.id ORDER BY t.updated_at DESC`;
+
+    if (limit !== null) {
+      query += ` LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+    }
+
     const tournaments = await db.all<TournamentDbRow>(query, params);
-    
-    return NextResponse.json(tournaments);
+
+    // Compute ETag for efficient polling
+    const maxUpdatedAt = tournaments.reduce(
+      (max, t) => (t.updated_at > max ? t.updated_at : max),
+      ''
+    );
+    const etag = `"${tournaments.length}:${maxUpdatedAt}"`;
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (limit === null && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+
+    return NextResponse.json(tournaments, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching tournaments:', error);
     return NextResponse.json(
