@@ -77,26 +77,38 @@ export async function GET(
       ORDER BY m.tournament_round, tm.match_order
     `, [tournamentId]) as TournamentMatch[];
 
-    // For completed matches without winner_team, calculate from match_games
-    for (const match of matches) {
-      if (match.status === 'complete' && !match.winner_team) {
-        const gameWinners = await db.all(`
-          SELECT winner_id, COUNT(*) as wins
-          FROM match_games
-          WHERE match_id = ? AND winner_id IS NOT NULL
-          GROUP BY winner_id
-          ORDER BY wins DESC
-        `, [match.id]) as { winner_id: string; wins: number }[];
+    // For completed matches without winner_team, calculate from match_games in one query
+    const incompleteIds = matches
+      .filter(m => m.status === 'complete' && !m.winner_team)
+      .map(m => m.id);
 
-        if (gameWinners.length > 0) {
-          const topWinner = gameWinners[0];
-          // Convert team1/team2 to actual team IDs
-          if (topWinner.winner_id === 'team1') {
+    if (incompleteIds.length > 0) {
+      const placeholders = incompleteIds.map(() => '?').join(',');
+      const gameWinners = await db.all(`
+        SELECT match_id, winner_id, COUNT(*) as wins
+        FROM match_games
+        WHERE match_id IN (${placeholders}) AND winner_id IS NOT NULL
+        GROUP BY match_id, winner_id
+        ORDER BY match_id, wins DESC
+      `, incompleteIds) as { match_id: string; winner_id: string; wins: number }[];
+
+      // Build a map of match_id -> top winner_id (first row per match_id wins due to ORDER BY)
+      const topWinnerByMatch = new Map<string, string>();
+      for (const row of gameWinners) {
+        if (!topWinnerByMatch.has(row.match_id)) {
+          topWinnerByMatch.set(row.match_id, row.winner_id);
+        }
+      }
+
+      for (const match of matches) {
+        const winnerId = topWinnerByMatch.get(match.id);
+        if (winnerId) {
+          if (winnerId === 'team1') {
             match.winner_team = match.team1_id;
-          } else if (topWinner.winner_id === 'team2') {
+          } else if (winnerId === 'team2') {
             match.winner_team = match.team2_id;
           } else {
-            match.winner_team = topWinner.winner_id;
+            match.winner_team = winnerId;
           }
         }
       }

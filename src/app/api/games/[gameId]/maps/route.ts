@@ -34,7 +34,9 @@ export async function GET(
         `, [gameId]);
 
         logger.debug('[DEBUG] CS2 maps result:', maps);
-        return NextResponse.json(maps);
+        return NextResponse.json(maps, {
+          headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+        });
       } catch (cs2Error) {
         logger.error('[ERROR] CS2 query failed:', cs2Error);
         throw cs2Error;
@@ -86,7 +88,9 @@ export async function GET(
       `, [gameId]);
     }
 
-    return NextResponse.json(maps);
+    return NextResponse.json(maps, {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+    });
   } catch (error) {
     logger.error('Error fetching maps:', error);
     return NextResponse.json(

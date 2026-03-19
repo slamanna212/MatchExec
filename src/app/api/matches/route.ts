@@ -17,9 +17,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const limit = limitParam ? parseInt(limitParam, 10) : null;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
     const db = await getDbInstance();
-    
+
     let query = `
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
              t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
@@ -32,9 +36,9 @@ export async function GET(request: NextRequest) {
       LEFT JOIN game_maps gm ON m.map_id = gm.id AND m.game_id = gm.game_id
       LEFT JOIN match_participants mp ON m.id = mp.match_id
     `;
-    
-    const params: string[] = [];
-    
+
+    const params: (string | number)[] = [];
+
     if (status === 'complete') {
       query += ` WHERE m.status = 'complete'`;
     } else {
@@ -42,8 +46,13 @@ export async function GET(request: NextRequest) {
       query += ` WHERE m.status != 'complete'`;
     }
 
-    query += ` GROUP BY m.id ORDER BY m.start_time ASC`;
-    
+    query += ` GROUP BY m.id ORDER BY m.updated_at DESC`;
+
+    if (limit !== null) {
+      query += ` LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+    }
+
     const matches = await db.all<MatchDbRow>(query, params);
 
     // Parse maps and map codes JSON for each match
@@ -61,7 +70,18 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(parsedMatches);
+    // Compute ETag from count + latest updated_at for efficient polling
+    const maxUpdatedAt = parsedMatches.reduce(
+      (max, m) => ((m as MatchDbRow).updated_at > max ? (m as MatchDbRow).updated_at : max),
+      ''
+    );
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}"`;
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (limit === null && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+
+    return NextResponse.json(parsedMatches, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching matches:', error);
     return NextResponse.json(
