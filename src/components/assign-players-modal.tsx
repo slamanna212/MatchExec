@@ -17,7 +17,7 @@ import {
   ActionIcon,
   Select
 } from '@mantine/core';
-import { IconMapRoute } from '@tabler/icons-react';
+import { IconStar } from '@tabler/icons-react';
 
 interface SignupField {
   id: string;
@@ -278,7 +278,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
             size="xl"
             variant="subtle"
             onClick={() => handleMapCodesToggle(participant.id)}
-            title={participant.receives_map_codes ? "Will receive map codes" : "Click to receive map codes"}
+            title={participant.receives_map_codes ? "Match Commander" : "Set as Match Commander"}
             style={{
               border: 'none',
               padding: 0,
@@ -299,7 +299,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
               }
             }}
           >
-            <IconMapRoute size={30} />
+            <IconStar size={30} />
           </ActionIcon>
         )}
       </Group>

@@ -838,18 +838,18 @@ async function addTeamParticipants(
   teamColor: 'red' | 'blue'
 ): Promise<void> {
   const teamMembers = await db.all(`
-    SELECT user_id, discord_user_id, username
+    SELECT user_id, discord_user_id, username, is_captain
     FROM tournament_team_members
     WHERE team_id = ?
-  `, [teamId]) as { user_id: string; discord_user_id: string | null; username: string }[];
+  `, [teamId]) as { user_id: string; discord_user_id: string | null; username: string; is_captain: number }[];
 
   for (const member of teamMembers) {
     const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     await db.run(`
       INSERT INTO match_participants (
-        id, match_id, user_id, discord_user_id, username, team, team_assignment, joined_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, teamColor, teamColor]);
+        id, match_id, user_id, discord_user_id, username, team, team_assignment, receives_map_codes, joined_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, teamColor, teamColor, member.is_captain ? 1 : 0]);
   }
 }
 
