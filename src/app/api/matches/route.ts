@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Compute ETag from count + latest updated_at for efficient polling
-    const maxUpdatedAt = parsedMatches.reduce(
-      (max, m) => ((m as MatchDbRow).updated_at > max ? (m as MatchDbRow).updated_at : max),
+    const maxUpdatedAt = matches.reduce(
+      (max, m) => { const val = String(m.updated_at); return val > max ? val : max; },
       ''
     );
     const etag = `"${parsedMatches.length}:${maxUpdatedAt}"`;

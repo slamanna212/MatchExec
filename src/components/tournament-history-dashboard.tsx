@@ -212,14 +212,6 @@ export function TournamentHistoryDashboard() {
     fetchCompletedTournaments();
   }, [fetchCompletedTournaments]);
 
-  // Refresh every 2 minutes (completed tournaments rarely change)
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchCompletedTournaments(true);
-    }, 120_000);
-    return () => clearInterval(intervalId);
-  }, [fetchCompletedTournaments]);
-
   // Filter tournaments based on search query
   const filteredTournaments = useMemo(() => {
     if (!searchQuery.trim()) return tournaments;

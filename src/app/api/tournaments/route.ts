@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     // Compute ETag for efficient polling
     const maxUpdatedAt = tournaments.reduce(
-      (max, t) => (t.updated_at > max ? t.updated_at : max),
+      (max, t) => { const val = String(t.updated_at); return val > max ? val : max; },
       ''
     );
     const etag = `"${tournaments.length}:${maxUpdatedAt}"`;

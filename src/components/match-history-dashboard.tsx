@@ -212,14 +212,6 @@ export function MatchHistoryDashboard() {
     fetchMatches();
   }, [fetchMatches]);
 
-  // Refresh every 2 minutes (completed matches rarely change)
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchMatches(true);
-    }, 120_000);
-    return () => clearInterval(intervalId);
-  }, [fetchMatches]);
-
   const _formatMapName = useCallback((mapId: string) => {
     // Convert map ID to proper display name
     // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"

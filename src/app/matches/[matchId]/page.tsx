@@ -300,11 +300,24 @@ export default function MatchPage({
     fetchData();
   }, [matchId, fetchMapNames, fetchMapNotes]);
 
+  const fetchMatch = useCallback(async (_silent = false) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatch(data);
+      }
+    } catch (error) {
+      logger.error('Error fetching match:', error);
+    }
+  }, [matchId]);
+
   // Auto-refresh participants, reminders, and match games
   useEffect(() => {
     if (!match || match.status === 'complete') return undefined;
 
     const interval = setInterval(() => {
+      fetchMatch(true);
       fetchParticipants(match.id, true);
       fetchReminders(match.id, true);
       if (match.status === 'battle') {
@@ -315,7 +328,7 @@ export default function MatchPage({
     return () => {
       clearInterval(interval);
     };
-  }, [match, refreshInterval, fetchParticipants, fetchReminders, refetchMatchGames]);
+  }, [match, refreshInterval, fetchMatch, fetchParticipants, fetchReminders, refetchMatchGames]);
 
   // Handle status transition
   const handleStatusTransition = useCallback(async (newStatus: string) => {
