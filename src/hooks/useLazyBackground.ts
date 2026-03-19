@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -5,13 +6,13 @@ import { useEffect, useRef, useState } from 'react';
  * The background is only applied when the element is near the viewport,
  * preventing network requests for off-screen images.
  */
-export function useLazyBackground(url: string | undefined) {
+export function useLazyBackground(url: string | undefined): { ref: React.RefObject<HTMLDivElement | null>; backgroundImage: string | undefined } {
   const ref = useRef<HTMLDivElement>(null);
   const [bgUrl, setBgUrl] = useState<string | undefined>();
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !url) return;
+    if (!el || !url) return () => {};
 
     const observer = new IntersectionObserver(
       ([entry]) => {
