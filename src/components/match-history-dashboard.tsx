@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -15,7 +15,8 @@ import {
   Stack,
   Grid,
   Image,
-  TextInput
+  TextInput,
+  Center,
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
 import { StageRing } from './StageRing';
@@ -87,6 +88,7 @@ const HistoryMatchCard = memo(({
           h={140}
           w="100%"
           fit="cover"
+          loading="lazy"
           style={{ objectFit: 'cover' }}
         />
       </Card.Section>
@@ -148,39 +150,36 @@ function SkeletonCard() {
   );
 }
 
+const PAGE_SIZE = 12;
+
 export function MatchHistoryDashboard() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(30);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const etagRef = useRef<string | null>(null);
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
-      // Fetch only completed matches
-      const response = await fetch('/api/matches?status=complete');
+      const headers: Record<string, string> = {};
+      if (silent && etagRef.current) {
+        headers['If-None-Match'] = etagRef.current;
+      }
+      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=0`, { headers });
+
+      if (response.status === 304) return;
+
+      const newEtag = response.headers.get('etag');
+      if (newEtag) etagRef.current = newEtag;
+
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed to prevent unnecessary rerenders
-        setMatches(prevMatches => {
-          // More efficient comparison than JSON.stringify for arrays
-          if (prevMatches.length !== data.length) {
-            return data;
-          }
-          
-          // Check if any match has changed by comparing key properties
-          const hasChanges = data.some((match: MatchWithGame, index: number) => {
-            const prevMatch = prevMatches[index];
-            return !prevMatch || 
-              match.id !== prevMatch.id ||
-              match.status !== prevMatch.status ||
-              match.name !== prevMatch.name ||
-              match.created_at !== prevMatch.created_at ||
-              match.updated_at !== prevMatch.updated_at;
-          });
-          
-          return hasChanges ? data : prevMatches;
-        });
+        setMatches(data);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(0);
       }
     } catch (error) {
       logger.error('Error fetching matches:', error);
@@ -191,33 +190,27 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
-  // Fetch UI settings on component mount
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        logger.error('Error fetching UI settings:', error);
+  const loadMore = useCallback(async () => {
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=${nextPage * PAGE_SIZE}`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatches(prev => [...prev, ...data]);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(nextPage);
       }
-    };
+    } catch (error) {
+      logger.error('Error loading more matches:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page]);
 
-    fetchMatches();
-    fetchUISettings();
-  }, [fetchMatches]);
-
-  // Set up auto-refresh with configurable interval (less frequent for history)
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchMatches(true); // Silent refresh to prevent loading states
-    }, refreshInterval * 1000);
-
-    // Cleanup interval on unmount or when refreshInterval changes
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, fetchMatches]);
+    fetchMatches();
+  }, [fetchMatches]);
 
   const _formatMapName = useCallback((mapId: string) => {
     // Convert map ID to proper display name
@@ -436,15 +429,28 @@ export function MatchHistoryDashboard() {
           </Stack>
         </Card>
       ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <Grid>
-            {memoizedMatchCards}
-          </Grid>
-        </motion.div>
+        <>
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <Grid>
+              {memoizedMatchCards}
+            </Grid>
+          </motion.div>
+          {hasMore && !searchQuery && (
+            <Center mt="xl">
+              <Button
+                variant="default"
+                loading={loadingMore}
+                onClick={loadMore}
+              >
+                Load More
+              </Button>
+            </Center>
+          )}
+        </>
       )}
     </div>
   );

@@ -121,7 +121,7 @@ export default function TournamentPage({
   }, [tournamentId]);
 
   // Fetch tournament data (includes teams)
-  const fetchTournament = useCallback(async () => {
+  const fetchTournament = useCallback(async (_silent = false) => {
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}`);
       if (response.ok) {
@@ -191,17 +191,20 @@ export default function TournamentPage({
     fetchData();
   }, [tournamentId]);
 
-  // Auto-refresh matches and standings during battle phase
+  // Auto-refresh during active phases
   useEffect(() => {
-    if (!tournament || tournament.status !== 'battle') return undefined;
+    if (!tournament || tournament.status === 'complete' || tournament.status === 'created') return undefined;
 
     const interval = setInterval(() => {
+      fetchTournament(true);
       fetchMatches(true);
-      fetchStandings();
+      if (tournament.status === 'battle') {
+        fetchStandings();
+      }
     }, refreshInterval * 1000);
 
     return () => clearInterval(interval);
-  }, [tournament, refreshInterval, fetchMatches, fetchStandings]);
+  }, [tournament, refreshInterval, fetchTournament, fetchMatches, fetchStandings]);
 
   // Handle status transition
   const handleStatusTransition = useCallback(async (newStatus: string) => {

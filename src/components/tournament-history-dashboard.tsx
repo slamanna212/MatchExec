@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -17,6 +17,7 @@ import {
   TextInput,
   Badge,
   Image,
+  Center,
   useMantineColorScheme
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
@@ -70,6 +71,7 @@ const HistoryTournamentCard = memo(({
           h={140}
           w="100%"
           fit="cover"
+          loading="lazy"
           style={{ objectFit: 'cover' }}
         />
       </Card.Section>
@@ -148,35 +150,36 @@ function SkeletonCard() {
   );
 }
 
+const PAGE_SIZE = 12;
+
 export function TournamentHistoryDashboard() {
   const router = useRouter();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const etagRef = useRef<string | null>(null);
 
   const fetchCompletedTournaments = useCallback(async (silent = false) => {
     try {
-      const response = await fetch('/api/tournaments?status=complete');
+      const headers: Record<string, string> = {};
+      if (silent && etagRef.current) {
+        headers['If-None-Match'] = etagRef.current;
+      }
+      const response = await fetch(`/api/tournaments?status=complete&limit=${PAGE_SIZE}&offset=0`, { headers });
+
+      if (response.status === 304) return;
+
+      const newEtag = response.headers.get('etag');
+      if (newEtag) etagRef.current = newEtag;
+
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed to prevent unnecessary rerenders
-        setTournaments(prevTournaments => {
-          if (prevTournaments.length !== data.length) {
-            return data;
-          }
-
-          const hasChanges = data.some((tournament: TournamentWithGame, index: number) => {
-            const prevTournament = prevTournaments[index];
-            return !prevTournament ||
-              tournament.id !== prevTournament.id ||
-              tournament.status !== prevTournament.status ||
-              tournament.name !== prevTournament.name ||
-              tournament.created_at !== prevTournament.created_at ||
-              tournament.updated_at !== prevTournament.updated_at;
-          });
-
-          return hasChanges ? data : prevTournaments;
-        });
+        setTournaments(data);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(0);
       }
     } catch (error) {
       logger.error('Error fetching completed tournaments:', error);
@@ -187,17 +190,26 @@ export function TournamentHistoryDashboard() {
     }
   }, []);
 
+  const loadMore = useCallback(async () => {
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const response = await fetch(`/api/tournaments?status=complete&limit=${PAGE_SIZE}&offset=${nextPage * PAGE_SIZE}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTournaments(prev => [...prev, ...data]);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(nextPage);
+      }
+    } catch (error) {
+      logger.error('Error loading more tournaments:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page]);
+
   useEffect(() => {
     fetchCompletedTournaments();
-  }, [fetchCompletedTournaments]);
-
-  // Set up auto-refresh with configurable interval
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchCompletedTournaments(true); // Silent refresh
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(intervalId);
   }, [fetchCompletedTournaments]);
 
   // Filter tournaments based on search query
@@ -317,15 +329,28 @@ export function TournamentHistoryDashboard() {
           </Stack>
         </Card>
       ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <Grid>
-            {memoizedTournamentCards}
-          </Grid>
-        </motion.div>
+        <>
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <Grid>
+              {memoizedTournamentCards}
+            </Grid>
+          </motion.div>
+          {hasMore && !searchQuery && (
+            <Center mt="xl">
+              <Button
+                variant="default"
+                loading={loadingMore}
+                onClick={loadMore}
+              >
+                Load More
+              </Button>
+            </Center>
+          )}
+        </>
       )}
 
     </div>

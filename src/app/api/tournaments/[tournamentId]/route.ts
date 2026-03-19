@@ -47,6 +47,7 @@ export async function GET(
       member_username?: string;
       member_joined_at?: string;
       member_avatar_url?: string;
+      member_is_captain?: number;
     }>(`
       SELECT
         tt.*,
@@ -55,6 +56,7 @@ export async function GET(
         ttm.discord_user_id as member_discord_user_id,
         ttm.username as member_username,
         ttm.joined_at as member_joined_at,
+        ttm.is_captain as member_is_captain,
         (SELECT mp.avatar_url FROM match_participants mp
          WHERE mp.discord_user_id = ttm.discord_user_id
            AND mp.avatar_url IS NOT NULL
@@ -88,7 +90,8 @@ export async function GET(
           discord_user_id: row.member_discord_user_id ?? undefined,
           username: row.member_username!,
           avatar_url: row.member_avatar_url ?? undefined,
-          joined_at: new Date(row.member_joined_at!)
+          joined_at: new Date(row.member_joined_at!),
+          is_captain: row.member_is_captain === 1
         });
       }
     }

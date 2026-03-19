@@ -91,6 +91,7 @@ export interface TournamentTeamMember {
   discord_user_id?: string;
   avatar_url?: string;
   joined_at: Date;
+  is_captain?: boolean;
 }
 
 // Database row types (includes fields not in the base interface)

@@ -26,27 +26,29 @@ export async function GET(
     }
     
     // Fetch teams and their members
-    const teams = await db.all<TournamentTeam & { 
+    const teams = await db.all<TournamentTeam & {
       member_id?: string;
       member_user_id?: string;
       member_username?: string;
       member_joined_at?: string;
+      member_is_captain?: number;
     }>(`
-      SELECT 
+      SELECT
         tt.*,
         ttm.id as member_id,
         ttm.user_id as member_user_id,
         ttm.username as member_username,
-        ttm.joined_at as member_joined_at
+        ttm.joined_at as member_joined_at,
+        ttm.is_captain as member_is_captain
       FROM tournament_teams tt
       LEFT JOIN tournament_team_members ttm ON tt.id = ttm.team_id
       WHERE tt.tournament_id = ?
       ORDER BY tt.team_name ASC, ttm.joined_at ASC
     `, [tournamentId]);
-    
+
     // Group members by team
     const teamsMap = new Map<string, TournamentTeam & { members: TournamentTeamMember[] }>();
-    
+
     for (const row of teams) {
       if (!teamsMap.has(row.id)) {
         teamsMap.set(row.id, {
@@ -57,7 +59,7 @@ export async function GET(
           members: []
         });
       }
-      
+
       // Add member if present
       if (row.member_id) {
         teamsMap.get(row.id)!.members.push({
@@ -65,7 +67,8 @@ export async function GET(
           team_id: row.id,
           user_id: row.member_user_id!,
           username: row.member_username!,
-          joined_at: new Date(row.member_joined_at!)
+          joined_at: new Date(row.member_joined_at!),
+          is_captain: row.member_is_captain === 1
         });
       }
     }
@@ -158,7 +161,7 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { teams } = body; // Array of { teamId, members: [{ userId, username }] }
+    const { teams } = body; // Array of { teamId, members: [{ userId, username, isCaptain }] }
     const { tournamentId } = await params;
     
     if (!teams || !Array.isArray(teams)) {
@@ -212,9 +215,9 @@ export async function PUT(
           `, [tournamentId, member.userId]);
 
           await db.run(`
-            INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
-            VALUES (?, ?, ?, ?, ?)
-          `, [memberId, team.teamId, member.userId, participant?.discord_user_id || null, member.username]);
+            INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username, is_captain)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [memberId, team.teamId, member.userId, participant?.discord_user_id || null, member.username, member.isCaptain ? 1 : 0]);
 
           // Update the participant's team assignment
           await db.run(`

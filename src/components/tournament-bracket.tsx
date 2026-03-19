@@ -178,7 +178,9 @@ export function TournamentBracket({
         minHeight: '120px',
         display: 'flex',
         flexDirection: 'column',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        contentVisibility: 'auto',
+        containIntrinsicSize: '0 120px',
       }}
     >
       <Stack gap="sm" style={{ flex: 1 }}>

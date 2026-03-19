@@ -15,7 +15,7 @@ import {
   SegmentedControl,
   Button
 } from '@mantine/core';
-import { IconTrophy } from '@tabler/icons-react';
+import { IconTrophy, IconStar } from '@tabler/icons-react';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
@@ -185,16 +185,21 @@ export function TournamentContentPanel({
                       {team.members && team.members.length > 0 ? (
                         <Stack gap="xs">
                           {team.members.map((member, memberIndex) => (
-                            <Group key={member.id} gap="sm">
-                              <Avatar
-                                size="sm"
-                                src={member.avatar_url || null}
-                                color={badgeColor}
-                                variant={member.avatar_url ? undefined : 'filled'}
-                              >
-                                {!member.avatar_url && (memberIndex + 1)}
-                              </Avatar>
-                              <Text size="sm">{member.username}</Text>
+                            <Group key={member.id} gap="sm" justify="space-between">
+                              <Group gap="sm">
+                                <Avatar
+                                  size="sm"
+                                  src={member.avatar_url || null}
+                                  color={badgeColor}
+                                  variant={member.avatar_url ? undefined : 'filled'}
+                                >
+                                  {!member.avatar_url && (memberIndex + 1)}
+                                </Avatar>
+                                <Text size="sm">{member.username}</Text>
+                              </Group>
+                              {member.is_captain && (
+                                <IconStar size={14} color="var(--mantine-color-yellow-5)" fill="var(--mantine-color-yellow-5)" />
+                              )}
                             </Group>
                           ))}
                         </Stack>
