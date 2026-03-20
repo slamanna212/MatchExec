@@ -1,3 +1,60 @@
+
+● All phases 1-13 are complete. Let me give a summary of everything that was implemented:
+
+  ---
+  All phases from the STATS.md plan have been implemented. Here's a summary of what was built:
+
+  Phases 1-3 (Foundation)
+  - Migration 012_scorecard_stats.sql — 8 new tables (scorecard_submissions, scorecard_player_stats, match_player_stats, stats_processing_queue, stats_image_queue,
+  discord_scorecard_prompt_queue, scorecard_dm_messages, stats_settings)
+  - stats.json files for Overwatch 2 (6 stats) and Marvel Rivals (6 stats), data versions bumped
+  - Seeder updated to seed stat definitions from stats.json
+  - 7 new TypeScript interfaces in shared/types.ts
+
+  Phases 4-6 (API Routes)
+  - GET/PUT /api/settings/stats — stats settings CRUD with API key masking
+  - GET /api/games/[gameId]/stats — returns stat definitions (empty array for games without stats)
+  - Full scorecard API: upload, list, get, delete, assign, review, match stats aggregation, image generation queue
+
+  Phase 7 (Stats Processor — 4th Process)
+  - processes/stats-processor/index.ts — polls queues every 5s, heartbeat every 5min
+  - ai-extractor.ts — calls Claude Vision API, parses results, auto-assigns players by name matching, retry logic (3 retries with backoff), both-sides validation and auto-advance
+  - stat-image-generator.ts — aggregates stats, generates team + individual player canvas images using @napi-rs/canvas
+  - esbuild.stats-processor.config.mjs — build config
+
+  Phase 8 (Process Config)
+  - PM2 ecosystem.config.js — stats-processor as 4th process
+  - s6-overlay service files for Docker
+
+  Phase 9 (Discord DM Flow)
+  - scorecard-handler.ts — sends DMs to match commanders at map start, handles screenshot replies
+  - Discord bot: MessageContent intent, messageCreate event listener
+  - Queue processor: processScorecardPromptQueue()
+
+  Phase 10 (Scoring Integration)
+  - queueScorecardPrompts() — called when first/next map goes ongoing
+  - queueStatsAggregation() — called when match completes
+
+  Phases 11-13 (UI)
+  - /settings/stats — two-card settings page (general toggles + API key/model)
+  - Settings index updated with Stats card
+  - ScorecardUpload.tsx — drag-and-drop upload with team side selector
+  - SimpleMapScoring.tsx — "Upload Scorecard" button when stats enabled for current game
+  - /matches/[matchId]/stats — review page with map tabs
+  - StatsReviewPanel, PlayerStatCard, SubmissionViewer components
+  - "Review Stats" button on match detail page for battle/complete matches
+
+  Verification: npm run migrate ✅ | tsc --noEmit ✅ | npm run lint ✅
+
+
+
+
+
+
+
+
+
+
 # AI-Powered Scorecard Stats Extraction - Implementation Plan
 
 ## Overview
