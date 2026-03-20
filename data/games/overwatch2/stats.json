@@ -1,0 +1,8 @@
+[
+  { "id": "eliminations", "name": "eliminations", "displayName": "Eliminations", "statType": "number", "category": "combat", "sortOrder": 1, "isPrimary": true },
+  { "id": "assists", "name": "assists", "displayName": "Assists", "statType": "number", "category": "combat", "sortOrder": 2, "isPrimary": true },
+  { "id": "deaths", "name": "deaths", "displayName": "Deaths", "statType": "number", "category": "combat", "sortOrder": 3, "isPrimary": true },
+  { "id": "damage", "name": "damage", "displayName": "Damage", "statType": "number", "category": "combat", "sortOrder": 4, "isPrimary": true, "format": "thousands" },
+  { "id": "healing", "name": "healing", "displayName": "Healing", "statType": "number", "category": "support", "sortOrder": 5, "isPrimary": true, "format": "thousands" },
+  { "id": "damage_mitigated", "name": "damage_mitigated", "displayName": "Damage Mitigated", "statType": "number", "category": "tank", "sortOrder": 6, "isPrimary": false, "format": "thousands" }
+]

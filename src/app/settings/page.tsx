@@ -10,6 +10,7 @@ import {
   IconPaint,
   IconSettings,
   IconDatabaseExport,
+  IconChartBar,
 } from '@tabler/icons-react';
 
 const settingsCategories = [
@@ -54,6 +55,13 @@ const settingsCategories = [
     href: '/settings/backup-restore',
     icon: IconDatabaseExport,
     color: '#16a085',
+  },
+  {
+    title: 'Stats',
+    description: 'Configure AI-powered scorecard analysis and stat tracking',
+    href: '/settings/stats',
+    icon: IconChartBar,
+    color: '#e74c3c',
   },
 ];
 

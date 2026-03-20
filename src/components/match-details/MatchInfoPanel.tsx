@@ -59,6 +59,7 @@ interface MatchInfoPanelProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
+  onReviewStats?: () => void;
 }
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = {
@@ -156,7 +157,8 @@ function MatchActionsCard({
   onScoring,
   onDelete,
   onEdit,
-  onStatusTransition
+  onStatusTransition,
+  onReviewStats
 }: {
   match: MatchWithGame;
   isHistory: boolean;
@@ -165,10 +167,12 @@ function MatchActionsCard({
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
+  onReviewStats?: () => void;
 }) {
   const showAssignPlayers = ASSIGN_STATUSES.has(match.status) && Boolean(onAssignPlayers);
   const showScoring = match.status === 'battle' && Boolean(onScoring);
   const showEdit = !isHistory && Boolean(onEdit) && !NON_EDIT_STATUSES.has(match.status) && match.tournament_allow_match_editing !== false;
+  const showReviewStats = Boolean(onReviewStats) && (match.status === 'battle' || match.status === 'complete');
 
   return (
     <Card withBorder padding="lg" shadow="sm">
@@ -178,6 +182,9 @@ function MatchActionsCard({
         )}
         {showScoring && (
           <Button variant="light" color="blue" fullWidth onClick={onScoring}>Scoring</Button>
+        )}
+        {showReviewStats && (
+          <Button variant="light" color="grape" fullWidth onClick={onReviewStats}>Review Stats</Button>
         )}
         {getStatusTransitionButton(match, isHistory, onStatusTransition)}
         {showEdit && (
@@ -205,7 +212,8 @@ export function MatchInfoPanel({
   onScoring,
   onDelete,
   onEdit,
-  onStatusTransition
+  onStatusTransition,
+  onReviewStats
 }: MatchInfoPanelProps) {
   return (
     <div style={{ position: 'sticky', top: 20 }}>
@@ -246,6 +254,7 @@ export function MatchInfoPanel({
             onDelete={onDelete}
             onEdit={onEdit}
             onStatusTransition={onStatusTransition}
+            onReviewStats={onReviewStats}
           />
         )}
       </Stack>

@@ -1,4 +1,5 @@
 import type { Client, Message } from 'discord.js';
+import type { ScorecardHandler } from './scorecard-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -355,6 +356,7 @@ function recreateAttachment(eventImageUrl: string | null | undefined, updatedEmb
 
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
+  private scorecardHandler: ScorecardHandler | null = null;
 
   constructor(
     private client: Client,
@@ -366,6 +368,10 @@ export class QueueProcessor {
     private voiceHandler: VoiceHandler | null = null,
     private settingsManager: SettingsManager | null = null
   ) {}
+
+  setScorecardHandler(handler: ScorecardHandler) {
+    this.scorecardHandler = handler;
+  }
 
   async processAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
@@ -1673,8 +1679,44 @@ export class QueueProcessor {
       this.processMapCodeQueue(),
       this.processMatchWinnerNotificationQueue(),
       this.processDiscordBotRequests(),
-      this.processMatchEditQueue()
+      this.processMatchEditQueue(),
+      this.processScorecardPromptQueue()
     ]);
+  }
+
+  async processScorecardPromptQueue() {
+    if (!this.client.isReady() || !this.db || !this.scorecardHandler) return;
+
+    try {
+      const pending = await this.db.all<{ id: string; match_id: string; match_game_id: string; map_name: string | null }>(
+        `SELECT id, match_id, match_game_id, map_name FROM discord_scorecard_prompt_queue WHERE status = 'pending' LIMIT 5`
+      );
+
+      for (const item of (pending || [])) {
+        try {
+          await this.db.run(
+            `UPDATE discord_scorecard_prompt_queue SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+          const sent = await this.scorecardHandler.sendScorecardPrompts(
+            item.match_id,
+            item.match_game_id,
+            item.map_name || ''
+          );
+          if (!sent) {
+            logger.debug(`No scorecard prompts sent for match ${item.match_id} (no eligible commanders)`);
+          }
+        } catch (err) {
+          logger.error(`Error processing scorecard prompt queue item ${item.id}:`, err);
+          await this.db.run(
+            `UPDATE discord_scorecard_prompt_queue SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing scorecard prompt queue:', error);
+    }
   }
 
   private async updateMatchMessagesForSignupClosure(matchId: string): Promise<boolean> {

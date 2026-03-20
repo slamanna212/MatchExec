@@ -17,7 +17,7 @@ Add AI-powered scorecard analysis: match commanders photograph in-game scoreboar
 
 ## Phase 1: Database Migration
 
-- [ ] **Create `migrations/012_scorecard_stats.sql`**
+- [x] **Create `migrations/012_scorecard_stats.sql`**
 
 **Tables to create:**
 
@@ -203,7 +203,7 @@ BEGIN UPDATE match_player_stats SET updated_at = CURRENT_TIMESTAMP WHERE id = NE
 
 ### Create stat definition files
 
-- [ ] **Create `data/games/overwatch2/stats.json`**
+- [x] **Create `data/games/overwatch2/stats.json`**
 
 ```json
 [
@@ -216,7 +216,7 @@ BEGIN UPDATE match_player_stats SET updated_at = CURRENT_TIMESTAMP WHERE id = NE
 ]
 ```
 
-- [ ] **Create `data/games/marvelrivals/stats.json`**
+- [x] **Create `data/games/marvelrivals/stats.json`**
 
 ```json
 [
@@ -231,7 +231,7 @@ BEGIN UPDATE match_player_stats SET updated_at = CURRENT_TIMESTAMP WHERE id = NE
 
 ### Modify seeder
 
-- [ ] **Modify `lib/database/seeder.ts`** — add stats seeding
+- [x] **Modify `lib/database/seeder.ts`** — add stats seeding
 
 **1. Add `StatData` interface** near top of file (after `MapData` interface, around line 49):
 
@@ -287,8 +287,8 @@ private async seedStats(gameId: string, statsData: StatData[]): Promise<void> {
 
 ### Bump data versions
 
-- [ ] **Modify `data/games/overwatch2/game.json`** — change `"dataVersion": "1.7.7"` to `"1.8.0"`
-- [ ] **Modify `data/games/marvelrivals/game.json`** — change `"dataVersion": "1.8.3"` to `"1.9.0"`
+- [x] **Modify `data/games/overwatch2/game.json`** — change `"dataVersion": "1.7.7"` to `"1.8.0"`
+- [x] **Modify `data/games/marvelrivals/game.json`** — change `"dataVersion": "1.8.3"` to `"1.9.0"`
 
 **Verify:** `npm run migrate` then `sqlite3 ./app_data/data/matchexec.db "SELECT * FROM game_stat_definitions;"`
 
@@ -296,7 +296,7 @@ private async seedStats(gameId: string, statsData: StatData[]): Promise<void> {
 
 ## Phase 3: TypeScript Types
 
-- [ ] **Modify `shared/types.ts`** — add at end of file (after `SchedulerSettings` interface, around line 337):
+- [x] **Modify `shared/types.ts`** — add at end of file (after `SchedulerSettings` interface, around line 337):
 
 ```typescript
 // === Scorecard Stats Types ===
@@ -402,7 +402,7 @@ export interface AIExtractionResult {
 
 ## Phase 4: API Routes — Stats Settings
 
-- [ ] **Create `src/app/api/settings/stats/route.ts`**
+- [x] **Create `src/app/api/settings/stats/route.ts`**
 
 Follow the pattern of `src/app/api/settings/discord/route.ts`:
 - **GET**: Query `stats_settings WHERE id = 1`. Mask API key as `'***configured***'` if set, empty string if not.
@@ -415,7 +415,7 @@ Follow the pattern of `src/app/api/settings/discord/route.ts`:
 
 ## Phase 5: API Routes — Game Stats
 
-- [ ] **Create `src/app/api/games/[gameId]/stats/route.ts`**
+- [x] **Create `src/app/api/games/[gameId]/stats/route.ts`**
 
 **GET**: Query `SELECT * FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order ASC`. Return as JSON array. Return empty array `[]` if game has no stats defined. This endpoint is used by the UI to decide whether to show stats features.
 
@@ -429,7 +429,7 @@ Use `getDbInstance()` from `@/lib/database-init`. Accept `gameId` from route par
 
 ### Scorecard upload + list
 
-- [ ] **Create `src/app/api/matches/[matchId]/scorecard/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/scorecard/route.ts`**
 
 **POST** — Upload a scorecard screenshot:
 - Accept FormData with `screenshot` (File), `matchGameId` (string), `teamSide` (string: 'blue'|'red')
@@ -447,14 +447,14 @@ Use `getDbInstance()` from `@/lib/database-init`. Accept `gameId` from route par
 
 ### Single submission
 
-- [ ] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/route.ts`**
 
 **GET** — Single submission with its `scorecard_player_stats` rows.
 **DELETE** — Remove submission and associated player stats (CASCADE handles stats).
 
 ### Assignment
 
-- [ ] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/assign/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/assign/route.ts`**
 
 **PUT** — Assign participants to extracted players:
 - Body: `{ assignments: [{ playerStatId: string, participantId: string }] }`
@@ -462,7 +462,7 @@ Use `getDbInstance()` from `@/lib/database-init`. Accept `gameId` from route par
 
 ### Review
 
-- [ ] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/review/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/scorecard/[submissionId]/review/route.ts`**
 
 **PUT** — Approve or reject:
 - Body: `{ status: 'approved' | 'rejected' }`
@@ -471,14 +471,14 @@ Use `getDbInstance()` from `@/lib/database-init`. Accept `gameId` from route par
 
 ### Match stats
 
-- [ ] **Create `src/app/api/matches/[matchId]/stats/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/stats/route.ts`**
 
 **GET** — Return aggregated match stats from `match_player_stats` for this match.
 **POST** — Trigger aggregation: compute totals from all approved `scorecard_player_stats`, upsert into `match_player_stats`.
 
 ### Image generation trigger
 
-- [ ] **Create `src/app/api/matches/[matchId]/stats/generate-images/route.ts`**
+- [x] **Create `src/app/api/matches/[matchId]/stats/generate-images/route.ts`**
 
 **POST** — Queue image generation by inserting into `stats_image_queue` with unique ID and `status = 'pending'`.
 
@@ -490,7 +490,7 @@ New 4th process. Polls queue tables and performs AI extraction + image generatio
 
 ### Main process file
 
-- [ ] **Create `processes/stats-processor/index.ts`**
+- [x] **Create `processes/stats-processor/index.ts`**
 
 Follow the pattern of `processes/scheduler/index.ts`:
 - Import `waitForDatabaseReady` from `../../lib/database`
@@ -506,7 +506,7 @@ Follow the pattern of `processes/scheduler/index.ts`:
 
 ### AI Extractor module
 
-- [ ] **Create `processes/stats-processor/modules/ai-extractor.ts`**
+- [x] **Create `processes/stats-processor/modules/ai-extractor.ts`**
 
 ```
 class AIExtractor {
@@ -570,7 +570,7 @@ class AIExtractor {
 
 ### Image Generator module
 
-- [ ] **Create `processes/stats-processor/modules/stat-image-generator.ts`**
+- [x] **Create `processes/stats-processor/modules/stat-image-generator.ts`**
 
 Uses `@napi-rs/canvas` for image generation.
 
@@ -608,7 +608,7 @@ class StatImageGenerator {
 
 ### Esbuild config
 
-- [ ] **Create `esbuild.stats-processor.config.mjs`**
+- [x] **Create `esbuild.stats-processor.config.mjs`**
 
 Copy from `esbuild.scheduler.config.mjs` and change:
 - `entryPoints`: `processes/stats-processor/index.ts`
@@ -674,7 +674,7 @@ console.log('✓ Stats processor bundled successfully');
 
 ### PM2
 
-- [ ] **Modify `ecosystem.config.js`** — add after the scheduler entry (after line 58, before the closing `]`):
+- [x] **Modify `ecosystem.config.js`** — add after the scheduler entry (after line 58, before the closing `]`):
 
 ```javascript
 {
@@ -697,8 +697,8 @@ console.log('✓ Stats processor bundled successfully');
 
 Create these files following the exact pattern of `s6-overlay/s6-rc.d/scheduler/`:
 
-- [ ] **Create `s6-overlay/s6-rc.d/stats-processor/type`** — content: `longrun`
-- [ ] **Create `s6-overlay/s6-rc.d/stats-processor/run`** — make executable (`chmod +x`):
+- [x] **Create `s6-overlay/s6-rc.d/stats-processor/type`** — content: `longrun`
+- [x] **Create `s6-overlay/s6-rc.d/stats-processor/run`** — make executable (`chmod +x`):
 
 ```bash
 #!/command/with-contenv bash
@@ -719,7 +719,7 @@ exec s6-setuidgid abc node dist/stats-processor.js
 
 ### Scorecard handler module
 
-- [ ] **Create `processes/discord-bot/modules/scorecard-handler.ts`**
+- [x] **Create `processes/discord-bot/modules/scorecard-handler.ts`**
 
 ```
 import type { Client, Message } from 'discord.js';
@@ -774,7 +774,7 @@ class ScorecardHandler {
 
 ### Modify discord bot main
 
-- [ ] **Modify `processes/discord-bot/index.ts`**
+- [x] **Modify `processes/discord-bot/index.ts`**
 
 1. Add import at top (after other module imports, around line 18):
 ```typescript
@@ -819,7 +819,7 @@ this.scorecardHandler?.updateSettings(newSettings);
 
 ### Modify queue processor
 
-- [ ] **Modify `processes/discord-bot/modules/queue-processor.ts`**
+- [x] **Modify `processes/discord-bot/modules/queue-processor.ts`**
 
 1. Accept `ScorecardHandler` as parameter in constructor (add after `voiceHandler` parameter)
 2. Add `processScorecardPromptQueue()` method:
@@ -836,7 +836,7 @@ this.scorecardHandler?.updateSettings(newSettings);
 
 ## Phase 10: Scoring Flow Integration
 
-- [ ] **Modify `src/lib/scoring-functions.ts`**
+- [x] **Modify `src/lib/scoring-functions.ts`**
 
 ### Add `queueScorecardPrompts()` helper (add near end of file, before exports):
 
@@ -927,7 +927,7 @@ try {
 
 ## Phase 11: Settings Page UI
 
-- [ ] **Create `src/app/settings/stats/page.tsx`**
+- [x] **Create `src/app/settings/stats/page.tsx`**
 
 Use the `frontend-design` skill. Follow the pattern of existing settings pages.
 
@@ -954,7 +954,7 @@ Load initial data with `useEffect` → `fetch('/api/settings/stats')` on mount.
 
 ### Add to settings index
 
-- [ ] **Modify `src/app/settings/page.tsx`**
+- [x] **Modify `src/app/settings/page.tsx`**
 
 Add `IconChartBar` to the import from `@tabler/icons-react` (line 12).
 
@@ -975,7 +975,7 @@ Add to `settingsCategories` array (after the Backup & Restore entry, around line
 
 ### Upload component
 
-- [ ] **Create `src/components/scoring/ScorecardUpload.tsx`**
+- [x] **Create `src/components/scoring/ScorecardUpload.tsx`**
 
 ```typescript
 interface ScorecardUploadProps {
@@ -993,7 +993,7 @@ interface ScorecardUploadProps {
 
 ### Integrate into scoring page
 
-- [ ] **Modify `src/components/scoring/SimpleMapScoring.tsx`**
+- [x] **Modify `src/components/scoring/SimpleMapScoring.tsx`**
 
 1. On mount, fetch game stats: `GET /api/games/{gameId}/stats`
 2. Also fetch stats settings: `GET /api/settings/stats` to check `enabled`
@@ -1009,7 +1009,7 @@ interface ScorecardUploadProps {
 
 ### Review page
 
-- [ ] **Create `src/app/matches/[matchId]/stats/page.tsx`**
+- [x] **Create `src/app/matches/[matchId]/stats/page.tsx`**
 
 Layout:
 ```
@@ -1031,21 +1031,21 @@ Layout:
 
 ### Components
 
-- [ ] **Create `src/components/stats/StatsReviewPanel.tsx`**
+- [x] **Create `src/components/stats/StatsReviewPanel.tsx`**
   - Main review layout component
   - Fetches submission data from `/api/matches/{matchId}/scorecard?matchGameId=X`
   - Map selector tabs (one per match game)
   - Manages assignment state
   - Approve/reject buttons that PUT to `.../review`
 
-- [ ] **Create `src/components/stats/PlayerStatCard.tsx`**
+- [x] **Create `src/components/stats/PlayerStatCard.tsx`**
   - Extracted player name + hero
   - Stat values displayed per stat definition (fetched from `/api/games/{gameId}/stats`)
   - Assignment dropdown: lists match participants from `/api/matches/{matchId}/participants`, pre-selected if auto-assigned
   - Confidence badge: green (>0.8), yellow (>0.5), red (<0.5)
   - On dropdown change: PUT to `.../assign` with the assignment
 
-- [ ] **Create `src/components/stats/SubmissionViewer.tsx`**
+- [x] **Create `src/components/stats/SubmissionViewer.tsx`**
   - Displays the screenshot image from `screenshot_url`
   - Click to expand/zoom
 
@@ -1218,12 +1218,12 @@ Phase 16 (Error handling)      ← all phases
 ## Verification Checklist
 
 ### Build & Migrate
-- [ ] `npm run migrate` succeeds and creates all new tables
-- [ ] `sqlite3 ./app_data/data/matchexec.db "SELECT * FROM game_stat_definitions;"` shows OW2 + MR stats
-- [ ] `npx tsc --noEmit` passes
+- [x] `npm run migrate` succeeds and creates all new tables
+- [x] `sqlite3 ./app_data/data/matchexec.db "SELECT * FROM game_stat_definitions;"` shows OW2 + MR stats
+- [x] `npx tsc --noEmit` passes
 - [ ] `npm run build:stats-processor` succeeds
 - [ ] `npm run build` (full Next.js build) succeeds
-- [ ] `npm run lint` passes
+- [x] `npm run lint` passes
 
 ### Runtime
 - [ ] `npm run dev:all` → `npx pm2 status` shows stats-processor running

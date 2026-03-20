@@ -1,0 +1,8 @@
+[
+  { "id": "kills", "name": "kills", "displayName": "Kills", "statType": "number", "category": "combat", "sortOrder": 1, "isPrimary": true },
+  { "id": "deaths", "name": "deaths", "displayName": "Deaths", "statType": "number", "category": "combat", "sortOrder": 2, "isPrimary": true },
+  { "id": "assists", "name": "assists", "displayName": "Assists", "statType": "number", "category": "combat", "sortOrder": 3, "isPrimary": true },
+  { "id": "kda", "name": "kda", "displayName": "KDA", "statType": "number", "category": "combat", "sortOrder": 4, "isPrimary": true, "format": "decimal" },
+  { "id": "damage", "name": "damage", "displayName": "Damage", "statType": "number", "category": "combat", "sortOrder": 5, "isPrimary": true, "format": "thousands" },
+  { "id": "healing", "name": "healing", "displayName": "Healing", "statType": "number", "category": "support", "sortOrder": 6, "isPrimary": false, "format": "thousands" }
+]

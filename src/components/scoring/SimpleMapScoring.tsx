@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useHotkeys } from '@mantine/hooks';
-import { Text, Badge, Alert, Loader, Group, Stack } from '@mantine/core';
-import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
+import { Text, Badge, Alert, Loader, Group, Stack, Button, Modal } from '@mantine/core';
+import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords, IconCamera } from '@tabler/icons-react';
+import { ScorecardUpload } from './ScorecardUpload';
 import type { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger/client';
 import { getMapImageUrl, formatMapName } from '@/lib/utils/map-utils';
@@ -445,6 +446,19 @@ export function SimpleMapScoring({
 }: SimpleMapScoringProps) {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [statsEnabled, setStatsEnabled] = useState(false);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/settings/stats').then(r => r.json()).catch(() => ({ enabled: false })),
+      fetch(`/api/games/${encodeURIComponent(gameType)}/stats`).then(r => r.json()).catch(() => []),
+    ]).then(([settings, defs]: [{ enabled: boolean }, unknown[]]) => {
+      setStatsEnabled(settings.enabled);
+      setHasStatDefs(Array.isArray(defs) && defs.length > 0);
+    });
+  }, [gameType]);
 
   const { matchGames, participants, team1Name, team2Name, loading, error: fetchError, refetch } = useMatchGamesData(matchId);
 
@@ -520,16 +534,29 @@ export function SimpleMapScoring({
 
       {/* Right detail panel */}
       {selectedGame ? (
-        <MapDetailPanel
-          selectedGame={selectedGame}
-          gameType={gameType}
-          participants={participants}
-          team1Name={team1Name}
-          team2Name={team2Name}
-          onTeamWin={winner => handleWinnerSubmit(winner)}
-          onParticipantWin={id => handleWinnerSubmit('team1', id)}
-          submitting={submitting}
-        />
+        <div>
+          <MapDetailPanel
+            selectedGame={selectedGame}
+            gameType={gameType}
+            participants={participants}
+            team1Name={team1Name}
+            team2Name={team2Name}
+            onTeamWin={winner => handleWinnerSubmit(winner)}
+            onParticipantWin={id => handleWinnerSubmit('team1', id)}
+            submitting={submitting}
+          />
+          {statsEnabled && hasStatDefs && selectedGame.status === 'ongoing' && (
+            <Group justify="center" mt="md">
+              <Button
+                variant="light"
+                leftSection={<IconCamera size={16} />}
+                onClick={() => setShowUploadModal(true)}
+              >
+                Upload Scorecard
+              </Button>
+            </Group>
+          )}
+        </div>
       ) : (
         <div className={styles.detailPanel}>
           <Alert color="blue" icon={<IconMap size={16} />}>
@@ -537,6 +564,22 @@ export function SimpleMapScoring({
           </Alert>
         </div>
       )}
+
+      <Modal
+        opened={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        title="Upload Scorecard Screenshot"
+        size="md"
+      >
+        {selectedGame && (
+          <ScorecardUpload
+            matchId={matchId}
+            matchGameId={selectedGame.id}
+            onUploadComplete={() => setShowUploadModal(false)}
+            onCancel={() => setShowUploadModal(false)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

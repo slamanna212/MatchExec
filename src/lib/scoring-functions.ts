@@ -129,7 +129,17 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
         
         await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
         logger.debug(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
-        
+
+        // Queue scorecard prompts for the first (ongoing) map
+        if (status === 'ongoing') {
+          try {
+            const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '')]);
+            await queueScorecardPrompts(matchId, gameId, mapData?.name || mapId);
+          } catch (err) {
+            logger.error('Error queuing scorecard prompts for first map:', err);
+          }
+        }
+
         // Clean up the temporary Round 0 entry if it exists
         if (noteEntry) {
           await db.run(`
@@ -443,6 +453,13 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
       } catch (mapCodeError) {
         logger.error('Error queuing map code PMs for next map:', mapCodeError);
         // Don't throw - this is a non-critical operation
+      }
+
+      // Queue scorecard prompts for the next map
+      try {
+        await queueScorecardPrompts(matchId, nextMap.id, nextMap.map_name || '');
+      } catch (scorecardError) {
+        logger.error('Error queuing scorecard prompts for next map:', scorecardError);
       }
 
       return true; // There is a next map
@@ -765,6 +782,13 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
     // Queue post-match operations
     await queueMatchWinnerNotification(matchId);
     await queueDiscordDeletion(matchId);
+
+    // Queue stats aggregation and image generation
+    try {
+      await queueStatsAggregation(matchId);
+    } catch (statsError) {
+      logger.error('Error queuing stats aggregation:', statsError);
+    }
 
     // Clean up voice channels
     await deleteMatchVoiceChannels(matchId);
@@ -1128,6 +1152,51 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
 /**
  * Queue Discord deletion for match announcements and events when match completes
  */
+async function queueScorecardPrompts(matchId: string, matchGameId: string, mapName: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    const statsSettings = await db.get<{ enabled: number }>('SELECT enabled FROM stats_settings WHERE id = 1');
+    if (!statsSettings?.enabled) return;
+
+    const match = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+    if (!match) return;
+
+    const statDefs = await db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM game_stat_definitions WHERE game_id = ?', [match.game_id]);
+    if (!statDefs || statDefs.cnt === 0) return;
+
+    const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    await db.run(
+      'INSERT INTO discord_scorecard_prompt_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
+      [queueId, matchId, matchGameId, mapName, 'pending']
+    );
+    logger.debug(`📸 Scorecard prompt queued for match ${matchId}, game ${matchGameId}`);
+  } catch (error) {
+    logger.error('Error queuing scorecard prompts:', error);
+  }
+}
+
+async function queueStatsAggregation(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    const statsSettings = await db.get<{ enabled: number }>('SELECT enabled FROM stats_settings WHERE id = 1');
+    if (!statsSettings?.enabled) return;
+
+    const count = await db.get<{ cnt: number }>(
+      "SELECT COUNT(*) as cnt FROM scorecard_submissions WHERE match_id = ? AND review_status IN ('approved', 'auto_approved')",
+      [matchId]
+    );
+    if (!count || count.cnt === 0) return;
+
+    const queueId = `stats_image_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    await db.run('INSERT INTO stats_image_queue (id, match_id, status) VALUES (?, ?, ?)', [queueId, matchId, 'pending']);
+    logger.debug(`📊 Stats aggregation queued for completed match ${matchId}`);
+  } catch (error) {
+    logger.error('Error queuing stats aggregation:', error);
+  }
+}
+
 export async function queueDiscordDeletion(matchId: string): Promise<void> {
   try {
     const db = await getDbInstance();

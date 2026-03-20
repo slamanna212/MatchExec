@@ -335,3 +335,99 @@ export interface SchedulerSettings {
   created_at: Date;
   updated_at: Date;
 }
+
+// === Scorecard Stats Types ===
+
+export interface GameStatDefinition {
+  id: string;
+  game_id: string;
+  name: string;
+  display_name: string;
+  stat_type: string;
+  category?: string;
+  sort_order: number;
+  is_primary: boolean;
+  format?: string;
+}
+
+export interface ScorecardSubmission {
+  id: string;
+  match_id: string;
+  match_game_id: string;
+  submitted_by_participant_id?: string;
+  submitted_by_discord_user_id?: string;
+  team_side: 'blue' | 'red';
+  screenshot_url: string;
+  discord_message_id?: string;
+  ai_raw_response?: string;
+  ai_extraction_status: 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
+  ai_error_message?: string;
+  review_status: 'pending' | 'approved' | 'rejected' | 'auto_approved';
+  reviewed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScorecardPlayerStat {
+  id: string;
+  submission_id: string;
+  match_id: string;
+  match_game_id: string;
+  participant_id?: string;
+  extracted_player_name: string;
+  extracted_hero?: string;
+  team_side?: 'blue' | 'red';
+  stats_json: string;
+  assignment_status: 'unassigned' | 'assigned' | 'confirmed';
+  confidence_score?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchPlayerStats {
+  id: string;
+  match_id: string;
+  participant_id: string;
+  total_stats_json: string;
+  maps_played: number;
+  stat_image_url?: string;
+  stat_image_sent: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StatsSettings {
+  enabled: boolean;
+  ai_provider: string;
+  ai_api_key?: string;
+  ai_model: string;
+  both_sides_required: boolean;
+  auto_advance_on_match: boolean;
+}
+
+export interface ScorecardDmMessage {
+  id: string;
+  match_id: string;
+  match_game_id: string;
+  discord_user_id: string;
+  discord_message_id: string;
+  participant_id?: string;
+  team_side?: 'blue' | 'red';
+  created_at: string;
+}
+
+export interface AIExtractionResult {
+  players: Array<{
+    playerName: string;
+    hero?: string;
+    teamSide: 'blue' | 'red' | 'unknown';
+    stats: Record<string, number>;
+    confidence: number;
+  }>;
+  mapName?: string;
+  gameResult?: {
+    team1Score?: number;
+    team2Score?: number;
+    winner?: 'team1' | 'team2';
+  };
+}

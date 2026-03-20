@@ -82,6 +82,7 @@ interface MatchPageLayoutProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
+  onReviewStats?: () => void;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   formatMapName: (mapId: string) => string;
   showActions?: boolean;
@@ -108,6 +109,7 @@ export function MatchPageLayout({
   onDelete,
   onEdit,
   onStatusTransition,
+  onReviewStats,
   parseDbTimestamp,
   formatMapName,
   showActions = true,
@@ -135,6 +137,7 @@ export function MatchPageLayout({
             onDelete={onDelete}
             onEdit={onEdit}
             onStatusTransition={onStatusTransition}
+            onReviewStats={onReviewStats}
           />
         </Grid.Col>
 

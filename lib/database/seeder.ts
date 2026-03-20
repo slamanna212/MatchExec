@@ -48,6 +48,17 @@ interface MapData {
   tournament_enabled?: boolean;
 }
 
+interface StatData {
+  id: string;
+  name: string;
+  displayName: string;
+  statType: string;
+  category?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  format?: string;
+}
+
 interface VoiceData {
   dataVersion: string;
   voices: Array<{
@@ -176,6 +187,24 @@ export class DatabaseSeeder {
       }
     } else {
       console.log(`ℹ️ No maps.json found for ${gameData.name}`);
+    }
+
+    // Seed stats if they exist
+    const statsPath = path.join(gamePath, 'stats.json');
+    if (fs.existsSync(statsPath)) {
+      try {
+        const statsContent = fs.readFileSync(statsPath, 'utf8').trim();
+        if (statsContent) {
+          const statsData: StatData[] = JSON.parse(statsContent);
+          await this.seedStats(gameData.id, statsData);
+          console.log(`✅ Seeded ${statsData.length} stat definitions for ${gameData.name}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error seeding stats for ${gameData.name}:`, error);
+        throw error;
+      }
+    } else {
+      console.log(`ℹ️ No stats.json found for ${gameData.name}`);
     }
 
     // Update data version
@@ -350,6 +379,17 @@ export class DatabaseSeeder {
       INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, tournament_enabled, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [id, gameId, name, modeId, imageUrl, location, tournamentEnabled ? 1 : 0]);
+  }
+
+  private async seedStats(gameId: string, statsData: StatData[]): Promise<void> {
+    await this.db.run('DELETE FROM game_stat_definitions WHERE game_id = ?', [gameId]);
+    for (const stat of statsData) {
+      await this.db.run(
+        `INSERT INTO game_stat_definitions (id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [stat.id, gameId, stat.name, stat.displayName, stat.statType, stat.category || null, stat.sortOrder, stat.isPrimary ? 1 : 0, stat.format || null]
+      );
+    }
   }
 
   private async updateDataVersion(gameId: string, dataVersion: string): Promise<void> {
