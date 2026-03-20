@@ -14,7 +14,8 @@ import {
   ActionRowBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  EmbedBuilder
 } from 'discord.js';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
@@ -194,7 +195,13 @@ export class InteractionHandler {
     const commands = [
       new SlashCommandBuilder()
         .setName('status')
-        .setDescription('Check bot status and configuration')
+        .setDescription('Check bot status and configuration'),
+      new SlashCommandBuilder()
+        .setName('matches')
+        .setDescription('List upcoming and active matches (up to 5)'),
+      new SlashCommandBuilder()
+        .setName('tournaments')
+        .setDescription('List upcoming and active tournaments (up to 5)')
     ];
 
     try {
@@ -218,6 +225,12 @@ export class InteractionHandler {
       switch (commandName) {
         case 'status':
           await this.handleStatusCommand(interaction);
+          break;
+        case 'matches':
+          await this.handleMatchesCommand(interaction);
+          break;
+        case 'tournaments':
+          await this.handleTournamentsCommand(interaction);
           break;
         default:
           await interaction.reply({
@@ -255,6 +268,139 @@ export class InteractionHandler {
       content: status,
       flags: MessageFlags.Ephemeral
     });
+  }
+
+  private getStatusEmoji(status: string): string {
+    switch (status) {
+      case 'created': return '🟡';
+      case 'gather':  return '🟢';
+      case 'assign':  return '🔵';
+      case 'battle':  return '⚔️';
+      default:        return '⚪';
+    }
+  }
+
+  private getStatusLabel(status: string): string {
+    switch (status) {
+      case 'created': return 'Setup';
+      case 'gather':  return 'Signups Open';
+      case 'assign':  return 'Teams Assigned';
+      case 'battle':  return 'In Progress';
+      default:        return status;
+    }
+  }
+
+  private async handleMatchesCommand(interaction: ChatInputCommandInteraction) {
+    const matches = await this.db.all<{
+      id: string;
+      name: string;
+      status: string;
+      start_date: string | null;
+      game_name: string;
+    }>(`
+      SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
+      FROM matches m
+      JOIN games g ON m.game_id = g.id
+      WHERE m.status NOT IN ('complete', 'cancelled')
+        AND m.tournament_id IS NULL
+      ORDER BY m.start_date ASC
+      LIMIT 5
+    `);
+
+    if (!matches.length) {
+      await interaction.reply({ content: 'No active matches found.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('📋 Upcoming Matches')
+      .setColor(0x5865F2)
+      .setFooter({ text: 'Showing up to 5 active matches' });
+
+    for (const match of matches) {
+      const msg = await this.db.get<{ message_id: string; channel_id: string }>(`
+        SELECT message_id, channel_id FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement' LIMIT 1
+      `, [match.id]);
+
+      const parts: string[] = [`🎮 ${match.game_name}`];
+
+      if (match.start_date) {
+        const ts = Math.floor(new Date(match.start_date).getTime() / 1000);
+        if (!isNaN(ts)) parts.push(`🕐 <t:${ts}:R>`);
+      }
+
+      if (msg && this.settings?.guild_id) {
+        parts.push(`[View Announcement](https://discord.com/channels/${this.settings.guild_id}/${msg.channel_id}/${msg.message_id})`);
+      }
+
+      const statusEmoji = this.getStatusEmoji(match.status);
+      const statusLabel = this.getStatusLabel(match.status);
+      embed.addFields({
+        name: `${statusEmoji} ${match.name}`,
+        value: `${parts.join(' · ')}\n*${statusLabel}*`,
+        inline: false
+      });
+    }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async handleTournamentsCommand(interaction: ChatInputCommandInteraction) {
+    const tournaments = await this.db.all<{
+      id: string;
+      name: string;
+      status: string;
+      start_date: string | null;
+      format: string;
+      game_name: string;
+    }>(`
+      SELECT t.id, t.name, t.status, t.start_date, t.format, g.name as game_name
+      FROM tournaments t
+      JOIN games g ON t.game_id = g.id
+      WHERE t.status NOT IN ('complete', 'cancelled')
+      ORDER BY t.start_date ASC
+      LIMIT 5
+    `);
+
+    if (!tournaments.length) {
+      await interaction.reply({ content: 'No active tournaments found.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 Upcoming Tournaments')
+      .setColor(0x5865F2)
+      .setFooter({ text: 'Showing up to 5 active tournaments' });
+
+    for (const tournament of tournaments) {
+      const msg = await this.db.get<{ message_id: string; channel_id: string }>(`
+        SELECT message_id, channel_id FROM discord_match_messages
+        WHERE match_id = ? AND message_type = 'announcement' LIMIT 1
+      `, [tournament.id]);
+
+      const formatLabel = tournament.format === 'double-elimination' ? 'DE' : 'SE';
+      const parts: string[] = [`🎮 ${tournament.game_name}`, `🏟️ ${formatLabel}`];
+
+      if (tournament.start_date) {
+        const ts = Math.floor(new Date(tournament.start_date).getTime() / 1000);
+        if (!isNaN(ts)) parts.push(`🕐 <t:${ts}:R>`);
+      }
+
+      if (msg && this.settings?.guild_id) {
+        parts.push(`[View Announcement](https://discord.com/channels/${this.settings.guild_id}/${msg.channel_id}/${msg.message_id})`);
+      }
+
+      const statusEmoji = this.getStatusEmoji(tournament.status);
+      const statusLabel = this.getStatusLabel(tournament.status);
+      embed.addFields({
+        name: `${statusEmoji} ${tournament.name}`,
+        value: `${parts.join(' · ')}\n*${statusLabel}*`,
+        inline: false
+      });
+    }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
   async handleButtonInteraction(interaction: ButtonInteraction) {

@@ -52,9 +52,17 @@ export class AIExtractor {
 
       // Load settings
       const settings = await this.db.get(
-        'SELECT ai_api_key, ai_model FROM stats_settings WHERE id = 1'
+        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key FROM stats_settings WHERE id = 1'
       );
-      if (!settings?.ai_api_key) throw new Error('AI API key not configured');
+
+      const providersConfig = settings?.ai_providers_config
+        ? JSON.parse(settings.ai_providers_config)
+        : [{ id: 'anthropic', enabled: true, model: settings?.ai_model || 'claude-sonnet-4-20250514', sortOrder: 0 }];
+      const enabledProviders = (providersConfig as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
+        .filter(p => p.enabled)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      if (enabledProviders.length === 0) throw new Error('No AI providers enabled');
 
       // Load screenshot
       const imagePath = path.join(process.cwd(), 'public', submission.screenshot_url);
@@ -65,15 +73,24 @@ export class AIExtractor {
       const ext = path.extname(submission.screenshot_url).toLowerCase();
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
-      // Build prompt and call Claude
+      // Build prompt and try providers in order with fallback
       const prompt = this.buildPrompt(statDefs, game?.name || match.game_id);
-      const rawResponse = await this.callClaudeVisionAPI(
-        settings.ai_api_key,
-        settings.ai_model || 'claude-sonnet-4-20250514',
-        imageBase64,
-        mimeType,
-        prompt
-      );
+      let rawResponse: string | null = null;
+      let lastError: Error | null = null;
+      for (const provider of enabledProviders) {
+        const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key : settings?.google_api_key;
+        if (!apiKey) continue;
+        try {
+          rawResponse = provider.id === 'google'
+            ? await this.callGeminiVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt)
+            : await this.callClaudeVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt);
+          break;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          logger.warning(`Provider ${provider.id} failed, trying next: ${lastError.message}`);
+        }
+      }
+      if (!rawResponse) throw lastError ?? new Error('No configured providers succeeded');
 
       // Parse response
       const extractionResult = this.parseExtractionResult(rawResponse);
@@ -248,6 +265,38 @@ Return JSON matching this exact structure:
 
     const data = await response.json() as { content: Array<{ type: string; text: string }> };
     return data.content[0]?.text || '';
+  }
+
+  async callGeminiVisionAPI(
+    apiKey: string,
+    model: string,
+    imageBase64: string,
+    mimeType: string,
+    prompt: string
+  ): Promise<string> {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inlineData: { mimeType, data: imageBase64 } },
+              { text: prompt },
+            ],
+          }],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${errorBody}`);
+    }
+
+    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {

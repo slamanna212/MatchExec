@@ -8,8 +8,39 @@ interface StatsSettingsRow {
   ai_provider: string;
   ai_api_key: string | null;
   ai_model: string;
+  ai_providers_config: string | null;
+  google_api_key: string | null;
   both_sides_required: number;
   auto_advance_on_match: number;
+}
+
+interface ProviderConfig {
+  id: string;
+  model: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+const PROVIDER_DEFAULTS: ProviderConfig[] = [
+  { id: 'anthropic', model: 'claude-sonnet-4-20250514', enabled: false, sortOrder: 0 },
+  { id: 'google', model: 'gemini-2.0-flash', enabled: false, sortOrder: 1 },
+];
+
+function parseProvidersConfig(raw: string | null, anthropicKey: string | null, anthropicModel: string): ProviderConfig[] {
+  if (raw) {
+    try {
+      return JSON.parse(raw) as ProviderConfig[];
+    } catch {
+      // fall through to legacy migration
+    }
+  }
+  // Migrate from legacy single-provider fields
+  return PROVIDER_DEFAULTS.map(p => {
+    if (p.id === 'anthropic') {
+      return { ...p, model: anthropicModel, enabled: !!anthropicKey };
+    }
+    return p;
+  });
 }
 
 export async function GET() {
@@ -17,26 +48,37 @@ export async function GET() {
     const db = await getDbInstance();
 
     const settings = await db.get<StatsSettingsRow>(
-      'SELECT enabled, ai_provider, ai_api_key, ai_model, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
+      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
     );
 
-    const safeSettings = settings ? {
+    if (!settings) {
+      return NextResponse.json({
+        enabled: false,
+        both_sides_required: false,
+        auto_advance_on_match: false,
+        providers: PROVIDER_DEFAULTS.map(p => ({ id: p.id, model: p.model, enabled: false, hasKey: false })),
+      });
+    }
+
+    const providersConfig = parseProvidersConfig(
+      settings.ai_providers_config,
+      settings.ai_api_key,
+      settings.ai_model || 'claude-sonnet-4-20250514'
+    );
+
+    const providers = providersConfig.map(p => ({
+      id: p.id,
+      model: p.model,
+      enabled: p.enabled,
+      hasKey: p.id === 'anthropic' ? !!settings.ai_api_key : !!settings.google_api_key,
+    }));
+
+    return NextResponse.json({
       enabled: Boolean(settings.enabled),
-      ai_provider: settings.ai_provider || 'anthropic',
-      ai_api_key: settings.ai_api_key ? '***configured***' : '',
-      ai_model: settings.ai_model || 'claude-sonnet-4-20250514',
       both_sides_required: Boolean(settings.both_sides_required),
       auto_advance_on_match: Boolean(settings.auto_advance_on_match),
-    } : {
-      enabled: false,
-      ai_provider: 'anthropic',
-      ai_api_key: '',
-      ai_model: 'claude-sonnet-4-20250514',
-      both_sides_required: false,
-      auto_advance_on_match: false,
-    };
-
-    return NextResponse.json(safeSettings);
+      providers,
+    });
   } catch (error) {
     logger.error('Error fetching stats settings:', error);
     return NextResponse.json(
@@ -60,18 +102,6 @@ export async function PUT(request: NextRequest) {
       updateFields.push('enabled = ?');
       updateValues.push(body.enabled ? 1 : 0);
     }
-    if (body.ai_provider !== undefined) {
-      updateFields.push('ai_provider = ?');
-      updateValues.push(body.ai_provider);
-    }
-    if (body.ai_api_key !== undefined && body.ai_api_key !== '***configured***') {
-      updateFields.push('ai_api_key = ?');
-      updateValues.push(body.ai_api_key || null);
-    }
-    if (body.ai_model !== undefined) {
-      updateFields.push('ai_model = ?');
-      updateValues.push(body.ai_model);
-    }
     if (body.both_sides_required !== undefined) {
       updateFields.push('both_sides_required = ?');
       updateValues.push(body.both_sides_required ? 1 : 0);
@@ -79,6 +109,42 @@ export async function PUT(request: NextRequest) {
     if (body.auto_advance_on_match !== undefined) {
       updateFields.push('auto_advance_on_match = ?');
       updateValues.push(body.auto_advance_on_match ? 1 : 0);
+    }
+
+    if (Array.isArray(body.providers)) {
+      const providers = body.providers as Array<{ id: string; model: string; enabled: boolean; sortOrder: number; apiKey?: string }>;
+
+      // Store config without API keys
+      const configToStore: ProviderConfig[] = providers.map(p => ({
+        id: p.id,
+        model: p.model,
+        enabled: p.enabled,
+        sortOrder: p.sortOrder,
+      }));
+      updateFields.push('ai_providers_config = ?');
+      updateValues.push(JSON.stringify(configToStore));
+
+      // Update API keys per provider
+      const anthropic = providers.find(p => p.id === 'anthropic');
+      if (anthropic?.apiKey !== undefined) {
+        updateFields.push('ai_api_key = ?');
+        updateValues.push(anthropic.apiKey || null);
+      }
+
+      const google = providers.find(p => p.id === 'google');
+      if (google?.apiKey !== undefined) {
+        updateFields.push('google_api_key = ?');
+        updateValues.push(google.apiKey || null);
+      }
+
+      // Keep legacy fields in sync with the first enabled provider
+      const firstEnabled = providers.filter(p => p.enabled).sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      if (firstEnabled) {
+        updateFields.push('ai_provider = ?');
+        updateValues.push(firstEnabled.id);
+        updateFields.push('ai_model = ?');
+        updateValues.push(firstEnabled.model);
+      }
     }
 
     if (updateFields.length > 0) {

@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS stats_settings (
   ai_provider TEXT NOT NULL DEFAULT 'anthropic',
   ai_api_key TEXT,
   ai_model TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  ai_providers_config TEXT,
+  google_api_key TEXT,
   both_sides_required INTEGER NOT NULL DEFAULT 0,
   auto_advance_on_match INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

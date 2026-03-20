@@ -12,11 +12,9 @@ import { showSuccess, showError } from '@/lib/notifications';
 
 interface StatsSettings {
   enabled: boolean;
-  ai_provider: string;
-  ai_api_key: string;
-  ai_model: string;
   both_sides_required: boolean;
   auto_advance_on_match: boolean;
+  providers: Array<{ id: string; model: string; enabled: boolean; hasKey: boolean }>;
 }
 
 function AnthropicLogo({ size = '1.5rem' }: { size?: number | string }) {
@@ -312,13 +310,13 @@ export default function StatsSettingsPage() {
 
         setProviders(
           PROVIDER_REGISTRY.map((p) => {
-            const isActive = p.id === data.ai_provider;
+            const saved = (data.providers ?? []).find(s => s.id === p.id);
             return {
               id: p.id,
               apiKey: '',
-              model: isActive ? (data.ai_model || p.models[0].value) : p.models[0].value,
-              enabled: isActive,
-              keyConfigured: isActive && data.ai_api_key === '***configured***',
+              model: saved?.model ?? p.models[0].value,
+              enabled: saved?.enabled ?? false,
+              keyConfigured: saved?.hasKey ?? false,
             };
           })
         );
@@ -330,10 +328,7 @@ export default function StatsSettingsPage() {
 
   const handleToggleProvider = (id: string) => {
     setProviders(prev =>
-      prev.map(p => ({
-        ...p,
-        enabled: p.id === id ? !p.enabled : false, // only one active at a time
-      }))
+      prev.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p)
     );
   };
 
@@ -358,22 +353,16 @@ export default function StatsSettingsPage() {
   const handleSave = async (formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
     setSaving(true);
     try {
-      const activeProvider = providers.find(p => p.enabled);
-      const body: Record<string, unknown> = {
+      const body = {
         ...formValues,
-        ai_provider: activeProvider?.id ?? 'anthropic',
-        ai_model: activeProvider?.model ?? PROVIDER_REGISTRY[0].models[0].value,
+        providers: providers.map((p, i) => ({
+          id: p.id,
+          model: p.model,
+          enabled: p.enabled,
+          sortOrder: i,
+          ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+        })),
       };
-
-      if (activeProvider) {
-        if (activeProvider.apiKey) {
-          body.ai_api_key = activeProvider.apiKey;
-        } else if (activeProvider.keyConfigured) {
-          body.ai_api_key = '***configured***';
-        } else {
-          body.ai_api_key = null;
-        }
-      }
 
       const res = await fetch('/api/settings/stats', {
         method: 'PUT',
@@ -387,11 +376,10 @@ export default function StatsSettingsPage() {
       // Refresh key-configured state
       const updated = await fetch('/api/settings/stats').then((r) => r.json()) as StatsSettings;
       setProviders(prev =>
-        prev.map(p => ({
-          ...p,
-          apiKey: '',
-          keyConfigured: p.id === updated.ai_provider && updated.ai_api_key === '***configured***',
-        }))
+        prev.map(p => {
+          const savedProvider = (updated.providers ?? []).find(s => s.id === p.id);
+          return { ...p, apiKey: '', keyConfigured: savedProvider?.hasKey ?? false };
+        })
       );
 
     } catch {

@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
 import { logger } from '@/lib/logger/client';
@@ -14,6 +14,15 @@ export default function DevPage() {
   }, []);
   const [voiceTestLoading, setVoiceTestLoading] = useState(false);
   const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [aiTestGame, setAiTestGame] = useState<string | null>(null);
+  const [aiTestGames, setAiTestGames] = useState<{ id: string; name: string }[]>([]);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
+  const [aiTestResults, setAiTestResults] = useState<
+    Array<{ provider: string; model: string; rawResponse?: string; error?: string }>
+  >([]);
+  const [aiTestError, setAiTestError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleTestVoiceLines = async () => {
     setVoiceTestLoading(true);
@@ -36,6 +45,34 @@ export default function DevPage() {
       setVoiceTestMessage({ type: 'error', text: 'Failed to test voice lines' });
     } finally {
       setVoiceTestLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetch('/api/debug/scoring-ai-test')
+      .then(r => r.json())
+      .then((data: { id: string; name: string }[]) => setAiTestGames(data))
+      .catch(() => {});
+  }, []);
+
+  const handleAiTest = async (file: File) => {
+    if (!aiTestGame) return;
+    setAiTestLoading(true);
+    setAiTestResults([]);
+    setAiTestError(null);
+    try {
+      const formData = new FormData();
+      formData.append('game', aiTestGame);
+      formData.append('image', file);
+      const response = await fetch('/api/debug/scoring-ai-test', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) setAiTestError(data.error || 'Request failed');
+      else setAiTestResults(data.results || []);
+    } catch (err) {
+      logger.error('AI test error:', err);
+      setAiTestError('Failed to run AI test');
+    } finally {
+      setAiTestLoading(false);
     }
   };
 
@@ -70,7 +107,7 @@ export default function DevPage() {
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Text size="lg" fw={600} mb="md">Discord</Text>
-          
+
           {voiceTestMessage && (
             <Alert color={voiceTestMessage.type === 'success' ? 'green' : 'red'} mb="md">
               {voiceTestMessage.text}
@@ -83,7 +120,7 @@ export default function DevPage() {
               <Text size="xs" c="dimmed" mb="md">
                 Tests voice announcements by connecting to user 123546381628604420&apos;s voice channel and playing a random line from the selected voice.
               </Text>
-              <Button 
+              <Button
                 onClick={handleTestVoiceLines}
                 loading={voiceTestLoading}
                 disabled={voiceTestLoading}
@@ -414,6 +451,76 @@ export default function DevPage() {
             </Grid.Col>
           </Grid>
         </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Scoring AI Test</Text>
+          <Text size="sm" c="dimmed" mb="lg">
+            Upload a scoreboard screenshot to test AI extraction using the live system.
+            Reads stat definitions from the database and uses the API key from Stats Settings.
+          </Text>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) { handleAiTest(file); e.target.value = ''; }
+            }}
+          />
+
+          <Stack gap="md">
+            <Group align="flex-end" gap="md">
+              <Select
+                label="Game"
+                placeholder="Select a game"
+                data={aiTestGames.map(g => ({ value: g.id, label: g.name }))}
+                value={aiTestGame}
+                onChange={setAiTestGame}
+                w={220}
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                loading={aiTestLoading}
+                disabled={!aiTestGame || aiTestLoading}
+              >
+                Test AI Extraction
+              </Button>
+            </Group>
+
+            {aiTestError && <Alert color="red">{aiTestError}</Alert>}
+
+            {aiTestResults.map(result => (
+              <div key={result.provider}>
+                <Group gap="xs" mb="xs">
+                  <Badge color={result.error ? 'red' : 'green'} variant="light">
+                    {result.provider}
+                  </Badge>
+                  <Text size="xs" c="dimmed">{result.model}</Text>
+                </Group>
+                <pre style={{
+                  backgroundColor: 'light-dark(#f8f9fa, #1a1b1e)',
+                  color: result.error ? 'var(--mantine-color-red-6)' : 'var(--mantine-color-green-6)',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  overflowX: 'auto',
+                  overflowY: 'auto',
+                  maxHeight: '400px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  margin: 0,
+                  border: '1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5))',
+                }}>
+                  {result.error ?? result.rawResponse}
+                </pre>
+              </div>
+            ))}
+          </Stack>
+        </Card>
+
       </Stack>
     </div>
   );
