@@ -2,7 +2,9 @@
   { "id": "kills", "name": "kills", "displayName": "Kills", "statType": "number", "category": "combat", "sortOrder": 1, "isPrimary": true },
   { "id": "deaths", "name": "deaths", "displayName": "Deaths", "statType": "number", "category": "combat", "sortOrder": 2, "isPrimary": true },
   { "id": "assists", "name": "assists", "displayName": "Assists", "statType": "number", "category": "combat", "sortOrder": 3, "isPrimary": true },
-  { "id": "kda", "name": "kda", "displayName": "KDA", "statType": "number", "category": "combat", "sortOrder": 4, "isPrimary": true, "format": "decimal" },
+  { "id": "final_hits", "name": "final_hits", "displayName": "Final Hits", "statType": "number", "category": "combat", "sortOrder": 4, "isPrimary": true },
   { "id": "damage", "name": "damage", "displayName": "Damage", "statType": "number", "category": "combat", "sortOrder": 5, "isPrimary": true, "format": "thousands" },
-  { "id": "healing", "name": "healing", "displayName": "Healing", "statType": "number", "category": "support", "sortOrder": 6, "isPrimary": false, "format": "thousands" }
+  { "id": "damage_blocked", "name": "damage_blocked", "displayName": "Damage Blocked", "statType": "number", "category": "combat", "sortOrder": 6, "isPrimary": false, "format": "thousands" },
+  { "id": "healing", "name": "healing", "displayName": "Healing", "statType": "number", "category": "support", "sortOrder": 7, "isPrimary": false, "format": "thousands" },
+  { "id": "accuracy", "name": "accuracy", "displayName": "Accuracy", "statType": "number", "category": "combat", "sortOrder": 8, "isPrimary": false, "format": "percentage" }
 ]
