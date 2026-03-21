@@ -2,6 +2,7 @@ import type { NextRequest} from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { AIExtractor } from '../../../../../processes/stats-processor/modules/ai-extractor';
+import { AI_PROVIDER_CALLS } from '../../../../../processes/stats-processor/modules/providers';
 import type { GameStatDefinition } from '../../../../../shared/types';
 import { logger } from '@/lib/logger';
 
@@ -97,10 +98,13 @@ export async function POST(request: NextRequest) {
         results.push({ provider: provider.id, model: provider.model, error: 'API key not configured' });
         continue;
       }
+      const callProvider = AI_PROVIDER_CALLS[provider.id];
+      if (!callProvider) {
+        results.push({ provider: provider.id, model: provider.model, error: `Unknown provider: ${provider.id}` });
+        continue;
+      }
       try {
-        const rawResponse = provider.id === 'google'
-          ? await extractor.callGeminiVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt)
-          : await extractor.callClaudeVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt);
+        const rawResponse = await callProvider(apiKey, provider.model, imageBase64, mimeType, prompt);
         results.push({ provider: provider.id, model: provider.model, rawResponse });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

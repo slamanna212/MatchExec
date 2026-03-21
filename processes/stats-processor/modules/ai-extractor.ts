@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { AIExtractionResult, GameStatDefinition } from '../../../shared/types';
+import { AI_PROVIDER_CALLS } from './providers';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
@@ -80,10 +81,10 @@ export class AIExtractor {
       for (const provider of enabledProviders) {
         const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key : settings?.google_api_key;
         if (!apiKey) continue;
+        const callProvider = AI_PROVIDER_CALLS[provider.id];
+        if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.id}`); continue; }
         try {
-          rawResponse = provider.id === 'google'
-            ? await this.callGeminiVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt)
-            : await this.callClaudeVisionAPI(apiKey, provider.model, imageBase64, mimeType, prompt);
+          rawResponse = await callProvider(apiKey, provider.model, imageBase64, mimeType, prompt);
           break;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -217,86 +218,6 @@ Return JSON matching this exact structure:
     "winner": "team1" | "team2" | null
   }
 }`;
-  }
-
-  async callClaudeVisionAPI(
-    apiKey: string,
-    model: string,
-    imageBase64: string,
-    mimeType: string,
-    prompt: string
-  ): Promise<string> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mimeType,
-                  data: imageBase64,
-                },
-              },
-              {
-                type: 'text',
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Claude API error ${response.status}: ${errorBody}`);
-    }
-
-    const data = await response.json() as { content: Array<{ type: string; text: string }> };
-    return data.content[0]?.text || '';
-  }
-
-  async callGeminiVisionAPI(
-    apiKey: string,
-    model: string,
-    imageBase64: string,
-    mimeType: string,
-    prompt: string
-  ): Promise<string> {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inlineData: { mimeType, data: imageBase64 } },
-              { text: prompt },
-            ],
-          }],
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Gemini API error ${response.status}: ${errorBody}`);
-    }
-
-    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {
