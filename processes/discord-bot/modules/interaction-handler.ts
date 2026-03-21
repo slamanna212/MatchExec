@@ -201,7 +201,10 @@ export class InteractionHandler {
         .setDescription('List upcoming and active matches (up to 5)'),
       new SlashCommandBuilder()
         .setName('tournaments')
-        .setDescription('List upcoming and active tournaments (up to 5)')
+        .setDescription('List upcoming and active tournaments (up to 5)'),
+      new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Get links to MatchExec documentation')
     ];
 
     try {
@@ -231,6 +234,9 @@ export class InteractionHandler {
           break;
         case 'tournaments':
           await this.handleTournamentsCommand(interaction);
+          break;
+        case 'help':
+          await this.handleHelpCommand(interaction);
           break;
         default:
           await interaction.reply({
@@ -331,6 +337,21 @@ export class InteractionHandler {
         inline: false
       });
     }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async handleHelpCommand(interaction: ChatInputCommandInteraction) {
+    const embed = new EmbedBuilder()
+      .setTitle('📚 MatchExec Documentation')
+      .setColor(0x5865F2)
+      .setURL('https://docs.matchexec.com')
+      .setDescription('Find guides and references for MatchExec at [docs.matchexec.com](https://docs.matchexec.com).')
+      .addFields(
+        { name: '📋 Matches', value: '[Match Lifecycle](https://docs.matchexec.com/docs/matches/match-lifecycle/)', inline: false },
+        { name: '🏆 Tournaments', value: '[Tournament Lifecycle](https://docs.matchexec.com/docs/tournaments/tournament-lifecycle/)', inline: false },
+        { name: '🤖 Slash Commands', value: '[Discord Slash Commands](https://docs.matchexec.com/docs/discord/slash-commands/)', inline: false }
+      );
 
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
