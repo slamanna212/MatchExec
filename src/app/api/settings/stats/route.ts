@@ -10,6 +10,7 @@ interface StatsSettingsRow {
   ai_model: string;
   ai_providers_config: string | null;
   google_api_key: string | null;
+  openrouter_api_key: string | null;
   both_sides_required: number;
   auto_advance_on_match: number;
 }
@@ -73,7 +74,7 @@ export async function GET() {
     const db = await getDbInstance();
 
     const settings = await db.get<StatsSettingsRow>(
-      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
+      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
     );
 
     if (!settings) {
@@ -95,7 +96,9 @@ export async function GET() {
       instanceId: p.instanceId,
       providerId: p.providerId,
       model: p.model,
-      hasKey: p.providerId === 'anthropic' ? !!settings.ai_api_key : !!settings.google_api_key,
+      hasKey: p.providerId === 'anthropic' ? !!settings.ai_api_key
+            : p.providerId === 'google' ? !!settings.google_api_key
+            : !!settings.openrouter_api_key,
     }));
 
     return NextResponse.json({
@@ -160,6 +163,12 @@ export async function PUT(request: NextRequest) {
       if (googleInstance?.apiKey !== undefined) {
         updateFields.push('google_api_key = ?');
         updateValues.push(googleInstance.apiKey || null);
+      }
+
+      const openrouterInstance = providers.find(p => p.providerId === 'openrouter' && p.apiKey !== undefined);
+      if (openrouterInstance?.apiKey !== undefined) {
+        updateFields.push('openrouter_api_key = ?');
+        updateValues.push(openrouterInstance.apiKey || null);
       }
 
       // Keep legacy fields in sync with the first provider

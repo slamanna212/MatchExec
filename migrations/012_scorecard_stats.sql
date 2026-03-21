@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS stats_settings (
   ai_model TEXT NOT NULL DEFAULT 'sonnet',
   ai_providers_config TEXT,
   google_api_key TEXT,
+  openrouter_api_key TEXT,
   both_sides_required INTEGER NOT NULL DEFAULT 0,
   auto_advance_on_match INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

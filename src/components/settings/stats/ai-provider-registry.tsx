@@ -18,6 +18,16 @@ function AnthropicLogo({ size = '1.5rem' }: { size?: number | string }) {
   );
 }
 
+function OpenRouterLogo({ size = '1.5rem' }: { size?: number | string }) {
+  const px = typeof size === 'number' ? size : size;
+  return (
+    <svg width={px} height={px} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" stroke="#6366F1" strokeWidth="2"/>
+      <path d="M8 12h8M14 9l3 3-3 3" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
 function GeminiLogo({ size = '1.5rem' }: { size?: number | string }) {
   const px = typeof size === 'number' ? size : size;
   return (
@@ -63,5 +73,20 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     ],
     apiKeyPlaceholder: 'AIza...',
     apiKeyLink: 'https://aistudio.google.com/app/apikey',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    description: 'Access multiple AI models via a unified API',
+    modelShortLabel: 'OpenRouter',
+    Icon: OpenRouterLogo,
+    models: [
+      { value: 'nano', label: 'GPT-5.4 Nano (Fast)' },
+      { value: 'mimo', label: 'Xiaomi Mimo v2 Omni' },
+      { value: 'mistral-small', label: 'Mistral Small' },
+      { value: 'qwen', label: 'Qwen 3.5 9B' },
+    ],
+    apiKeyPlaceholder: 'sk-or-...',
+    apiKeyLink: 'https://openrouter.ai/keys',
   },
 ];

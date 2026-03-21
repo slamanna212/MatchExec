@@ -54,7 +54,7 @@ export class AIExtractor {
 
       // Load settings
       const settings = await this.db.get(
-        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key FROM stats_settings WHERE id = 1'
+        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
       );
 
       const providersConfig = settings?.ai_providers_config
@@ -80,7 +80,9 @@ export class AIExtractor {
       let rawResponse: string | null = null;
       let lastError: Error | null = null;
       for (const provider of enabledProviders) {
-        const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key : settings?.google_api_key;
+        const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key
+                     : provider.id === 'google' ? settings?.google_api_key
+                     : settings?.openrouter_api_key;
         if (!apiKey) continue;
         const callProvider = AI_PROVIDER_CALLS[provider.id];
         if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.id}`); continue; }
