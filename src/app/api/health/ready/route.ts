@@ -16,6 +16,7 @@ export async function GET() {
     web: { status: 'up' },
     scheduler: { status: 'down' },
     discord_bot: { status: 'down' },
+    stats_processor: { status: 'down' },
   };
 
   try {
@@ -72,6 +73,26 @@ export async function GET() {
       } else {
         services.discord_bot = { status: 'down', message: 'No heartbeat recorded yet' };
       }
+    }
+
+    // Check stats processor heartbeat
+    const statsProcessorHeartbeat = await db.get<{ setting_value: string }>(
+      'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+      ['stats_processor_last_heartbeat']
+    );
+
+    if (statsProcessorHeartbeat?.setting_value) {
+      const lastBeat = new Date(statsProcessorHeartbeat.setting_value);
+      const elapsed = Date.now() - lastBeat.getTime();
+      services.stats_processor = {
+        status: elapsed < HEARTBEAT_TIMEOUT_MS ? 'up' : 'degraded',
+        lastHeartbeat: statsProcessorHeartbeat.setting_value,
+        ...(elapsed >= HEARTBEAT_TIMEOUT_MS && {
+          message: `No heartbeat for ${Math.floor(elapsed / 60000)} minutes`,
+        }),
+      };
+    } else {
+      services.stats_processor = { status: 'down', message: 'No heartbeat recorded yet' };
     }
 
     // Overall status

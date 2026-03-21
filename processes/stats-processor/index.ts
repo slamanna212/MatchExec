@@ -27,11 +27,13 @@ class StatsProcessor {
       try {
         const now = new Date().toISOString();
         await this.db.run(
-          `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?`,
-          [now, 'stats_processor_last_heartbeat']
+          `INSERT INTO app_settings (setting_key, setting_value, updated_at)
+           VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
+          ['stats_processor_last_heartbeat', now, now]
         );
       } catch {
-        // heartbeat column may not exist yet, ignore
+        // ignore heartbeat errors
       }
 
       // Poll extraction queue every 5 seconds
@@ -60,8 +62,10 @@ class StatsProcessor {
         try {
           const now = new Date().toISOString();
           await this.db.run(
-            `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?`,
-            [now, 'stats_processor_last_heartbeat']
+            `INSERT INTO app_settings (setting_key, setting_value, updated_at)
+             VALUES (?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
+            ['stats_processor_last_heartbeat', now, now]
           );
         } catch {
           // ignore heartbeat errors
