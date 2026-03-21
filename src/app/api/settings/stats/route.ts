@@ -14,33 +14,58 @@ interface StatsSettingsRow {
   auto_advance_on_match: number;
 }
 
-interface ProviderConfig {
+interface ProviderInstanceConfig {
+  instanceId: string;
+  providerId: string;
+  model: string;
+  sortOrder: number;
+}
+
+interface LegacyProviderConfig {
   id: string;
   model: string;
   enabled: boolean;
   sortOrder: number;
 }
 
-const PROVIDER_DEFAULTS: ProviderConfig[] = [
-  { id: 'anthropic', model: 'claude-sonnet-4-20250514', enabled: false, sortOrder: 0 },
-  { id: 'google', model: 'gemini-2.0-flash', enabled: false, sortOrder: 1 },
-];
-
-function parseProvidersConfig(raw: string | null, anthropicKey: string | null, anthropicModel: string): ProviderConfig[] {
+function parseProvidersConfig(
+  raw: string | null,
+  anthropicKey: string | null,
+  anthropicModel: string
+): ProviderInstanceConfig[] {
   if (raw) {
     try {
-      return JSON.parse(raw) as ProviderConfig[];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Case 1: New format (has instanceId)
+        if ((parsed[0] as Record<string, unknown>).instanceId !== undefined) {
+          return parsed as ProviderInstanceConfig[];
+        }
+        // Case 2: Old format (has id + enabled) — migrate enabled providers only
+        const legacy = parsed as LegacyProviderConfig[];
+        return legacy
+          .filter(p => p.enabled)
+          .map(p => ({
+            instanceId: `${p.id}-${p.model}`,
+            providerId: p.id,
+            model: p.model,
+            sortOrder: p.sortOrder,
+          }));
+      }
     } catch {
-      // fall through to legacy migration
+      // fall through
     }
   }
-  // Migrate from legacy single-provider fields
-  return PROVIDER_DEFAULTS.map(p => {
-    if (p.id === 'anthropic') {
-      return { ...p, model: anthropicModel, enabled: !!anthropicKey };
-    }
-    return p;
-  });
+  // Case 3: No config — legacy: if anthropicKey exists, produce one instance
+  if (anthropicKey) {
+    return [{
+      instanceId: `anthropic-${anthropicModel}`,
+      providerId: 'anthropic',
+      model: anthropicModel,
+      sortOrder: 0,
+    }];
+  }
+  return [];
 }
 
 export async function GET() {
@@ -56,7 +81,7 @@ export async function GET() {
         enabled: false,
         both_sides_required: false,
         auto_advance_on_match: false,
-        providers: PROVIDER_DEFAULTS.map(p => ({ id: p.id, model: p.model, enabled: false, hasKey: false })),
+        providers: [],
       });
     }
 
@@ -67,10 +92,10 @@ export async function GET() {
     );
 
     const providers = providersConfig.map(p => ({
-      id: p.id,
+      instanceId: p.instanceId,
+      providerId: p.providerId,
       model: p.model,
-      enabled: p.enabled,
-      hasKey: p.id === 'anthropic' ? !!settings.ai_api_key : !!settings.google_api_key,
+      hasKey: p.providerId === 'anthropic' ? !!settings.ai_api_key : !!settings.google_api_key,
     }));
 
     return NextResponse.json({
@@ -112,38 +137,38 @@ export async function PUT(request: NextRequest) {
     }
 
     if (Array.isArray(body.providers)) {
-      const providers = body.providers as Array<{ id: string; model: string; enabled: boolean; sortOrder: number; apiKey?: string }>;
+      const providers = body.providers as Array<{ instanceId: string; providerId: string; model: string; sortOrder: number; apiKey?: string }>;
 
       // Store config without API keys
-      const configToStore: ProviderConfig[] = providers.map(p => ({
-        id: p.id,
+      const configToStore: ProviderInstanceConfig[] = providers.map(p => ({
+        instanceId: p.instanceId,
+        providerId: p.providerId,
         model: p.model,
-        enabled: p.enabled,
         sortOrder: p.sortOrder,
       }));
       updateFields.push('ai_providers_config = ?');
       updateValues.push(JSON.stringify(configToStore));
 
-      // Update API keys per provider
-      const anthropic = providers.find(p => p.id === 'anthropic');
-      if (anthropic?.apiKey !== undefined) {
+      // Update API keys per provider type (one key shared across all instances of that provider)
+      const anthropicInstance = providers.find(p => p.providerId === 'anthropic' && p.apiKey !== undefined);
+      if (anthropicInstance?.apiKey !== undefined) {
         updateFields.push('ai_api_key = ?');
-        updateValues.push(anthropic.apiKey || null);
+        updateValues.push(anthropicInstance.apiKey || null);
       }
 
-      const google = providers.find(p => p.id === 'google');
-      if (google?.apiKey !== undefined) {
+      const googleInstance = providers.find(p => p.providerId === 'google' && p.apiKey !== undefined);
+      if (googleInstance?.apiKey !== undefined) {
         updateFields.push('google_api_key = ?');
-        updateValues.push(google.apiKey || null);
+        updateValues.push(googleInstance.apiKey || null);
       }
 
-      // Keep legacy fields in sync with the first enabled provider
-      const firstEnabled = providers.filter(p => p.enabled).sort((a, b) => a.sortOrder - b.sortOrder)[0];
-      if (firstEnabled) {
+      // Keep legacy fields in sync with the first provider
+      const firstProvider = [...providers].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      if (firstProvider) {
         updateFields.push('ai_provider = ?');
-        updateValues.push(firstEnabled.id);
+        updateValues.push(firstProvider.providerId);
         updateFields.push('ai_model = ?');
-        updateValues.push(firstEnabled.model);
+        updateValues.push(firstProvider.model);
       }
     }
 

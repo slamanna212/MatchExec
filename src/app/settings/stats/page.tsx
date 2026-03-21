@@ -1,12 +1,13 @@
 'use client'
 
 import {
-  Card, Text, Stack, Button, Group, Switch, Select, PasswordInput, Badge, Divider, Skeleton, Collapse, ActionIcon, Alert
+  Card, Text, Stack, Button, Group, Switch, Select, PasswordInput, Badge, Divider, Skeleton, ActionIcon, Alert, Modal, SimpleGrid
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
 import {
-  IconChartBar, IconArrowUp, IconArrowDown, IconInfoCircle, IconCheck
+  IconChartBar, IconArrowUp, IconArrowDown, IconInfoCircle, IconCheck, IconTrash, IconPlus
 } from '@tabler/icons-react';
 import { showSuccess, showError } from '@/lib/notifications';
 import { PROVIDER_REGISTRY, type ProviderDescriptor } from '@/components/settings/stats/ai-provider-registry';
@@ -15,28 +16,27 @@ interface StatsSettings {
   enabled: boolean;
   both_sides_required: boolean;
   auto_advance_on_match: boolean;
-  providers: Array<{ id: string; model: string; enabled: boolean; hasKey: boolean }>;
+  providers: Array<{ instanceId: string; providerId: string; model: string; hasKey: boolean }>;
 }
 
-interface ProviderRowState {
-  id: string;
-  apiKey: string;
+interface ProviderInstance {
+  instanceId: string;
+  providerId: string;
   model: string;
-  enabled: boolean;
+  apiKey: string;
   keyConfigured: boolean;
 }
 
 interface ProviderCardProps {
   descriptor: ProviderDescriptor;
-  state: ProviderRowState;
-  order: number; // 1-based if enabled, 0 if disabled
+  state: ProviderInstance;
+  order: number;
   isFirst: boolean;
   isLast: boolean;
-  onToggleEnabled: () => void;
+  onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onApiKeyChange: (val: string) => void;
-  onModelChange: (val: string) => void;
 }
 
 function ProviderCard({
@@ -45,11 +45,10 @@ function ProviderCard({
   order,
   isFirst,
   isLast,
-  onToggleEnabled,
+  onDelete,
   onMoveUp,
   onMoveDown,
   onApiKeyChange,
-  onModelChange,
 }: ProviderCardProps) {
   const { Icon } = descriptor;
   const activeModel = descriptor.models.find(m => m.value === state.model);
@@ -57,31 +56,21 @@ function ProviderCard({
     ? activeModel.label.replace(' (Recommended)', '').replace(' (Faster)', '')
     : descriptor.modelShortLabel;
 
-  const statusPill = state.enabled && state.keyConfigured
+  const statusPill = state.keyConfigured
     ? <Badge color="green" size="sm" variant="light" style={{ fontWeight: 500 }}>Active</Badge>
-    : state.enabled && !state.keyConfigured
-    ? <Badge color="orange" size="sm" variant="light" style={{ fontWeight: 500 }}>No key</Badge>
-    : null;
+    : <Badge color="orange" size="sm" variant="light" style={{ fontWeight: 500 }}>No key</Badge>;
 
   return (
     <Card
-      withBorder
       padding={0}
       style={{
-        borderColor: state.enabled && state.keyConfigured
-          ? 'var(--mantine-primary-color)'
-          : undefined,
+        border: `1px solid ${state.keyConfigured ? 'var(--mantine-primary-color)' : 'var(--mantine-color-default-border)'}`,
         transition: 'border-color 0.15s ease',
         overflow: 'hidden',
       }}
     >
       {/* Header row */}
-      <Group
-        px="md"
-        py="sm"
-        justify="space-between"
-        wrap="nowrap"
-      >
+      <Group px="md" py="sm" justify="space-between" wrap="nowrap">
         <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
           {/* Order badge */}
           <div
@@ -93,29 +82,21 @@ function ProviderCard({
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              backgroundColor: state.enabled
-                ? 'var(--mantine-primary-color)'
-                : 'var(--mantine-color-dark-4)',
-              color: state.enabled ? '#fff' : 'var(--mantine-color-dimmed)',
+              backgroundColor: 'var(--mantine-color-violet-6)',
+              color: '#fff',
               fontSize: '0.75rem',
               fontWeight: 700,
-              transition: 'background-color 0.15s ease',
             }}
           >
-            {state.enabled ? order : '—'}
+            {order}
           </div>
 
           {/* Logo + name */}
-          <div style={{ color: state.enabled ? undefined : 'var(--mantine-color-dimmed)', flexShrink: 0 }}>
+          <div style={{ flexShrink: 0 }}>
             <Icon size="1.25rem" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <Text
-              fw={600}
-              size="sm"
-              c={state.enabled ? undefined : 'dimmed'}
-              style={{ transition: 'color 0.15s ease' }}
-            >
+            <Text fw={600} size="sm">
               {descriptor.name}
             </Text>
             <Text size="xs" c="dimmed">
@@ -123,7 +104,7 @@ function ProviderCard({
               {state.keyConfigured && (
                 <span style={{ color: 'var(--mantine-primary-color)' }}> · Key configured</span>
               )}
-              {!state.keyConfigured && state.enabled && (
+              {!state.keyConfigured && (
                 <span> · No key set</span>
               )}
             </Text>
@@ -153,62 +134,54 @@ function ProviderCard({
           >
             <IconArrowDown size="0.85rem" />
           </ActionIcon>
-
-          <Switch
-            checked={state.enabled}
-            onChange={onToggleEnabled}
-            color="teal"
+          <ActionIcon
+            variant="subtle"
+            color="red"
             size="sm"
-          />
+            onClick={onDelete}
+            aria-label="Remove provider"
+          >
+            <IconTrash size="0.85rem" />
+          </ActionIcon>
         </Group>
       </Group>
 
-      {/* Expanded body — shown only when enabled */}
-      <Collapse in={state.enabled}>
-        <Divider />
-        <Stack gap="md" p="md">
-          <div>
-            <Group justify="space-between" mb={6}>
-              <Text size="sm" fw={500}>API key</Text>
-              <Text
-                size="xs"
-                c="teal"
-                component="a"
-                href={descriptor.apiKeyLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ textDecoration: 'none' }}
-              >
-                How do I get a {descriptor.name} key? ↗
-              </Text>
-            </Group>
-            <PasswordInput
-              placeholder={
-                state.keyConfigured
-                  ? `${descriptor.apiKeyPlaceholder.slice(0, 6)}••••••••`
-                  : `Paste your API key here…`
-              }
-              value={state.apiKey}
-              onChange={(e) => onApiKeyChange(e.currentTarget.value)}
-              styles={{ input: { fontFamily: 'monospace' } }}
-            />
-            {state.keyConfigured && !state.apiKey && (
-              <Group gap="xs" mt="xs">
-                <IconCheck size="0.85rem" color="var(--mantine-color-green-5)" />
-                <Text size="xs" c="green">Key configured</Text>
-              </Group>
-            )}
-          </div>
-
-          <Select
-            label="Model"
-            description={`The ${descriptor.name} model used for scorecard image analysis in MatchExec`}
-            data={descriptor.models}
-            value={state.model}
-            onChange={(val) => onModelChange(val ?? descriptor.models[0].value)}
+      {/* Always-visible API key section */}
+      <Divider />
+      <Stack gap="md" p="md">
+        <div>
+          <Group justify="space-between" mb={6}>
+            <Text size="sm" fw={500}>API key</Text>
+            <Text
+              size="xs"
+              c="teal"
+              component="a"
+              href={descriptor.apiKeyLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: 'none' }}
+            >
+              How do I get a {descriptor.name} key? ↗
+            </Text>
+          </Group>
+          <PasswordInput
+            placeholder={
+              state.keyConfigured
+                ? `${descriptor.apiKeyPlaceholder.slice(0, 6)}••••••••`
+                : `Paste your API key here…`
+            }
+            value={state.apiKey}
+            onChange={(e) => onApiKeyChange(e.currentTarget.value)}
+            styles={{ input: { fontFamily: 'monospace' } }}
           />
-        </Stack>
-      </Collapse>
+          {state.keyConfigured && !state.apiKey && (
+            <Group gap="xs" mt="xs">
+              <IconCheck size="0.85rem" color="var(--mantine-color-green-5)" />
+              <Text size="xs" c="green">Key configured</Text>
+            </Group>
+          )}
+        </div>
+      </Stack>
     </Card>
   );
 }
@@ -216,15 +189,15 @@ function ProviderCard({
 export default function StatsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [providers, setProviders] = useState<ProviderRowState[]>(
-    PROVIDER_REGISTRY.map((p, i) => ({
-      id: p.id,
-      apiKey: '',
-      model: p.models[0].value,
-      enabled: i === 0,
-      keyConfigured: false,
-    }))
-  );
+  const [providers, setProviders] = useState<ProviderInstance[]>([]);
+
+  const [deleteModal, { open: openDelete, close: closeDelete }] = useDisclosure(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [addModal, { open: openAdd, close: closeAdd }] = useDisclosure(false);
+  const [addStep, setAddStep] = useState<1 | 2>(1);
+  const [addProviderId, setAddProviderId] = useState<string | null>(null);
+  const [addModel, setAddModel] = useState('');
+  const [addApiKey, setAddApiKey] = useState('');
 
   const form = useForm({
     initialValues: {
@@ -245,28 +218,19 @@ export default function StatsSettingsPage() {
         });
 
         setProviders(
-          PROVIDER_REGISTRY.map((p) => {
-            const saved = (data.providers ?? []).find(s => s.id === p.id);
-            return {
-              id: p.id,
-              apiKey: '',
-              model: saved?.model ?? p.models[0].value,
-              enabled: saved?.enabled ?? false,
-              keyConfigured: saved?.hasKey ?? false,
-            };
-          })
+          (data.providers ?? []).map(p => ({
+            instanceId: p.instanceId,
+            providerId: p.providerId,
+            model: p.model,
+            apiKey: '',
+            keyConfigured: p.hasKey,
+          }))
         );
       })
       .catch(() => showError('Failed to load stats settings'))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleToggleProvider = (id: string) => {
-    setProviders(prev =>
-      prev.map(p => p.id === id ? { ...p, enabled: !p.enabled } : p)
-    );
-  };
 
   const handleMoveUp = (index: number) => {
     if (index === 0) return;
@@ -286,15 +250,75 @@ export default function StatsSettingsPage() {
     });
   };
 
+  const handleApiKeyChange = (providerId: string, val: string) => {
+    setProviders(prev =>
+      prev.map(p => p.providerId === providerId ? { ...p, apiKey: val } : p)
+    );
+  };
+
+  const requestDelete = (instanceId: string) => {
+    setPendingDeleteId(instanceId);
+    openDelete();
+  };
+
+  const handleDeleteProvider = () => {
+    if (!pendingDeleteId) return;
+    setProviders(prev => prev.filter(p => p.instanceId !== pendingDeleteId));
+    closeDelete();
+    setPendingDeleteId(null);
+  };
+
+  // Add modal helpers
+  const addedModelKeys = providers.map(p => `${p.providerId}-${p.model}`);
+  const fullyAddedProviderIds = PROVIDER_REGISTRY
+    .filter(p => p.models.every(m => addedModelKeys.includes(`${p.id}-${m.value}`)))
+    .map(p => p.id);
+
+  const handleSelectProvider = (providerId: string) => {
+    const descriptor = PROVIDER_REGISTRY.find(d => d.id === providerId)!;
+    const firstAvailable = descriptor.models.find(
+      m => !addedModelKeys.includes(`${providerId}-${m.value}`)
+    );
+    setAddProviderId(providerId);
+    setAddModel(firstAvailable?.value ?? '');
+    setAddStep(2);
+  };
+
+  const existingKeyConfigured = addProviderId
+    ? providers.some(p => p.providerId === addProviderId && p.keyConfigured)
+    : false;
+
+  const handleAddProvider = () => {
+    if (!addProviderId || !addModel) return;
+    const instanceId = `${addProviderId}-${addModel}`;
+    const newInstance: ProviderInstance = {
+      instanceId,
+      providerId: addProviderId,
+      model: addModel,
+      apiKey: addApiKey,
+      keyConfigured: existingKeyConfigured,
+    };
+    setProviders(prev => [...prev, newInstance]);
+    handleCloseAddModal();
+  };
+
+  const handleCloseAddModal = () => {
+    setAddStep(1);
+    setAddProviderId(null);
+    setAddModel('');
+    setAddApiKey('');
+    closeAdd();
+  };
+
   const handleSave = async (formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
     setSaving(true);
     try {
       const body = {
         ...formValues,
         providers: providers.map((p, i) => ({
-          id: p.id,
+          instanceId: p.instanceId,
+          providerId: p.providerId,
           model: p.model,
-          enabled: p.enabled,
           sortOrder: i,
           ...(p.apiKey ? { apiKey: p.apiKey } : {}),
         })),
@@ -313,8 +337,8 @@ export default function StatsSettingsPage() {
       const updated = await fetch('/api/settings/stats').then((r) => r.json()) as StatsSettings;
       setProviders(prev =>
         prev.map(p => {
-          const savedProvider = (updated.providers ?? []).find(s => s.id === p.id);
-          return { ...p, apiKey: '', keyConfigured: savedProvider?.hasKey ?? false };
+          const savedProvider = (updated.providers ?? []).find(s => s.instanceId === p.instanceId);
+          return { ...p, apiKey: '', keyConfigured: savedProvider?.hasKey ?? p.keyConfigured };
         })
       );
 
@@ -324,14 +348,6 @@ export default function StatsSettingsPage() {
       setSaving(false);
     }
   };
-
-  const enabledCount = providers.filter(p => p.enabled).length;
-
-  // Precompute 1-based order for each enabled provider
-  const providerOrders = (() => {
-    let n = 0;
-    return providers.map(p => (p.enabled ? ++n : 0));
-  })();
 
   if (loading) {
     return (
@@ -346,6 +362,129 @@ export default function StatsSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Delete confirmation modal */}
+      <Modal
+        opened={deleteModal}
+        onClose={closeDelete}
+        title="Remove Provider"
+        size="sm"
+        centered
+      >
+        <Text size="sm" mb="lg">
+          Are you sure you want to remove this provider? It will no longer be used for stats extraction.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={closeDelete}>Cancel</Button>
+          <Button color="red" onClick={handleDeleteProvider}>Remove</Button>
+        </Group>
+      </Modal>
+
+      {/* Add Provider modal */}
+      <Modal
+        opened={addModal}
+        onClose={handleCloseAddModal}
+        title={addStep === 1 ? 'Add Provider' : 'Configure Provider'}
+        size={addStep === 1 ? 'md' : 'sm'}
+        centered
+      >
+        {addStep === 1 ? (
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">Select an AI provider to add</Text>
+            <SimpleGrid cols={2}>
+              {PROVIDER_REGISTRY.map(descriptor => {
+                const isFullyAdded = fullyAddedProviderIds.includes(descriptor.id);
+                const { Icon } = descriptor;
+                return (
+                  <Card
+                    key={descriptor.id}
+                    withBorder
+                    padding="md"
+                    style={{
+                      cursor: isFullyAdded ? 'not-allowed' : 'pointer',
+                      opacity: isFullyAdded ? 0.5 : 1,
+                      transition: 'opacity 0.15s ease',
+                    }}
+                    onClick={() => !isFullyAdded && handleSelectProvider(descriptor.id)}
+                  >
+                    <Group gap="sm" mb="xs">
+                      <Icon size="1.5rem" />
+                      <Text fw={600} size="sm">{descriptor.name}</Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">{descriptor.description}</Text>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+          </Stack>
+        ) : (
+          <Stack gap="md">
+            {addProviderId && (() => {
+              const descriptor = PROVIDER_REGISTRY.find(d => d.id === addProviderId)!;
+              const { Icon } = descriptor;
+              const modelOptions = descriptor.models.map(m => ({
+                ...m,
+                disabled: addedModelKeys.includes(`${addProviderId}-${m.value}`),
+              }));
+              return (
+                <>
+                  <Group gap="sm">
+                    <Icon size="1.5rem" />
+                    <Text fw={600}>{descriptor.name}</Text>
+                  </Group>
+
+                  <Select
+                    label="Model"
+                    data={modelOptions}
+                    value={addModel}
+                    onChange={(val) => setAddModel(val ?? '')}
+                  />
+
+                  <div>
+                    <Group justify="space-between" mb={6}>
+                      <Text size="sm" fw={500}>API key</Text>
+                      <Text
+                        size="xs"
+                        c="teal"
+                        component="a"
+                        href={descriptor.apiKeyLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        How do I get a {descriptor.name} key? ↗
+                      </Text>
+                    </Group>
+                    {existingKeyConfigured ? (
+                      <Group gap="xs">
+                        <IconCheck size="0.85rem" color="var(--mantine-color-green-5)" />
+                        <Text size="xs" c="green">Key already configured for {descriptor.name}</Text>
+                      </Group>
+                    ) : (
+                      <PasswordInput
+                        placeholder={`Paste your ${descriptor.name} API key…`}
+                        value={addApiKey}
+                        onChange={(e) => setAddApiKey(e.currentTarget.value)}
+                        styles={{ input: { fontFamily: 'monospace' } }}
+                      />
+                    )}
+                  </div>
+
+                  <Group justify="space-between" mt="xs">
+                    <Button variant="default" onClick={() => setAddStep(1)}>Back</Button>
+                    <Button
+                      onClick={handleAddProvider}
+                      disabled={!addModel || (!existingKeyConfigured && !addApiKey)}
+                    >
+                      Add Provider
+                    </Button>
+                  </Group>
+                </>
+              );
+            })()}
+          </Stack>
+        )}
+      </Modal>
+
       <form onSubmit={form.onSubmit(handleSave)}>
         <Stack gap="lg">
           <Group>
@@ -391,7 +530,7 @@ export default function StatsSettingsPage() {
               <Text size="xs" fw={700} tt="uppercase" c="dimmed" style={{ letterSpacing: '0.08em' }}>
                 AI Providers
               </Text>
-              <Text size="xs" c="dimmed">{enabledCount} active</Text>
+              <Text size="xs" c="dimmed">{providers.length} active</Text>
             </Group>
 
             <Alert
@@ -403,7 +542,6 @@ export default function StatsSettingsPage() {
                 root: {
                   borderLeft: '3px solid var(--mantine-color-teal-5)',
                   borderRadius: 'var(--mantine-radius-sm)',
-                  backgroundColor: 'var(--mantine-color-dark-7)',
                 },
               }}
             >
@@ -414,33 +552,33 @@ export default function StatsSettingsPage() {
 
             <Stack gap="sm">
               {providers.map((providerState, index) => {
-                const descriptor = PROVIDER_REGISTRY.find(d => d.id === providerState.id)!;
-
+                const descriptor = PROVIDER_REGISTRY.find(d => d.id === providerState.providerId)!;
                 return (
                   <ProviderCard
-                    key={providerState.id}
+                    key={providerState.instanceId}
                     descriptor={descriptor}
                     state={providerState}
-                    order={providerOrders[index]}
+                    order={index + 1}
                     isFirst={index === 0}
                     isLast={index === providers.length - 1}
-                    onToggleEnabled={() => handleToggleProvider(providerState.id)}
+                    onDelete={() => requestDelete(providerState.instanceId)}
                     onMoveUp={() => handleMoveUp(index)}
                     onMoveDown={() => handleMoveDown(index)}
-                    onApiKeyChange={(val) =>
-                      setProviders(prev =>
-                        prev.map(p => p.id === providerState.id ? { ...p, apiKey: val } : p)
-                      )
-                    }
-                    onModelChange={(val) =>
-                      setProviders(prev =>
-                        prev.map(p => p.id === providerState.id ? { ...p, model: val } : p)
-                      )
-                    }
+                    onApiKeyChange={(val) => handleApiKeyChange(providerState.providerId, val)}
                   />
                 );
               })}
             </Stack>
+
+            <Button
+              variant="light"
+              leftSection={<IconPlus size="0.85rem" />}
+              onClick={openAdd}
+              size="sm"
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Add Provider
+            </Button>
           </Stack>
 
           <Group justify="flex-end">

@@ -1,6 +1,7 @@
 export interface ProviderDescriptor {
   id: string;
   name: string;
+  description: string;
   modelShortLabel: string;
   Icon: React.ComponentType<{ size?: number | string }>;
   models: { value: string; label: string }[];
@@ -40,6 +41,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
+    description: 'Claude models for vision and analysis',
     modelShortLabel: 'Claude Sonnet',
     Icon: AnthropicLogo,
     models: [
@@ -52,6 +54,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
   {
     id: 'google',
     name: 'Google',
+    description: 'Gemini models with multimodal support',
     modelShortLabel: 'Gemini Flash',
     Icon: GeminiLogo,
     models: [

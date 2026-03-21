@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useState, useRef } from 'react';
-import { IconAlertTriangle, IconDownload, IconUpload, IconLock, IconShieldOff } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDownload, IconUpload, IconLock, IconShieldOff, IconDatabaseImport } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 
@@ -151,12 +151,15 @@ export default function BackupRestorePage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="lg">
-        <div>
-          <Text size="xl" fw={700} mb="xs">Backup & Restore</Text>
-          <Text size="sm" c="dimmed">
-            Export or import the entire database. All matches, tournaments, settings, and configuration are included.
-          </Text>
-        </div>
+        <Group>
+          <IconDatabaseImport size="2rem" />
+          <div>
+            <Text size="xl" fw={700}>Backup & Restore</Text>
+            <Text size="sm" c="dimmed">
+              Export or import the entire database. All matches, tournaments, settings, and configuration are included.
+            </Text>
+          </div>
+        </Group>
 
         {/* Backup */}
         <Card shadow="sm" padding="lg" radius="md" withBorder>
