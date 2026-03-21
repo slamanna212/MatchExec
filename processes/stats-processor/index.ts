@@ -32,8 +32,9 @@ class StatsProcessor {
            ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
           ['stats_processor_last_heartbeat', now, now]
         );
-      } catch {
-        // ignore heartbeat errors
+        logger.debug('💓 Initial stats processor heartbeat sent');
+      } catch (error) {
+        logger.error('Failed to send initial stats processor heartbeat:', error);
       }
 
       // Poll extraction queue every 5 seconds
@@ -67,8 +68,9 @@ class StatsProcessor {
              ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
             ['stats_processor_last_heartbeat', now, now]
           );
-        } catch {
-          // ignore heartbeat errors
+          logger.debug('💓 Stats processor heartbeat sent');
+        } catch (error) {
+          logger.error('Failed to persist stats processor heartbeat:', error);
         }
       }, 5 * 60 * 1000);
 
