@@ -5,6 +5,7 @@ import { AIExtractor } from '../../../../../processes/stats-processor/modules/ai
 import { AI_PROVIDER_CALLS } from '../../../../../processes/stats-processor/modules/providers';
 import type { GameStatDefinition } from '../../../../../shared/types';
 import { logger } from '@/lib/logger';
+import { resolveModelId } from '@/lib/ai-model-resolver';
 
 export async function GET() {
   if (process.env.NODE_ENV === 'production') {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const providersConfig = settings?.ai_providers_config
       ? JSON.parse(settings.ai_providers_config)
-      : [{ id: 'anthropic', enabled: !!settings?.ai_api_key, model: settings?.ai_model || 'claude-sonnet-4-20250514', sortOrder: 0 }];
+      : [{ id: 'anthropic', enabled: !!settings?.ai_api_key, model: settings?.ai_model || 'sonnet', sortOrder: 0 }];
     const enabledProviders = (providersConfig as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
       .filter(p => p.enabled)
       .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
       try {
-        const rawResponse = await callProvider(apiKey, provider.model, imageBase64, mimeType, prompt);
+        const rawResponse = await callProvider(apiKey, resolveModelId(provider.id, provider.model), imageBase64, mimeType, prompt);
         results.push({ provider: provider.id, model: provider.model, rawResponse });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

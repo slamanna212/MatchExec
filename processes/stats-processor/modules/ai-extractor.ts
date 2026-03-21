@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { AIExtractionResult, GameStatDefinition } from '../../../shared/types';
 import { AI_PROVIDER_CALLS } from './providers';
+import { resolveModelId } from '../../../src/lib/ai-model-resolver';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
@@ -58,7 +59,7 @@ export class AIExtractor {
 
       const providersConfig = settings?.ai_providers_config
         ? JSON.parse(settings.ai_providers_config)
-        : [{ id: 'anthropic', enabled: true, model: settings?.ai_model || 'claude-sonnet-4-20250514', sortOrder: 0 }];
+        : [{ id: 'anthropic', enabled: true, model: settings?.ai_model || 'sonnet', sortOrder: 0 }];
       const enabledProviders = (providersConfig as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
         .filter(p => p.enabled)
         .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -84,7 +85,7 @@ export class AIExtractor {
         const callProvider = AI_PROVIDER_CALLS[provider.id];
         if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.id}`); continue; }
         try {
-          rawResponse = await callProvider(apiKey, provider.model, imageBase64, mimeType, prompt);
+          rawResponse = await callProvider(apiKey, resolveModelId(provider.id, provider.model), imageBase64, mimeType, prompt);
           break;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));

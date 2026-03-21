@@ -45,8 +45,8 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     modelShortLabel: 'Claude Sonnet',
     Icon: AnthropicLogo,
     models: [
-      { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet (Recommended)' },
-      { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku (Faster)' },
+      { value: 'sonnet', label: 'Claude Sonnet (Recommended)' },
+      { value: 'haiku', label: 'Claude Haiku (Faster)' },
     ],
     apiKeyPlaceholder: 'sk-ant-...',
     apiKeyLink: 'https://platform.claude.com/docs/en/get-started',
@@ -58,8 +58,8 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     modelShortLabel: 'Gemini Flash',
     Icon: GeminiLogo,
     models: [
-      { value: 'gemini-2.5-pro', label: 'Gemini Pro (Recommended)' },
-      { value: 'gemini-2.0-flash', label: 'Gemini Flash (Faster)' },
+      { value: 'pro', label: 'Gemini Pro (Recommended)' },
+      { value: 'flash', label: 'Gemini Flash (Faster)' },
     ],
     apiKeyPlaceholder: 'AIza...',
     apiKeyLink: 'https://aistudio.google.com/app/apikey',

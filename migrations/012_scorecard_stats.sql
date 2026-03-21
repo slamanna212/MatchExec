@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS stats_settings (
   enabled INTEGER NOT NULL DEFAULT 0,
   ai_provider TEXT NOT NULL DEFAULT 'anthropic',
   ai_api_key TEXT,
-  ai_model TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  ai_model TEXT NOT NULL DEFAULT 'sonnet',
   ai_providers_config TEXT,
   google_api_key TEXT,
   both_sides_required INTEGER NOT NULL DEFAULT 0,

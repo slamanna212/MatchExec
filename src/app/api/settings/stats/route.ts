@@ -88,7 +88,7 @@ export async function GET() {
     const providersConfig = parseProvidersConfig(
       settings.ai_providers_config,
       settings.ai_api_key,
-      settings.ai_model || 'claude-sonnet-4-20250514'
+      settings.ai_model || 'sonnet'
     );
 
     const providers = providersConfig.map(p => ({
