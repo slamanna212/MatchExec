@@ -830,14 +830,37 @@ export class QueueProcessor {
             description: string;
             game_id: string;
             start_date: string;
+            status: string;
             event_image_url?: string;
           }>(`
-            SELECT id, name, description, game_id, start_date, event_image_url
+            SELECT id, name, description, game_id, start_date, status, event_image_url
             FROM matches WHERE id = ?
           `, [reminder.match_id]);
 
           if (!matchData) {
             throw new Error('Match not found');
+          }
+
+          // Skip if match is already over
+          if (matchData.status === 'complete' || matchData.status === 'cancelled') {
+            logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (status: ${matchData.status})`);
+            await this.db.run(`
+              UPDATE discord_reminder_queue
+              SET status = 'completed', sent_at = datetime('now')
+              WHERE id = ?
+            `, [reminder.id]);
+            continue;
+          }
+
+          // Skip if match start time has already passed
+          if (new Date(matchData.start_date) <= new Date()) {
+            logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (start time has passed)`);
+            await this.db.run(`
+              UPDATE discord_reminder_queue
+              SET status = 'completed', sent_at = datetime('now')
+              WHERE id = ?
+            `, [reminder.id]);
+            continue;
           }
 
           logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
@@ -927,8 +950,10 @@ export class QueueProcessor {
           const matchSettings = await this.db.get<{
             player_notifications: number;
             name: string;
+            status: string;
+            start_date: string;
           }>(`
-            SELECT player_notifications, name FROM matches WHERE id = ?
+            SELECT player_notifications, name, status, start_date FROM matches WHERE id = ?
           `, [reminder.match_id]);
 
           if (!matchSettings) {
@@ -938,7 +963,29 @@ export class QueueProcessor {
           if (!matchSettings.player_notifications) {
             // Mark as completed since this is expected behavior
             await this.db.run(`
-              UPDATE discord_player_reminder_queue 
+              UPDATE discord_player_reminder_queue
+              SET status = 'completed', sent_at = datetime('now')
+              WHERE id = ?
+            `, [reminder.id]);
+            continue;
+          }
+
+          // Skip if match is already over
+          if (matchSettings.status === 'complete' || matchSettings.status === 'cancelled') {
+            logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (status: ${matchSettings.status})`);
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue
+              SET status = 'completed', sent_at = datetime('now')
+              WHERE id = ?
+            `, [reminder.id]);
+            continue;
+          }
+
+          // Skip if match start time has already passed
+          if (new Date(matchSettings.start_date) <= new Date()) {
+            logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (start time has passed)`);
+            await this.db.run(`
+              UPDATE discord_player_reminder_queue
               SET status = 'completed', sent_at = datetime('now')
               WHERE id = ?
             `, [reminder.id]);
