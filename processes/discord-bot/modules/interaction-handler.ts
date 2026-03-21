@@ -280,16 +280,6 @@ export class InteractionHandler {
     }
   }
 
-  private getStatusLabel(status: string): string {
-    switch (status) {
-      case 'created': return 'Setup';
-      case 'gather':  return 'Signups Open';
-      case 'assign':  return 'Teams Assigned';
-      case 'battle':  return 'In Progress';
-      default:        return status;
-    }
-  }
-
   private async handleMatchesCommand(interaction: ChatInputCommandInteraction) {
     const matches = await this.db.all<{
       id: string;
@@ -315,6 +305,7 @@ export class InteractionHandler {
     const embed = new EmbedBuilder()
       .setTitle('📋 Upcoming Matches')
       .setColor(0x5865F2)
+      .setDescription('🟡 Setup · 🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
       .setFooter({ text: 'Showing up to 5 active matches' });
 
     for (const match of matches) {
@@ -334,11 +325,9 @@ export class InteractionHandler {
         parts.push(`[View Announcement](https://discord.com/channels/${this.settings.guild_id}/${msg.channel_id}/${msg.message_id})`);
       }
 
-      const statusEmoji = this.getStatusEmoji(match.status);
-      const statusLabel = this.getStatusLabel(match.status);
       embed.addFields({
-        name: `${statusEmoji} ${match.name}`,
-        value: `${parts.join(' · ')}\n*${statusLabel}*`,
+        name: `${this.getStatusEmoji(match.status)} ${match.name}`,
+        value: parts.join(' · '),
         inline: false
       });
     }
@@ -371,6 +360,7 @@ export class InteractionHandler {
     const embed = new EmbedBuilder()
       .setTitle('🏆 Upcoming Tournaments')
       .setColor(0x5865F2)
+      .setDescription('🟡 Setup · 🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
       .setFooter({ text: 'Showing up to 5 active tournaments' });
 
     for (const tournament of tournaments) {
@@ -391,11 +381,9 @@ export class InteractionHandler {
         parts.push(`[View Announcement](https://discord.com/channels/${this.settings.guild_id}/${msg.channel_id}/${msg.message_id})`);
       }
 
-      const statusEmoji = this.getStatusEmoji(tournament.status);
-      const statusLabel = this.getStatusLabel(tournament.status);
       embed.addFields({
-        name: `${statusEmoji} ${tournament.name}`,
-        value: `${parts.join(' · ')}\n*${statusLabel}*`,
+        name: `${this.getStatusEmoji(tournament.status)} ${tournament.name}`,
+        value: parts.join(' · '),
         inline: false
       });
     }
