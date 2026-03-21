@@ -106,15 +106,14 @@ export class AIExtractor {
       for (const player of extractionResult.players) {
         const statId = crypto.randomUUID();
         await this.db.run(
-          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, extracted_hero, team_side, stats_json, confidence_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, team_side, stats_json, confidence_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             statId,
             submissionId,
             submission.match_id,
             submission.match_game_id,
             player.playerName,
-            player.hero || null,
             player.teamSide === 'unknown' ? null : player.teamSide,
             JSON.stringify(player.stats),
             player.confidence,
@@ -184,7 +183,6 @@ export class AIExtractor {
 
 Extract ALL player statistics visible in the image. For each player, provide:
 - playerName: the in-game username exactly as shown
-- hero: the character/hero they played (if visible)
 - teamSide: "blue", "red", or "unknown" based on team colors or positioning
 - stats: an object with the following fields (use 0 if not visible):
 ${statList}
@@ -205,7 +203,6 @@ Return JSON matching this exact structure:
   "players": [
     {
       "playerName": "string",
-      "hero": "string or null",
       "teamSide": "blue" | "red" | "unknown",
       "stats": { ${statDefs.map(s => `"${s.name}": number`).join(', ')} },
       "confidence": number

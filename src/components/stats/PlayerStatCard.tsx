@@ -46,9 +46,6 @@ export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }:
         <Group justify="space-between">
           <div>
             <Text fw={600}>{stat.extracted_player_name}</Text>
-            {stat.extracted_hero && (
-              <Text size="xs" c="dimmed">{stat.extracted_hero}</Text>
-            )}
           </div>
           {stat.confidence_score !== undefined && (
             <Badge color={confidenceColor(stat.confidence_score)} size="sm">

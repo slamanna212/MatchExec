@@ -375,7 +375,6 @@ export interface ScorecardPlayerStat {
   match_game_id: string;
   participant_id?: string;
   extracted_player_name: string;
-  extracted_hero?: string;
   team_side?: 'blue' | 'red';
   stats_json: string;
   assignment_status: 'unassigned' | 'assigned' | 'confirmed';
@@ -419,7 +418,6 @@ export interface ScorecardDmMessage {
 export interface AIExtractionResult {
   players: Array<{
     playerName: string;
-    hero?: string;
     teamSide: 'blue' | 'red' | 'unknown';
     stats: Record<string, number>;
     confidence: number;
