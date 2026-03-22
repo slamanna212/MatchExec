@@ -1,0 +1,482 @@
+[
+  {
+    "id": "mkstadium",
+    "name": "Mario Kart Stadium",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/mkstadium.webp"
+  },
+  {
+    "id": "waterpark",
+    "name": "Water Park",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/waterpark.webp"
+  },
+  {
+    "id": "sweetsweetcanyon",
+    "name": "Sweet Sweet Canyon",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/sweetsweetcanyon.webp"
+  },
+  {
+    "id": "thwompruins",
+    "name": "Thwomp Ruins",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/thwompruins.webp"
+  },
+  {
+    "id": "mariocircuit",
+    "name": "Mario Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/mariocircuit.webp"
+  },
+  {
+    "id": "toadharbor",
+    "name": "Toad Harbor",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/toadharbor.webp"
+  },
+  {
+    "id": "twistedmansion",
+    "name": "Twisted Mansion",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/twistedmansion.webp"
+  },
+  {
+    "id": "shyguyfalls",
+    "name": "Shy Guy Falls",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/shyguyfalls.webp"
+  },
+  {
+    "id": "sunshineairport",
+    "name": "Sunshine Airport",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/sunshineairport.webp"
+  },
+  {
+    "id": "dolphinshoals",
+    "name": "Dolphin Shoals",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dolphinshoals.webp"
+  },
+  {
+    "id": "electrodrome",
+    "name": "Electrodrome",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/electrodrome.webp"
+  },
+  {
+    "id": "mountwario",
+    "name": "Mount Wario",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/mountwario.webp"
+  },
+  {
+    "id": "cloudtopcruise",
+    "name": "Cloudtop Cruise",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/cloudtopcruise.webp"
+  },
+  {
+    "id": "bonedrydunes",
+    "name": "Bone-Dry Dunes",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/bonedrydunes.webp"
+  },
+  {
+    "id": "bowserscastle",
+    "name": "Bowser's Castle",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/bowserscastle.webp"
+  },
+  {
+    "id": "rainbowroad",
+    "name": "Rainbow Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/rainbowroad.webp"
+  },
+  {
+    "id": "wiimoomeadows",
+    "name": "Wii Moo Moo Meadows",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiimoomeadows.webp"
+  },
+  {
+    "id": "gbamariocircuit",
+    "name": "GBA Mario Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbamariocircuit.webp"
+  },
+  {
+    "id": "dscheepbeach",
+    "name": "DS Cheep Cheep Beach",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dscheepbeach.webp"
+  },
+  {
+    "id": "n64toadsturnpike",
+    "name": "N64 Toad's Turnpike",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64toadsturnpike.webp"
+  },
+  {
+    "id": "gcndrydrydesert",
+    "name": "GCN Dry Dry Desert",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcndrydrydesert.webp"
+  },
+  {
+    "id": "snesdonutplains3",
+    "name": "SNES Donut Plains 3",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/snesdonutplains3.webp"
+  },
+  {
+    "id": "n64royalraceway",
+    "name": "N64 Royal Raceway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64royalraceway.webp"
+  },
+  {
+    "id": "3dsdkjungle",
+    "name": "3DS DK Jungle",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsdkjungle.webp"
+  },
+  {
+    "id": "dswariostadium",
+    "name": "DS Wario Stadium",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dswariostadium.webp"
+  },
+  {
+    "id": "gcnsherbetland",
+    "name": "GCN Sherbet Land",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcnsherbetland.webp"
+  },
+  {
+    "id": "3dsmusicpark",
+    "name": "3DS Music Park",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsmusicpark.webp"
+  },
+  {
+    "id": "n64yoshivalley",
+    "name": "N64 Yoshi Valley",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64yoshivalley.webp"
+  },
+  {
+    "id": "dsticktockclock",
+    "name": "DS Tick-Tock Clock",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dsticktockclock.webp"
+  },
+  {
+    "id": "3dspiranhaplantslide",
+    "name": "3DS Piranha Plant Slide",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dspiranhaplantslide.webp"
+  },
+  {
+    "id": "wiigrumblevolcano",
+    "name": "Wii Grumble Volcano",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiigrumblevolcano.webp"
+  },
+  {
+    "id": "n64rainbowroad",
+    "name": "N64 Rainbow Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64rainbowroad.webp"
+  },
+  {
+    "id": "gcnyoshicircuit",
+    "name": "GCN Yoshi Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcnyoshicircuit.webp"
+  },
+  {
+    "id": "excitebikearena",
+    "name": "Excitebike Arena",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/excitebikearena.webp"
+  },
+  {
+    "id": "dragondriftway",
+    "name": "Dragon Driftway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dragondriftway.webp"
+  },
+  {
+    "id": "mutecity",
+    "name": "Mute City",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/mutecity.webp"
+  },
+  {
+    "id": "wiiwariosgoldmine",
+    "name": "Wii Wario's Gold Mine",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiiwariosgoldmine.webp"
+  },
+  {
+    "id": "snesrainbowroad",
+    "name": "SNES Rainbow Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/snesrainbowroad.webp"
+  },
+  {
+    "id": "iceiceoutpost",
+    "name": "Ice Ice Outpost",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/iceiceoutpost.webp"
+  },
+  {
+    "id": "hyrulecircuit",
+    "name": "Hyrule Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/hyrulecircuit.webp"
+  },
+  {
+    "id": "gcnbabypark",
+    "name": "GCN Baby Park",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcnbabypark.webp"
+  },
+  {
+    "id": "gbacheeseland",
+    "name": "GBA Cheese Land",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbacheeseland.webp"
+  },
+  {
+    "id": "wildwoods",
+    "name": "Wild Woods",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wildwoods.webp"
+  },
+  {
+    "id": "animalcrossing",
+    "name": "Animal Crossing",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/animalcrossing.webp"
+  },
+  {
+    "id": "3dsneobowsercity",
+    "name": "3DS Neo Bowser City",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsneobowsercity.webp"
+  },
+  {
+    "id": "gbaribbonroad",
+    "name": "GBA Ribbon Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbaribbonroad.webp"
+  },
+  {
+    "id": "superbellsubway",
+    "name": "Super Bell Subway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/superbellsubway.webp"
+  },
+  {
+    "id": "bigblue",
+    "name": "Big Blue",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/bigblue.webp"
+  },
+  {
+    "id": "tourparispromenade",
+    "name": "Tour Paris Promenade",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourparispromenade.webp"
+  },
+  {
+    "id": "3dstoadcircuit",
+    "name": "3DS Toad Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dstoadcircuit.webp"
+  },
+  {
+    "id": "n64chocomountain",
+    "name": "N64 Choco Mountain",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64chocomountain.webp"
+  },
+  {
+    "id": "wiicoconutmall",
+    "name": "Wii Coconut Mall",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiicoconutmall.webp"
+  },
+  {
+    "id": "tourtokyoblur",
+    "name": "Tour Tokyo Blur",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourtokyoblur.webp"
+  },
+  {
+    "id": "dsshroomridge",
+    "name": "DS Shroom Ridge",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dsshroomridge.webp"
+  },
+  {
+    "id": "gbaskygarden",
+    "name": "GBA Sky Garden",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbaskygarden.webp"
+  },
+  {
+    "id": "ninjahideaway",
+    "name": "Ninja Hideaway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/ninjahideaway.webp"
+  },
+  {
+    "id": "tournewyorkminute",
+    "name": "Tour New York Minute",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tournewyorkminute.webp"
+  },
+  {
+    "id": "snesmariocircuit3",
+    "name": "SNES Mario Circuit 3",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/snesmariocircuit3.webp"
+  },
+  {
+    "id": "n64kalimaridesert",
+    "name": "N64 Kalimari Desert",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/n64kalimaridesert.webp"
+  },
+  {
+    "id": "dswaluigipinball",
+    "name": "DS Waluigi Pinball",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dswaluigipinball.webp"
+  },
+  {
+    "id": "toursydneysprint",
+    "name": "Tour Sydney Sprint",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/toursydneysprint.webp"
+  },
+  {
+    "id": "gbasnowland",
+    "name": "GBA Snow Land",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbasnowland.webp"
+  },
+  {
+    "id": "wiimushroomgorge",
+    "name": "Wii Mushroom Gorge",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiimushroomgorge.webp"
+  },
+  {
+    "id": "skyhighsundae",
+    "name": "Sky-High Sundae",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/skyhighsundae.webp"
+  },
+  {
+    "id": "tourlondonloop",
+    "name": "Tour London Loop",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourlondonloop.webp"
+  },
+  {
+    "id": "gbaboolake",
+    "name": "GBA Boo Lake",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbaboolake.webp"
+  },
+  {
+    "id": "3dsalpinepass",
+    "name": "3DS Alpine Pass",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsalpinepass.webp"
+  },
+  {
+    "id": "wiimapletreeway",
+    "name": "Wii Maple Treeway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiimapletreeway.webp"
+  },
+  {
+    "id": "tourberlinbyways",
+    "name": "Tour Berlin Byways",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourberlinbyways.webp"
+  },
+  {
+    "id": "dspeachgardens",
+    "name": "DS Peach Gardens",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dspeachgardens.webp"
+  },
+  {
+    "id": "merrymountain",
+    "name": "Merry Mountain",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/merrymountain.webp"
+  },
+  {
+    "id": "3dsrainbowroad",
+    "name": "3DS Rainbow Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsrainbowroad.webp"
+  },
+  {
+    "id": "touramsterdamdrift",
+    "name": "Tour Amsterdam Drift",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/touramsterdamdrift.webp"
+  },
+  {
+    "id": "gbariversidepark",
+    "name": "GBA Riverside Park",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbariversidepark.webp"
+  },
+  {
+    "id": "wiidksummit",
+    "name": "Wii DK Summit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiidksummit.webp"
+  },
+  {
+    "id": "yoshisisland",
+    "name": "Yoshi's Island",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/yoshisisland.webp"
+  },
+  {
+    "id": "tourbangkokrush",
+    "name": "Tour Bangkok Rush",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourbangkokrush.webp"
+  },
+  {
+    "id": "dsmariocircuit",
+    "name": "DS Mario Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/dsmariocircuit.webp"
+  },
+  {
+    "id": "gcnwaluigistadium",
+    "name": "GCN Waluigi Stadium",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcnwaluigistadium.webp"
+  },
+  {
+    "id": "toursingaporespeedway",
+    "name": "Tour Singapore Speedway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/toursingaporespeedway.webp"
+  },
+  {
+    "id": "tourathensdash",
+    "name": "Tour Athens Dash",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourathensdash.webp"
+  },
+  {
+    "id": "gcndaisycruiser",
+    "name": "GCN Daisy Cruiser",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcndaisycruiser.webp"
+  },
+  {
+    "id": "wiimoonviewhighway",
+    "name": "Wii Moonview Highway",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiimoonviewhighway.webp"
+  },
+  {
+    "id": "squeakycleansprint",
+    "name": "Squeaky Clean Sprint",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/squeakycleansprint.webp"
+  },
+  {
+    "id": "tourlosangeleslaps",
+    "name": "Tour Los Angeles Laps",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourlosangeleslaps.webp"
+  },
+  {
+    "id": "gbasunsetwilds",
+    "name": "GBA Sunset Wilds",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gbasunsetwilds.webp"
+  },
+  {
+    "id": "wiikoapacape",
+    "name": "Wii Koopa Cape",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiikoapacape.webp"
+  },
+  {
+    "id": "tourvancouvervelocity",
+    "name": "Tour Vancouver Velocity",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourvancouvervelocity.webp"
+  },
+  {
+    "id": "tourromeavanti",
+    "name": "Tour Rome Avanti",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourromeavanti.webp"
+  },
+  {
+    "id": "gcndkmountain",
+    "name": "GCN DK Mountain",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/gcndkmountain.webp"
+  },
+  {
+    "id": "wiidaisycircuit",
+    "name": "Wii Daisy Circuit",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiidaisycircuit.webp"
+  },
+  {
+    "id": "piranhaplantcove",
+    "name": "Piranha Plant Cove",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/piranhaplantcove.webp"
+  },
+  {
+    "id": "tourmadriddrive",
+    "name": "Tour Madrid Drive",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/tourmadriddrive.webp"
+  },
+  {
+    "id": "3dsrosalinaiceworld",
+    "name": "3DS Rosalina's Ice World",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/3dsrosalinaiceworld.webp"
+  },
+  {
+    "id": "snesbowsercastle3",
+    "name": "SNES Bowser Castle 3",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/snesbowsercastle3.webp"
+  },
+  {
+    "id": "wiirainbowroad",
+    "name": "Wii Rainbow Road",
+    "thumbnailUrl": "/assets/games/mariokart8deluxe/maps/wiirainbowroad.webp"
+  }
+]

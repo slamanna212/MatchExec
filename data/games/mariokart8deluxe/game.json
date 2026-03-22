@@ -1,0 +1,19 @@
+{
+  "id": "mariokart8deluxe",
+  "name": "Mario Kart 8 Deluxe",
+  "color": "#E4000F",
+  "genre": "Racing",
+  "developer": "Nintendo",
+  "releaseDate": "2017-04-28",
+  "patch": "2023-11-09",
+  "dataVersion": "1.0.0",
+  "minPlayers": 2,
+  "maxPlayers": 12,
+  "maxSignups": 12,
+  "mapCodesSupported": false,
+  "supportsAllModes": true,
+  "assets": {
+    "iconUrl": "/assets/games/mariokart8deluxe/icon.webp",
+    "coverUrl": "/assets/games/mariokart8deluxe/cover.webp"
+  }
+}
