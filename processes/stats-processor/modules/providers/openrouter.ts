@@ -3,11 +3,13 @@ export async function callOpenRouterVisionAPI(
   model: string,
   imageBase64: string,
   mimeType: string,
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ): Promise<string> {
   const response = await fetch(
     'https://openrouter.ai/api/v1/chat/completions',
     {
+      signal,
       method: 'POST',
       headers: {
         'content-type': 'application/json',

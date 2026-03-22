@@ -12,6 +12,32 @@ export default function DevPage() {
       redirect('/');
     }
   }, []);
+  const [systemStatus, setSystemStatus] = useState<{
+    status: string;
+    timestamp: string;
+    services: Record<string, { status: 'up' | 'down' | 'degraded'; lastHeartbeat?: string; message?: string }>;
+  } | null>(null);
+  const [systemStatusLoading, setSystemStatusLoading] = useState(false);
+
+  const fetchSystemStatus = async () => {
+    setSystemStatusLoading(true);
+    try {
+      const res = await fetch('/api/health/ready');
+      const data = await res.json();
+      setSystemStatus(data);
+    } catch {
+      setSystemStatus(null);
+    } finally {
+      setSystemStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemStatus();
+    const interval = setInterval(fetchSystemStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [voiceTestLoading, setVoiceTestLoading] = useState(false);
   const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -83,26 +109,47 @@ export default function DevPage() {
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Group justify="space-between" mb="md">
             <Text size="lg" fw={600}>System Status</Text>
-            <Badge color="green">Online</Badge>
+            <Group gap="xs">
+              {systemStatus && (
+                <Badge color={systemStatus.status === 'healthy' ? 'green' : systemStatus.status === 'degraded' ? 'yellow' : 'red'}>
+                  {systemStatus.status}
+                </Badge>
+              )}
+              <Button size="xs" variant="subtle" loading={systemStatusLoading} onClick={fetchSystemStatus}>
+                Refresh
+              </Button>
+            </Group>
           </Group>
-          <Grid>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Web Server</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Discord Bot</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Scheduler</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Worker</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-          </Grid>
+          {systemStatus ? (
+            <Grid>
+              {Object.entries(systemStatus.services).map(([name, svc], index, arr) => {
+                const lastRowCount = arr.length % 3;
+                const isFirstOfLastRow = lastRowCount > 0 && index === arr.length - lastRowCount;
+                const offset = isFirstOfLastRow ? Math.floor((3 - lastRowCount) * 4 / 2) : 0;
+                return (
+                <Grid.Col span={4} offset={offset} key={name}>
+                  <Text size="sm" c="dimmed">{name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Text>
+                  <Group gap="xs" align="center">
+                    <Badge size="sm" color={svc.status === 'up' ? 'green' : svc.status === 'degraded' ? 'yellow' : 'red'} variant="light">
+                      {svc.status}
+                    </Badge>
+                    {svc.message && <Text size="xs" c="dimmed">{svc.message}</Text>}
+                  </Group>
+                  {svc.lastHeartbeat && (
+                    <Text size="xs" c="dimmed">
+                      Last seen: {new Date(svc.lastHeartbeat).toLocaleTimeString()}
+                    </Text>
+                  )}
+                </Grid.Col>
+                );
+              })}
+            </Grid>
+          ) : (
+            <Text size="sm" c="dimmed">Loading status...</Text>
+          )}
+          {systemStatus?.timestamp && (
+            <Text size="xs" c="dimmed" mt="sm">Updated: {new Date(systemStatus.timestamp).toLocaleTimeString()}</Text>
+          )}
         </Card>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>

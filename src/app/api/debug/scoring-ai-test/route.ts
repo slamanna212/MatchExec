@@ -69,16 +69,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Game ${gameId} not found` }, { status: 404 });
     }
 
-    const settings = await db.get<{ ai_providers_config?: string; ai_api_key?: string; ai_model: string; google_api_key?: string }>(
-      'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key FROM stats_settings WHERE id = 1'
+    const settings = await db.get<{ ai_providers_config?: string; ai_api_key?: string; ai_model: string; google_api_key?: string; openrouter_api_key?: string }>(
+      'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
     );
 
-    const providersConfig = settings?.ai_providers_config
-      ? JSON.parse(settings.ai_providers_config)
-      : [{ id: 'anthropic', enabled: !!settings?.ai_api_key, model: settings?.ai_model || 'sonnet', sortOrder: 0 }];
-    const enabledProviders = (providersConfig as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
-      .filter(p => p.enabled)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    // Parse provider config supporting both old format ({ id, model, enabled }) and new format ({ instanceId, providerId, model })
+    type EnabledProvider = { providerId: string; model: string; sortOrder: number };
+    let enabledProviders: EnabledProvider[] = [];
+    if (settings?.ai_providers_config) {
+      const parsed = JSON.parse(settings.ai_providers_config) as Array<Record<string, unknown>>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (parsed[0].instanceId !== undefined) {
+          // New format — presence in list means enabled
+          enabledProviders = parsed.map((p, i) => ({ providerId: p.providerId as string, model: p.model as string, sortOrder: (p.sortOrder as number) ?? i }));
+        } else {
+          // Old format — filter by enabled flag
+          enabledProviders = (parsed as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
+            .filter(p => p.enabled)
+            .map(p => ({ providerId: p.id, model: p.model, sortOrder: p.sortOrder }));
+        }
+      }
+    } else if (settings?.ai_api_key) {
+      enabledProviders = [{ providerId: 'anthropic', model: settings.ai_model || 'sonnet', sortOrder: 0 }];
+    }
+    enabledProviders.sort((a, b) => a.sortOrder - b.sortOrder);
 
     if (enabledProviders.length === 0) {
       return NextResponse.json({ error: 'No providers enabled. Configure them in Stats Settings.' }, { status: 400 });
@@ -91,27 +105,33 @@ export async function POST(request: NextRequest) {
     const extractor = new AIExtractor(null);
     const prompt = extractor.buildPrompt(statDefs, game.name);
 
-    const results: Array<{ provider: string; model: string; rawResponse?: string; error?: string }> = [];
-
-    for (const provider of enabledProviders) {
-      const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key : settings?.google_api_key;
-      if (!apiKey) {
-        results.push({ provider: provider.id, model: provider.model, error: 'API key not configured' });
-        continue;
-      }
-      const callProvider = AI_PROVIDER_CALLS[provider.id];
-      if (!callProvider) {
-        results.push({ provider: provider.id, model: provider.model, error: `Unknown provider: ${provider.id}` });
-        continue;
-      }
-      try {
-        const rawResponse = await callProvider(apiKey, resolveModelId(provider.id, provider.model), imageBase64, mimeType, prompt);
-        results.push({ provider: provider.id, model: provider.model, rawResponse });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        results.push({ provider: provider.id, model: provider.model, error: message });
-      }
-    }
+    const PROVIDER_TIMEOUT_MS = 30_000;
+    const results = await Promise.all(
+      enabledProviders.map(async (provider) => {
+        const apiKey = provider.providerId === 'anthropic' ? settings?.ai_api_key
+          : provider.providerId === 'google' ? settings?.google_api_key
+          : settings?.openrouter_api_key;
+        if (!apiKey) {
+          return { provider: provider.providerId, model: provider.model, error: 'API key not configured' };
+        }
+        const callProvider = AI_PROVIDER_CALLS[provider.providerId];
+        if (!callProvider) {
+          return { provider: provider.providerId, model: provider.model, error: `Unknown provider: ${provider.providerId}` };
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+        try {
+          const rawResponse = await callProvider(apiKey, resolveModelId(provider.providerId, provider.model), imageBase64, mimeType, prompt, controller.signal);
+          return { provider: provider.providerId, model: provider.model, rawResponse };
+        } catch (err) {
+          const isTimeout = err instanceof Error && err.name === 'AbortError';
+          const message = isTimeout ? `Timed out after ${PROVIDER_TIMEOUT_MS / 1000}s` : (err instanceof Error ? err.message : String(err));
+          return { provider: provider.providerId, model: provider.model, error: message };
+        } finally {
+          clearTimeout(timer);
+        }
+      })
+    );
 
     return NextResponse.json({ results });
   } catch (error) {

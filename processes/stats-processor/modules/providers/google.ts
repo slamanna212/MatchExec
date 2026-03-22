@@ -3,11 +3,13 @@ export async function callGoogleVisionAPI(
   model: string,
   imageBase64: string,
   mimeType: string,
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ): Promise<string> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
+      signal,
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

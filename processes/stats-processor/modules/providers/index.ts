@@ -7,7 +7,8 @@ export type AIProviderCallFn = (
   model: string,
   imageBase64: string,
   mimeType: string,
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ) => Promise<string>;
 
 export const AI_PROVIDER_CALLS: Record<string, AIProviderCallFn> = {

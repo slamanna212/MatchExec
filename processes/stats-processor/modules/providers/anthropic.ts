@@ -3,9 +3,11 @@ export async function callAnthropicVisionAPI(
   model: string,
   imageBase64: string,
   mimeType: string,
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ): Promise<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
+    signal,
     method: 'POST',
     headers: {
       'x-api-key': apiKey,
