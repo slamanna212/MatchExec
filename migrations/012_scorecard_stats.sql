@@ -173,3 +173,6 @@ BEGIN UPDATE match_player_stats SET updated_at = CURRENT_TIMESTAMP WHERE id = NE
 -- Seed stats processor heartbeat setting
 INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type, metadata)
 VALUES ('stats_processor_last_heartbeat', '', 'string', '{"description": "ISO timestamp of the last stats processor heartbeat for health monitoring"}');
+
+-- Add AI screenshot notes to games table
+ALTER TABLE games ADD COLUMN ai_screenshot_notes TEXT;

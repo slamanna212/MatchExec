@@ -195,8 +195,13 @@ export class DatabaseSeeder {
       try {
         const statsContent = fs.readFileSync(statsPath, 'utf8').trim();
         if (statsContent) {
-          const statsData: StatData[] = JSON.parse(statsContent);
+          const parsed = JSON.parse(statsContent);
+          const statsData: StatData[] = Array.isArray(parsed) ? parsed : parsed.stats;
+          const aiNotes: string | undefined = Array.isArray(parsed) ? undefined : parsed.aiNotes;
           await this.seedStats(gameData.id, statsData);
+          if (aiNotes !== undefined) {
+            await this.db.run('UPDATE games SET ai_screenshot_notes = ? WHERE id = ?', [aiNotes, gameData.id]);
+          }
           console.log(`✅ Seeded ${statsData.length} stat definitions for ${gameData.name}`);
         }
       } catch (error) {

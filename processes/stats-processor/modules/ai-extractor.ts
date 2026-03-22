@@ -49,8 +49,8 @@ export class AIExtractor {
         throw new Error(`No stat definitions found for game ${match.game_id}`);
       }
 
-      // Load game name
-      const game = await this.db.get('SELECT name FROM games WHERE id = ?', [match.game_id]);
+      // Load game name and AI notes
+      const game = await this.db.get('SELECT name, ai_screenshot_notes FROM games WHERE id = ?', [match.game_id]);
 
       // Load settings
       const settings = await this.db.get(
@@ -76,7 +76,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes);
       let rawResponse: string | null = null;
       let lastError: Error | null = null;
       for (const provider of enabledProviders) {
@@ -180,8 +180,11 @@ export class AIExtractor {
     }
   }
 
-  buildPrompt(statDefs: GameStatDefinition[], gameName: string): string {
+  buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string): string {
     const statList = statDefs.map(s => `- ${s.name}: ${s.display_name} (${s.stat_type})`).join('\n');
+    const gameSpecificSection = aiNotes
+      ? `\nGAME-SPECIFIC NOTES:\n${aiNotes}${teamSide ? `\nThe submitter is on the ${teamSide} team.` : ''}\n`
+      : '';
     return `You are analyzing a ${gameName} end-of-match scorecard screenshot.
 
 Extract ALL player statistics visible in the image. For each player, provide:
@@ -194,9 +197,9 @@ ${statList}
 Also extract if visible:
 - mapName: the name of the map played
 - gameResult: { team1Score, team2Score, winner: "team1" or "team2" }
-
+${gameSpecificSection}
 IMPORTANT RULES:
-- Return ONLY valid JSON, no markdown fences or explanation
+- Return ONLY the JSON object — no markdown, no explanation, no extra text before or after
 - Normalize numbers: "12.5K" → 12500, "1.2M" → 1200000
 - For decimal stats (like KDA), keep as decimal number
 - If a stat is not visible for a player, use 0
