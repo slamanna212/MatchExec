@@ -5,12 +5,11 @@
   },
   "google": {
     "pro": "gemini-3.1-pro-preview",
-    "flash": "gemini-3-flash"
+    "flash": "gemini-3-flash-preview"
   },
   "openrouter": {
     "nano": "openai/gpt-5.4-nano",
     "mimo": "xiaomi/mimo-v2-omni",
-    "mistral-small": "mistralai/mistral-small-2603",
-    "qwen": "qwen/qwen3.5-9b"
+    "qwen": "qwen/qwen3.5-flash-02-23"
   }
 }
