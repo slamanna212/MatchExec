@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, Text, Stack, Button, Group, Anchor } from '@mantine/core';
-import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly } from '@tabler/icons-react';
+import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly, IconScale } from '@tabler/icons-react';
 
 export default function InfoPage() {
   return (
@@ -135,6 +135,36 @@ export default function InfoPage() {
                   </Text>
                 </li>
               </ul>
+            </Stack>
+          </Card>
+        </Stack>
+
+        <Stack gap="lg">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Group mb="md">
+              <IconScale size="1.2rem" />
+              <Text size="lg" fw={600}>Copyright</Text>
+            </Group>
+
+            <Stack gap="md">
+              <Text>
+                MatchExec is and always will be free and open source.
+              </Text>
+              <ul className="list-disc ml-4">
+                <li><Text component="span">Assetto Corsa Competizione &copy; Kunos Simulazioni S.r.l.</Text></li>
+                <li><Text component="span">Counter-Strike 2 &copy; Valve Corporation</Text></li>
+                <li><Text component="span">Fortnite &copy; Epic Games, Inc.</Text></li>
+                <li><Text component="span">League of Legends &copy; Riot Games, Inc.</Text></li>
+                <li><Text component="span">Mario Kart 8 Deluxe &copy; Nintendo Co., Ltd.</Text></li>
+                <li><Text component="span">Marvel Rivals &copy; NetEase Games. Marvel characters &copy; Marvel Entertainment, LLC.</Text></li>
+                <li><Text component="span">Overwatch &copy; Blizzard Entertainment, Inc.</Text></li>
+                <li><Text component="span">Rainbow Six Siege &copy; Ubisoft Entertainment SA</Text></li>
+                <li><Text component="span">Rocket League &copy; Psyonix LLC</Text></li>
+                <li><Text component="span">VALORANT &copy; Riot Games, Inc.</Text></li>
+              </ul>
+              <Text size="sm" c="dimmed">
+                MatchExec is an independent tool and is not affiliated with, endorsed by, or sponsored by any of the above companies. All game names, logos, and trademarks are the property of their respective owners.
+              </Text>
             </Stack>
           </Card>
         </Stack>
