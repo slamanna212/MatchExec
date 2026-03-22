@@ -53,6 +53,33 @@ const theme = createTheme({
   },
   other: {
     bodyColor: '#e8ebec'
+  },
+  components: {
+    TextInput: {
+      styles: {
+        input: { backgroundColor: '#1e1e2e', borderColor: 'rgba(139, 92, 246, 0.35)' }
+      }
+    },
+    PasswordInput: {
+      styles: {
+        input: { backgroundColor: '#1e1e2e', borderColor: 'rgba(139, 92, 246, 0.35)' }
+      }
+    },
+    NumberInput: {
+      styles: {
+        input: { backgroundColor: '#1e1e2e', borderColor: 'rgba(139, 92, 246, 0.35)' }
+      }
+    },
+    Textarea: {
+      styles: {
+        input: { backgroundColor: '#1e1e2e', borderColor: 'rgba(139, 92, 246, 0.35)' }
+      }
+    },
+    Select: {
+      styles: {
+        input: { backgroundColor: '#1e1e2e', borderColor: 'rgba(139, 92, 246, 0.35)' }
+      }
+    },
   }
 })
 
