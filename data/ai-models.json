@@ -9,7 +9,6 @@
   },
   "openrouter": {
     "nano": "openai/gpt-5.4-nano",
-    "mimo": "xiaomi/mimo-v2-omni",
-    "qwen": "qwen/qwen3.5-flash-02-23"
+    "mimo": "xiaomi/mimo-v2-omni"
   }
 }

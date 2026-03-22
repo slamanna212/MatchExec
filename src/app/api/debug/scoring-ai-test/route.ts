@@ -118,14 +118,18 @@ export async function POST(request: NextRequest) {
         if (!callProvider) {
           return { provider: provider.providerId, model: provider.model, error: `Unknown provider: ${provider.providerId}` };
         }
+        const resolvedModel = resolveModelId(provider.providerId, provider.model);
+        logger.debug(`AI test: calling ${provider.providerId} with model ${resolvedModel}`);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
         try {
-          const rawResponse = await callProvider(apiKey, resolveModelId(provider.providerId, provider.model), imageBase64, mimeType, prompt, controller.signal);
+          const rawResponse = await callProvider(apiKey, resolvedModel, imageBase64, mimeType, prompt, controller.signal);
+          logger.debug(`AI test: ${provider.providerId} (${resolvedModel}) succeeded`);
           return { provider: provider.providerId, model: provider.model, rawResponse };
         } catch (err) {
           const isTimeout = err instanceof Error && err.name === 'AbortError';
           const message = isTimeout ? `Timed out after ${PROVIDER_TIMEOUT_MS / 1000}s` : (err instanceof Error ? err.message : String(err));
+          logger.warning(`AI test: ${provider.providerId} (${resolvedModel}) failed: ${message}`);
           return { provider: provider.providerId, model: provider.model, error: message };
         } finally {
           clearTimeout(timer);

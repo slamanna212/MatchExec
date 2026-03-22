@@ -539,7 +539,7 @@ export default function DevPage() {
             {aiTestError && <Alert color="red">{aiTestError}</Alert>}
 
             {aiTestResults.map(result => (
-              <div key={result.provider}>
+              <div key={`${result.provider}-${result.model}`}>
                 <Group gap="xs" mb="xs">
                   <Badge color={result.error ? 'red' : 'green'} variant="light">
                     {result.provider}

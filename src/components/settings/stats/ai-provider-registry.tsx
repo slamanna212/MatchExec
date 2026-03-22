@@ -83,8 +83,6 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     models: [
       { value: 'nano', label: 'GPT-5.4 Nano (Fast)' },
       { value: 'mimo', label: 'Xiaomi Mimo v2 Omni' },
-      { value: 'mistral-small', label: 'Mistral Small' },
-      { value: 'qwen', label: 'Qwen 3.5 9B' },
     ],
     apiKeyPlaceholder: 'sk-or-...',
     apiKeyLink: 'https://openrouter.ai/keys',
