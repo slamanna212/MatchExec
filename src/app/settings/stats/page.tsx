@@ -298,8 +298,10 @@ export default function StatsSettingsPage() {
       apiKey: addApiKey,
       keyConfigured: existingKeyConfigured,
     };
-    setProviders(prev => [...prev, newInstance]);
+    const nextProviders = [...providers, newInstance];
+    setProviders(nextProviders);
     handleCloseAddModal();
+    saveProviders(nextProviders, form.values);
   };
 
   const handleCloseAddModal = () => {
@@ -310,12 +312,12 @@ export default function StatsSettingsPage() {
     closeAdd();
   };
 
-  const handleSave = async (formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
+  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
     setSaving(true);
     try {
       const body = {
         ...formValues,
-        providers: providers.map((p, i) => ({
+        providers: providerList.map((p, i) => ({
           instanceId: p.instanceId,
           providerId: p.providerId,
           model: p.model,
@@ -347,6 +349,10 @@ export default function StatsSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = async (formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
+    await saveProviders(providers, formValues);
   };
 
   if (loading) {
