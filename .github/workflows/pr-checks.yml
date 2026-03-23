@@ -144,7 +144,7 @@ jobs:
           docker inspect matchexec-test --format '{{json .State}}' > container-state.json 2>/dev/null || echo '{}' > container-state.json
       - name: Upload logs as artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-test-logs
           path: |
