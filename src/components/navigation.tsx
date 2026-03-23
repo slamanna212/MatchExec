@@ -192,21 +192,21 @@ export function Navigation({ children }: NavigationProps) {
     },
     { label: 'Games', href: '/games', iconName: 'gamepad' },
     { label: 'Channels', href: '/channels', iconName: 'hash' },
+    { label: 'Info', href: '/info', iconName: 'info' },
     {
       label: 'Settings',
       href: '/settings',
       iconName: 'settings',
       links: [
         { label: 'Application', href: '/settings/application', iconName: 'adjustments' },
+        { label: 'Stats', href: '/settings/stats', iconName: 'chart' },
         { label: 'Announcer', href: '/settings/announcer', iconName: 'volume' },
-        { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
         { label: 'Discord', href: '/settings/discord', iconName: 'discord' },
+        { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
         { label: 'UI', href: '/settings/ui', iconName: 'paint' },
         { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' },
-        { label: 'Stats', href: '/settings/stats', iconName: 'chart' }
       ]
     },
-    { label: 'Info', href: '/info', iconName: 'info' },
     ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
   ]
 

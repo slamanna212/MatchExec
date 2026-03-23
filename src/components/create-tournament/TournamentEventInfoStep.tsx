@@ -1,6 +1,7 @@
 'use client'
 
-import { Text, Stack, TextInput, Textarea, Group, Select, NumberInput, Switch, Button } from '@mantine/core';
+import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Button, Group } from '@mantine/core';
+import { DateTimePicker } from '@mantine/dates';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
 import { EventImageUpload } from '../create-match/EventImageUpload';
 
@@ -47,20 +48,13 @@ export function TournamentEventInfoStep({
         onChange={(e) => updateFormData('description', e.target.value)}
       />
 
-      <Group grow>
-        <TextInput
-          label="Start Date"
-          type="date"
-          value={formData.date || ''}
-          onChange={(e) => updateFormData('date', e.target.value)}
-        />
-        <TextInput
-          label="Start Time"
-          type="time"
-          value={formData.time || ''}
-          onChange={(e) => updateFormData('time', e.target.value)}
-        />
-      </Group>
+      <DateTimePicker
+        label="Start Date & Time"
+        placeholder="Pick date and time (optional)"
+        value={formData.dateTime ?? null}
+        onChange={(val) => updateFormData('dateTime', val)}
+        timePickerProps={{ format: '12h' }}
+      />
 
       <NumberInput
         label="Rounds per Match"

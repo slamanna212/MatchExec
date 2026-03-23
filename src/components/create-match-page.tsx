@@ -103,7 +103,7 @@ export function CreateMatchPage() {
   };
 
   const handleEventInfoNext = async () => {
-    if (formData.name && formData.date && formData.time && formData.gameId) {
+    if (formData.name && formData.dateTime && formData.gameId) {
       navigateToStep(3);
     }
   };

@@ -2,41 +2,18 @@ import type { MatchFormData, SelectedMapCard } from './useMatchForm';
 import { logger } from '@/lib/logger/client';
 
 /**
- * Converts local date/time to UTC
- *
- * Takes date (YYYY-MM-DD) and time (HH:mm) strings from the user's browser
- * and creates a Date object in the browser's local timezone.
- * When .toISOString() is called on the result, it will properly convert to UTC.
- *
- * Example: User in EST (UTC-5) enters 12:12pm
- *   - This function creates a Date representing 12:12pm EST
- *   - .toISOString() converts to "17:12:00.000Z" (12:12pm + 5 hours = 17:12 UTC)
- */
-export function convertToUTC(date: string, time: string): Date {
-  // Parse components explicitly to ensure we use the browser's local timezone
-  const [year, month, day] = date.split('-').map(Number);
-  const [hours, minutes] = time.split(':').map(Number);
-
-  // Create Date using Date constructor with components - always uses local timezone
-  // Month is 0-indexed in JavaScript Date constructor
-  return new Date(year, month - 1, day, hours, minutes, 0, 0);
-}
-
-/**
  * Builds match payload from form data
  */
 export function buildMatchPayload(formData: Partial<MatchFormData>) {
-  if (!formData.name || !formData.date || !formData.time || !formData.gameId) {
+  if (!formData.name || !formData.dateTime || !formData.gameId) {
     throw new Error('Missing required fields');
   }
-
-  const utcDateTime = convertToUTC(formData.date, formData.time);
 
   return {
     name: formData.name,
     description: formData.description || '',
     gameId: formData.gameId,
-    startDate: utcDateTime.toISOString(),
+    startDate: formData.dateTime.toISOString(),
     livestreamLink: formData.livestreamLink || '',
     rules: formData.rules,
     rounds: (formData.maps || []).length || 1,

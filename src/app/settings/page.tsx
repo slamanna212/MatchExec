@@ -22,6 +22,13 @@ const settingsCategories = [
     color: '#27ae60',
   },
   {
+    title: 'Stats',
+    description: 'Configure AI-powered scorecard analysis and stat tracking',
+    href: '/settings/stats',
+    icon: IconChartBar,
+    color: '#e74c3c',
+  },
+  {
     title: 'Announcer',
     description: 'Configure voice announcements and TTS for matches',
     href: '/settings/announcer',
@@ -29,18 +36,18 @@ const settingsCategories = [
     color: '#e67e22',
   },
   {
-    title: 'Scheduler',
-    description: 'Configure automated tasks and their timing',
-    href: '/settings/scheduler',
-    icon: IconClock,
-    color: '#9b59b6',
-  },
-  {
     title: 'Discord',
     description: 'Configure Discord bot connection and permissions',
     href: '/settings/discord',
     icon: IconBrandDiscord,
     color: '#5865f2',
+  },
+  {
+    title: 'Scheduler',
+    description: 'Configure automated tasks and their timing',
+    href: '/settings/scheduler',
+    icon: IconClock,
+    color: '#9b59b6',
   },
   {
     title: 'UI',
@@ -55,13 +62,6 @@ const settingsCategories = [
     href: '/settings/backup-restore',
     icon: IconDatabaseExport,
     color: '#16a085',
-  },
-  {
-    title: 'Stats',
-    description: 'Configure AI-powered scorecard analysis and stat tracking',
-    href: '/settings/stats',
-    icon: IconChartBar,
-    color: '#e74c3c',
   },
 ];
 

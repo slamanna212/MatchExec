@@ -20,8 +20,7 @@ export interface MatchFormData {
   gameId: string;
   name: string;
   description: string;
-  date: string;
-  time: string;
+  dateTime?: Date | null;
   livestreamLink: string;
   rules: 'casual' | 'competitive';
   rounds: number;
@@ -81,6 +80,9 @@ export function useMatchForm() {
       if (savedFormData) {
         try {
           const parsedData = JSON.parse(savedFormData);
+          if (parsedData.dateTime && typeof parsedData.dateTime === 'string') {
+            parsedData.dateTime = new Date(parsedData.dateTime);
+          }
           setFormData(parsedData);
           if (parsedData.eventImageUrl) {
             setImagePreview(parsedData.eventImageUrl);

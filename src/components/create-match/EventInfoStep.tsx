@@ -1,6 +1,7 @@
 'use client'
 
 import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button } from '@mantine/core';
+import { DateTimePicker } from '@mantine/dates';
 import type { MatchFormData } from './useMatchForm';
 import { EventImageUpload } from './EventImageUpload';
 
@@ -45,24 +46,15 @@ export function EventInfoStep({
         rows={3}
       />
 
-      <Group grow>
-        <TextInput
-          label="Date"
-          type="date"
-          required
-          value={formData.date || ''}
-          onChange={(e) => updateFormData('date', e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
-        />
-        <TextInput
-          label="Time"
-          type="time"
-          required
-          value={formData.time || ''}
-          onChange={(e) => updateFormData('time', e.target.value)}
-          step="60"
-        />
-      </Group>
+      <DateTimePicker
+        label="Date & Time"
+        placeholder="Pick date and time"
+        required
+        value={formData.dateTime ?? null}
+        onChange={(val) => updateFormData('dateTime', val)}
+        minDate={new Date()}
+        timePickerProps={{ format: '12h' }}
+      />
 
       <TextInput
         label="Livestream Link"
@@ -103,7 +95,7 @@ export function EventInfoStep({
         </Button>
         <Button
           onClick={onNext}
-          disabled={!formData.name || !formData.date || !formData.time}
+          disabled={!formData.name || !formData.dateTime}
         >
           Next
         </Button>

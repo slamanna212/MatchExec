@@ -20,8 +20,7 @@ export interface TournamentFormData {
   gameModeId: string;
   name: string;
   description: string;
-  date: string;
-  time: string;
+  dateTime?: Date | null;
   format: TournamentFormat;
   roundsPerMatch: number;
   ruleset: string;
@@ -54,6 +53,9 @@ export function useTournamentForm() {
       if (savedFormData) {
         try {
           const parsedData = JSON.parse(savedFormData);
+          if (parsedData.dateTime && typeof parsedData.dateTime === 'string') {
+            parsedData.dateTime = new Date(parsedData.dateTime);
+          }
           setFormData(parsedData);
 
           if (parsedData.eventImageUrl) {

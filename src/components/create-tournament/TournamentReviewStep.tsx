@@ -118,10 +118,10 @@ export function TournamentReviewStep({
             </Group>
           )}
 
-          {formData.date && formData.time && (
+          {formData.dateTime && (
             <Group>
               <Text fw={500}>Start:</Text>
-              <Text>{new Date(`${formData.date}T${formData.time}`).toLocaleString()}</Text>
+              <Text>{new Date(formData.dateTime).toLocaleString()}</Text>
             </Group>
           )}
 
