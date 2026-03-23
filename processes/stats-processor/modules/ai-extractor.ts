@@ -60,9 +60,8 @@ export class AIExtractor {
 
       const providersConfig = settings?.ai_providers_config
         ? JSON.parse(settings.ai_providers_config)
-        : [{ id: 'anthropic', enabled: true, model: settings?.ai_model || 'sonnet', sortOrder: 0 }];
-      const enabledProviders = (providersConfig as Array<{ id: string; model: string; enabled: boolean; sortOrder: number }>)
-        .filter(p => p.enabled)
+        : [{ instanceId: 'anthropic-sonnet', providerId: 'anthropic', model: settings?.ai_model || 'sonnet', sortOrder: 0 }];
+      const enabledProviders = (providersConfig as Array<{ instanceId: string; providerId: string; model: string; sortOrder: number }>)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
       if (enabledProviders.length === 0) throw new Error('No AI providers enabled');
@@ -81,18 +80,18 @@ export class AIExtractor {
       let rawResponse: string | null = null;
       let lastError: Error | null = null;
       for (const provider of enabledProviders) {
-        const apiKey = provider.id === 'anthropic' ? settings?.ai_api_key
-                     : provider.id === 'google' ? settings?.google_api_key
+        const apiKey = provider.providerId === 'anthropic' ? settings?.ai_api_key
+                     : provider.providerId === 'google' ? settings?.google_api_key
                      : settings?.openrouter_api_key;
         if (!apiKey) continue;
-        const callProvider = AI_PROVIDER_CALLS[provider.id];
-        if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.id}`); continue; }
+        const callProvider = AI_PROVIDER_CALLS[provider.providerId];
+        if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.providerId}`); continue; }
         try {
-          rawResponse = await callProvider(apiKey, resolveModelId(provider.id, provider.model), imageBase64, mimeType, prompt);
+          rawResponse = await callProvider(apiKey, resolveModelId(provider.providerId, provider.model), imageBase64, mimeType, prompt);
           break;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
-          logger.warning(`Provider ${provider.id} failed, trying next: ${lastError.message}`);
+          logger.warning(`Provider ${provider.providerId} failed, trying next: ${lastError.message}`);
         }
       }
       if (!rawResponse) throw lastError ?? new Error('No configured providers succeeded');
