@@ -4,6 +4,7 @@ import * as cron from 'node-cron';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
+import { logFeedEvent } from '../../src/lib/feed-helpers';
 
 class MatchExecScheduler {
   private isRunning = false;
@@ -503,14 +504,36 @@ class MatchExecScheduler {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const result = await this.db.run(
-      `DELETE FROM matches 
-       WHERE status = 'complete' 
+      `DELETE FROM matches
+       WHERE status = 'complete'
        AND updated_at < ?`,
       [thirtyDaysAgo.toISOString()]
     );
 
     if (result.changes > 0) {
       logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
+    }
+
+    await this.cleanupFeedEvents();
+  }
+
+  private async cleanupFeedEvents() {
+    try {
+      const setting = await this.db.get(
+        "SELECT setting_value FROM app_settings WHERE setting_key = 'feed_retention_days'"
+      );
+      const retentionDays = parseInt(setting?.setting_value ?? '180', 10);
+      if (isNaN(retentionDays) || retentionDays <= 0) return;
+
+      const result = await this.db.run(
+        `DELETE FROM activity_feed WHERE created_at < datetime('now', '-' || ? || ' days')`,
+        [retentionDays]
+      );
+      if (result.changes > 0) {
+        logger.info(`🧹 Feed cleanup: deleted ${result.changes} events older than ${retentionDays} days`);
+      }
+    } catch (error) {
+      logger.error('❌ Error cleaning up feed events:', error);
     }
   }
 
@@ -535,6 +558,83 @@ class MatchExecScheduler {
         }
       }
     }, 300000); // Every 5 minutes
+
+    // Check discord bot heartbeat every 2 minutes
+    setInterval(async () => {
+      if (this.isRunning) {
+        await this.checkDiscordBotHeartbeat();
+      }
+    }, 120000); // Every 2 minutes
+  }
+
+  private async checkDiscordBotHeartbeat(): Promise<void> {
+    const DISCORD_BOT_TIMEOUT_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+    const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
+    const ALERT_TYPE = 'discord_bot_heartbeat_missing';
+
+    try {
+      const result = await this.db.get(
+        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+        ['discord_bot_last_heartbeat']
+      );
+
+      if (!result?.setting_value) {
+        logger.debug('No discord bot heartbeat found in database yet');
+        return;
+      }
+
+      const lastHeartbeat = new Date(result.setting_value);
+      const now = new Date();
+      const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
+
+      if (timeSinceHeartbeat <= DISCORD_BOT_TIMEOUT_THRESHOLD) return;
+
+      // Rate limit: check if we already sent this alert recently
+      const rateLimitRow = await this.db.get(
+        'SELECT last_sent_at FROM health_alerts_sent WHERE alert_type = ?',
+        [ALERT_TYPE]
+      );
+
+      if (rateLimitRow?.last_sent_at) {
+        const timeSinceLastAlert = now.getTime() - new Date(rateLimitRow.last_sent_at).getTime();
+        if (timeSinceLastAlert <= RATE_LIMIT_WINDOW) {
+          logger.debug(`Discord bot health alert rate-limited: ${ALERT_TYPE}`);
+          return;
+        }
+      }
+
+      const minutesAgo = Math.floor(timeSinceHeartbeat / 60000);
+      const title = 'Discord Bot Not Responding';
+      const description = `The Discord bot has not sent a heartbeat in ${minutesAgo} minutes. Last heartbeat: ${lastHeartbeat.toISOString()}`;
+
+      // Log to activity feed immediately (regardless of bot state)
+      await logFeedEvent({
+        eventType: 'health_alert',
+        priority: 1,
+        title,
+        description,
+      });
+
+      // Enqueue Discord alert — the bot will post it when/if it recovers
+      const alertId = `health_alert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      await this.db.run(
+        `INSERT INTO discord_health_alert_queue (id, severity, title, description, status)
+         VALUES (?, ?, ?, ?, 'pending')`,
+        [alertId, 'critical', title, description]
+      );
+
+      // Update rate limit
+      await this.db.run(
+        `INSERT INTO health_alerts_sent (alert_type, last_sent_at)
+         VALUES (?, CURRENT_TIMESTAMP)
+         ON CONFLICT(alert_type) DO UPDATE SET last_sent_at = CURRENT_TIMESTAMP`,
+        [ALERT_TYPE]
+      );
+
+      logger.info(`Discord bot health alert queued: ${title}`);
+    } catch (error) {
+      logger.error('Error checking discord bot heartbeat:', error);
+    }
   }
 
   async stop() {

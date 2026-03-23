@@ -1,6 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
+import { logFeedEvent } from './feed-helpers';
 import type {
   MatchResult,
   MatchFormat,
@@ -349,6 +350,24 @@ export async function saveMatchResult(
 
       await db.run(query, [result.winner, matchGameId]);
       logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
+    }
+
+    // Log map scored feed event
+    try {
+      const gameInfo = await db.get<{ name: string; round: number }>(
+        `SELECT m.name, mg.round FROM match_games mg JOIN matches m ON mg.match_id = m.id WHERE mg.id = ?`,
+        [matchGameId]
+      );
+      await logFeedEvent({
+        eventType: 'map_scored',
+        priority: 3,
+        title: 'Map Scored',
+        description: `Map ${gameInfo?.round ?? ''} of "${gameInfo?.name ?? matchGameId}" completed`,
+        matchId: result.matchId,
+        metadata: { matchGameId, round: gameInfo?.round },
+      });
+    } catch (feedError) {
+      logger.error('Error logging map scored feed event:', feedError);
     }
 
     // Queue Discord score notification

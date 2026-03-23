@@ -429,3 +429,41 @@ export interface AIExtractionResult {
     winner?: 'team1' | 'team2';
   };
 }
+
+// Activity Feed types
+export type FeedEventType =
+  | 'match_created'
+  | 'tournament_created'
+  | 'match_phase_changed'
+  | 'tournament_phase_changed'
+  | 'match_started'
+  | 'tournament_started'
+  | 'match_scoring_required'
+  | 'map_scored'
+  | 'match_completed'
+  | 'tournament_completed'
+  | 'match_cancelled'
+  | 'tournament_cancelled'
+  | 'ai_error'
+  | 'health_alert';
+
+export type FeedPriority = 1 | 2 | 3 | 4;
+
+export interface FeedEvent {
+  id: string;
+  event_type: FeedEventType;
+  priority: FeedPriority;
+  title: string;
+  description: string | null;
+  match_id: string | null;
+  tournament_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface FeedResponse {
+  events: FeedEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}

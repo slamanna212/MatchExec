@@ -1727,8 +1727,47 @@ export class QueueProcessor {
       this.processMatchWinnerNotificationQueue(),
       this.processDiscordBotRequests(),
       this.processMatchEditQueue(),
-      this.processScorecardPromptQueue()
+      this.processScorecardPromptQueue(),
+      this.processHealthAlertQueue()
     ]);
+  }
+
+  async processHealthAlertQueue() {
+    if (!this.client.isReady() || !this.db || !this.announcementHandler) return;
+
+    try {
+      const pending = await this.db.all<{ id: string; severity: string; title: string; description: string | null }>(
+        `SELECT id, severity, title, description FROM discord_health_alert_queue WHERE status = 'pending' LIMIT 5`
+      );
+
+      for (const item of (pending || [])) {
+        try {
+          await this.db.run(
+            `UPDATE discord_health_alert_queue SET status = 'processing', posted_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+
+          await this.announcementHandler.postHealthAlert({
+            severity: item.severity as 'critical' | 'warning',
+            title: item.title,
+            description: item.description ?? item.title,
+          });
+
+          await this.db.run(
+            `UPDATE discord_health_alert_queue SET status = 'completed' WHERE id = ?`,
+            [item.id]
+          );
+        } catch (err) {
+          logger.error(`Error processing health alert queue item ${item.id}:`, err);
+          await this.db.run(
+            `UPDATE discord_health_alert_queue SET status = 'failed', error_message = ? WHERE id = ?`,
+            [err instanceof Error ? err.message : 'Unknown error', item.id]
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing health alert queue:', error);
+    }
   }
 
   async processScorecardPromptQueue() {

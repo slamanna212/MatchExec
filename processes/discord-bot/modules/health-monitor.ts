@@ -1,6 +1,7 @@
 import type { Database } from '../../../lib/database/connection';
 import type { AnnouncementHandler } from './announcement-handler';
 import { logger } from '../../../src/lib/logger/server';
+import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 interface HealthAlertConfig {
   type: string;
@@ -14,6 +15,7 @@ export class HealthMonitor {
   private lastSchedulerHeartbeat: Date | null = null;
   private readonly SCHEDULER_CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
   private readonly SCHEDULER_TIMEOUT_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+  private readonly STATS_PROCESSOR_TIMEOUT_THRESHOLD = 10 * 60 * 1000; // 10 minutes
   private readonly RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
 
   constructor(
@@ -27,9 +29,10 @@ export class HealthMonitor {
   async start(): Promise<void> {
     logger.info('🏥 Starting health monitoring...');
 
-    // Monitor scheduler heartbeat every 2 minutes
+    // Monitor scheduler and stats-processor heartbeats every 2 minutes
     const schedulerInterval = setInterval(() => {
       this.checkSchedulerHeartbeat();
+      this.checkStatsProcessorHeartbeat();
     }, this.SCHEDULER_CHECK_INTERVAL);
     this.monitoringIntervals.push(schedulerInterval);
 
@@ -58,11 +61,19 @@ export class HealthMonitor {
         return;
       }
 
-      // Send the alert
+      // Send the alert to Discord
       await this.announcementHandler.postHealthAlert({
         severity: config.severity,
         title: config.title,
         description: config.description
+      });
+
+      // Log to activity feed
+      await logFeedEvent({
+        eventType: 'health_alert',
+        priority: 1,
+        title: config.title,
+        description: config.description,
       });
 
       // Update last sent timestamp
@@ -107,6 +118,40 @@ export class HealthMonitor {
       }
     } catch (error) {
       logger.error('Error checking scheduler heartbeat:', error);
+    }
+  }
+
+  /**
+   * Check stats-processor heartbeat and alert if missing
+   */
+  private async checkStatsProcessorHeartbeat(): Promise<void> {
+    try {
+      const result = await this.db.get<{ setting_value: string }>(
+        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+        ['stats_processor_last_heartbeat']
+      );
+
+      if (!result?.setting_value) {
+        logger.debug('No stats-processor heartbeat found in database yet');
+        return;
+      }
+
+      const lastHeartbeat = new Date(result.setting_value);
+      const now = new Date();
+      const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
+
+      if (timeSinceHeartbeat > this.STATS_PROCESSOR_TIMEOUT_THRESHOLD) {
+        const minutesAgo = Math.floor(timeSinceHeartbeat / 60000);
+
+        await this.reportHealthIssue({
+          type: 'stats_processor_heartbeat_missing',
+          severity: 'critical',
+          title: 'Stats Processor Not Responding',
+          description: `The stats processor has not sent a heartbeat in ${minutesAgo} minutes. Last heartbeat: ${lastHeartbeat.toISOString()}`
+        });
+      }
+    } catch (error) {
+      logger.error('Error checking stats-processor heartbeat:', error);
     }
   }
 

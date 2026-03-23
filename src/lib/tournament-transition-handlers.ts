@@ -8,6 +8,7 @@
 
 import { logger } from './logger';
 import type { Database } from '../../lib/database/connection';
+import { logFeedEvent } from './feed-helpers';
 
 /**
  * Handles the transition to "gather" status (tournament open for signups)
@@ -30,6 +31,19 @@ export async function handleGatherTransition(
   if (!discordSuccess) {
     logger.warning('⚠️ Failed to queue Discord announcement for tournament:', tournamentId);
   }
+
+  try {
+    const row = await db.get<{ name: string }>('SELECT name FROM tournaments WHERE id = ?', [tournamentId]);
+    await logFeedEvent({
+      eventType: 'tournament_phase_changed',
+      priority: 3,
+      title: 'Tournament Signups Opened',
+      description: `"${row?.name ?? tournamentId}" is now accepting signups`,
+      tournamentId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging tournament gather feed event:', error);
+  }
 }
 
 /**
@@ -50,6 +64,19 @@ export async function handleAssignTransition(
 
   await autoCreateSoloTeams(db, tournamentId);
   await queueDiscordTournamentStatusUpdate(db, tournamentId, 'assign');
+
+  try {
+    const row = await db.get<{ name: string }>('SELECT name FROM tournaments WHERE id = ?', [tournamentId]);
+    await logFeedEvent({
+      eventType: 'tournament_phase_changed',
+      priority: 3,
+      title: 'Tournament Signups Closed',
+      description: `"${row?.name ?? tournamentId}" signups closed, bracket being assigned`,
+      tournamentId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging tournament assign feed event:', error);
+  }
 }
 
 /**
@@ -69,6 +96,19 @@ export async function handleBattleTransition(
   logger.debug(`⚔️ Tournament ${tournamentId} started - transitioning first round matches to battle`);
 
   await transitionFirstRoundMatches(db, tournamentId);
+
+  try {
+    const row = await db.get<{ name: string }>('SELECT name FROM tournaments WHERE id = ?', [tournamentId]);
+    await logFeedEvent({
+      eventType: 'tournament_started',
+      priority: 2,
+      title: 'Tournament Started',
+      description: `"${row?.name ?? tournamentId}" battles are underway`,
+      tournamentId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging tournament battle feed event:', error);
+  }
 }
 
 /**
@@ -92,6 +132,22 @@ export async function handleEndTransition(
   );
 
   await queueDiscordEventDeletion(db, tournamentId);
+
+  try {
+    const row = await db.get<{ name: string }>('SELECT name FROM tournaments WHERE id = ?', [tournamentId]);
+    const name = row?.name ?? tournamentId;
+    await logFeedEvent({
+      eventType: status === 'complete' ? 'tournament_completed' : 'tournament_cancelled',
+      priority: 2,
+      title: status === 'complete' ? 'Tournament Completed' : 'Tournament Cancelled',
+      description: status === 'complete'
+        ? `"${name}" is over`
+        : `"${name}" was cancelled`,
+      tournamentId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging tournament end feed event:', error);
+  }
 }
 
 /**

@@ -4,6 +4,17 @@ import { VoiceChannelService } from './voice-channel-service';
 import { MapCodeService } from './map-code-service';
 import { queueDiscordDeletion } from './scoring-functions';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
+import { logFeedEvent } from './feed-helpers';
+
+async function getMatchName(matchId: string): Promise<string> {
+  try {
+    const db = await getDbInstance();
+    const row = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [matchId]);
+    return row?.name ?? matchId;
+  } catch {
+    return matchId;
+  }
+}
 
 /**
  * Queue a Discord announcement request that the Discord bot will process
@@ -117,6 +128,19 @@ export async function handleGatherTransition(matchId: string): Promise<void> {
     logger.error('❌ Error handling gather transition:', error);
     // Don't throw - just log the error
   }
+
+  try {
+    const name = await getMatchName(matchId);
+    await logFeedEvent({
+      eventType: 'match_phase_changed',
+      priority: 3,
+      title: 'Match Signups Opened',
+      description: `"${name}" is now accepting signups`,
+      matchId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging gather feed event:', error);
+  }
 }
 
 /**
@@ -142,6 +166,19 @@ export async function handleAssignTransition(matchId: string): Promise<void> {
     await VoiceChannelService.setupMatchVoiceChannels(matchId);
   } catch (error) {
     logger.error('❌ Error setting up voice channels:', error);
+  }
+
+  try {
+    const name = await getMatchName(matchId);
+    await logFeedEvent({
+      eventType: 'match_phase_changed',
+      priority: 3,
+      title: 'Match Signups Closed',
+      description: `"${name}" signups closed, teams being assigned`,
+      matchId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging assign feed event:', error);
   }
 }
 
@@ -188,6 +225,36 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
     }
   } catch (error) {
     logger.error('❌ Error processing first map code:', error);
+  }
+
+  // Log feed events for match started and scoring required
+  try {
+    const db = await getDbInstance();
+    const matchData = await db.get<{ name: string; maps: string }>(
+      'SELECT name, maps FROM matches WHERE id = ?',
+      [matchId]
+    );
+    const name = matchData?.name ?? matchId;
+    const mapCount = matchData?.maps ? JSON.parse(matchData.maps).length : 1;
+
+    await logFeedEvent({
+      eventType: 'match_started',
+      priority: 2,
+      title: 'Match Started',
+      description: `"${name}" is now live`,
+      matchId,
+    });
+
+    await logFeedEvent({
+      eventType: 'match_scoring_required',
+      priority: 2,
+      title: 'Map Scoring Required',
+      description: `"${name}" needs scoring (${mapCount} map${mapCount !== 1 ? 's' : ''})`,
+      matchId,
+      metadata: { mapCount },
+    });
+  } catch (error) {
+    logger.error('❌ Error logging battle feed events:', error);
   }
 }
 
@@ -254,6 +321,19 @@ export async function handleCompleteTransition(matchId: string): Promise<void> {
   } catch (error) {
     logger.error('❌ Error deleting voice channels for completed match:', error);
   }
+
+  try {
+    const name = await getMatchName(matchId);
+    await logFeedEvent({
+      eventType: 'match_completed',
+      priority: 2,
+      title: 'Match Completed',
+      description: `"${name}" has finished`,
+      matchId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging complete feed event:', error);
+  }
 }
 
 /**
@@ -275,6 +355,19 @@ export async function handleCancelledTransition(matchId: string): Promise<void> 
     logger.debug(`🔇 Voice channels deleted for cancelled match: ${matchId}`);
   } catch (error) {
     logger.error('❌ Error deleting voice channels for cancelled match:', error);
+  }
+
+  try {
+    const name = await getMatchName(matchId);
+    await logFeedEvent({
+      eventType: 'match_cancelled',
+      priority: 2,
+      title: 'Match Cancelled',
+      description: `"${name}" was cancelled`,
+      matchId,
+    });
+  } catch (error) {
+    logger.error('❌ Error logging cancelled feed event:', error);
   }
 }
 

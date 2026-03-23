@@ -4,6 +4,7 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { safeJSONParse } from '@/lib/utils/validation';
+import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   validateMatchRequest,
   prepareMatchData,
@@ -133,6 +134,15 @@ export async function POST(request: NextRequest) {
     }
 
     logger.debug(`✅ Match created in "created" status: ${body.name}`);
+
+    await logFeedEvent({
+      eventType: 'match_created',
+      priority: 3,
+      title: 'Match Created',
+      description: `"${body.name}" is ready for setup`,
+      matchId: preparedData.matchId,
+      metadata: { gameName: (match as unknown as Record<string, unknown>)?.game_name },
+    });
 
     return NextResponse.json(parsedMatch, { status: 201 });
   } catch (error) {

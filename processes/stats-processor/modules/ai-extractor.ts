@@ -6,6 +6,7 @@ import { logger } from '../../../src/lib/logger/server';
 import type { AIExtractionResult, GameStatDefinition } from '../../../shared/types';
 import { AI_PROVIDER_CALLS } from './providers';
 import { resolveModelId } from '../../../src/lib/ai-model-resolver';
+import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
@@ -176,6 +177,24 @@ export class AIExtractor {
           `UPDATE scorecard_submissions SET ai_extraction_status = 'failed', ai_error_message = ? WHERE id = ?`,
           [message, submissionId]
         );
+
+        // Log to activity feed — only on final failure after all retries exhausted
+        try {
+          const sub = await this.db.get('SELECT match_id FROM scorecard_submissions WHERE id = ?', [submissionId]);
+          await logFeedEvent({
+            eventType: 'ai_error',
+            priority: 2,
+            title: 'AI Processing Error',
+            description: `Scorecard extraction failed after all retries`,
+            matchId: sub?.match_id ?? undefined,
+            metadata: {
+              submissionId,
+              error: message.substring(0, 200),
+            },
+          });
+        } catch (feedError) {
+          logger.error('Failed to log AI error feed event:', feedError);
+        }
       }
     }
   }

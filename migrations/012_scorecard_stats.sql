@@ -176,3 +176,47 @@ VALUES ('stats_processor_last_heartbeat', '', 'string', '{"description": "ISO ti
 
 -- Add AI screenshot notes to games table
 ALTER TABLE games ADD COLUMN ai_screenshot_notes TEXT;
+
+-- Activity Feed
+-- Centralized append-only event log for the Feed page
+CREATE TABLE IF NOT EXISTS activity_feed (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 3,
+  -- 1 = Critical (red, pinned), 2 = High (orange), 3 = Normal (blue), 4 = Low (gray)
+  title TEXT NOT NULL,
+  description TEXT,
+  match_id TEXT,
+  tournament_id TEXT,
+  metadata TEXT, -- JSON blob for arbitrary extra data
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE SET NULL,
+  FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_feed_created_at ON activity_feed(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_feed_priority ON activity_feed(priority);
+CREATE INDEX IF NOT EXISTS idx_activity_feed_match_id ON activity_feed(match_id);
+CREATE INDEX IF NOT EXISTS idx_activity_feed_tournament_id ON activity_feed(tournament_id);
+
+-- Seed feed retention setting
+INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type, metadata)
+VALUES ('feed_retention_days', '180', 'number', '{"description": "Number of days to keep activity feed events before automatic cleanup.", "min": 1, "max": 3650}');
+
+-- Health alert queue for scheduler-to-discord-bot communication
+-- Used by the scheduler to queue health alerts (e.g. discord bot heartbeat missing)
+-- that the discord bot's queue processor will deliver when/if it recovers
+
+CREATE TABLE IF NOT EXISTS discord_health_alert_queue (
+  id TEXT PRIMARY KEY,
+  severity TEXT NOT NULL DEFAULT 'critical',
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  posted_at DATETIME,
+  error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_discord_health_alert_queue_status
+  ON discord_health_alert_queue(status);

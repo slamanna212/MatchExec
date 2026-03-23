@@ -18,6 +18,8 @@ export default function ApplicationSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
+  const [feedRetentionDays, setFeedRetentionDays] = useState<number>(180);
+  const [feedSaving, setFeedSaving] = useState(false);
 
   // Helper functions for player reminder conversion
   const minutesToValueUnit = (minutes: number) => {
@@ -52,9 +54,10 @@ export default function ApplicationSettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [settingsResponse, logLevelResponse] = await Promise.all([
+        const [settingsResponse, logLevelResponse, feedRetentionResponse] = await Promise.all([
           fetch('/api/settings'),
-          fetch('/api/settings/log-level')
+          fetch('/api/settings/log-level'),
+          fetch('/api/settings/feed-retention'),
         ]);
 
         if (settingsResponse.ok) {
@@ -79,6 +82,12 @@ export default function ApplicationSettingsPage() {
           const playerReminderDisplay = minutesToValueUnit(data.discord.player_reminder_minutes || 120);
           setPlayerReminderValue(playerReminderDisplay.value);
           setPlayerReminderUnit(playerReminderDisplay.unit);
+
+          // Set feed retention days
+          if (feedRetentionResponse.ok) {
+            const feedData = await feedRetentionResponse.json();
+            setFeedRetentionDays(feedData.feed_retention_days ?? 180);
+          }
         }
       } catch (error) {
         logger.error('Error fetching settings:', error);
@@ -135,6 +144,36 @@ export default function ApplicationSettingsPage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleFeedRetentionSubmit = async () => {
+    setFeedSaving(true);
+    try {
+      const response = await fetch('/api/settings/feed-retention', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feed_retention_days: feedRetentionDays }),
+      });
+      if (response.ok) {
+        notificationHelper.success({
+          title: 'Settings Saved',
+          message: 'Feed retention settings saved successfully!'
+        });
+      } else {
+        notificationHelper.error({
+          title: 'Save Failed',
+          message: 'Failed to save feed retention settings.'
+        });
+      }
+    } catch (error) {
+      logger.error('Error saving feed retention settings:', error);
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'An error occurred while saving feed retention settings.'
+      });
+    } finally {
+      setFeedSaving(false);
     }
   };
 
@@ -220,6 +259,38 @@ export default function ApplicationSettingsPage() {
               </Group>
             </Stack>
           </form>
+          )}
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          {loading ? (
+            <Stack gap="md">
+              <Stack gap={4}>
+                <Skeleton height={14} width={120} />
+                <Skeleton height={36} />
+              </Stack>
+              <Group justify="flex-end"><Skeleton height={36} width={180} /></Group>
+            </Stack>
+          ) : (
+            <Stack gap="md">
+              <div>
+                <Text size="lg" fw={600} mb="xs">Activity Feed</Text>
+                <Text size="sm" c="dimmed">Configure how long activity feed events are retained</Text>
+              </div>
+              <NumberInput
+                label="Retain events for (days)"
+                description="Feed events older than this will be deleted automatically during the daily cleanup. Min 1, max 3650."
+                min={1}
+                max={3650}
+                value={feedRetentionDays}
+                onChange={(value) => setFeedRetentionDays(Number(value) || 180)}
+              />
+              <Group justify="flex-end" mt="lg">
+                <Button onClick={handleFeedRetentionSubmit} loading={feedSaving}>
+                  Save Feed Settings
+                </Button>
+              </Group>
+            </Stack>
           )}
         </Card>
 

@@ -5,6 +5,7 @@ import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+import { logFeedEvent } from '@/lib/feed-helpers';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 
@@ -200,7 +201,16 @@ export async function POST(request: NextRequest) {
     `, [tournamentId]);
     
     logger.debug(`✅ Tournament created in "created" status: ${body.name}`);
-    
+
+    await logFeedEvent({
+      eventType: 'tournament_created',
+      priority: 3,
+      title: 'Tournament Created',
+      description: `"${body.name}" is ready for setup`,
+      tournamentId,
+      metadata: { format: body.format },
+    });
+
     return NextResponse.json(tournament, { status: 201 });
   } catch (error) {
     logger.error('Error creating tournament:', error);

@@ -34,7 +34,8 @@ import {
   IconHome,
   IconSwords,
   IconDatabaseExport,
-  IconChartBar
+  IconChartBar,
+  IconRss
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -142,6 +143,7 @@ export function Navigation({ children }: NavigationProps) {
   const getIcon = (name: string) => {
     const iconMap: Record<string, React.ComponentType<{ size: string }>> = {
       home: IconHome,
+      feed: IconRss,
       swords: IconSwords,
       history: IconHistory,
       trophy: IconTrophy,
@@ -166,6 +168,11 @@ export function Navigation({ children }: NavigationProps) {
       label: 'Home',
       href: '/',
       iconName: 'home'
+    },
+    {
+      label: 'Feed',
+      href: '/feed',
+      iconName: 'feed'
     },
     {
       label: 'Matches',
