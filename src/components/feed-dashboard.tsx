@@ -302,7 +302,7 @@ export function FeedDashboard() {
                 <Text size="xs" c="dimmed">Live</Text>
               </Group>
             </Group>
-            <Text size="sm" c="dimmed">Real-time events from matches and tournaments</Text>
+            <Text size="sm" c="dimmed">Real-time events from every part of MatchExec</Text>
           </Stack>
           <DatePickerInput
             type="range"
