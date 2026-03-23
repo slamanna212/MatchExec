@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Stack, Text, Group, Button, Alert, Loader, Tabs, Badge, SimpleGrid } from '@mantine/core';
-import { IconCheck, IconX, IconRefresh } from '@tabler/icons-react';
+import { IconCheck, IconX, IconRefresh, IconRotate } from '@tabler/icons-react';
 import { showSuccess, showError } from '@/lib/notifications';
 import type { ScorecardSubmission, ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';
 import { SubmissionViewer } from './SubmissionViewer';
@@ -29,6 +29,7 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
   const [loading, setLoading] = useState(true);
   const [activeSubmission, setActiveSubmission] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -66,6 +67,19 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
       await fetchData();
     } catch {
       showError('Failed to assign participant');
+    }
+  };
+
+  const handleRetry = async (submissionId: string) => {
+    setRetrying(submissionId);
+    try {
+      await fetch(`/api/matches/${matchId}/scorecard/${submissionId}/retry`, { method: 'POST' });
+      showSuccess('Requeued for AI extraction');
+      await fetchData();
+    } catch {
+      showError('Failed to retry extraction');
+    } finally {
+      setRetrying(null);
     }
   };
 
@@ -146,6 +160,18 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
                 >
                   {sub.ai_extraction_status}
                 </Badge>
+                {sub.ai_extraction_status === 'failed' && (
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="orange"
+                    leftSection={<IconRotate size={12} />}
+                    loading={retrying === sub.id}
+                    onClick={() => handleRetry(sub.id)}
+                  >
+                    Retry
+                  </Button>
+                )}
               </Group>
 
               {sub.ai_error_message && (
