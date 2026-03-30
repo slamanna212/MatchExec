@@ -60,7 +60,7 @@ jobs:
       - name: Run unit tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/unit.junit.xml
       - name: Upload coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/coverage-final.json
           token: ${{ secrets.CODECOV_TOKEN }}
