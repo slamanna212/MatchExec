@@ -26,6 +26,9 @@ Test infrastructure is already in good shape (vitest forks, `TestDatabase` wrapp
 - Commit after each tier with a descriptive message — do NOT bundle all tiers into one commit.
 - Run `npm run test:coverage` + `npm run lint` after each tier.
 
+Check files before adding tests there have been a couple commits since we created this plan
+
+
 ## Critical Files To Read First (patterns to copy)
 
 - [ ] `tests/utils/test-db.ts`
