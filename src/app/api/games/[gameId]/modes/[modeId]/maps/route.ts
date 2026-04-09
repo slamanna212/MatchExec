@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: Request,
@@ -21,12 +21,9 @@ export async function GET(
       ORDER BY gm.name
     `, [gameId, modeId]);
 
-    return NextResponse.json(maps);
+    return apiOk(maps);
   } catch (error) {
     logger.error('Error fetching maps for mode:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch maps for mode' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch maps for mode');
   }
 }

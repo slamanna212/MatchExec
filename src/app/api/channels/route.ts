@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export interface DiscordChannel {
   id: string;
@@ -50,13 +50,10 @@ export async function GET() {
       send_health_alerts: Boolean(channel.send_health_alerts)
     }));
 
-    return NextResponse.json(formattedChannels);
+    return apiOk(formattedChannels);
   } catch (error) {
     logger.error('Error fetching Discord channels:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch Discord channels' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch Discord channels');
   }
 }
 
@@ -79,25 +76,19 @@ export async function POST(request: NextRequest) {
 
     const guildId = await fetchGuildId(db);
     if (!guildId) {
-      return NextResponse.json(
-        { error: 'Discord guild not configured' },
-        { status: 400 }
-      );
+      return apiError('Discord guild not configured', 400);
     }
 
     const channelId = await createDiscordChannel(db, channelData, guildId);
 
-    return NextResponse.json({
+    return apiOk({
       success: true,
       id: channelId,
       message: 'Channel created successfully'
     });
   } catch (error) {
     logger.error('Error creating Discord channel:', error);
-    return NextResponse.json(
-      { error: 'Failed to create Discord channel' },
-      { status: 500 }
-    );
+    return apiError('Failed to create Discord channel');
   }
 }
 
@@ -115,24 +106,15 @@ function extractChannelData(body: any) {
 
 function validateChannelInput(data: ReturnType<typeof extractChannelData>) {
   if (!data.discord_channel_id || !data.channel_type) {
-    return NextResponse.json(
-      { error: 'Channel ID and type are required' },
-      { status: 400 }
-    );
+    return apiError('Channel ID and type are required', 400);
   }
 
   if (!['text', 'voice'].includes(data.channel_type)) {
-    return NextResponse.json(
-      { error: 'Channel type must be text or voice' },
-      { status: 400 }
-    );
+    return apiError('Channel type must be text or voice', 400);
   }
 
   if (data.channel_type === 'voice') {
-    return NextResponse.json(
-      { error: 'Voice channels are automatically created and cannot be manually added' },
-      { status: 400 }
-    );
+    return apiError('Voice channels are automatically created and cannot be manually added', 400);
   }
 
   return null;
@@ -145,10 +127,7 @@ async function checkChannelExistence(db: any, discordChannelId: string) {
   );
 
   if (existing) {
-    return NextResponse.json(
-      { error: 'Channel already exists' },
-      { status: 409 }
-    );
+    return apiError('Channel already exists', 409);
   }
 
   return null;

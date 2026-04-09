@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 import { resetDbSingleton } from '@/lib/database-init';
 import { resetConnectionSingleton } from '@/lib/database/connection';
 import * as crypto from 'crypto';
@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
     const password = (formData.get('password') as string | null)?.trim() || undefined;
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return apiError('No file provided', 400);
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'File too large (max 100 MB)' }, { status: 400 });
+      return apiError('File too large (max 100 MB)', 400);
     }
 
     let buffer = Buffer.from(await file.arrayBuffer());
@@ -33,10 +33,7 @@ export async function POST(request: NextRequest) {
     // Detect and decrypt encrypted backups
     if (buffer.subarray(0, 8).equals(MAGIC)) {
       if (!password) {
-        return NextResponse.json(
-          { error: 'This backup is encrypted — please provide the password.' },
-          { status: 400 }
-        );
+        return apiError('This backup is encrypted — please provide the password.', 400);
       }
 
       try {
@@ -50,19 +47,13 @@ export async function POST(request: NextRequest) {
         decipher.setAuthTag(authTag);
         buffer = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       } catch {
-        return NextResponse.json(
-          { error: 'Decryption failed — wrong password or corrupted file.' },
-          { status: 400 }
-        );
+        return apiError('Decryption failed — wrong password or corrupted file.', 400);
       }
     }
 
     // Validate it's actually a SQLite database
     if (buffer.length < 16 || !buffer.subarray(0, 16).equals(SQLITE_MAGIC)) {
-      return NextResponse.json(
-        { error: 'Invalid file — not a valid SQLite database.' },
-        { status: 400 }
-      );
+      return apiError('Invalid file — not a valid SQLite database.', 400);
     }
 
     const dbPath =
@@ -86,10 +77,10 @@ export async function POST(request: NextRequest) {
     restartProcesses();
 
     logger.info('Database restored successfully');
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Restore failed:', error);
-    return NextResponse.json({ error: 'Restore failed' }, { status: 500 });
+    return apiError('Restore failed');
   }
 }
 

@@ -1,11 +1,11 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { ScorecardSubmission, ScorecardPlayerStat } from '@/shared/types';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -45,30 +45,24 @@ export async function POST(
     const teamSide = formData.get('teamSide') as string;
 
     if (!file) {
-      return NextResponse.json({ error: 'No screenshot file provided' }, { status: 400 });
+      return apiError('No screenshot file provided', 400);
     }
     if (!matchGameId) {
-      return NextResponse.json({ error: 'matchGameId is required' }, { status: 400 });
+      return apiError('matchGameId is required', 400);
     }
     if (!teamSide || !['blue', 'red'].includes(teamSide)) {
-      return NextResponse.json({ error: 'teamSide must be blue or red' }, { status: 400 });
+      return apiError('teamSide must be blue or red', 400);
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: 'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.' },
-        { status: 400 }
-      );
+      return apiError('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.', 400);
     }
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: 'File too large. Maximum size is 10MB.' }, { status: 400 });
+      return apiError('File too large. Maximum size is 10MB.', 400);
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (!isValidImageType(buffer)) {
-      return NextResponse.json(
-        { error: 'Invalid image file. File content does not match image format.' },
-        { status: 400 }
-      );
+      return apiError('Invalid image file. File content does not match image format.', 400);
     }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', matchId);
@@ -99,10 +93,10 @@ export async function POST(
       [queueId, submissionId, matchId, matchGameId]
     );
 
-    return NextResponse.json({ success: true, submissionId, screenshotUrl });
+    return apiOk({ success: true, submissionId, screenshotUrl });
   } catch (error) {
     logger.error('Error uploading scorecard:', error);
-    return NextResponse.json({ error: 'Failed to upload scorecard' }, { status: 500 });
+    return apiError('Failed to upload scorecard');
   }
 }
 
@@ -140,9 +134,9 @@ export async function GET(
       })
     );
 
-    return NextResponse.json(result);
+    return apiOk(result);
   } catch (error) {
     logger.error('Error fetching scorecard submissions:', error);
-    return NextResponse.json({ error: 'Failed to fetch submissions' }, { status: 500 });
+    return apiError('Failed to fetch submissions');
   }
 }

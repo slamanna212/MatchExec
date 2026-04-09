@@ -9,36 +9,11 @@ import {
   Card,
   Image
 } from '@mantine/core';
-import type { Match } from '@/shared/types';
+import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
 
-interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
-  game_name?: string;
-  game_icon?: string;
-  game_color?: string;
-  map_codes_supported?: boolean;
-  rules?: string;
-  rounds?: number;
-  maps?: string[];
-  map_codes?: Record<string, string>;
-  livestream_link?: string;
-  event_image_url?: string;
-  tournament_allow_match_editing?: boolean;
-  created_at: string;
-  updated_at: string;
-  start_date?: string;
-  end_date?: string;
-}
-
-interface MatchGameResult {
-  id: string;
-  match_id: string;
-  round: number;
-  map_id: string;
-  map_name: string;
-  winner_id?: string;
-  status: 'pending' | 'ongoing' | 'completed';
-}
+// Use MatchWithGame as a local alias for the shared type
+type MatchWithGame = MatchWithGameDetails;
 
 interface MatchInfoPanelProps {
   match: MatchWithGame;
@@ -79,11 +54,11 @@ function getStatusTransitionButton(
   if (isHistory || !onStatusTransition) return null;
   switch (match.status) {
     case 'created':
-      return <Button variant="light" color="blue" fullWidth onClick={() => onStatusTransition('gather')}>Start Signups</Button>;
+      return <Button variant="filled" color="violet" fullWidth onClick={() => onStatusTransition('gather')}>Start Signups</Button>;
     case 'gather':
       return <Button variant="light" color="orange" fullWidth onClick={() => onStatusTransition('assign')}>Close Signups</Button>;
     case 'assign':
-      return <Button variant="light" color="green" fullWidth onClick={() => onStatusTransition('battle')}>Start Match</Button>;
+      return <Button variant="filled" color="violet" fullWidth onClick={() => onStatusTransition('battle')}>Start Match</Button>;
     case 'battle':
       return <Button variant="light" color="red" fullWidth onClick={() => onStatusTransition('complete')}>End Match</Button>;
     default:
@@ -178,17 +153,17 @@ function MatchActionsCard({
     <Card withBorder padding="lg" shadow="sm">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
         {showAssignPlayers && (
-          <Button variant="light" fullWidth onClick={onAssignPlayers}>Assign Players</Button>
+          <Button variant="light" color="violet" fullWidth onClick={onAssignPlayers}>Assign Players</Button>
         )}
         {showScoring && (
-          <Button variant="light" color="blue" fullWidth onClick={onScoring}>Scoring</Button>
+          <Button variant="light" color="violet" fullWidth onClick={onScoring}>Scoring</Button>
         )}
         {showReviewStats && (
-          <Button variant="light" color="grape" fullWidth onClick={onReviewStats}>Review Stats</Button>
+          <Button variant="light" color="violet" fullWidth onClick={onReviewStats}>Review Stats</Button>
         )}
         {getStatusTransitionButton(match, isHistory, onStatusTransition)}
         {showEdit && (
-          <Button variant="light" color="yellow" fullWidth onClick={onEdit}>Edit Match</Button>
+          <Button variant="light" color="violet" fullWidth onClick={onEdit}>Edit Match</Button>
         )}
         {onDelete && (
           <Button color="red" variant="light" fullWidth onClick={onDelete}>Delete Match</Button>

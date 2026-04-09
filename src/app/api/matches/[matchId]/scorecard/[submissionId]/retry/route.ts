@@ -1,8 +1,8 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   _request: NextRequest,
@@ -18,11 +18,11 @@ export async function POST(
     );
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return apiError('Submission not found', 404);
     }
 
     if (submission.ai_extraction_status !== 'failed') {
-      return NextResponse.json({ error: 'Only failed submissions can be retried' }, { status: 400 });
+      return apiError('Only failed submissions can be retried', 400);
     }
 
     // Reset submission status
@@ -49,9 +49,9 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error retrying submission:', error);
-    return NextResponse.json({ error: 'Failed to retry submission' }, { status: 500 });
+    return apiError('Failed to retry submission');
   }
 }

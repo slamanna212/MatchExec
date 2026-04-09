@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function PUT(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function PUT(
     const { status } = body as { status: 'approved' | 'rejected' };
 
     if (!status || !['approved', 'rejected'].includes(status)) {
-      return NextResponse.json({ error: 'status must be approved or rejected' }, { status: 400 });
+      return apiError('status must be approved or rejected', 400);
     }
 
     const db = await getDbInstance();
@@ -24,7 +24,7 @@ export async function PUT(
     );
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return apiError('Submission not found', 404);
     }
 
     await db.run(
@@ -32,9 +32,9 @@ export async function PUT(
       [status, submissionId]
     );
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error reviewing submission:', error);
-    return NextResponse.json({ error: 'Failed to review submission' }, { status: 500 });
+    return apiError('Failed to review submission');
   }
 }

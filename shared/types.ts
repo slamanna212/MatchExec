@@ -227,6 +227,60 @@ export interface MatchGame {
   updated_at: Date;
 }
 
+// Match game result (used in detail views)
+export interface MatchGameResult {
+  id: string;
+  match_id: string;
+  round: number;
+  map_id: string;
+  map_name: string;
+  winner_id?: string;
+  status: 'pending' | 'ongoing' | 'completed';
+}
+
+// Signup form field definition
+export interface SignupField {
+  id: string;
+  label: string;
+  type: string;
+}
+
+// Signup form configuration
+export interface SignupConfig {
+  fields: SignupField[];
+}
+
+// Match with joined game data (used in detail/info panel views)
+export interface MatchWithGameDetails extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  map_codes_supported?: boolean;
+  rules?: string;
+  rounds?: number;
+  maps?: string[];
+  map_codes?: Record<string, string>;
+  livestream_link?: string;
+  event_image_url?: string;
+  tournament_allow_match_editing?: boolean;
+  created_at: string;
+  updated_at: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+// Tournament with joined game data (used in detail/info panel views)
+export interface TournamentWithGameDetails extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  participant_count?: number;
+  event_image_url?: string;
+  created_at: string;
+  updated_at: string;
+  start_time?: string;
+}
+
 // Data seeding types
 export interface DataVersion {
   game_id: string;

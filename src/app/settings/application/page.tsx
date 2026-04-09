@@ -278,7 +278,7 @@ export default function ApplicationSettingsPage() {
           ) : (
             <Stack gap="md">
               <div>
-                <Text size="lg" fw={600} mb="xs">Activity Feed</Text>
+                <Text size="md" fw={600} mb="xs">Activity Feed</Text>
                 <Text size="sm" c="dimmed">Configure how long activity feed events are retained</Text>
               </div>
               <NumberInput
@@ -311,7 +311,7 @@ export default function ApplicationSettingsPage() {
           <form onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
               <div>
-                <Text size="lg" fw={600} mb="xs">Log Level</Text>
+                <Text size="md" fw={600} mb="xs">Log Level</Text>
                 <Text size="sm" c="dimmed">Control the verbosity of application logs</Text>
               </div>
 

@@ -126,7 +126,7 @@ export function ParticipantsList({
     return (
       <div>
         <Group justify="space-between" mb="sm">
-          <Text size="lg" fw={600} c={teamColor}>
+          <Text size="md" fw={600} c={teamColor}>
             {title}
           </Text>
           <Badge size="md" color={teamColor} variant="light">
@@ -231,7 +231,7 @@ export function ParticipantsList({
       {/* Special Case: All Unassigned - Split into 2 columns on desktop */}
       {allUnassigned && unassigned.length > 0 && (
         <>
-          <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+          <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, md: 6 }}>
               <Stack gap="xs">
@@ -254,7 +254,7 @@ export function ParticipantsList({
       {/* Unassigned Players Section - When teams exist */}
       {!allUnassigned && unassigned.length > 0 && (
         <div>
-          <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+          <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
           <Grid gutter="md">
             {unassigned.map((participant, index) => (
               <Grid.Col key={participant.id} span={{ base: 12, md: 6 }}>

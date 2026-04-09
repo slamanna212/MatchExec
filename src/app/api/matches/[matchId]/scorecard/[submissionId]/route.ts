@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { ScorecardSubmission, ScorecardPlayerStat } from '@/shared/types';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   _request: Request,
@@ -17,7 +17,7 @@ export async function GET(
     );
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return apiError('Submission not found', 404);
     }
 
     const playerStats = await db.all<ScorecardPlayerStat>(
@@ -25,10 +25,10 @@ export async function GET(
       [submissionId]
     );
 
-    return NextResponse.json({ ...submission, playerStats: playerStats || [] });
+    return apiOk({ ...submission, playerStats: playerStats || [] });
   } catch (error) {
     logger.error('Error fetching submission:', error);
-    return NextResponse.json({ error: 'Failed to fetch submission' }, { status: 500 });
+    return apiError('Failed to fetch submission');
   }
 }
 
@@ -46,14 +46,14 @@ export async function DELETE(
     );
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return apiError('Submission not found', 404);
     }
 
     await db.run('DELETE FROM scorecard_submissions WHERE id = ?', [submissionId]);
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error deleting submission:', error);
-    return NextResponse.json({ error: 'Failed to delete submission' }, { status: 500 });
+    return apiError('Failed to delete submission');
   }
 }

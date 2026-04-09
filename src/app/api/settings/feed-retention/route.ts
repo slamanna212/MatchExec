@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const DEFAULT_RETENTION_DAYS = 180;
 
@@ -17,13 +17,10 @@ export async function GET() {
       ? parseInt(result.setting_value, 10)
       : DEFAULT_RETENTION_DAYS;
 
-    return NextResponse.json({ feed_retention_days });
+    return apiOk({ feed_retention_days });
   } catch (error) {
     logger.error('Error fetching feed retention days:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch feed retention days' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch feed retention days');
   }
 }
 
@@ -34,10 +31,7 @@ export async function PUT(request: Request) {
 
     const parsed = parseInt(feed_retention_days, 10);
     if (isNaN(parsed) || parsed < 1 || parsed > 3650) {
-      return NextResponse.json(
-        { error: 'Invalid value. Must be an integer between 1 and 3650.' },
-        { status: 400 }
-      );
+      return apiError('Invalid value. Must be an integer between 1 and 3650.', 400);
     }
 
     const db = await getDbInstance();
@@ -47,12 +41,9 @@ export async function PUT(request: Request) {
       [String(parsed), 'feed_retention_days']
     );
 
-    return NextResponse.json({ success: true, feed_retention_days: parsed });
+    return apiOk({ success: true, feed_retention_days: parsed });
   } catch (error) {
     logger.error('Error updating feed retention days:', error);
-    return NextResponse.json(
-      { error: 'Failed to update feed retention days' },
-      { status: 500 }
-    );
+    return apiError('Failed to update feed retention days');
   }
 }

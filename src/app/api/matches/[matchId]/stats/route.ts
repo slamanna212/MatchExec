@@ -1,9 +1,9 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { MatchPlayerStats, ScorecardPlayerStat } from '@/shared/types';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   _request: NextRequest,
@@ -18,10 +18,10 @@ export async function GET(
       [matchId]
     );
 
-    return NextResponse.json(stats || []);
+    return apiOk(stats || []);
   } catch (error) {
     logger.error('Error fetching match stats:', error);
-    return NextResponse.json({ error: 'Failed to fetch match stats' }, { status: 500 });
+    return apiError('Failed to fetch match stats');
   }
 }
 
@@ -43,7 +43,7 @@ export async function POST(
     );
 
     if (!playerStats || playerStats.length === 0) {
-      return NextResponse.json({ message: 'No approved stats to aggregate' });
+      return apiOk({ message: 'No approved stats to aggregate' });
     }
 
     // Group by participant_id and sum stats
@@ -84,9 +84,9 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ success: true, participantsAggregated: participantStats.size });
+    return apiOk({ success: true, participantsAggregated: participantStats.size });
   } catch (error) {
     logger.error('Error aggregating match stats:', error);
-    return NextResponse.json({ error: 'Failed to aggregate match stats' }, { status: 500 });
+    return apiError('Failed to aggregate match stats');
   }
 }

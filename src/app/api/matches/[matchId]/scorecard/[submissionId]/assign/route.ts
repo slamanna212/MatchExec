@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function PUT(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function PUT(
     const { assignments } = body as { assignments: Array<{ playerStatId: string; participantId: string }> };
 
     if (!Array.isArray(assignments) || assignments.length === 0) {
-      return NextResponse.json({ error: 'assignments array is required' }, { status: 400 });
+      return apiError('assignments array is required', 400);
     }
 
     const db = await getDbInstance();
@@ -24,7 +24,7 @@ export async function PUT(
     );
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return apiError('Submission not found', 404);
     }
 
     for (const assignment of assignments) {
@@ -34,9 +34,9 @@ export async function PUT(
       );
     }
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error assigning participants:', error);
-    return NextResponse.json({ error: 'Failed to assign participants' }, { status: 500 });
+    return apiError('Failed to assign participants');
   }
 }

@@ -15,21 +15,16 @@ import {
   SegmentedControl,
   Button
 } from '@mantine/core';
-import { IconTrophy, IconStar } from '@tabler/icons-react';
-import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { IconTrophy, IconStar, IconUsers, IconSwords } from '@tabler/icons-react';
+import type { TournamentWithGameDetails, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
+import { EmptyState } from '../EmptyState';
+import { SectionLabel } from '../SectionLabel';
 import classes from '../gradient-segmented-control.module.css';
 
-interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
-  game_name?: string;
-  game_icon?: string;
-  game_color?: string;
-  participant_count?: number;
-  created_at: string;
-  updated_at: string;
-  start_time?: string;
-}
+// Use shared type as local alias
+type TournamentWithGame = TournamentWithGameDetails;
 
 interface TeamWithMembers extends TournamentTeam {
   members: TournamentTeamMember[];
@@ -169,7 +164,8 @@ export function TournamentContentPanel({
                       height: '100%',
                       minHeight: '200px',
                       display: 'flex',
-                      flexDirection: 'column'
+                      flexDirection: 'column',
+                      borderLeft: `4px solid ${teamStyles.borderColor}`
                     }}
                   >
                     <Group mb="sm">
@@ -212,8 +208,12 @@ export function TournamentContentPanel({
               })}
             </SimpleGrid>
           ) : (
-            <Card withBorder p="xl">
-              <Text size="sm" c="dimmed" ta="center">No teams registered yet</Text>
+            <Card withBorder>
+              <EmptyState
+                icon={IconUsers}
+                title="No teams registered yet"
+                description="Teams will appear here once participants are assigned"
+              />
             </Card>
           )}
         </Stack>
@@ -284,11 +284,11 @@ export function TournamentContentPanel({
                     </Group>
                     <Group gap="lg">
                       <div style={{ textAlign: 'center' }}>
-                        <Text size="xs" c="dimmed" fw={500}>WINS</Text>
+                        <SectionLabel>Wins</SectionLabel>
                         <Text size="lg" fw={700} c="green">{team.wins}</Text>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <Text size="xs" c="dimmed" fw={500}>LOSSES</Text>
+                        <SectionLabel>Losses</SectionLabel>
                         <Text size="lg" fw={700} c="red">{team.losses}</Text>
                       </div>
                     </Group>
@@ -297,8 +297,12 @@ export function TournamentContentPanel({
               ))}
             </Stack>
           ) : (
-            <Card withBorder p="xl">
-              <Text size="sm" c="dimmed" ta="center">No standings available yet</Text>
+            <Card withBorder>
+              <EmptyState
+                icon={IconTrophy}
+                title="No standings yet"
+                description="Standings will appear once matches are played"
+              />
             </Card>
           )}
         </Stack>
@@ -314,15 +318,19 @@ export function TournamentContentPanel({
         return (
           <Stack gap="md">
             {activeMatches.length === 0 ? (
-              <Card withBorder p="xl">
-                <Text size="sm" c="dimmed" ta="center">No active matches right now</Text>
+              <Card withBorder>
+                <EmptyState
+                  icon={IconSwords}
+                  title="No active matches"
+                  description="No matches are currently running"
+                />
               </Card>
             ) : (
               <>
                 {startableMatches.length > 0 && (
                   <Group justify="center">
                     <Button
-                      color="green"
+                      color="violet"
                       variant="filled"
                       onClick={() => onStartAllMatches(startableMatches.map(m => m.id))}
                     >
@@ -361,7 +369,8 @@ export function TournamentContentPanel({
                         </Group>
                         {match.rawStatus === 'battle' ? (
                           <Button
-                            color="blue"
+                            variant="light"
+                            color="violet"
                             size="sm"
                             onClick={(e) => { e.stopPropagation(); router.push(`/matches/${match.id}/scoring`); }}
                           >
@@ -369,7 +378,8 @@ export function TournamentContentPanel({
                           </Button>
                         ) : (
                           <Button
-                            color="green"
+                            variant="filled"
+                            color="violet"
                             size="sm"
                             onClick={(e) => { e.stopPropagation(); onStartMatch(match.id); }}
                           >

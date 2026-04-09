@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface StatsSettingsRow {
   enabled: number;
@@ -78,7 +78,7 @@ export async function GET() {
     );
 
     if (!settings) {
-      return NextResponse.json({
+      return apiOk({
         enabled: false,
         both_sides_required: false,
         auto_advance_on_match: false,
@@ -101,7 +101,7 @@ export async function GET() {
             : !!settings.openrouter_api_key,
     }));
 
-    return NextResponse.json({
+    return apiOk({
       enabled: Boolean(settings.enabled),
       both_sides_required: Boolean(settings.both_sides_required),
       auto_advance_on_match: Boolean(settings.auto_advance_on_match),
@@ -109,10 +109,7 @@ export async function GET() {
     });
   } catch (error) {
     logger.error('Error fetching stats settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch stats settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch stats settings');
   }
 }
 
@@ -188,12 +185,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating stats settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update stats settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to update stats settings');
   }
 }

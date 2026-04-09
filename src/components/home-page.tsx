@@ -426,11 +426,11 @@ export function HomePage() {
                   transition: 'all 0.25s ease',
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+                  e.currentTarget.style.transform = 'translateY(-3px)';
                   e.currentTarget.style.boxShadow = `0 8px 24px ${stat.color}33`;
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.transform = '';
                   e.currentTarget.style.boxShadow = '';
                 }}
               >

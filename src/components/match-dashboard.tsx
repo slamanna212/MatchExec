@@ -20,7 +20,9 @@ import {
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
 
+import { IconSwords, IconSearch } from '@tabler/icons-react';
 import { StageRing } from './StageRing';
+import { EmptyState } from './EmptyState';
 import { showError, showSuccess } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
@@ -591,22 +593,20 @@ export function MatchDashboard() {
       <Divider mb="xl" />
 
       {matches.length === 0 ? (
-        <Card p="xl" shadow="sm" withBorder>
-          <Stack align="center">
-            <Text size="xl" fw={600}>No matches yet</Text>
-            <Text c="dimmed">
-              Create a match to get started
-            </Text>
-          </Stack>
+        <Card shadow="sm" withBorder>
+          <EmptyState
+            icon={IconSwords}
+            title="No matches yet"
+            description="Create a match to get started"
+          />
         </Card>
       ) : filteredMatches.length === 0 && searchQuery ? (
-        <Card p="xl" shadow="sm" withBorder>
-          <Stack align="center">
-            <Text size="xl" fw={600}>No matches found</Text>
-            <Text c="dimmed">
-              No matches match your search for &quot;{searchQuery}&quot;
-            </Text>
-          </Stack>
+        <Card shadow="sm" withBorder>
+          <EmptyState
+            icon={IconSearch}
+            title="No matches found"
+            description={`No matches match your search for "${searchQuery}"`}
+          />
         </Card>
       ) : (
         <motion.div

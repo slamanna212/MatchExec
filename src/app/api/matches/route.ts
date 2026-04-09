@@ -12,6 +12,7 @@ import {
   parseMatchResponse,
   type MatchRequestBody
 } from './helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 
 export async function GET(request: NextRequest) {
@@ -85,10 +86,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(parsedMatches, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching matches:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch matches' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch matches');
   }
 }
 
@@ -99,10 +97,7 @@ export async function POST(request: NextRequest) {
     // Validate request
     const validation = validateMatchRequest(body);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 400 }
-      );
+      return apiError(validation.error!, 400);
     }
 
     const db = await getDbInstance();
@@ -144,12 +139,9 @@ export async function POST(request: NextRequest) {
       metadata: { gameName: (match as unknown as Record<string, unknown>)?.game_name },
     });
 
-    return NextResponse.json(parsedMatch, { status: 201 });
+    return apiOk(parsedMatch, 201);
   } catch (error) {
     logger.error('Error creating match:', error);
-    return NextResponse.json(
-      { error: 'Failed to create match' },
-      { status: 500 }
-    );
+    return apiError('Failed to create match');
   }
 }

@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface TournamentParticipant {
   id: string;
@@ -76,15 +76,12 @@ export async function GET(
       // Continue without signup config - this is non-critical
     }
 
-    return NextResponse.json({
+    return apiOk({
       participants: parsedParticipants,
       signupConfig
     });
   } catch (error) {
     logger.error('Error fetching tournament participants:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournament participants' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournament participants');
   }
 }

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError } from '@/lib/api-response';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
       path.join(process.cwd(), 'app_data', 'data', 'matchexec.db');
 
     if (!fs.existsSync(dbPath)) {
-      return NextResponse.json({ error: 'Database file not found' }, { status: 500 });
+      return apiError('Database file not found');
     }
 
     // VACUUM INTO creates a clean single-file copy with all WAL data merged in
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Backup failed:', error);
-    return NextResponse.json({ error: 'Backup failed' }, { status: 500 });
+    return apiError('Backup failed');
   } finally {
     if (tmpFile && fs.existsSync(tmpFile)) {
       fs.unlinkSync(tmpFile);

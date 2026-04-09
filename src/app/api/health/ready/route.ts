@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiOk } from '@/lib/api-response';
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -102,24 +102,24 @@ export async function GET() {
 
     const statusCode = overallStatus === 'unhealthy' ? 503 : 200;
 
-    return NextResponse.json(
+    return apiOk(
       {
         status: overallStatus,
         timestamp: new Date().toISOString(),
         services,
       },
-      { status: statusCode }
+      statusCode
     );
   } catch (error) {
     logger.error('Readiness check failed:', error);
-    return NextResponse.json(
+    return apiOk(
       {
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         services,
         error: 'Database connection failed',
       },
-      { status: 503 }
+      503
     );
   }
 }

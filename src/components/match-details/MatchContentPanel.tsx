@@ -10,7 +10,7 @@ import {
   SegmentedControl
 } from '@mantine/core';
 import { IconDeviceFloppy } from '@tabler/icons-react';
-import type { Match } from '@/shared/types';
+import type { MatchWithGameDetails, MatchGameResult, SignupConfig } from '@/shared/types';
 import { ParticipantsList } from './ParticipantsList';
 import { RemindersList } from './RemindersList';
 import { MapResultsSection } from './MapResultsSection';
@@ -107,22 +107,8 @@ function MapCodesTabContent({
   );
 }
 
-interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
-  game_name?: string;
-  game_icon?: string;
-  game_color?: string;
-  map_codes_supported?: boolean;
-  rules?: string;
-  rounds?: number;
-  maps?: string[];
-  map_codes?: Record<string, string>;
-  livestream_link?: string;
-  event_image_url?: string;
-  created_at: string;
-  updated_at: string;
-  start_date?: string;
-  end_date?: string;
-}
+// Use shared types as local aliases
+type MatchWithGame = MatchWithGameDetails;
 
 interface MatchParticipant {
   id: string;
@@ -130,16 +116,6 @@ interface MatchParticipant {
   username: string;
   joined_at: string;
   signup_data: Record<string, unknown>;
-}
-
-interface SignupField {
-  id: string;
-  label: string;
-  type: string;
-}
-
-interface SignupConfig {
-  fields: SignupField[];
 }
 
 interface ReminderData {
@@ -153,16 +129,6 @@ interface ReminderData {
   processed_at?: string;
   type: 'discord_general' | 'discord_match' | 'discord_player' | 'timed_announcement';
   description?: string;
-}
-
-interface MatchGameResult {
-  id: string;
-  match_id: string;
-  round: number;
-  map_id: string;
-  map_name: string;
-  winner_id?: string;
-  status: 'pending' | 'ongoing' | 'completed';
 }
 
 interface MatchContentPanelProps {

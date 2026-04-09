@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { ParticipantDbRow, MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -19,10 +19,7 @@ export async function GET(
     );
     
     if (!match) {
-      return NextResponse.json(
-        { error: 'Match not found' },
-        { status: 404 }
-      );
+      return apiError('Match not found', 404);
     }
     
     // Fetch all participants for this match
@@ -58,15 +55,12 @@ export async function GET(
       logger.debug('No signup form config found for game:', match.game_id);
     }
     
-    return NextResponse.json({
+    return apiOk({
       participants: parsedParticipants,
       signupConfig: signupConfig
     });
   } catch (error) {
     logger.error('Error fetching match participants:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch participants' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch participants');
   }
 }

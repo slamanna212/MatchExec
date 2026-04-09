@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST() {
   try {
@@ -17,10 +17,7 @@ export async function POST() {
     `);
 
     if (!settings?.bot_token || !settings?.guild_id) {
-      return NextResponse.json(
-        { error: 'Discord bot not configured' },
-        { status: 400 }
-      );
+      return apiError('Discord bot not configured', 400);
     }
 
     // Get all channels that need name refresh
@@ -78,7 +75,7 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({
+    return apiOk({
       success: true,
       updated_count: updatedCount,
       removed_count: removedCount,
@@ -87,9 +84,6 @@ export async function POST() {
     });
   } catch (error) {
     logger.error('Error refreshing channel names:', error);
-    return NextResponse.json(
-      { error: 'Failed to refresh channel names' },
-      { status: 500 }
-    );
+    return apiError('Failed to refresh channel names');
   }
 }

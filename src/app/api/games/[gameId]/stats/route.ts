@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { GameStatDefinition } from '@/shared/types';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   _request: Request,
@@ -16,12 +16,9 @@ export async function GET(
       [gameId]
     );
 
-    return NextResponse.json(stats || []);
+    return apiOk(stats || []);
   } catch (error) {
     logger.error('Error fetching game stats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch game stats' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch game stats');
   }
 }

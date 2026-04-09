@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   _request: Request,
@@ -17,9 +17,9 @@ export async function POST(
       [queueId, matchId, 'pending']
     );
 
-    return NextResponse.json({ success: true, queueId });
+    return apiOk({ success: true, queueId });
   } catch (error) {
     logger.error('Error queuing image generation:', error);
-    return NextResponse.json({ error: 'Failed to queue image generation' }, { status: 500 });
+    return apiError('Failed to queue image generation');
   }
 }

@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
 import { logFeedEvent } from '@/lib/feed-helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 
@@ -152,10 +153,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(tournaments, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching tournaments:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournaments' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournaments');
   }
 }
 
@@ -165,14 +163,14 @@ export async function POST(request: NextRequest) {
 
     const validationError = validateTournamentBody(body);
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+      return apiError(validationError, 400);
     }
 
     const db = await getDbInstance();
 
     const gameModeError = await validateGameModeId(db, body.gameId, body.gameModeId);
     if (gameModeError) {
-      return NextResponse.json({ error: gameModeError }, { status: 400 });
+      return apiError(gameModeError, 400);
     }
 
     const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -211,12 +209,9 @@ export async function POST(request: NextRequest) {
       metadata: { format: body.format },
     });
 
-    return NextResponse.json(tournament, { status: 201 });
+    return apiOk(tournament, 201);
   } catch (error) {
     logger.error('Error creating tournament:', error);
-    return NextResponse.json(
-      { error: 'Failed to create tournament' },
-      { status: 500 }
-    );
+    return apiError('Failed to create tournament');
   }
 }

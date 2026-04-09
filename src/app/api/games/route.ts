@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError } from '@/lib/api-response';
 
 export async function GET() {
   try {
@@ -35,9 +36,6 @@ export async function GET() {
     });
   } catch (error) {
     logger.error('Error fetching games:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch games' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch games');
   }
 }

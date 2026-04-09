@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET() {
   try {
@@ -19,16 +19,13 @@ export async function GET() {
         (SELECT COUNT(*) FROM tournament_participants) as tournamentParticipants
     `);
 
-    return NextResponse.json({
+    return apiOk({
       totalMatches: row?.totalMatches || 0,
       totalTournaments: row?.totalTournaments || 0,
       totalSignups: (row?.matchParticipants || 0) + (row?.tournamentParticipants || 0),
     });
   } catch (error) {
     logger.error('Error fetching stats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch stats' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch stats');
   }
 }

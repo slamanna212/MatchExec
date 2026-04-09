@@ -11,19 +11,11 @@ import {
   Image
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import type { Tournament } from '@/shared/types';
+import type { TournamentWithGameDetails } from '@/shared/types';
 import { StageRing } from '../StageRing';
 
-interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
-  game_name?: string;
-  game_icon?: string;
-  game_color?: string;
-  participant_count?: number;
-  event_image_url?: string;
-  created_at: string;
-  updated_at: string;
-  start_time?: string;
-}
+// Use shared type as local alias
+type TournamentWithGame = TournamentWithGameDetails;
 
 interface TournamentInfoPanelProps {
   tournament: TournamentWithGame;
@@ -54,8 +46,8 @@ export function TournamentInfoPanel({
         return (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
             <Button
-              variant="light"
-              color="blue"
+              variant="filled"
+              color="violet"
               fullWidth
               onClick={() => onStatusTransition('gather')}
             >
@@ -76,6 +68,7 @@ export function TournamentInfoPanel({
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
             <Button
               variant="light"
+              color="violet"
               fullWidth
               onClick={onAssignTeams}
             >
@@ -116,6 +109,7 @@ export function TournamentInfoPanel({
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
             <Button
               variant="light"
+              color="violet"
               fullWidth
               onClick={onAssignTeams}
             >
@@ -123,8 +117,8 @@ export function TournamentInfoPanel({
             </Button>
             {hasBracket ? (
               <Button
-                variant="light"
-                color="green"
+                variant="filled"
+                color="violet"
                 fullWidth
                 onClick={() => onStatusTransition('battle')}
               >
@@ -133,7 +127,7 @@ export function TournamentInfoPanel({
             ) : (
               <Button
                 variant="light"
-                color="blue"
+                color="violet"
                 fullWidth
                 onClick={onGenerateBracket}
               >
@@ -154,8 +148,8 @@ export function TournamentInfoPanel({
         return (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
             <Button
-              variant="light"
-              color="green"
+              variant="filled"
+              color="violet"
               fullWidth
               onClick={() => {
                 modals.openConfirmModal({

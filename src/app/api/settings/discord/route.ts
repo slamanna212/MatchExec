@@ -1,9 +1,9 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { DiscordSettingsDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { validateNumberRange } from '@/lib/utils/validation';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> = [
   { key: 'event_duration_minutes', min: 5, max: 720 },
@@ -163,13 +163,10 @@ export async function GET() {
       voice_channel_cleanup_delay_minutes: 10
     };
 
-    return NextResponse.json(safeSettings);
+    return apiOk(safeSettings);
   } catch (error) {
     logger.error('Error fetching Discord settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch Discord settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch Discord settings');
   }
 }
 
@@ -182,7 +179,7 @@ export async function PUT(request: NextRequest) {
       if (body[field.key] !== undefined) {
         const check = validateNumberRange(body[field.key], field.min, field.max, field.key);
         if (!check.valid) {
-          return NextResponse.json({ error: check.error }, { status: 400 });
+          return apiError(check.error!, 400);
         }
       }
     }
@@ -210,12 +207,9 @@ export async function PUT(request: NextRequest) {
       await restartDiscordBot();
     }
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating Discord settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update Discord settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to update Discord settings');
   }
 }

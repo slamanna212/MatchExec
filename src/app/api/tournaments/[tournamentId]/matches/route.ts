@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface TournamentMatch {
   id: string;
@@ -133,16 +133,13 @@ export async function GET(
       match_order: match.match_order
     }));
 
-    return NextResponse.json({
+    return apiOk({
       matches: bracketMatches,
       count: bracketMatches.length
     });
 
   } catch (error) {
     logger.error('Error fetching tournament matches:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournament matches' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournament matches');
   }
 }

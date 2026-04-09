@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface DiscordSettings {
   application_id: string;
@@ -77,7 +77,7 @@ export async function GET() {
     };
 
     // Return all settings in one response
-    return NextResponse.json({
+    return apiOk({
       discord: safeDiscordSettings,
       announcer: {
         announcer_voice: safeDiscordSettings.announcer_voice,
@@ -89,9 +89,6 @@ export async function GET() {
     });
   } catch (error) {
     logger.error('Error fetching settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch settings');
   }
 }

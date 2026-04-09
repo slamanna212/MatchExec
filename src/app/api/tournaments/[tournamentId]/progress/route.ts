@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 import {
   generateNextRoundMatches,
   generateLosersBracketMatches,
@@ -57,40 +57,27 @@ export async function POST(
     ) as Tournament | undefined;
 
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
 
     if (tournament.status !== 'battle') {
-      return NextResponse.json(
-        { error: 'Tournament must be in battle phase to progress' },
-        { status: 400 }
-      );
+      return apiError('Tournament must be in battle phase to progress', 400);
     }
 
     // Get current round information
     const roundInfo = await getCurrentRoundInfo(tournamentId);
-    
+
     // Check what progression is needed
     if (tournament.format === 'single-elimination') {
       return await handleSingleEliminationProgress(tournamentId, roundInfo);
     } else if (tournament.format === 'double-elimination') {
       return await handleDoubleEliminationProgress(tournamentId, roundInfo);
-    } 
-      return NextResponse.json(
-        { error: 'Invalid tournament format' },
-        { status: 400 }
-      );
-    
+    }
+      return apiError('Invalid tournament format', 400);
 
   } catch (error) {
     logger.error('Error progressing tournament:', error);
-    return NextResponse.json(
-      { error: 'Failed to progress tournament' },
-      { status: 500 }
-    );
+    return apiError('Failed to progress tournament');
   }
 }
 
@@ -99,10 +86,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
   
   // Check if current winner's bracket round is complete
   if (!await isRoundComplete(tournamentId, roundInfo.maxWinnersRound, 'winners')) {
-    return NextResponse.json(
-      { error: `Round ${roundInfo.maxWinnersRound} is not complete yet` },
-      { status: 400 }
-    );
+    return apiError(`Round ${roundInfo.maxWinnersRound} is not complete yet`, 400);
   }
 
   // Get completed matches from current round
@@ -119,10 +103,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
   `, [tournamentId, roundInfo.maxWinnersRound]) as TournamentMatch[];
 
   if (completedMatches.length === 0) {
-    return NextResponse.json(
-      { error: 'No completed matches found to progress from' },
-      { status: 400 }
-    );
+    return apiError('No completed matches found to progress from', 400);
   }
 
   // Check for bye teams in the current round — if any exist, a final match still needs to be generated
@@ -149,7 +130,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
       // Don't fail the tournament completion if notification fails
     }
 
-    return NextResponse.json({
+    return apiOk({
       message: 'Tournament completed!',
       winner: completedMatches[0].winner_team,
       tournamentId
@@ -165,10 +146,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
   );
 
   if (nextRoundMatches.length === 0) {
-    return NextResponse.json(
-      { error: 'No matches to generate for next round' },
-      { status: 400 }
-    );
+    return apiError('No matches to generate for next round', 400);
   }
 
   // Create tournament match relationships
@@ -185,7 +163,7 @@ async function handleSingleEliminationProgress(tournamentId: string, roundInfo: 
   // Save new matches
   await saveGeneratedMatches(nextRoundMatches, tournamentMatches);
 
-  return NextResponse.json({
+  return apiOk({
     message: `Generated ${nextRoundMatches.length} matches for Round ${roundInfo.maxWinnersRound + 1}`,
     matchCount: nextRoundMatches.length,
     nextRound: roundInfo.maxWinnersRound + 1,
@@ -232,17 +210,14 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
         // Don't fail the tournament completion if notification fails
       }
 
-      return NextResponse.json({
+      return apiOk({
         message: 'Tournament completed!',
         winner: latestFinal.winner_team,
         tournamentId
       });
     }
 
-    return NextResponse.json(
-      { error: 'Grand finals match is not yet complete' },
-      { status: 400 }
-    );
+    return apiError('Grand finals match is not yet complete', 400);
   }
 
   // Check if both brackets are ready for grand finals
@@ -273,7 +248,7 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
 
       await saveGeneratedMatches(grandFinalsMatches, tournamentMatches);
 
-      return NextResponse.json({
+      return apiOk({
         message: 'Generated Grand Finals match',
         matchCount: 1,
         tournamentId
@@ -341,7 +316,7 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
         }
       }
 
-      return NextResponse.json({
+      return apiOk({
         message: `Generated ${nextRoundMatches.length} winner's bracket matches for Round ${roundInfo.maxWinnersRound + 1}`,
         matchCount: nextRoundMatches.length,
         nextRound: roundInfo.maxWinnersRound + 1,
@@ -350,8 +325,5 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
     }
   }
 
-  return NextResponse.json(
-    { error: 'No progression available at this time' },
-    { status: 400 }
-  );
+  return apiError('No progression available at this time', 400);
 }

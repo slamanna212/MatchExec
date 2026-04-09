@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function POST(
     const { teamAssignments, blueTeamVoiceChannel, redTeamVoiceChannel } = body;
 
     if (!teamAssignments || !Array.isArray(teamAssignments)) {
-      return NextResponse.json({ error: 'Invalid team assignments data' }, { status: 400 });
+      return apiError('Invalid team assignments data', 400);
     }
 
     const db = await getDbInstance();
@@ -38,12 +38,9 @@ export async function POST(
       [blueTeamVoiceChannel || null, redTeamVoiceChannel || null, matchId]
     );
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating team assignments:', error);
-    return NextResponse.json(
-      { error: 'Failed to update team assignments' },
-      { status: 500 }
-    );
+    return apiError('Failed to update team assignments');
   }
 }

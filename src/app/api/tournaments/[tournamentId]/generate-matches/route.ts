@@ -1,6 +1,6 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
+import { apiError, apiOk } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
 import type {
   BracketAssignment
@@ -98,30 +98,30 @@ export async function POST(
 
     const tournament = await db.get('SELECT * FROM tournaments WHERE id = ?', [tournamentId]) as Tournament | undefined;
     if (!tournament) {
-      return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+      return apiError('Tournament not found', 404);
     }
 
     if (tournament.status !== 'assign') {
-      return NextResponse.json({ error: 'Tournament must be in assign phase to generate matches' }, { status: 400 });
+      return apiError('Tournament must be in assign phase to generate matches', 400);
     }
 
     const existingMatches = await db.get('SELECT COUNT(*) as count FROM matches WHERE tournament_id = ?', [tournamentId]) as MatchCount | undefined;
     if (existingMatches && existingMatches.count > 0) {
-      return NextResponse.json({ error: 'Matches have already been generated for this tournament' }, { status: 400 });
+      return apiError('Matches have already been generated for this tournament', 400);
     }
 
     const bracketAssignmentsResult = await getBracketAssignments(db, tournamentId, assignments);
     if ('error' in bracketAssignmentsResult) {
-      return NextResponse.json({ error: bracketAssignmentsResult.error }, { status: 400 });
+      return apiError(bracketAssignmentsResult.error, 400);
     }
 
     if (bracketAssignmentsResult.length < 2) {
-      return NextResponse.json({ error: 'At least 2 teams must be assigned to bracket positions' }, { status: 400 });
+      return apiError('At least 2 teams must be assigned to bracket positions', 400);
     }
 
     const matchData = await generateMatchesForFormat(tournament, tournamentId, bracketAssignmentsResult);
     if ('error' in matchData) {
-      return NextResponse.json({ error: matchData.error }, { status: 400 });
+      return apiError(matchData.error, 400);
     }
 
     const { generatedMatches, tournamentMatches } = matchData;
@@ -131,7 +131,7 @@ export async function POST(
 
     await db.run('UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [tournamentId]);
 
-    return NextResponse.json({
+    return apiOk({
       message: 'Tournament bracket generated successfully',
       matchCount: generatedMatches.length,
       format: tournament.format,
@@ -140,9 +140,6 @@ export async function POST(
 
   } catch (error) {
     logger.error('Error generating tournament matches:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate tournament matches' },
-      { status: 500 }
-    );
+    return apiError('Failed to generate tournament matches');
   }
 }

@@ -1,10 +1,10 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { handleStatusTransition } from '@/lib/transition-handlers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   request: NextRequest,
@@ -12,14 +12,14 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
     const { newStatus } = await request.json();
 
     // Validate new status
     if (!newStatus || !MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS]) {
-      return NextResponse.json(
-        { error: 'Invalid status provided' },
-        { status: 400 }
-      );
+      return apiError('Invalid status provided', 400);
     }
 
     const db = await getDbInstance();
@@ -28,10 +28,7 @@ export async function POST(
     const currentMatch = await db.get<MatchDbRow>('SELECT * FROM matches WHERE id = ?', [matchId]);
 
     if (!currentMatch) {
-      return NextResponse.json(
-        { error: 'Match not found' },
-        { status: 404 }
-      );
+      return apiError('Match not found', 404);
     }
 
     // Validate status transition (basic flow validation)
@@ -39,10 +36,7 @@ export async function POST(
     const newStep = MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS];
 
     if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
-      return NextResponse.json(
-        { error: 'Cannot move backwards in match flow' },
-        { status: 400 }
-      );
+      return apiError('Cannot move backwards in match flow', 400);
     }
 
     // Update match status in database
@@ -76,13 +70,10 @@ export async function POST(
       maps
     };
 
-    return NextResponse.json(parsedMatch);
+    return apiOk(parsedMatch);
 
   } catch (error) {
     logger.error('Error transitioning match status:', error);
-    return NextResponse.json(
-      { error: 'Failed to transition match status' },
-      { status: 500 }
-    );
+    return apiError('Failed to transition match status');
   }
 }

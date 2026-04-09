@@ -21,7 +21,9 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
+import { IconTrophy, IconSearch } from '@tabler/icons-react';
 import { StageRing } from './StageRing';
+import { EmptyState } from './EmptyState';
 import { notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
@@ -175,7 +177,6 @@ function SkeletonCard() {
 
 export function TournamentDashboard() {
   const router = useRouter();
-  const { colorScheme } = useMantineColorScheme();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -578,27 +579,21 @@ export function TournamentDashboard() {
       </div>
       <Divider mb="xl" />
       {tournaments.length === 0 ? (
-        <Card 
-          shadow="sm" 
-          padding="xl" 
-          radius="md" 
-          withBorder
-          className="text-center py-12"
-          style={{ 
-            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-          }}
-        >
-          <Stack align="center">
-            <Text size="xl" fw={600}>No tournaments yet</Text>
-            <Text c="dimmed">
-              Create a tournament to get started
-            </Text>
-          </Stack>
+        <Card shadow="sm" radius="md" withBorder>
+          <EmptyState
+            icon={IconTrophy}
+            title="No tournaments yet"
+            description="Create a tournament to get started"
+          />
         </Card>
       ) : filteredTournaments.length === 0 ? (
-        <div className="text-center py-12">
-          <Text size="lg" c="dimmed">No tournaments match your search</Text>
-        </div>
+        <Card shadow="sm" withBorder>
+          <EmptyState
+            icon={IconSearch}
+            title="No tournaments found"
+            description="No tournaments match your search"
+          />
+        </Card>
       ) : (
         <motion.div
           variants={containerVariants}

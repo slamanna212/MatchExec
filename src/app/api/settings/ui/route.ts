@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET() {
   try {
@@ -11,13 +11,10 @@ export async function GET() {
       SELECT * FROM ui_settings WHERE id = 1
     `);
 
-    return NextResponse.json(settings || { auto_refresh_interval_seconds: 10 });
+    return apiOk(settings || { auto_refresh_interval_seconds: 10 });
   } catch (error) {
     logger.error('Error fetching UI settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch UI settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch UI settings');
   }
 }
 
@@ -29,10 +26,7 @@ export async function PUT(request: NextRequest) {
 
     // Validate input
     if (!auto_refresh_interval_seconds || auto_refresh_interval_seconds < 5 || auto_refresh_interval_seconds > 300) {
-      return NextResponse.json(
-        { error: 'Auto refresh interval must be between 5 and 300 seconds' },
-        { status: 400 }
-      );
+      return apiError('Auto refresh interval must be between 5 and 300 seconds', 400);
     }
 
     // Update or insert UI settings
@@ -41,12 +35,9 @@ export async function PUT(request: NextRequest) {
       VALUES (1, ?, CURRENT_TIMESTAMP)
     `, [auto_refresh_interval_seconds]);
 
-    return NextResponse.json({ message: 'UI settings updated successfully' });
+    return apiOk({ message: 'UI settings updated successfully' });
   } catch (error) {
     logger.error('Error updating UI settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update UI settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to update UI settings');
   }
 }
