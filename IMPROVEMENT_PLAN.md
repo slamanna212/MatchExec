@@ -16,6 +16,8 @@ Work through each section in order. Each task includes:
 
 After completing each section run `npm run test` and `npm run lint` to catch regressions.
 
+NOTE: do not do any tests for the stats system, it is not done yet
+
 ---
 
 ## Section 1 — Design Token Foundation (do this first, everything else builds on it)
