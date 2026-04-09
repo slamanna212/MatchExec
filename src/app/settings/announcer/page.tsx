@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2 } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -115,17 +117,13 @@ export default function AnnouncerSettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Group>
-            <IconVolume size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>Announcer Settings</Text>
-              <Text size="sm" c="dimmed">Configure voice announcements for matches</Text>
-            </div>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconVolume}
+          title="Announcer Settings"
+          subtitle="Configure voice announcements for matches"
+        />
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           {loading ? (
@@ -206,6 +204,6 @@ export default function AnnouncerSettingsPage() {
           )}
         </Card>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

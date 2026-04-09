@@ -11,6 +11,8 @@ import {
 } from '@tabler/icons-react';
 import { showSuccess, showError } from '@/lib/notifications';
 import { PROVIDER_REGISTRY, type ProviderDescriptor } from '@/components/settings/stats/ai-provider-registry';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface StatsSettings {
   enabled: boolean;
@@ -357,17 +359,17 @@ export default function StatsSettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <PageLayout narrow>
         <Stack gap="lg">
           <Skeleton height={200} />
           <Skeleton height={300} />
         </Stack>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       {/* Delete confirmation modal */}
       <Modal
         opened={deleteModal}
@@ -493,13 +495,11 @@ export default function StatsSettingsPage() {
 
       <form onSubmit={form.onSubmit(handleSave)}>
         <Stack gap="lg">
-          <Group>
-            <IconChartBar size="2rem" />
-            <div>
-              <Text size="xl" fw={700}>Stats Settings</Text>
-              <Text size="sm" c="dimmed">Configure AI-powered scorecard analysis and stat tracking</Text>
-            </div>
-          </Group>
+          <PageHeader
+            icon={IconChartBar}
+            title="Stats Settings"
+            subtitle="Configure AI-powered scorecard analysis and stat tracking"
+          />
 
           {/* General Settings */}
           <Card withBorder padding="lg">
@@ -594,6 +594,6 @@ export default function StatsSettingsPage() {
           </Group>
         </Stack>
       </form>
-    </div>
+    </PageLayout>
   );
 }

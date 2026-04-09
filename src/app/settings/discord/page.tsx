@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface DiscordSettings {
   application_id?: string;
@@ -117,17 +119,13 @@ export default function DiscordSettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Group>
-            <IconBrandDiscord size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>Discord Settings</Text>
-              <Text size="sm" c="dimmed">Configure Discord bot connection and permissions</Text>
-            </div>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconBrandDiscord}
+          title="Discord Settings"
+          subtitle="Configure Discord bot connection and permissions"
+        />
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           {loading ? (
@@ -275,6 +273,6 @@ export default function DiscordSettingsPage() {
           )}
         </Card>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

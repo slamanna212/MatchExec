@@ -3,8 +3,11 @@
 import { Card, Text, Stack, Button, Group, NumberInput, Select, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
+import { IconAdjustments } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface ApplicationSettings {
   event_duration_minutes?: number;
@@ -178,12 +181,13 @@ export default function ApplicationSettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Text size="xl" fw={700} mb="xs">Application Settings</Text>
-          <Text size="sm" c="dimmed">Configure general application behavior and timing</Text>
-        </div>
+        <PageHeader
+          icon={IconAdjustments}
+          title="Application Settings"
+          subtitle="Configure general application behavior and timing"
+        />
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           {loading ? (
@@ -336,6 +340,6 @@ export default function ApplicationSettingsPage() {
           )}
         </Card>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

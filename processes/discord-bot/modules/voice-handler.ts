@@ -19,12 +19,37 @@ export class VoiceHandler {
   private voiceConnections = new Map<string, unknown>(); // channelId -> connection
   private activeAudioPlayers = new Map<string, unknown>(); // channelId -> player
   private playbackStatus = new Map<string, boolean>(); // channelId -> isPlaying
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null
-  ) {}
+  ) {
+    // Sweep stale map entries once per hour to prevent unbounded growth
+    this.sweepTimer = setInterval(() => this.sweepStaleEntries(), 60 * 60 * 1000);
+  }
+
+  /** Remove map entries for connections that are no longer active. */
+  private sweepStaleEntries(): void {
+    for (const [channelId, connection] of this.voiceConnections) {
+      const status = (connection as { state?: { status: string } }).state?.status;
+      if (status === VoiceConnectionStatus.Destroyed || status === VoiceConnectionStatus.Disconnected) {
+        this.voiceConnections.delete(channelId);
+        this.activeAudioPlayers.delete(channelId);
+        this.playbackStatus.delete(channelId);
+        logger.debug(`🧹 Swept stale voice entry for channel ${channelId}`);
+      }
+    }
+  }
+
+  /** Stop the periodic sweep timer (call during shutdown). */
+  destroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+  }
 
   async testVoiceLineForUser(userId: string, _voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
     try {
@@ -233,6 +258,18 @@ export class VoiceHandler {
       });
 
       this.voiceConnections.set(channelId, connection);
+
+      // Clean up maps if the connection is destroyed externally (bot kicked, etc.)
+      connection.on('stateChange', (_old, newState) => {
+        if (
+          newState.status === VoiceConnectionStatus.Destroyed ||
+          newState.status === VoiceConnectionStatus.Disconnected
+        ) {
+          this.voiceConnections.delete(channelId);
+          this.activeAudioPlayers.delete(channelId);
+          this.playbackStatus.delete(channelId);
+        }
+      });
 
       // Wait for connection to be ready
       logger.debug(`🔊 Waiting for voice connection to channel ${channelId} (guild: ${channel.guild.id}) to be ready. Current state: ${connection.state.status}`);

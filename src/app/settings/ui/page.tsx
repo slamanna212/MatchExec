@@ -1,11 +1,13 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Stack, Group, Button, NumberInput, Skeleton } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;
@@ -77,17 +79,13 @@ export default function UISettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Group>
-            <IconSettings size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>UI Settings</Text>
-              <Text size="sm" c="dimmed">Configure user interface behavior and appearance</Text>
-            </div>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconSettings}
+          title="UI Settings"
+          subtitle="Configure user interface behavior and appearance"
+        />
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           {loading ? (
@@ -121,6 +119,6 @@ export default function UISettingsPage() {
           )}
         </Card>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

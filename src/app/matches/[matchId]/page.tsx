@@ -11,19 +11,7 @@ import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
 import { showError, notificationHelper } from '@/lib/notifications';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-
-  // Check if timestamp already includes timezone info
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(`${timestamp}Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
 
 const formatMapName = (mapId: string) => {
   // Convert map ID to proper display name
@@ -76,7 +64,6 @@ export default function MatchPage({
   const [refreshInterval, setRefreshInterval] = useState(10);
 
   // Map data states
-  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
   const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
@@ -98,7 +85,6 @@ export default function MatchPage({
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
         const maps = await response.json();
-        const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
 
         if (supportsAllModes) {
@@ -110,7 +96,6 @@ export default function MatchPage({
           }
 
           maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
@@ -123,7 +108,6 @@ export default function MatchPage({
             modes.forEach(mode => {
               const modeSpecificId = `${baseMapName}-${mode.id}`;
               if (modeSpecificId !== map.id) {
-                mapNamesObj[modeSpecificId] = map.name;
                 mapDetailsObj[modeSpecificId] = {
                   name: map.name,
                   imageUrl: map.imageUrl,
@@ -135,7 +119,6 @@ export default function MatchPage({
           });
         } else {
           maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
@@ -145,7 +128,6 @@ export default function MatchPage({
           });
         }
 
-        setMapNames(prev => ({ ...prev, ...mapNamesObj }));
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {

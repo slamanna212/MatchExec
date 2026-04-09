@@ -1,16 +1,33 @@
-// @ts-nocheck - Database method calls have complex typing issues
 import { waitForDatabaseReady } from '../../lib/database';
+import type { Database } from '../../lib/database/connection';
 import * as cron from 'node-cron';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
 
+interface AnnouncementItem {
+  id?: string;
+  value: number;
+  unit: 'minutes' | 'hours' | 'days';
+}
+
 class MatchExecScheduler {
   private isRunning = false;
-  private db: unknown;
+  private _db: Database | null = null;
   private cronJobs: cron.ScheduledTask[] = [];
   private avatarUpdateJob: AvatarUpdateJob | null = null;
+
+  /** Returns the database connection, throwing if it has not been initialised yet. */
+  private get db(): Database {
+    if (!this._db) throw new Error('Database not initialised — call start() first');
+    return this._db;
+  }
+
+  /** Allows tests to inject a mock database without calling start(). */
+  private set db(value: Database) {
+    this._db = value;
+  }
 
   async start() {
     logger.debug('🕐 Starting MatchExec Scheduler...');
@@ -18,7 +35,7 @@ class MatchExecScheduler {
     try {
       // Wait for database to be ready (migrated and seeded)
       logger.debug('⏳ Waiting for database to be ready...');
-      this.db = await waitForDatabaseReady();
+      this._db = await waitForDatabaseReady();
 
       this.isRunning = true;
 
@@ -52,7 +69,6 @@ class MatchExecScheduler {
 
   private async loadSchedulerSettings() {
     try {
-      // @ts-expect-error - Database get method typed as unknown
       const settings = (await this.db.get(
         'SELECT * FROM scheduler_settings WHERE id = 1'
       )) as SchedulerSettings | null;
@@ -128,19 +144,16 @@ class MatchExecScheduler {
   private async checkMatchStartTimes() {
     // Check for matches that should transition from 'assign' to 'battle' at their scheduled start time
     const now = new Date();
-    // @ts-expect-error - Database all method typed as unknown
-    const matchesToStart = await this.db.all(
-      `SELECT * FROM matches 
-       WHERE status = 'assign' 
-       AND start_date <= ? 
+    const matchesToStart = await this.db.all<{ id: string; name: string }>(
+      `SELECT id, name FROM matches
+       WHERE status = 'assign'
+       AND start_date <= ?
        AND start_date IS NOT NULL`,
       [now.toISOString()]
     );
 
     for (const match of matchesToStart) {
       logger.debug(`🏆 Starting battle phase for match: ${match.name}`);
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['battle', match.id]
@@ -167,18 +180,15 @@ class MatchExecScheduler {
     const thresholdTime = new Date();
     thresholdTime.setHours(thresholdTime.getHours() - autoCompleteThresholdHours);
 
-    // @ts-expect-error - Database all method typed as unknown
-    const matchesToComplete = await this.db.all(
-      `SELECT * FROM matches 
-       WHERE status = 'battle' 
+    const matchesToComplete = await this.db.all<{ id: string; name: string }>(
+      `SELECT id, name FROM matches
+       WHERE status = 'battle'
        AND updated_at < ?`,
       [thresholdTime.toISOString()]
     );
 
     for (const match of matchesToComplete) {
       logger.debug(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['complete', match.id]
@@ -207,8 +217,7 @@ class MatchExecScheduler {
   private async queueMatchReminders() {
     try {
       // Get Discord settings to know the reminder minutes
-      // @ts-expect-error - Database get method typed as unknown
-      const discordSettings = await this.db.get(
+      const discordSettings = await this.db.get<{ match_reminder_minutes: number }>(
         'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
       );
 
@@ -220,7 +229,7 @@ class MatchExecScheduler {
       const reminderMinutes = discordSettings.match_reminder_minutes;
 
       // Find matches that have start times and need reminders
-      const upcomingMatches = await this.db.all(
+      const upcomingMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
         `SELECT m.id, m.name, m.start_date
          FROM matches m
          WHERE m.start_date IS NOT NULL
@@ -251,7 +260,6 @@ class MatchExecScheduler {
         if (reminderTime > new Date()) {
           const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-          // @ts-expect-error - Database run method typed as unknown
           await this.db.run(`
             INSERT OR IGNORE INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
             VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
@@ -275,8 +283,7 @@ class MatchExecScheduler {
   private async queuePlayerReminders() {
     try {
       // Get Discord settings to know the player reminder minutes
-      // @ts-expect-error - Database get method typed as unknown
-      const discordSettings = await this.db.get(
+      const discordSettings = await this.db.get<{ player_reminder_minutes: number }>(
         'SELECT player_reminder_minutes FROM discord_settings WHERE id = 1'
       );
       
@@ -291,8 +298,8 @@ class MatchExecScheduler {
       // Compute threshold in JS to avoid template literal injection into SQL
       const lookAheadMs = (reminderMinutes + 60) * 60 * 1000;
       const thresholdDate = new Date(Date.now() + lookAheadMs).toISOString();
-      const upcomingMatches = await this.db.all(
-        `SELECT m.id, m.name, m.start_date, m.player_notifications
+      const upcomingMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
+        `SELECT m.id, m.name, m.start_date
          FROM matches m
          WHERE m.start_date IS NOT NULL
          AND m.player_notifications = 1
@@ -313,17 +320,15 @@ class MatchExecScheduler {
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
           // Get all participants for this match
-          const participants = await this.db.all(
+          const participants = await this.db.all<{ user_id: string }>(
             'SELECT user_id FROM match_participants WHERE match_id = ?',
             [match.id]
           );
-          
+
           // Create reminder queue entry for each participant
           for (const participant of participants) {
             const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
             
-            // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
               INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
               VALUES (?, ?, ?, 'player_reminder', ?, ?, 'pending')
@@ -345,8 +350,6 @@ class MatchExecScheduler {
       const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       
       // Add to Discord match start notification queue that the bot will process
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_match_start_queue (id, match_id, status)
         VALUES (?, ?, 'pending')
@@ -363,7 +366,7 @@ class MatchExecScheduler {
   /**
    * Parse announcements field into array
    */
-  private parseAnnouncementsField(announcements: unknown, matchName: string): unknown[] | null {
+  private parseAnnouncementsField(announcements: unknown, matchName: string): AnnouncementItem[] | null {
     if (typeof announcements === 'string') {
       try {
         return JSON.parse(announcements);
@@ -406,7 +409,7 @@ class MatchExecScheduler {
   /**
    * Check if announcement already exists in queue
    */
-  private async hasExistingAnnouncement(matchId: string, announcement: unknown): Promise<boolean> {
+  private async hasExistingAnnouncement(matchId: string, announcement: AnnouncementItem): Promise<boolean> {
     const existingAnnouncement = await this.db.get(`
       SELECT id FROM discord_announcement_queue
       WHERE match_id = ? AND announcement_type = 'timed'
@@ -420,7 +423,7 @@ class MatchExecScheduler {
   /**
    * Process announcements for a single match
    */
-  private async processMatchAnnouncements(match: { id: string; name: string; start_date: string; announcements: unknown }): Promise<void> {
+  private async processMatchAnnouncements(match: { id: string; name: string; start_date: string; announcements: string }): Promise<void> {
     const announcements = this.parseAnnouncementsField(match.announcements, match.name);
     if (!announcements) return;
 
@@ -456,7 +459,7 @@ class MatchExecScheduler {
     try {
       // Include matches whose start_date is within 30 minutes ago (catch-up window)
       // to avoid permanently missing announcements that fired just before match start.
-      const matchesWithAnnouncements = await this.db.all(`
+      const matchesWithAnnouncements = await this.db.all<{ id: string; name: string; start_date: string; announcements: string }>(`
         SELECT id, name, start_date, announcements
         FROM matches
         WHERE announcements IS NOT NULL
@@ -477,13 +480,11 @@ class MatchExecScheduler {
     }
   }
 
-  private async queueTimedAnnouncement(matchId: string, announcement: unknown, scheduledFor: Date): Promise<boolean> {
+  private async queueTimedAnnouncement(matchId: string, announcement: AnnouncementItem, scheduledFor: Date): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
       const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-      // @ts-expect-error - Database run method typed as unknown
-      // @ts-expect-error - Database run method typed as unknown
     await this.db.run(`
         INSERT INTO discord_announcement_queue (
           id, match_id, status, announcement_type, announcement_data, scheduled_for
@@ -510,7 +511,7 @@ class MatchExecScheduler {
       [thirtyDaysAgo.toISOString()]
     );
 
-    if (result.changes > 0) {
+    if ((result.changes ?? 0) > 0) {
       logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
     }
 
@@ -519,7 +520,7 @@ class MatchExecScheduler {
 
   private async cleanupFeedEvents() {
     try {
-      const setting = await this.db.get(
+      const setting = await this.db.get<{ setting_value: string }>(
         "SELECT setting_value FROM app_settings WHERE setting_key = 'feed_retention_days'"
       );
       const retentionDays = parseInt(setting?.setting_value ?? '180', 10);
@@ -529,7 +530,7 @@ class MatchExecScheduler {
         `DELETE FROM activity_feed WHERE created_at < datetime('now', '-' || ? || ' days')`,
         [retentionDays]
       );
-      if (result.changes > 0) {
+      if ((result.changes ?? 0) > 0) {
         logger.info(`🧹 Feed cleanup: deleted ${result.changes} events older than ${retentionDays} days`);
       }
     } catch (error) {
@@ -573,7 +574,7 @@ class MatchExecScheduler {
     const ALERT_TYPE = 'discord_bot_heartbeat_missing';
 
     try {
-      const result = await this.db.get(
+      const result = await this.db.get<{ setting_value: string }>(
         'SELECT setting_value FROM app_settings WHERE setting_key = ?',
         ['discord_bot_last_heartbeat']
       );
@@ -590,7 +591,7 @@ class MatchExecScheduler {
       if (timeSinceHeartbeat <= DISCORD_BOT_TIMEOUT_THRESHOLD) return;
 
       // Rate limit: check if we already sent this alert recently
-      const rateLimitRow = await this.db.get(
+      const rateLimitRow = await this.db.get<{ last_sent_at: string }>(
         'SELECT last_sent_at FROM health_alerts_sent WHERE alert_type = ?',
         [ALERT_TYPE]
       );
@@ -646,9 +647,9 @@ class MatchExecScheduler {
     this.cronJobs = [];
 
     // Close database connection
-    if (this.db) {
+    if (this._db) {
       try {
-        await (this.db as { close: () => Promise<void> }).close();
+        await this._db.close();
         logger.info('✅ Database connection closed');
       } catch (error) {
         logger.error('Error closing database connection:', error);
@@ -695,8 +696,7 @@ class MatchExecScheduler {
       logger.debug('🔄 Starting voice channel cleanup...');
 
       // Get Discord settings to know the cleanup delay
-      // @ts-expect-error - Database get method typed as unknown
-      const discordSettings = await this.db.get(
+      const discordSettings = await this.db.get<{ voice_channel_cleanup_delay_minutes: number }>(
         'SELECT voice_channel_cleanup_delay_minutes FROM discord_settings WHERE id = 1'
       );
 
@@ -707,8 +707,7 @@ class MatchExecScheduler {
       thresholdTime.setMinutes(thresholdTime.getMinutes() - cleanupDelayMinutes);
 
       // Find matches that completed/cancelled and are past the cleanup delay
-      // @ts-expect-error - Database all method typed as unknown
-      const matchesForCleanup = await this.db.all(`
+      const matchesForCleanup = await this.db.all<{ id: string; name: string; status: string; updated_at: string }>(`
         SELECT DISTINCT m.id, m.name, m.status, m.updated_at
         FROM matches m
         INNER JOIN auto_voice_channels avc ON m.id = avc.match_id
@@ -744,8 +743,7 @@ class MatchExecScheduler {
       logger.debug(`✅ Voice channel cleanup completed`);
 
       // Also check for orphaned voice channels (match was manually deleted)
-      // @ts-expect-error - Database all method typed as unknown
-      const orphanedChannels = await this.db.all(`
+      const orphanedChannels = await this.db.all<{ id: string; match_id: string; channel_id: string; team_name: string }>(`
         SELECT avc.id, avc.match_id, avc.channel_id, avc.team_name
         FROM auto_voice_channels avc
         WHERE avc.match_id NOT IN (SELECT id FROM matches)

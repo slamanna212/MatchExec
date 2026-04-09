@@ -5,10 +5,12 @@ import { Card, Text, Stack, Group, Button, Grid, Badge, ActionIcon, Modal, Check
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { useEffect, useState } from 'react';
-import { IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
+import { IconHash, IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
 import type { DiscordChannel } from '../api/channels/route';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface ChannelEditData {
   send_announcements: boolean;
@@ -157,7 +159,7 @@ export default function ChannelsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto">
+      <PageLayout>
         <Stack gap="xl">
           <Card shadow="sm" padding="lg" radius="md" withBorder style={{ maxWidth: '900px', margin: '0 auto' }}>
             <Skeleton height={14} width={160} mb="xs" mx="auto" />
@@ -190,15 +192,18 @@ export default function ChannelsPage() {
             ))}
           </Grid>
         </Stack>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageLayout>
       <Stack gap="xl">
-        <div>
-          <Group justify="flex-end" align="center">
+        <PageHeader
+          icon={IconHash}
+          title="Channels"
+          subtitle="Manage Discord channels for announcements and notifications"
+          action={
             <Group>
               <Button
                 variant="outline"
@@ -216,8 +221,8 @@ export default function ChannelsPage() {
                 Add Channel
               </Button>
             </Group>
-          </Group>
-        </div>
+          }
+        />
 
         {/* Notification Status Indicators */}
         <Card shadow="sm" padding="lg" radius="md" withBorder style={{ maxWidth: '900px', margin: '0 auto' }}>
@@ -412,6 +417,6 @@ export default function ChannelsPage() {
           </Stack>
         </Modal>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

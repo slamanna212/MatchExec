@@ -22,21 +22,8 @@ import type { Match } from '@/shared/types';
 
 import { StageRing } from './StageRing';
 import { showError, showSuccess } from '@/lib/notifications';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-  
-  // Check if timestamp already includes timezone info (Z, +offset, or -offset at the end)
-  // Note: SQLite date format "2025-08-09 00:40:16" contains dashes but they're part of the date, not timezone
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-  
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  // We need to treat this as UTC, so append 'Z'
-  return new Date(`${timestamp  }Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
+import { PageLayout } from './PageLayout';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -89,7 +76,7 @@ const MatchCard = memo(({
 
   return (
     <Card
-      shadow={colorScheme === 'light' ? 'lg' : 'sm'}
+      shadow="sm"
       padding={0}
       radius="md"
       withBorder
@@ -100,11 +87,11 @@ const MatchCard = memo(({
         borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : `${accentColor}33`,
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px) scale(1.01)';
+        e.currentTarget.style.transform = 'translateY(-3px)';
         e.currentTarget.style.boxShadow = `0 12px 32px ${accentColor}44`;
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = colorScheme === 'light' ? '0 1px 3px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.24)';
       }}
       onClick={() => onViewDetails(match)}
@@ -243,7 +230,6 @@ function SkeletonCard() {
 
 export function MatchDashboard() {
   const router = useRouter();
-  const { colorScheme } = useMantineColorScheme();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
@@ -565,7 +551,7 @@ export function MatchDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
+      <PageLayout>
         <Grid>
           {Array.from({ length: 6 }).map((_, i) => (
             <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
@@ -573,12 +559,12 @@ export function MatchDashboard() {
             </Grid.Col>
           ))}
         </Grid>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
+    <PageLayout>
       <div className="flex justify-center md:justify-end mb-6">
         <Group gap="sm" wrap="nowrap">
           {matches.length > 0 && (
@@ -605,15 +591,7 @@ export function MatchDashboard() {
       <Divider mb="xl" />
 
       {matches.length === 0 ? (
-        <Card 
-          p="xl" 
-          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-          withBorder
-          bg={colorScheme === 'light' ? 'white' : undefined}
-          style={{ 
-            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-          }}
-        >
+        <Card p="xl" shadow="sm" withBorder>
           <Stack align="center">
             <Text size="xl" fw={600}>No matches yet</Text>
             <Text c="dimmed">
@@ -622,15 +600,7 @@ export function MatchDashboard() {
           </Stack>
         </Card>
       ) : filteredMatches.length === 0 && searchQuery ? (
-        <Card 
-          p="xl" 
-          shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-          withBorder
-          bg={colorScheme === 'light' ? 'white' : undefined}
-          style={{ 
-            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-          }}
-        >
+        <Card p="xl" shadow="sm" withBorder>
           <Stack align="center">
             <Text size="xl" fw={600}>No matches found</Text>
             <Text c="dimmed">
@@ -651,6 +621,6 @@ export function MatchDashboard() {
       )}
 
 
-    </div>
+    </PageLayout>
   );
 }

@@ -17,6 +17,8 @@ import { useState, useRef } from 'react';
 import { IconAlertTriangle, IconDownload, IconUpload, IconLock, IconShieldOff, IconDatabaseImport } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function BackupRestorePage() {
   const [backupPassword, setBackupPassword] = useState('');
@@ -149,17 +151,13 @@ export default function BackupRestorePage() {
   const isEncryptedFile = restoreFile?.name.endsWith('.enc') ?? false;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <Group>
-          <IconDatabaseImport size="2rem" />
-          <div>
-            <Text size="xl" fw={700}>Backup & Restore</Text>
-            <Text size="sm" c="dimmed">
-              Export or import the entire database. All matches, tournaments, settings, and configuration are included.
-            </Text>
-          </div>
-        </Group>
+        <PageHeader
+          icon={IconDatabaseImport}
+          title="Backup & Restore"
+          subtitle="Export or import the entire database. All matches, tournaments, settings, and configuration are included."
+        />
 
         {/* Backup */}
         <Card shadow="sm" padding="lg" radius="md" withBorder>
@@ -299,6 +297,6 @@ export default function BackupRestorePage() {
           </Group>
         </Stack>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }

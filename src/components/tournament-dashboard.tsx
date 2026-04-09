@@ -23,19 +23,8 @@ import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
 import { StageRing } from './StageRing';
 import { notificationHelper } from '@/lib/notifications';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-  
-  // Check if timestamp already includes timezone info
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-  
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(`${timestamp  }Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
+import { PageLayout } from './PageLayout';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -551,7 +540,7 @@ export function TournamentDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
+      <PageLayout>
         <Grid>
           {Array.from({ length: 6 }).map((_, i) => (
             <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
@@ -559,12 +548,12 @@ export function TournamentDashboard() {
             </Grid.Col>
           ))}
         </Grid>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
+    <PageLayout>
       <div className="flex justify-center md:justify-end mb-6">
         <Group gap="sm" wrap="nowrap">
           {tournaments.length > 0 && (
@@ -622,6 +611,6 @@ export function TournamentDashboard() {
         </motion.div>
       )}
 
-    </div>
+    </PageLayout>
   );
 }

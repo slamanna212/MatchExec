@@ -19,7 +19,8 @@ vi.mock('@discordjs/voice', () => ({
   joinVoiceChannel: vi.fn().mockReturnValue({
     state: { status: 'ready' },
     subscribe: vi.fn(),
-    destroy: vi.fn()
+    destroy: vi.fn(),
+    on: vi.fn()
   }),
   createAudioPlayer: vi.fn().mockReturnValue({
     play: vi.fn(),

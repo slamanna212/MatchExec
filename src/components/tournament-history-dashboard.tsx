@@ -22,6 +22,7 @@ import {
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
 import { StageRing } from './StageRing';
+import { PageLayout } from './PageLayout';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -271,7 +272,7 @@ export function TournamentHistoryDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
+      <PageLayout>
         <Grid>
           {Array.from({ length: 6 }).map((_, i) => (
             <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
@@ -279,12 +280,12 @@ export function TournamentHistoryDashboard() {
             </Grid.Col>
           ))}
         </Grid>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
+    <PageLayout>
       <Group justify="flex-end" mb="xl">
         {tournaments.length > 0 && (
           <TextInput
@@ -353,6 +354,6 @@ export function TournamentHistoryDashboard() {
         </>
       )}
 
-    </div>
+    </PageLayout>
   );
 }

@@ -9,6 +9,7 @@ import { AnimatedCounter } from './AnimatedCounter';
 
 import { logger } from '@/lib/logger/client';
 import { StageRing } from './StageRing';
+import { PageLayout } from './PageLayout';
 
 interface Stats {
   totalMatches: number;
@@ -293,7 +294,7 @@ export function HomePage() {
   };
 
   return (
-    <div className="container mx-auto px-6 pt-3 pb-6 max-w-6xl">
+    <PageLayout>
       <Stack gap="lg">
         {/* Mission Control Card */}
         <Card
@@ -479,6 +480,6 @@ export function HomePage() {
           </SimpleGrid>
         </motion.div>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

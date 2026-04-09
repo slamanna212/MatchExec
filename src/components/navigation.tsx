@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -112,6 +112,66 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
   );
 }
 
+// Icon map defined once outside the component — avoids object recreation on every render
+const ICON_MAP: Record<string, React.ComponentType<{ size: string }>> = {
+  home: IconHome,
+  feed: IconRss,
+  swords: IconSwords,
+  history: IconHistory,
+  trophy: IconTrophy,
+  gamepad: IconDeviceGamepad2,
+  hash: IconHash,
+  settings: IconSettings,
+  adjustments: IconAdjustments,
+  volume: IconVolume,
+  clock: IconClock,
+  discord: IconBrandDiscord,
+  paint: IconPaint,
+  info: IconInfoCircle,
+  code: IconCode,
+  database: IconDatabaseExport,
+  chart: IconChartBar,
+};
+
+function getIcon(name: string): React.ComponentType<{ size: string }> {
+  return ICON_MAP[name] ?? IconHome;
+}
+
+// Static navigation structure — defined outside the component so it's never re-allocated
+const STATIC_NAV_ITEMS: NavItemData[] = [
+  { label: 'Home',        href: '/',            iconName: 'home' },
+  { label: 'Feed',        href: '/feed',         iconName: 'feed' },
+  {
+    label: 'Matches',
+    href: '/matches',
+    iconName: 'swords',
+    links: [{ label: 'History', href: '/matches/history', iconName: 'history' }],
+  },
+  {
+    label: 'Tournaments',
+    href: '/tournaments',
+    iconName: 'trophy',
+    links: [{ label: 'History', href: '/tournaments/history', iconName: 'history' }],
+  },
+  { label: 'Games',    href: '/games',    iconName: 'gamepad' },
+  { label: 'Channels', href: '/channels', iconName: 'hash' },
+  { label: 'Info',     href: '/info',     iconName: 'info' },
+  {
+    label: 'Settings',
+    href: '/settings',
+    iconName: 'settings',
+    links: [
+      { label: 'Application',   href: '/settings/application',   iconName: 'adjustments' },
+      { label: 'Stats',         href: '/settings/stats',         iconName: 'chart' },
+      { label: 'Announcer',     href: '/settings/announcer',     iconName: 'volume' },
+      { label: 'Discord',       href: '/settings/discord',       iconName: 'discord' },
+      { label: 'Scheduler',     href: '/settings/scheduler',     iconName: 'clock' },
+      { label: 'UI',            href: '/settings/ui',            iconName: 'paint' },
+      { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' },
+    ],
+  },
+];
+
 interface NavigationProps {
   children: React.ReactNode
 }
@@ -124,12 +184,11 @@ export function Navigation({ children }: NavigationProps) {
   const [mounted, setMounted] = useState(false)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
 
-  // Fix hydration issues by ensuring component is mounted on client
+  // Delay rendering until client is mounted to avoid hydration mismatches
+  // rAF defers the setState call out of the synchronous effect body, satisfying the
+  // react-compiler rule while still giving us the client-only flag we need.
   useEffect(() => {
-    // Use requestAnimationFrame to avoid synchronous setState in effect
-    const frame = requestAnimationFrame(() => {
-      setMounted(true);
-    });
+    const frame = requestAnimationFrame(() => setMounted(true));
 
     // Fetch version info from API
     getVersionInfo().then(setVersionInfo).catch((error) => {
@@ -139,76 +198,11 @@ export function Navigation({ children }: NavigationProps) {
     return () => cancelAnimationFrame(frame);
   }, [])
 
-  // Icon mapping to avoid serialization issues with SSR
-  const getIcon = (name: string) => {
-    const iconMap: Record<string, React.ComponentType<{ size: string }>> = {
-      home: IconHome,
-      feed: IconRss,
-      swords: IconSwords,
-      history: IconHistory,
-      trophy: IconTrophy,
-      gamepad: IconDeviceGamepad2,
-      hash: IconHash,
-      settings: IconSettings,
-      adjustments: IconAdjustments,
-      volume: IconVolume,
-      clock: IconClock,
-      discord: IconBrandDiscord,
-      paint: IconPaint,
-      info: IconInfoCircle,
-      code: IconCode,
-      database: IconDatabaseExport,
-      chart: IconChartBar,
-    };
-    return iconMap[name] || IconHome;
-  };
-
-  const navigationItems = [
-    {
-      label: 'Home',
-      href: '/',
-      iconName: 'home'
-    },
-    {
-      label: 'Feed',
-      href: '/feed',
-      iconName: 'feed'
-    },
-    {
-      label: 'Matches',
-      href: '/matches',
-      iconName: 'swords',
-      links: [
-        { label: 'History', href: '/matches/history', iconName: 'history' }
-      ]
-    },
-    {
-      label: 'Tournaments',
-      href: '/tournaments',
-      iconName: 'trophy',
-      links: [
-        { label: 'History', href: '/tournaments/history', iconName: 'history' }
-      ]
-    },
-    { label: 'Games', href: '/games', iconName: 'gamepad' },
-    { label: 'Channels', href: '/channels', iconName: 'hash' },
-    { label: 'Info', href: '/info', iconName: 'info' },
-    {
-      label: 'Settings',
-      href: '/settings',
-      iconName: 'settings',
-      links: [
-        { label: 'Application', href: '/settings/application', iconName: 'adjustments' },
-        { label: 'Stats', href: '/settings/stats', iconName: 'chart' },
-        { label: 'Announcer', href: '/settings/announcer', iconName: 'volume' },
-        { label: 'Discord', href: '/settings/discord', iconName: 'discord' },
-        { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
-        { label: 'UI', href: '/settings/ui', iconName: 'paint' },
-        { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' },
-      ]
-    },
+  // Append dev-only item at runtime so the static array stays pure
+  const navigationItems = useMemo(() => [
+    ...STATIC_NAV_ITEMS,
     ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
-  ]
+  ], [])
 
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {

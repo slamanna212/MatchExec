@@ -31,32 +31,29 @@ html {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
 
-/* Force consistent NavLink hover colors - desktop sidebar only */
+/* NavLink hover/active — uses stable .navlink-root class assigned in providers.tsx */
 @media (min-width: 62em) {
-  [data-mantine-color-scheme="dark"] .m_f0824112:hover,
-  [data-mantine-color-scheme="light"] .m_f0824112:hover,
-  .m_f0824112:hover {
+  /* Desktop sidebar: purple hover and gradient-active */
+  .navlink-root:hover {
     background-color: rgba(124, 58, 237, 0.25) !important;
     border-radius: 8px !important;
   }
 
-  [data-mantine-color-scheme="dark"] .m_f0824112[data-active="true"],
-  [data-mantine-color-scheme="light"] .m_f0824112[data-active="true"],
-  .m_f0824112[data-active="true"] {
+  .navlink-root[data-active="true"] {
     background: linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5)) !important;
     border-radius: 8px !important;
     box-shadow: 0 2px 8px rgba(109, 40, 217, 0.3) !important;
   }
 }
 
-/* Mobile drawer NavLink hover - subtle highlight */
 @media (max-width: 61.99em) {
-  .m_f0824112:hover {
+  /* Mobile drawer: subtle white highlight; active is transparent (colour comes from text) */
+  .navlink-root:hover {
     background-color: rgba(255, 255, 255, 0.08) !important;
     border-radius: 8px !important;
   }
 
-  .m_f0824112[data-active="true"] {
+  .navlink-root[data-active="true"] {
     background-color: transparent !important;
   }
 }
@@ -102,12 +99,8 @@ html {
 }
 
 
-/* Override modal content and header backgrounds */
-[data-mantine-color-scheme='dark'] .m_54c44539,
-[data-mantine-color-scheme='dark'] .m_d0e2b9cd,
-[data-mantine-color-scheme='dark'] .m_9df02822 {
+/* Modal backgrounds in dark mode — uses stable .modal-content/.modal-header classes assigned in providers.tsx */
+[data-mantine-color-scheme='dark'] .modal-content,
+[data-mantine-color-scheme='dark'] .modal-header {
   background-color: #131314;
 }
-
-
-
