@@ -289,49 +289,51 @@ export function FeedDashboard() {
       <PageLayout>
       <Stack gap="md">
 
-        {/* Header */}
-        <PageHeader
-          icon={IconActivity}
-          title="Activity Feed"
-          subtitle="Real-time events from every part of MatchExec"
-          action={
-            <Group gap="sm" align="center" wrap="nowrap">
-              <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />
-              <DatePickerInput
-                type="range"
-                placeholder="Filter by date range"
-                value={dateRange}
-                onChange={(val) => {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  setDateRange(val as any);
-                  setDisplayLimit(20);
-                  etagRef.current = null;
-                }}
-                clearable
-                maxDate={new Date()}
-                size="sm"
-                style={{ minWidth: 220 }}
-              />
-            </Group>
-          }
-        />
-
-        {/* Filter */}
-        <Group justify="center">
-          <SegmentedControl
-            radius="xl"
-            size="sm"
-            value={filter}
-            onChange={setFilter}
-            classNames={classes}
-            data={[
-              { value: 'all',         label: 'All'           },
-              { value: 'high',        label: 'High Priority' },
-              { value: 'matches',     label: 'Matches'       },
-              { value: 'tournaments', label: 'Tournaments'   },
-            ]}
+        {/* Header + Filter grouped tightly */}
+        <Stack gap="xs">
+          <PageHeader
+            icon={IconActivity}
+            title="Activity Feed"
+            subtitle="Real-time events from every part of MatchExec"
+            action={
+              <Group gap="sm" align="center" wrap="nowrap">
+                <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />
+                <DatePickerInput
+                  type="range"
+                  placeholder="Filter by date range"
+                  value={dateRange}
+                  onChange={(val) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    setDateRange(val as any);
+                    setDisplayLimit(20);
+                    etagRef.current = null;
+                  }}
+                  clearable
+                  maxDate={new Date()}
+                  size="sm"
+                  style={{ minWidth: 220 }}
+                />
+              </Group>
+            }
           />
-        </Group>
+
+          {/* Filter */}
+          <Group justify="center">
+            <SegmentedControl
+              radius="xl"
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              classNames={classes}
+              data={[
+                { value: 'all',         label: 'All'           },
+                { value: 'high',        label: 'High Priority' },
+                { value: 'matches',     label: 'Matches'       },
+                { value: 'tournaments', label: 'Tournaments'   },
+              ]}
+            />
+          </Group>
+        </Stack>
 
         {/* Loading skeletons */}
         {loading && (

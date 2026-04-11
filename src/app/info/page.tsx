@@ -8,7 +8,7 @@ import { PageLayout } from '@/components/PageLayout';
 export default function InfoPage() {
   return (
     <PageLayout>
-      <Stack gap="xl">
+      <Stack gap="md">
         <PageHeader
           icon={IconInfoCircle}
           title="Information"
