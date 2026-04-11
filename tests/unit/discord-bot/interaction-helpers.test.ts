@@ -63,8 +63,8 @@ describe('interaction-helpers', () => {
 
     it('returns tournament participant count', async () => {
       await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format)
-         VALUES ('t1', 'Test Tourney', ?, ?, 'created', 'single_elimination')`,
+        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
+         VALUES ('t1', 'Test Tourney', ?, ?, 'created', 'single_elimination', 3)`,
         [game.id, mode.id]
       );
       await db.run(
@@ -94,13 +94,13 @@ describe('interaction-helpers', () => {
 
       expect(msg).toContain('Successfully signed up');
       expect(msg).toContain('TestUser');
-      expect(msg).toContain('Participants: 5');
+      expect(msg).toContain('**Participants:** 5');
     });
 
     it('includes team name when selected', async () => {
       await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format)
-         VALUES ('t2', 'Tourney', ?, ?, 'created', 'single_elimination')`,
+        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
+         VALUES ('t2', 'Tourney', ?, ?, 'created', 'single_elimination', 3)`,
         [game.id, mode.id]
       );
       await db.run(
