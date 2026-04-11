@@ -44,6 +44,12 @@ html {
     border-radius: 8px !important;
     box-shadow: 0 2px 8px rgba(109, 40, 217, 0.3) !important;
   }
+
+  /* Collapsed sidebar icon buttons */
+  .sidebar-icon-btn:hover {
+    background-color: rgba(124, 58, 237, 0.25) !important;
+    border-radius: 8px !important;
+  }
 }
 
 @media (max-width: 61.99em) {

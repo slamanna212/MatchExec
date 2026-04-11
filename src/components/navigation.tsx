@@ -13,7 +13,9 @@ import {
   useMantineColorScheme,
   Image,
   Drawer,
-  Stack
+  Stack,
+  Tooltip,
+  UnstyledButton
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -35,7 +37,9 @@ import {
   IconSwords,
   IconDatabaseExport,
   IconChartBar,
-  IconRss
+  IconRss,
+  IconChevronLeft,
+  IconChevronRight
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -55,6 +59,7 @@ interface NavRenderContext {
   onNavigate?: () => void;
   router: ReturnType<typeof useRouter>;
   getIcon: (name: string) => React.ComponentType<{ size: string }>;
+  desktopCollapsed: boolean;
 }
 
 function isNavSectionActive(itemHref: string, pathname: string | null): boolean {
@@ -88,6 +93,34 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
   const sectionActive = isNavSectionActive(item.href, ctx.pathname);
   const isActive = ctx.mounted && (ctx.pathname === item.href || sectionActive);
   const shouldShowLinks = Boolean(item.links) && sectionActive;
+
+  if (ctx.desktopCollapsed) {
+    return (
+      <Tooltip key={item.href} label={item.label} position="right" withArrow>
+        <UnstyledButton
+          className="sidebar-icon-btn"
+          onClick={() => {
+            ctx.router.push(item.href);
+            ctx.onNavigate?.();
+          }}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            width: '100%',
+            height: 40,
+            borderRadius: 8,
+            color: isActive ? '#f7cc02' : '#F5F5F5',
+            background: isActive
+              ? 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))'
+              : 'transparent',
+          }}
+        >
+          {React.createElement(ctx.getIcon(item.iconName), { size: ctx.iconSize })}
+        </UnstyledButton>
+      </Tooltip>
+    );
+  }
 
   return (
     <div key={item.href}>
@@ -183,12 +216,17 @@ export function Navigation({ children }: NavigationProps) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false)
 
   // Delay rendering until client is mounted to avoid hydration mismatches
   // rAF defers the setState call out of the synchronous effect body, satisfying the
   // react-compiler rule while still giving us the client-only flag we need.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setMounted(true));
+    const frame = requestAnimationFrame(() => {
+      const saved = localStorage.getItem('sidebar-collapsed');
+      if (saved === 'true') setDesktopCollapsed(true);
+      setMounted(true);
+    });
 
     // Fetch version info from API
     getVersionInfo().then(setVersionInfo).catch((error) => {
@@ -197,6 +235,14 @@ export function Navigation({ children }: NavigationProps) {
 
     return () => cancelAnimationFrame(frame);
   }, [])
+
+  const toggleDesktopSidebar = () => {
+    setDesktopCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
 
   // Append dev-only item at runtime so the static array stays pure
   const navigationItems = useMemo(() => [
@@ -254,7 +300,7 @@ export function Navigation({ children }: NavigationProps) {
     )
   }
 
-  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean }) => {
+  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean; collapsed?: boolean }) => {
     const ctx: NavRenderContext = {
       pathname,
       mounted,
@@ -262,7 +308,8 @@ export function Navigation({ children }: NavigationProps) {
       fontSize: options?.large ? '1rem' : undefined,
       onNavigate: options?.onNavigate,
       router,
-      getIcon
+      getIcon,
+      desktopCollapsed: options?.collapsed ?? false,
     };
     return navigationItems.map((item) => <NavItem key={item.href} item={item} ctx={ctx} />);
   };
@@ -271,10 +318,12 @@ export function Navigation({ children }: NavigationProps) {
     <AppShell
       header={{ height: { base: 60, md: 0 } }}
       navbar={{
-        width: { base: 200, md: 250 },
+        width: { base: 200, md: desktopCollapsed ? 60 : 250 },
         breakpoint: 'md',
         collapsed: { mobile: true, desktop: false },
       }}
+      transitionDuration={250}
+      transitionTimingFunction="ease"
       padding="md"
     >
       <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
@@ -364,25 +413,26 @@ export function Navigation({ children }: NavigationProps) {
       </Drawer>
 
       {/* Desktop Sidebar */}
-      <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
+      <AppShell.Navbar p={desktopCollapsed ? 'xs' : 'md'} withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center">
             <Image
               src="/logo.svg"
               alt="MatchExec Logo"
-              w={140}
-              h={140}
+              w={desktopCollapsed ? 36 : 140}
+              h={desktopCollapsed ? 36 : 140}
               fit="contain"
+              style={{ transition: 'width 250ms ease, height 250ms ease' }}
             />
           </Group>
         </AppShell.Section>
 
         <AppShell.Section grow>
-          {renderNavItems({})}
+          {renderNavItems({ collapsed: desktopCollapsed })}
         </AppShell.Section>
 
         <AppShell.Section>
-          {versionInfo && (
+          {!desktopCollapsed && versionInfo && (
             <div
               title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
               style={{
@@ -397,7 +447,7 @@ export function Navigation({ children }: NavigationProps) {
               {versionInfo.version}
             </div>
           )}
-          <Group mt="md" justify="center">
+          <Group mt="md" justify="center" gap="xs">
             <ActionIcon
               variant="outline"
               size={30}
@@ -407,6 +457,17 @@ export function Navigation({ children }: NavigationProps) {
             >
               {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
             </ActionIcon>
+            <Tooltip label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
+              <ActionIcon
+                variant="subtle"
+                size={30}
+                onClick={toggleDesktopSidebar}
+                c="#F5F5F5"
+                visibleFrom="md"
+              >
+                {desktopCollapsed ? <IconChevronRight size="16" /> : <IconChevronLeft size="16" />}
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </AppShell.Section>
       </AppShell.Navbar>
