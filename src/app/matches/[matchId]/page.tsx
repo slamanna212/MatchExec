@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
 import { useHotkeys } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
-import { Skeleton, Container, Text, Center, Stack, Grid } from '@mantine/core';
+import { Skeleton, Container, Text, Center, Stack, Grid, Card, Group } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
@@ -421,21 +421,60 @@ export default function MatchPage({
   // Render loading state
   if (loading) {
     return (
-      <Container>
-        <Grid mt="md">
+      <div className="container mx-auto py-6 pl-2 pr-2">
+        <Grid gutter="lg">
           <Grid.Col span={{ base: 12, md: 4 }}>
-            <Stack>
-              <Skeleton height={200} radius="md" />
-              <Skeleton height={250} radius="md" />
-              <Skeleton height={120} radius="md" />
+            <Stack gap="md">
+              <Card withBorder padding="lg" shadow="sm">
+                <Stack gap="md">
+                  <Group>
+                    <Skeleton circle height={50} />
+                    <Stack gap="xs" style={{ flex: 1 }}>
+                      <Skeleton height={20} width="65%" />
+                      <Skeleton height={16} width="45%" />
+                    </Stack>
+                    <Skeleton circle height={60} />
+                  </Group>
+                  <Stack gap="xs">
+                    <Skeleton height={14} width="30%" />
+                    <Skeleton height={14} width="90%" />
+                    <Skeleton height={14} width="70%" />
+                  </Stack>
+                  <Skeleton height={200} radius="md" />
+                </Stack>
+              </Card>
+              <Card withBorder padding="lg" shadow="sm">
+                <Stack gap="sm">
+                  {[35, 30, 40, 25].map((w, i) => (
+                    <Group key={i} justify="space-between">
+                      <Skeleton height={14} width={`${w}%`} />
+                      <Skeleton height={14} width="30%" />
+                    </Group>
+                  ))}
+                </Stack>
+              </Card>
+              <Card withBorder padding="lg" shadow="sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                </div>
+              </Card>
             </Stack>
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 8 }}>
-            <Skeleton height={40} radius="sm" mb="md" />
-            <Skeleton height={400} radius="md" />
+            <Stack gap="md">
+              <Group justify="center">
+                <Skeleton height={36} width={320} radius="xl" />
+              </Group>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} height={64} radius="sm" />
+              ))}
+            </Stack>
           </Grid.Col>
         </Grid>
-      </Container>
+      </div>
     );
   }
 

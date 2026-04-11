@@ -11,7 +11,9 @@ import {
   Stack,
   Grid,
   Breadcrumbs,
-  Anchor
+  Anchor,
+  Card,
+  Group
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
@@ -457,21 +459,71 @@ export default function TournamentPage({
 
   if (loading) {
     return (
-      <Container>
-        <Grid mt="md">
-          <Grid.Col span={{ base: 12, md: 4 }}>
-            <Stack>
-              <Skeleton height={200} radius="md" />
-              <Skeleton height={250} radius="md" />
-              <Skeleton height={120} radius="md" />
-            </Stack>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 8 }}>
-            <Skeleton height={40} radius="sm" mb="md" />
-            <Skeleton height={400} radius="md" />
-          </Grid.Col>
-        </Grid>
-      </Container>
+      <div className="container mx-auto py-6 px-2">
+        <Stack gap="lg">
+          <Group gap="xs">
+            <Skeleton height={16} width={80} />
+            <Skeleton height={16} width={8} />
+            <Skeleton height={16} width={140} />
+          </Group>
+          <Grid>
+            <Grid.Col span={{ base: 12, md: 4 }}>
+              <Stack gap="md">
+                <Card withBorder padding="lg" shadow="sm">
+                  <Stack gap="md">
+                    <Group>
+                      <Skeleton circle height={50} />
+                      <Stack gap="xs" style={{ flex: 1 }}>
+                        <Skeleton height={20} width="65%" />
+                        <Skeleton height={16} width="45%" />
+                      </Stack>
+                      <Skeleton circle height={60} />
+                    </Group>
+                    <Stack gap="xs">
+                      <Skeleton height={14} width="30%" />
+                      <Skeleton height={14} width="90%" />
+                      <Skeleton height={14} width="70%" />
+                    </Stack>
+                    <Skeleton height={200} radius="md" />
+                  </Stack>
+                </Card>
+                <Card withBorder padding="lg" shadow="sm">
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Skeleton height={14} width="30%" />
+                      <Skeleton height={20} width="35%" radius="xl" />
+                    </Group>
+                    {[35, 30, 25].map((w, i) => (
+                      <Group key={i} justify="space-between">
+                        <Skeleton height={14} width={`${w}%`} />
+                        <Skeleton height={14} width="30%" />
+                      </Group>
+                    ))}
+                  </Stack>
+                </Card>
+                <Card withBorder padding="lg" shadow="sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                  </div>
+                </Card>
+              </Stack>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 8 }}>
+              <Stack gap="md">
+                <Group justify="center">
+                  <Skeleton height={36} width={320} radius="xl" />
+                </Group>
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} height={120} radius="sm" />
+                ))}
+              </Stack>
+            </Grid.Col>
+          </Grid>
+        </Stack>
+      </div>
     );
   }
 
