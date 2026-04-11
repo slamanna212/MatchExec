@@ -67,7 +67,12 @@ export class AIExtractor {
       if (enabledProviders.length === 0) throw new Error('No AI providers enabled');
 
       // Load screenshot
-      const imagePath = path.join(process.cwd(), 'public', submission.screenshot_url);
+      const publicDir = path.join(process.cwd(), 'public');
+      const resolvedImagePath = path.resolve(publicDir, submission.screenshot_url.replace(/^\//, ''));
+      if (!resolvedImagePath.startsWith(publicDir + path.sep)) {
+        throw new Error(`screenshot_url escapes public directory: ${submission.screenshot_url}`);
+      }
+      const imagePath = resolvedImagePath;
       if (!fs.existsSync(imagePath)) throw new Error(`Screenshot not found: ${imagePath}`);
 
       const imageBuffer = fs.readFileSync(imagePath);

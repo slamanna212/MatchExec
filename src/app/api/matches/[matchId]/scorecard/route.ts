@@ -8,6 +8,12 @@ import type { ScorecardSubmission, ScorecardPlayerStat } from '@/shared/types';
 import { apiError, apiOk } from '@/lib/api-response';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 function isValidImageType(buffer: Buffer): boolean {
@@ -39,6 +45,9 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
+    if (!/^\d+$/.test(matchId)) {
+      return apiError('Invalid match ID', 400);
+    }
     const formData = await request.formData();
     const file = formData.get('screenshot') as File;
     const matchGameId = formData.get('matchGameId') as string;
@@ -72,7 +81,7 @@ export async function POST(
 
     const timestamp = Date.now();
     const randomBytes = crypto.randomBytes(16).toString('hex');
-    const extension = path.extname(file.name).toLowerCase() || '.jpg';
+    const extension = MIME_TO_EXT[file.type] ?? '.jpg';
     const filename = `${timestamp}_${randomBytes}${extension}`;
     const filePath = path.join(uploadDir, filename);
     fs.writeFileSync(filePath, buffer);

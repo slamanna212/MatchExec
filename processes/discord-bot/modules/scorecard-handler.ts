@@ -123,6 +123,11 @@ export class ScorecardHandler {
 
       if (!dmRecord) return; // Not a scorecard reply
 
+      if (!/^\d+$/.test(String(dmRecord.match_id))) {
+        logger.error('Invalid match_id in scorecard DM record');
+        return;
+      }
+
       // Check for image attachments
       const imageAttachments = message.attachments.filter(
         (a) => a.contentType?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(a.name || '')
@@ -143,7 +148,12 @@ export class ScorecardHandler {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      const ext = path.extname(attachment.name || '.jpg').toLowerCase() || '.jpg';
+      const contentType = (attachment.contentType?.split(';')[0] ?? 'image/jpeg').trim();
+      const MIME_TO_EXT: Record<string, string> = {
+        'image/jpeg': '.jpg', 'image/png': '.png',
+        'image/webp': '.webp', 'image/gif': '.gif',
+      };
+      const ext = MIME_TO_EXT[contentType] ?? '.jpg';
 
       // Save to disk
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', dmRecord.match_id);

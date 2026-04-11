@@ -165,7 +165,13 @@ export class VoiceHandler {
 
       // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
       const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
-      const voiceDir = path.join(process.cwd(), cleanVoicePath);
+      const appRoot = process.cwd();
+      const resolvedVoiceDir = path.resolve(appRoot, cleanVoicePath);
+      if (!resolvedVoiceDir.startsWith(appRoot + path.sep)) {
+        logger.error(`Voice path escapes app root: ${resolvedVoiceDir}`);
+        return null;
+      }
+      const voiceDir = resolvedVoiceDir;
 
       // Construct filename
       let filename: string;
@@ -178,12 +184,17 @@ export class VoiceHandler {
           logger.warning(`⚠️ No ${audioType} audio files found in ${voiceDir}`);
           return null;
         }
-        
+
         const randomIndex = Math.floor(Math.random() * availableFiles.length);
         filename = availableFiles[randomIndex];
       }
 
-      const fullPath = path.join(voiceDir, filename);
+      const resolvedFull = path.resolve(voiceDir, filename);
+      if (!resolvedFull.startsWith(voiceDir + path.sep)) {
+        logger.error(`Audio file path escapes voice dir: ${resolvedFull}`);
+        return null;
+      }
+      const fullPath = resolvedFull;
       
       // Check if file exists using fs
       if (!fs.existsSync(fullPath)) {
