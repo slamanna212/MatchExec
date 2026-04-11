@@ -64,7 +64,7 @@ describe('interaction-helpers', () => {
     it('returns tournament participant count', async () => {
       await db.run(
         `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t1', 'Test Tourney', ?, ?, 'created', 'single_elimination', 3)`,
+         VALUES ('t1', 'Test Tourney', ?, ?, 'created', 'single-elimination', 3)`,
         [game.id, mode.id]
       );
       await db.run(
@@ -100,7 +100,7 @@ describe('interaction-helpers', () => {
     it('includes team name when selected', async () => {
       await db.run(
         `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t2', 'Tourney', ?, ?, 'created', 'single_elimination', 3)`,
+         VALUES ('t2', 'Tourney', ?, ?, 'created', 'single-elimination', 3)`,
         [game.id, mode.id]
       );
       await db.run(
