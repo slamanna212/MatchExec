@@ -3,13 +3,14 @@
 import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar, Skeleton } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight, IconLayoutDashboard } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 import { AnimatedCounter } from './AnimatedCounter';
 
 import { logger } from '@/lib/logger/client';
 import { StageRing } from './StageRing';
 import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface Stats {
   totalMatches: number;
@@ -296,6 +297,7 @@ export function HomePage() {
   return (
     <PageLayout>
       <Stack gap="lg">
+        <PageHeader icon={IconLayoutDashboard} title="Home" subtitle="Active matches, tournaments, and overall stats" />
         {/* Mission Control Card */}
         <Card
           shadow={colorScheme === 'light' ? 'lg' : 'sm'}

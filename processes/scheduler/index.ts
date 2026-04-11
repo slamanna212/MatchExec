@@ -316,27 +316,20 @@ class MatchExecScheduler {
       for (const match of upcomingMatches) {
         const startDate = new Date(match.start_date);
         const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
-        
-        // Only queue if reminder time is in the future
-        if (reminderTime > new Date()) {
-          // Get all participants for this match
-          const participants = await this.db.all<{ user_id: string }>(
-            'SELECT user_id FROM match_participants WHERE match_id = ?',
-            [match.id]
-          );
 
-          // Create reminder queue entry for each participant
-          for (const participant of participants) {
-            const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-            
-    await this.db.run(`
-              INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
-              VALUES (?, ?, ?, 'player_reminder', ?, ?, 'pending')
-            `, [reminderId, match.id, participant.user_id, reminderTime.toISOString(), reminderTime.toISOString()]);
-          }
-          
-          logger.debug(`📱 Queued player reminder DMs for match: ${match.name} (${participants.length} participants) at ${reminderTime.toISOString()}`);
-        }
+        // If reminder time is already past but match hasn't started yet, fire immediately
+        const effectiveReminderTime = reminderTime > new Date() ? reminderTime : new Date();
+
+        // Create a single queue entry per match; the processor calls sendPlayerReminders(matchId)
+        // which sends to all participants at once — one entry per participant would cause N×N duplicates
+        const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+        await this.db.run(`
+          INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
+          VALUES (?, ?, 'all', 'player_reminder', ?, ?, 'pending')
+        `, [reminderId, match.id, effectiveReminderTime.toISOString(), effectiveReminderTime.toISOString()]);
+
+        logger.debug(`📱 Queued player reminder DMs for match: ${match.name} at ${effectiveReminderTime.toISOString()}`);
       }
     } catch (error) {
       logger.error('❌ Error queueing player reminders:', error);
