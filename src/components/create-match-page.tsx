@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, ActionIcon, Title, Breadcrumbs, Anchor, Stepper } from '@mantine/core';
-import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap } from '@tabler/icons-react';
+import { Container, Stack, ActionIcon, Breadcrumbs, Anchor, Stepper } from '@mantine/core';
+import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap, IconSwords } from '@tabler/icons-react';
+import { PageHeader } from './PageHeader';
 import { showError, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { MapNoteModal } from './map-note-modal';
@@ -327,19 +328,15 @@ export function CreateMatchPage() {
     <Container size="md" py={{ base: "md", sm: "xl" }} px={{ base: "md", sm: "xl" }}>
       <Stack gap="md">
         {/* Header */}
-        <Group justify="space-between" align="center">
-          <Group align="center" gap="sm">
-            <ActionIcon
-              variant="subtle"
-              size="md"
-              onClick={handleBack}
-              aria-label="Go back"
-            >
+        <PageHeader
+          icon={IconSwords}
+          title="Create Match"
+          action={
+            <ActionIcon variant="subtle" size="md" onClick={handleBack} aria-label="Go back">
               <IconArrowLeft />
             </ActionIcon>
-            <Title order={2}>Create Match</Title>
-          </Group>
-        </Group>
+          }
+        />
 
         {/* Breadcrumbs */}
         <Breadcrumbs>

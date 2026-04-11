@@ -2,8 +2,9 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Container, Group, Button, Text, Stack, Skeleton, Tabs, Badge } from '@mantine/core';
+import { Container, Button, Stack, Skeleton, Tabs, Badge } from '@mantine/core';
 import { IconArrowLeft, IconChartBar } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import { StatsReviewPanel } from '@/components/stats/StatsReviewPanel';
 
 interface Match {
@@ -58,8 +59,11 @@ export default function MatchStatsPage({ params }: { params: Promise<{ matchId: 
     <Container size="lg" py="xl">
       <Stack gap="lg">
         {/* Header */}
-        <Group justify="space-between">
-          <Group>
+        <PageHeader
+          icon={IconChartBar}
+          title={`${match?.name || 'Match'} — Stats`}
+          subtitle={match?.game_name}
+          action={
             <Button
               variant="subtle"
               leftSection={<IconArrowLeft size={16} />}
@@ -67,15 +71,8 @@ export default function MatchStatsPage({ params }: { params: Promise<{ matchId: 
             >
               Back
             </Button>
-            <Group gap="xs">
-              <IconChartBar size="1.5rem" />
-              <div>
-                <Text fw={700} size="xl">{match?.name || 'Match'} — Stats</Text>
-                {match?.game_name && <Text size="sm" c="dimmed">{match.game_name}</Text>}
-              </div>
-            </Group>
-          </Group>
-        </Group>
+          }
+        />
 
         {/* Map tabs if multiple games */}
         {matchGames.length > 1 ? (

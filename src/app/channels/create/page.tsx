@@ -14,7 +14,8 @@ import {
   Alert,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconArrowLeft, IconArrowRight, IconCheck } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowRight, IconCheck, IconHash } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
 
@@ -230,8 +231,11 @@ export default function CreateChannelPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <Stack gap="xl">
-        <div>
-          <Group mb="md">
+        <PageHeader
+          icon={IconHash}
+          title="Add Channel"
+          subtitle="Configure a Discord channel for notifications"
+          action={
             <Button
               variant="outline"
               leftSection={<IconArrowLeft size="1rem" />}
@@ -239,8 +243,8 @@ export default function CreateChannelPage() {
             >
               Back to Channels
             </Button>
-          </Group>
-        </div>
+          }
+        />
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Stack gap="lg">

@@ -8,16 +8,15 @@ import {
   Stack,
   Group,
   Text,
-  Title,
   Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon
 } from '@mantine/core';
 import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { MatchFormat, MatchResult } from '@/shared/types';
 import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
 import { SimpleMapScoring } from '@/components/scoring/SimpleMapScoring';
@@ -158,13 +157,12 @@ export default function ScoringPage({
             <Text>Scoring</Text>
           </Breadcrumbs>
 
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="yellow">
-              <IconTrophy size={20} />
-            </ThemeIcon>
-            <Title order={2}>{match.name}</Title>
-            <FormatBadge format={match.match_format || 'casual'} />
-          </Group>
+          <PageHeader
+            icon={IconTrophy}
+            title={match.name}
+            subtitle="Scoring"
+            action={<FormatBadge format={match.match_format || 'casual'} />}
+          />
         </div>
 
         {scoringType === 'Position' ? (

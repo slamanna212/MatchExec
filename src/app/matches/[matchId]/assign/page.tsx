@@ -8,14 +8,12 @@ import {
   Stack,
   Group,
   Text,
-  Title,
   Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon,
   Card,
   Grid,
   Badge,
@@ -25,6 +23,7 @@ import {
   Select
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle, IconMapRoute } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 
 interface SignupField {
   id: string;
@@ -431,12 +430,11 @@ export default function AssignPage({
             <Text>Assign Players</Text>
           </Breadcrumbs>
 
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="violet">
-              <IconUsers size={20} />
-            </ThemeIcon>
-            <Title order={2}>{match.name}</Title>
-          </Group>
+          <PageHeader
+            icon={IconUsers}
+            title={match.name}
+            subtitle="Assign players to teams"
+          />
         </div>
 
         <Text size="sm" c="dimmed">

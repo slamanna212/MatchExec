@@ -21,8 +21,10 @@ import {
   useMantineColorScheme
 } from '@mantine/core';
 import type { Tournament} from '@/shared/types';
+import { IconClockHour3 } from '@tabler/icons-react';
 import { StageRing } from './StageRing';
 import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -286,18 +288,19 @@ export function TournamentHistoryDashboard() {
 
   return (
     <PageLayout>
-      <Group justify="flex-end" mb="xl">
-        {tournaments.length > 0 && (
+      <PageHeader
+        icon={IconClockHour3}
+        title="Tournament History"
+        subtitle="View results from completed tournaments"
+        action={tournaments.length > 0 ? (
           <TextInput
             placeholder="Search history..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.currentTarget.value)}
             style={{ width: 300 }}
           />
-        )}
-      </Group>
-
-      <Divider mb="xl" />
+        ) : undefined}
+      />
 
       {tournaments.length === 0 ? (
         <Card p="xl">

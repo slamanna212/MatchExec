@@ -22,6 +22,8 @@ import type { Match } from '@/shared/types';
 import { StageRing } from './StageRing';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
+import { IconClockHour3 } from '@tabler/icons-react';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -271,18 +273,19 @@ export function MatchHistoryDashboard() {
 
   return (
     <PageLayout>
-      <Group justify="flex-end" mb="xl">
-        {matches.length > 0 && (
+      <PageHeader
+        icon={IconClockHour3}
+        title="Match History"
+        subtitle="View results from completed matches"
+        action={matches.length > 0 ? (
           <TextInput
             placeholder="Search history..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.currentTarget.value)}
             style={{ width: 300 }}
           />
-        )}
-      </Group>
-
-      <Divider mb="xl" />
+        ) : undefined}
+      />
 
       {matches.length === 0 ? (
         <Card p="xl">

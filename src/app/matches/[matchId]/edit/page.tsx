@@ -11,7 +11,6 @@ import {
   Button,
   Group,
   Text,
-  Title,
   Breadcrumbs,
   Anchor,
   Card,
@@ -22,6 +21,8 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { logger } from '@/lib/logger/client';
 import { showError, notificationHelper } from '@/lib/notifications';
+import { IconPencil } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { GameMode, GameMapWithMode, SelectedMapCard } from '@/components/create-match/useMatchForm';
 import { MapSelector } from '@/components/create-match/MapSelector';
 import { SelectedMapsList } from '@/components/create-match/SelectedMapsList';
@@ -364,7 +365,11 @@ export default function EditMatchPage({
             <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
             <Text>Edit Match</Text>
           </Breadcrumbs>
-          <Title order={2}>Edit Match</Title>
+          <PageHeader
+            icon={IconPencil}
+            title="Edit Match"
+            subtitle={match.name}
+          />
         </div>
 
         <Card withBorder padding="lg" shadow="sm">

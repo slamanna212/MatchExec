@@ -27,6 +27,7 @@ import { EmptyState } from './EmptyState';
 import { notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -555,29 +556,26 @@ export function TournamentDashboard() {
 
   return (
     <PageLayout>
-      <div className="flex justify-center md:justify-end mb-6">
-        <Group gap="sm" wrap="nowrap">
-          {tournaments.length > 0 && (
-            <TextInput
-              placeholder="Search tournaments..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              style={{ 
-                width: 'clamp(150px, 50vw, 300px)',
-                flexShrink: 1
-              }}
-            />
-          )}
-          <Button 
-            size="md"
-            onClick={handleCreateTournament}
-            style={{ flexShrink: 0 }}
-          >
-            Create Tournament
-          </Button>
-        </Group>
-      </div>
-      <Divider mb="xl" />
+      <PageHeader
+        icon={IconTrophy}
+        title="Tournaments"
+        subtitle="Manage and advance your active tournaments"
+        action={
+          <Group gap="sm" wrap="nowrap">
+            {tournaments.length > 0 && (
+              <TextInput
+                placeholder="Search tournaments..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                style={{ width: 'clamp(150px, 50vw, 300px)', flexShrink: 1 }}
+              />
+            )}
+            <Button size="md" onClick={handleCreateTournament} style={{ flexShrink: 0 }}>
+              Create Tournament
+            </Button>
+          </Group>
+        }
+      />
       {tournaments.length === 0 ? (
         <Card shadow="sm" radius="md" withBorder>
           <EmptyState

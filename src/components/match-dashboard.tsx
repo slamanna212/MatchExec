@@ -26,6 +26,7 @@ import { EmptyState } from './EmptyState';
 import { showError, showSuccess } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -567,30 +568,26 @@ export function MatchDashboard() {
 
   return (
     <PageLayout>
-      <div className="flex justify-center md:justify-end mb-6">
-        <Group gap="sm" wrap="nowrap">
-          {matches.length > 0 && (
-            <TextInput
-              placeholder="Search matches..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              style={{ 
-                width: 'clamp(150px, 50vw, 300px)',
-                flexShrink: 1
-              }}
-            />
-          )}
-          <Button 
-            size="md"
-            onClick={handleCreateMatch}
-            style={{ flexShrink: 0 }}
-          >
-            Create Match
-          </Button>
-        </Group>
-      </div>
-
-      <Divider mb="xl" />
+      <PageHeader
+        icon={IconSwords}
+        title="Matches"
+        subtitle="Manage and advance your active matches"
+        action={
+          <Group gap="sm" wrap="nowrap">
+            {matches.length > 0 && (
+              <TextInput
+                placeholder="Search matches..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                style={{ width: 'clamp(150px, 50vw, 300px)', flexShrink: 1 }}
+              />
+            )}
+            <Button size="md" onClick={handleCreateMatch} style={{ flexShrink: 0 }}>
+              Create Match
+            </Button>
+          </Group>
+        }
+      />
 
       {matches.length === 0 ? (
         <Card shadow="sm" withBorder>

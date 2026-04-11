@@ -30,11 +30,13 @@ import {
   IconRss,
   IconCircleFilled,
   IconHeartbeat,
+  IconActivity,
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
 import type { FeedEvent, FeedResponse } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
+import { PageHeader } from './PageHeader';
 
 // ─── Priority config ──────────────────────────────────────────────────────────
 
@@ -286,33 +288,31 @@ export function FeedDashboard() {
       <Stack gap="md" maw={820} mx="auto">
 
         {/* Header */}
-        <Group justify="space-between" align="flex-end">
-          <Stack gap={2}>
-            <Group gap="xs" align="center">
-              <Text size="xl" fw={700}>Activity Feed</Text>
-              <Group gap={4} align="center" mb={1}>
-                <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />
-                <Text size="xs" c="dimmed">Live</Text>
-              </Group>
+        <PageHeader
+          icon={IconActivity}
+          title="Activity Feed"
+          subtitle="Real-time events from every part of MatchExec"
+          action={
+            <Group gap="sm" align="center" wrap="nowrap">
+              <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />
+              <DatePickerInput
+                type="range"
+                placeholder="Filter by date range"
+                value={dateRange}
+                onChange={(val) => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  setDateRange(val as any);
+                  setDisplayLimit(20);
+                  etagRef.current = null;
+                }}
+                clearable
+                maxDate={new Date()}
+                size="sm"
+                style={{ minWidth: 220 }}
+              />
             </Group>
-            <Text size="sm" c="dimmed">Real-time events from every part of MatchExec</Text>
-          </Stack>
-          <DatePickerInput
-            type="range"
-            placeholder="Filter by date range"
-            value={dateRange}
-            onChange={(val) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              setDateRange(val as any);
-              setDisplayLimit(20);
-              etagRef.current = null;
-            }}
-            clearable
-            maxDate={new Date()}
-            size="sm"
-            style={{ minWidth: 220 }}
-          />
-        </Group>
+          }
+        />
 
         {/* Filter */}
         <Group justify="center">

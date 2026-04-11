@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, Title, Breadcrumbs, Anchor, Button, Stepper } from '@mantine/core';
+import { Container, Stack, Breadcrumbs, Anchor, Button, Stepper } from '@mantine/core';
+import { PageHeader } from './PageHeader';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconTrophy, IconUsers, IconListCheck } from '@tabler/icons-react';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
@@ -204,12 +205,15 @@ export function CreateTournamentPage() {
         </Breadcrumbs>
 
         {/* Header */}
-        <Group justify="space-between" align="center">
-          <Title order={2}>Create New Tournament</Title>
-          <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
-            Back
-          </Button>
-        </Group>
+        <PageHeader
+          icon={IconTrophy}
+          title="Create Tournament"
+          action={
+            <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
+              Back
+            </Button>
+          }
+        />
 
         {/* Step Indicator */}
         <Stepper active={currentStep - 1} size="sm">

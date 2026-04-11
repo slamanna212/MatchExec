@@ -2,17 +2,23 @@
 
 import { Card, Text, Stack, Button, Group, Anchor } from '@mantine/core';
 import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly, IconScale } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function InfoPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
-        
+        <PageHeader
+          icon={IconInfoCircle}
+          title="Information"
+          subtitle="Documentation, support, and project information"
+        />
+
         <Stack gap="lg">
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Group mb="md">
               <IconInfoCircle size="1.2rem" />
-              <Text size="lg" fw={600}>Info</Text>
+              <Text size="lg" fw={600}>Documentation</Text>
             </Group>
 
             <Stack gap="md">

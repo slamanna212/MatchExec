@@ -9,14 +9,12 @@ import {
   Stack,
   Group,
   Text,
-  Title,
   Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon,
   Card,
   Grid,
   Badge,
@@ -27,6 +25,7 @@ import {
   Select
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
 
@@ -358,12 +357,11 @@ export default function AssignTournamentPage({
             <Text>Assign Teams</Text>
           </Breadcrumbs>
 
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="violet">
-              <IconUsers size={20} />
-            </ThemeIcon>
-            <Title order={2}>{tournament.name} — Assign Teams</Title>
-          </Group>
+          <PageHeader
+            icon={IconUsers}
+            title={`${tournament.name} — Assign Teams`}
+            subtitle="Assign participants to teams"
+          />
         </div>
 
         {/* Create new team section */}
