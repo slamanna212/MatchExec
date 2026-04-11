@@ -114,7 +114,9 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
       style={{
         borderLeftWidth: 3,
         borderLeftColor: accentColor,
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
         background: hasWarmBg ? warmBg : undefined,
         transition: 'box-shadow 0.15s ease',
       }}
@@ -134,19 +136,9 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
           </ThemeIcon>
 
           <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-            <Group gap={6} wrap="nowrap">
-              <Badge
-                color={p.color}
-                variant={p.badgeVariant}
-                size="xs"
-                style={{ flexShrink: 0 }}
-              >
-                {p.label}
-              </Badge>
-              <Text size="sm" fw={600} truncate>
-                {event.title}
-              </Text>
-            </Group>
+            <Text size="sm" fw={600} truncate>
+              {event.title}
+            </Text>
             {event.description && (
               <Text size="xs" c="dimmed" lineClamp={1}>
                 {event.description}
@@ -157,13 +149,14 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
 
         {/* Right side: timestamp + action */}
         <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-          <Text
+          <Badge
+            color={p.color}
+            variant="light"
             size="xs"
-            c="dimmed"
-            style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+            style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}
           >
             {formatRelativeTime(event.created_at)}
-          </Text>
+          </Badge>
 
           {isScoring && event.match_id && (
             <Button
