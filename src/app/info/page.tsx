@@ -3,10 +3,11 @@
 import { Card, Text, Stack, Button, Group, Anchor } from '@mantine/core';
 import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly, IconScale } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
+import { PageLayout } from '@/components/PageLayout';
 
 export default function InfoPage() {
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout>
       <Stack gap="xl">
         <PageHeader
           icon={IconInfoCircle}
@@ -175,6 +176,6 @@ export default function InfoPage() {
           </Card>
         </Stack>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

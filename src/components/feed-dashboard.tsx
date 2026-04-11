@@ -37,6 +37,7 @@ import { notificationHelper } from '@/lib/notifications';
 import type { FeedEvent, FeedResponse } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
 import { PageHeader } from './PageHeader';
+import { PageLayout } from './PageLayout';
 
 // ─── Priority config ──────────────────────────────────────────────────────────
 
@@ -285,7 +286,8 @@ export function FeedDashboard() {
         }
       `}</style>
 
-      <Stack gap="md" maw={820} mx="auto">
+      <PageLayout>
+      <Stack gap="md">
 
         {/* Header */}
         <PageHeader
@@ -390,6 +392,7 @@ export function FeedDashboard() {
           </Stack>
         )}
       </Stack>
+      </PageLayout>
     </>
   );
 }
