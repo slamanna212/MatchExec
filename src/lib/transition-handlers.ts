@@ -323,6 +323,16 @@ export async function handleCompleteTransition(matchId: string): Promise<void> {
   }
 
   try {
+    const db = await getDbInstance();
+    await db.run(
+      `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+      [matchId]
+    );
+  } catch (error) {
+    logger.error('❌ Error removing stale scoring feed events:', error);
+  }
+
+  try {
     const name = await getMatchName(matchId);
     await logFeedEvent({
       eventType: 'match_completed',
@@ -355,6 +365,16 @@ export async function handleCancelledTransition(matchId: string): Promise<void> 
     logger.debug(`🔇 Voice channels deleted for cancelled match: ${matchId}`);
   } catch (error) {
     logger.error('❌ Error deleting voice channels for cancelled match:', error);
+  }
+
+  try {
+    const db = await getDbInstance();
+    await db.run(
+      `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+      [matchId]
+    );
+  } catch (error) {
+    logger.error('❌ Error removing stale scoring feed events:', error);
   }
 
   try {

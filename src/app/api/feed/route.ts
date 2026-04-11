@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const events = await db.all<FeedRow>(
       `SELECT * FROM activity_feed
        ${where}
-       ORDER BY priority ASC, created_at DESC
+       ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
