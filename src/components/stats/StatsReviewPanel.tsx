@@ -186,17 +186,27 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
                 <>
                   <Text fw={500}>Extracted Players</Text>
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    {sub.playerStats.map(ps => (
-                      <PlayerStatCard
-                        key={ps.id}
-                        stat={ps}
-                        statDefs={statDefs}
-                        participants={participants}
-                        onAssignChange={(playerStatId, participantId) =>
-                          handleAssign(sub.id, playerStatId, participantId)
-                        }
-                      />
-                    ))}
+                    {sub.playerStats.map(ps => {
+                      const assignedElsewhere = new Set(
+                        sub.playerStats
+                          .filter(other => other.id !== ps.id && other.participant_id)
+                          .map(other => other.participant_id as string)
+                      );
+                      const availableParticipants = participants.filter(
+                        p => !assignedElsewhere.has(p.id)
+                      );
+                      return (
+                        <PlayerStatCard
+                          key={ps.id}
+                          stat={ps}
+                          statDefs={statDefs}
+                          participants={availableParticipants}
+                          onAssignChange={(playerStatId, participantId) =>
+                            handleAssign(sub.id, playerStatId, participantId)
+                          }
+                        />
+                      );
+                    })}
                   </SimpleGrid>
                 </>
               )}
