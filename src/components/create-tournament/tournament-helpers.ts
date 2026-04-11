@@ -4,7 +4,9 @@ import type { TournamentFormData } from './useTournamentForm';
  * Builds tournament payload from form data
  */
 export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
-  const startDateTime = formData.dateTime ?? null;
+  const startDateTime = formData.dateTime
+    ? (formData.dateTime instanceof Date ? formData.dateTime : new Date(formData.dateTime as string))
+    : null;
 
   return {
     name: formData.name,

@@ -13,7 +13,7 @@ export function buildMatchPayload(formData: Partial<MatchFormData>) {
     name: formData.name,
     description: formData.description || '',
     gameId: formData.gameId,
-    startDate: formData.dateTime.toISOString(),
+    startDate: (formData.dateTime instanceof Date ? formData.dateTime : new Date(formData.dateTime as string)).toISOString(),
     livestreamLink: formData.livestreamLink || '',
     rules: formData.rules,
     rounds: (formData.maps || []).length || 1,

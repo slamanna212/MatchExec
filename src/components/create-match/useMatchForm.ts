@@ -62,49 +62,48 @@ export interface SelectedMapCard {
  * Custom hook for managing match creation form state
  */
 export function useMatchForm() {
-  const [formData, setFormData] = useState<Partial<MatchFormData>>({
-    rules: 'casual',
-    playerNotifications: true,
-    announcements: []
+  const [formData, setFormData] = useState<Partial<MatchFormData>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('createMatchFormData');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.dateTime && typeof parsed.dateTime === 'string') {
+            parsed.dateTime = new Date(parsed.dateTime);
+          }
+          return parsed;
+        } catch { /* ignore */ }
+      }
+    }
+    return { rules: 'casual', playerNotifications: true, announcements: [] };
   });
 
-  const [selectedMaps, setSelectedMaps] = useState<SelectedMapCard[]>([]);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedMaps, setSelectedMaps] = useState<SelectedMapCard[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('createMatchSelectedMaps');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch { /* ignore */ }
+      }
+    }
+    return [];
+  });
+
+  const [imagePreview, setImagePreview] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('createMatchFormData');
+      if (saved) {
+        try {
+          return JSON.parse(saved).eventImageUrl ?? null;
+        } catch { /* ignore */ }
+      }
+    }
+    return null;
+  });
+
   const [startSignups, setStartSignups] = useState(true);
   const [mapNotes, setMapNotes] = useState<Record<string, string>>({});
-
-  // Load from session storage on mount
-  useEffect(() => {
-    const loadSavedData = () => {
-      const savedFormData = sessionStorage.getItem('createMatchFormData');
-      if (savedFormData) {
-        try {
-          const parsedData = JSON.parse(savedFormData);
-          if (parsedData.dateTime && typeof parsedData.dateTime === 'string') {
-            parsedData.dateTime = new Date(parsedData.dateTime);
-          }
-          setFormData(parsedData);
-          if (parsedData.eventImageUrl) {
-            setImagePreview(parsedData.eventImageUrl);
-          }
-        } catch {
-          // Failed to parse saved form data
-        }
-      }
-
-      const savedMaps = sessionStorage.getItem('createMatchSelectedMaps');
-      if (savedMaps) {
-        try {
-          const parsedMaps = JSON.parse(savedMaps);
-          setSelectedMaps(parsedMaps);
-        } catch {
-          // Failed to parse saved maps
-        }
-      }
-    };
-
-    loadSavedData();
-  }, []);
 
   // Save to session storage on changes
   useEffect(() => {

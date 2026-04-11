@@ -35,40 +35,40 @@ export interface TournamentFormData {
  * Custom hook for managing tournament creation form state
  */
 export function useTournamentForm() {
-  const [formData, setFormData] = useState<Partial<TournamentFormData>>({
-    format: 'single-elimination',
-    roundsPerMatch: 3,
-    ruleset: 'casual',
-    preCreatedTeams: [],
-    allowPlayerTeamSelection: false,
-    allowMatchEditing: true
+  const [formData, setFormData] = useState<Partial<TournamentFormData>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('tournamentFormData');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.dateTime && typeof parsed.dateTime === 'string') {
+            parsed.dateTime = new Date(parsed.dateTime);
+          }
+          return parsed;
+        } catch { /* ignore */ }
+      }
+    }
+    return {
+      format: 'single-elimination',
+      roundsPerMatch: 3,
+      ruleset: 'casual',
+      preCreatedTeams: [],
+      allowPlayerTeamSelection: false,
+      allowMatchEditing: true
+    };
   });
 
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Load from session storage on mount
-  useEffect(() => {
-    const loadSavedData = () => {
-      const savedFormData = sessionStorage.getItem('tournamentFormData');
-      if (savedFormData) {
+  const [imagePreview, setImagePreview] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('tournamentFormData');
+      if (saved) {
         try {
-          const parsedData = JSON.parse(savedFormData);
-          if (parsedData.dateTime && typeof parsedData.dateTime === 'string') {
-            parsedData.dateTime = new Date(parsedData.dateTime);
-          }
-          setFormData(parsedData);
-
-          if (parsedData.eventImageUrl) {
-            setImagePreview(parsedData.eventImageUrl);
-          }
-        } catch {
-          // Failed to parse saved form data
-        }
+          return JSON.parse(saved).eventImageUrl ?? null;
+        } catch { /* ignore */ }
       }
-    };
-
-    loadSavedData();
-  }, []);
+    }
+    return null;
+  });
 
   // Save to session storage on changes
   useEffect(() => {
