@@ -129,7 +129,10 @@ export class AIExtractor {
         );
       }
 
-      // Auto-assign participants by name matching
+      // Apply carry-over assignments from previous maps of this match
+      await this.applyCarryOverAssignments(submissionId, submission.match_id, submission.match_game_id);
+
+      // Auto-assign participants by name matching (fills remaining unassigned rows)
       await this.autoAssignParticipants(submissionId, submission.match_id, extractionResult.players);
 
       // Mark as completed
@@ -277,10 +280,42 @@ Return JSON matching this exact structure:
       if (matches.length === 1 && player.confidence > 0.7) {
         await this.db.run(
           `UPDATE scorecard_player_stats SET participant_id = ?, assignment_status = 'assigned'
-           WHERE submission_id = ? AND extracted_player_name = ?`,
+           WHERE submission_id = ? AND extracted_player_name = ? AND assignment_status = 'unassigned'`,
           [matches[0].id, submissionId, player.playerName]
         );
       }
+    }
+  }
+
+  async applyCarryOverAssignments(
+    submissionId: string,
+    matchId: string,
+    matchGameId: string
+  ): Promise<void> {
+    // Find the most recent assignment per extracted player name from previous maps of this match
+    const previousAssignments = await this.db.all<{ extracted_player_name: string; participant_id: string }>(
+      `SELECT sps.extracted_player_name, sps.participant_id
+       FROM scorecard_player_stats sps
+       INNER JOIN scorecard_submissions ss ON ss.id = sps.submission_id
+       WHERE sps.match_id = ?
+         AND sps.match_game_id != ?
+         AND sps.participant_id IS NOT NULL
+       GROUP BY sps.extracted_player_name
+       HAVING ss.created_at = MAX(ss.created_at)`,
+      [matchId, matchGameId]
+    );
+
+    if (!previousAssignments || previousAssignments.length === 0) return;
+
+    for (const prev of previousAssignments) {
+      await this.db.run(
+        `UPDATE scorecard_player_stats
+         SET participant_id = ?, assignment_status = 'assigned'
+         WHERE submission_id = ?
+           AND extracted_player_name = ?
+           AND assignment_status = 'unassigned'`,
+        [prev.participant_id, submissionId, prev.extracted_player_name]
+      );
     }
   }
 
