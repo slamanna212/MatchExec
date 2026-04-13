@@ -18,6 +18,7 @@ const INPUT_STYLES = {
 
 const theme = createTheme({
   primaryColor: 'violet',
+  autoContrast: true,
   colors: {
     violet: [
       '#f3e8ff',
