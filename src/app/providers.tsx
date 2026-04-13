@@ -102,6 +102,14 @@ const theme = createTheme({
     inputBorderColor: 'rgba(139, 92, 246, 0.35)',
   },
   components: {
+    // Disable auto contrast on buttons — buttons use intentional color choices with white text.
+    // Global autoContrast still applies to other components (Badge, Avatar, etc.)
+    Button: {
+      defaultProps: {
+        autoContrast: false,
+      },
+    },
+
     TextInput:     { styles: INPUT_STYLES },
     PasswordInput: { styles: INPUT_STYLES },
     NumberInput:   { styles: INPUT_STYLES },
