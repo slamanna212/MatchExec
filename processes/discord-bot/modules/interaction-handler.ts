@@ -297,7 +297,7 @@ export class InteractionHandler {
       SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
       FROM matches m
       JOIN games g ON m.game_id = g.id
-      WHERE m.status NOT IN ('complete', 'cancelled')
+      WHERE m.status IN ('gather', 'assign', 'battle')
         AND m.tournament_id IS NULL
       ORDER BY m.start_date ASC
       LIMIT 5
@@ -311,7 +311,7 @@ export class InteractionHandler {
     const embed = new EmbedBuilder()
       .setTitle('📋 Upcoming Matches')
       .setColor(0x5865F2)
-      .setDescription('🟡 Setup · 🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
+      .setDescription('🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
       .setFooter({ text: 'Showing up to 5 active matches' });
 
     for (const match of matches) {
@@ -368,7 +368,7 @@ export class InteractionHandler {
       SELECT t.id, t.name, t.status, t.start_date, t.format, g.name as game_name
       FROM tournaments t
       JOIN games g ON t.game_id = g.id
-      WHERE t.status NOT IN ('complete', 'cancelled')
+      WHERE t.status IN ('gather', 'assign', 'battle')
       ORDER BY t.start_date ASC
       LIMIT 5
     `);
@@ -381,7 +381,7 @@ export class InteractionHandler {
     const embed = new EmbedBuilder()
       .setTitle('🏆 Upcoming Tournaments')
       .setColor(0x5865F2)
-      .setDescription('🟡 Setup · 🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
+      .setDescription('🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
       .setFooter({ text: 'Showing up to 5 active tournaments' });
 
     for (const tournament of tournaments) {
