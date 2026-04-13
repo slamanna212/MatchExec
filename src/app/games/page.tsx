@@ -72,14 +72,6 @@ function LazyMapCard({ map, gameColor, isEnabled, onToggle, supportsAllModes }: 
         className={styles.mapCard}
         style={{ backgroundImage }}
       >
-        <button
-          className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
-          style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
-          onClick={(e) => { e.stopPropagation(); onToggle(map.name); }}
-          title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
-        >
-          <IconTrophy size={22} />
-        </button>
         <div className={styles.mapCardOverlay}>
           <div className={styles.mapCardBottom}>
             <div>
@@ -88,19 +80,29 @@ function LazyMapCard({ map, gameColor, isEnabled, onToggle, supportsAllModes }: 
                 <div className={styles.mapCardLocation}>{map.location}</div>
               )}
             </div>
-            {!supportsAllModes && mapModes.length > 0 && (
-              <div className={styles.mapCardModes}>
-                {mapModes.map((mode, i) => (
-                  <span
-                    key={i}
-                    className={styles.mapCardModeBadge}
-                    style={{ backgroundColor: `${gameColor}cc` }}
-                  >
-                    {mode}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className={styles.mapCardBottomRight}>
+              {!supportsAllModes && mapModes.length > 0 && (
+                <div className={styles.mapCardModes}>
+                  {mapModes.map((mode, i) => (
+                    <span
+                      key={i}
+                      className={styles.mapCardModeBadge}
+                      style={{ backgroundColor: `${gameColor}cc` }}
+                    >
+                      {mode}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
+                style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
+                onClick={(e) => { e.stopPropagation(); onToggle(map.name); }}
+                title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
+              >
+                <IconTrophy size={22} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
