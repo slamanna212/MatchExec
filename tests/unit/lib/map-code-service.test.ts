@@ -80,10 +80,9 @@ describe('MapCodeService', () => {
         [JSON.stringify(['hanamura']), JSON.stringify({ 'hanamura': 'ABC123' }), match.id]
       );
 
-      // Method finds map code but queueMapCodePM fails due to schema constraint (user_id NOT NULL)
-      // This surfaces a known source bug - test verifies the attempt was made
+      // Method finds map code and successfully queues PM
       const result = await MapCodeService.processFirstMapCode(match.id);
-      expect(typeof result).toBe('boolean');
+      expect(result).toBe(true);
     });
   });
 
@@ -94,14 +93,13 @@ describe('MapCodeService', () => {
       expect(result).toBe(false);
     });
 
-    it('attempts to queue PM when map code found (known source bug: user_id required)', async () => {
+    it('queues PM when map code found', async () => {
       const match = await createMatch(game.id, mode.id);
       const mapCodes = { 'hanamura': 'XYZ789' };
 
-      // processMapCode finds the code but queueMapCodePM fails due to schema constraint
+      // processMapCode finds the code and queues it successfully
       const result = await MapCodeService.processMapCode(match.id, game.id, 'hanamura', mapCodes);
-      // The method catches the error and returns false (source bug: user_id NOT NULL)
-      expect(typeof result).toBe('boolean');
+      expect(result).toBe(true);
     });
 
     it('strips numeric suffix from map ID before lookup', async () => {
@@ -110,13 +108,13 @@ describe('MapCodeService', () => {
       const mapCodes = { 'hanamura': 'CODE99' };
       const mapCodesWithSuffix = { 'hanamura-1': 'WRONG' };
 
-      // With exact key "hanamura-1" in codes — no match after stripping
+      // With exact key "hanamura-1" in codes — numeric suffix stripped, looks up "hanamura" but code is keyed as "hanamura-1"
       const noMatch = await MapCodeService.processMapCode(match.id, game.id, 'hanamura-1', mapCodesWithSuffix);
-      expect(typeof noMatch).toBe('boolean');
+      expect(noMatch).toBe(false);
 
-      // With base key "hanamura" — finds a match, tries to queue (may fail due to schema)
+      // With base key "hanamura" — finds a match and queues successfully
       const hasMatch = await MapCodeService.processMapCode(match.id, game.id, 'hanamura-1', mapCodes);
-      expect(typeof hasMatch).toBe('boolean');
+      expect(hasMatch).toBe(true);
     });
 
     it('returns false for case where no code found in codes map', async () => {

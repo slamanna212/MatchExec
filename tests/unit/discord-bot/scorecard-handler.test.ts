@@ -138,6 +138,31 @@ describe('ScorecardHandler', () => {
 
       expect(mockMessage.reply).not.toHaveBeenCalled();
     });
+
+    it('replies with instructions when user has a pending scorecard', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const matchGameId = `mg-${Date.now()}`;
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'ongoing')`,
+        [matchGameId, match.id]
+      );
+      await db.run(
+        `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id)
+         VALUES ('dm-1', ?, ?, 'user-with-pending', 'msg-123')`,
+        [match.id, matchGameId]
+      );
+
+      const mockMessage = {
+        author: { id: 'user-with-pending' },
+        reply: vi.fn().mockResolvedValue(undefined),
+      };
+
+      await handler.handleNonReplyDM(mockMessage as any);
+
+      expect(mockMessage.reply).toHaveBeenCalled();
+      const replyText = mockMessage.reply.mock.calls[0][0];
+      expect(replyText).toContain('reply directly');
+    });
   });
 
   describe('handleDMReply', () => {
@@ -162,6 +187,108 @@ describe('ScorecardHandler', () => {
 
       await handler.handleDMReply(mockMessage as any);
       expect(mockMessage.reply).not.toHaveBeenCalled();
+    });
+
+    it('replies with error when no image attachment is provided', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const matchGameId = `mg-${Date.now()}`;
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'ongoing')`,
+        [matchGameId, match.id]
+      );
+      // Use a numeric match_id value since the handler validates with /^\d+$/
+      await db.run(
+        `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id)
+         VALUES ('dm-reply-1', '12345', ?, 'user-reply', 'msg-scorecard')`,
+        [matchGameId]
+      );
+
+      const mockMessage = {
+        reference: { messageId: 'msg-scorecard' },
+        author: { id: 'user-reply' },
+        id: 'reply-msg-1',
+        reply: vi.fn().mockResolvedValue(undefined),
+        attachments: {
+          filter: vi.fn().mockReturnValue({ size: 0, first: vi.fn() }),
+        },
+      };
+
+      await handler.handleDMReply(mockMessage as any);
+
+      expect(mockMessage.reply).toHaveBeenCalled();
+      expect(mockMessage.reply.mock.calls[0][0]).toContain('screenshot image');
+    });
+
+    it('processes image attachment and creates submission', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const matchGameId = `mg-${Date.now()}`;
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'ongoing')`,
+        [matchGameId, match.id]
+      );
+
+      const participantId = `p-${Date.now()}`;
+      await db.run(
+        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, team)
+         VALUES (?, ?, 'u1', 'user-img', 'Tester', 'blue')`,
+        [participantId, match.id]
+      );
+      // Use a numeric match_id since the handler validates with /^\d+$/
+      await db.run(
+        `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
+         VALUES ('dm-img-1', '99999', ?, 'user-img', 'msg-sc-dm', ?, 'blue')`,
+        [matchGameId, participantId]
+      );
+
+      // Mock fs to succeed
+      fsMocks.existsSync.mockReturnValue(true);
+
+      // Mock global fetch for image download
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(100)),
+      }) as any;
+
+      const mockAttachment = {
+        url: 'https://cdn.discordapp.com/attachments/test/image.png',
+        contentType: 'image/png',
+        name: 'image.png',
+      };
+
+      const filteredAttachments = {
+        size: 1,
+        first: () => mockAttachment,
+      };
+
+      const mockMessage = {
+        reference: { messageId: 'msg-sc-dm' },
+        author: { id: 'user-img' },
+        id: 'reply-msg-img',
+        reply: vi.fn().mockResolvedValue(undefined),
+        attachments: {
+          filter: vi.fn().mockReturnValue(filteredAttachments),
+        },
+      };
+
+      await handler.handleDMReply(mockMessage as any);
+
+      // Restore fetch
+      globalThis.fetch = originalFetch;
+
+      // Should reply with success message
+      expect(mockMessage.reply).toHaveBeenCalled();
+      expect(mockMessage.reply.mock.calls[0][0]).toContain('Screenshot received');
+
+      // Verify submission was created in DB
+      const submissions = await db.all('SELECT * FROM scorecard_submissions WHERE match_id = ?', ['99999']);
+      expect(submissions.length).toBe(1);
+      expect(submissions[0].submitted_by_discord_user_id).toBe('user-img');
+      expect(submissions[0].team_side).toBe('blue');
+
+      // Verify processing queue entry was created
+      const queueEntries = await db.all('SELECT * FROM stats_processing_queue WHERE match_id = ?', ['99999']);
+      expect(queueEntries.length).toBe(1);
     });
   });
 

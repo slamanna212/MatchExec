@@ -55,27 +55,25 @@ describe('voice-channel-manager', () => {
       expect(result.message).toContain('not found');
     });
 
-    it('queues voice channel creation request and times out', async () => {
+    it('queues voice channel creation request', async () => {
       await db.run(`
         INSERT INTO discord_settings (guild_id, bot_token, voice_channel_category_id)
         VALUES ('guild1', 'token1', 'cat123')
       `);
       const match = await createMatch(game.id, mode.id);
 
-      // Override the wait timeout to be very short to avoid 30s wait in tests
-      // The request will be pending and the function will time out
-      // We test that it queues the request at minimum
-      void createMatchVoiceChannels(match.id);
+      // Start the creation process (don't await — it polls for 30s)
+      const promise = createMatchVoiceChannels(match.id);
 
-      // Give it a moment, then check that a request was queued
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for the DB insert to appear (happens before the poll loop)
+      await vi.waitFor(async () => {
+        const requests = await db.all(`SELECT * FROM discord_bot_requests WHERE type = 'voice_channel_create'`);
+        expect(requests.length).toBeGreaterThanOrEqual(1);
+      }, { timeout: 2000 });
 
-      const requests = await db.all(`SELECT * FROM discord_bot_requests WHERE type = 'voice_channel_create'`);
-      expect(requests.length).toBeGreaterThanOrEqual(1);
-
-      // Cancel the promise by letting it run (it will timeout after 30s in prod,
-      // but we use vi.useFakeTimers approach won't work cleanly here, so just await)
-      // The test verifies the queue was created; we don't need to await the timeout
+      // Don't await the full promise — it would timeout after 30s
+      // The test verifies the request was queued correctly
+      void promise;
     }, 10000);
   });
 

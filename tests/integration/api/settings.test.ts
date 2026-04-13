@@ -18,9 +18,9 @@ describe('Settings API', () => {
 
     it('should update discord settings', async () => {
       const request = createMockRequest('PUT', '/api/settings/discord', {
-        token: 'new-token',
-        guildId: 'new-guild',
-        announcementChannelId: 'new-channel',
+        bot_token: 'new-token',
+        guild_id: 'new-guild',
+        announcement_role_id: 'new-role',
       });
 
       const response = await updateDiscordSettings(request);
@@ -33,6 +33,9 @@ describe('Settings API', () => {
       const getResponse = await getDiscordSettings();
       const { data: savedData } = await parseResponse(getResponse);
       expect(savedData).toBeDefined();
+      expect(savedData.guild_id).toBe('new-guild');
+      expect(savedData.bot_token).toBe('••••••••'); // Token is masked in GET response
+      expect(savedData.announcement_role_id).toBe('new-role');
     });
   });
 
@@ -47,9 +50,8 @@ describe('Settings API', () => {
 
     it('should update announcer settings', async () => {
       const request = createMockRequest('PUT', '/api/settings/announcer', {
-        enabled: true,
-        voice: 'male',
-        volume: 80,
+        announcer_voice: 'male',
+        voice_announcements_enabled: true,
       });
 
       const response = await updateAnnouncerSettings(request);
@@ -62,6 +64,8 @@ describe('Settings API', () => {
       const getResponse = await getAnnouncerSettings();
       const { data: savedData } = await parseResponse(getResponse);
       expect(savedData).toBeDefined();
+      expect(savedData.announcer_voice).toBe('male');
+      expect(savedData.voice_announcements_enabled).toBe(true);
     });
   });
 
@@ -89,6 +93,7 @@ describe('Settings API', () => {
       const getResponse = await getUISettings();
       const { data: savedData } = await parseResponse(getResponse);
       expect(savedData).toBeDefined();
+      expect(savedData.auto_refresh_interval_seconds).toBe(30);
     });
   });
 

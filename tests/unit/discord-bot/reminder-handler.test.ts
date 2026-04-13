@@ -84,9 +84,10 @@ describe('ReminderHandler', () => {
 
     it('sends DMs to participants with discord_user_id', async () => {
       mockClient.isReady.mockReturnValue(true);
+      const mockSend = vi.fn().mockResolvedValue(undefined);
       mockClient.users = {
         fetch: vi.fn().mockResolvedValue({
-          send: vi.fn().mockResolvedValue(undefined),
+          send: mockSend,
         }),
       };
 
@@ -95,6 +96,12 @@ describe('ReminderHandler', () => {
 
       const result = await handler.sendPlayerReminders(match.id);
       expect(result).toBe(true);
+      expect(mockClient.users.fetch).toHaveBeenCalledWith('discord-u1');
+      expect(mockSend).toHaveBeenCalled();
+      // Verify the DM contains an embed
+      const sendArgs = mockSend.mock.calls[0][0];
+      expect(sendArgs).toHaveProperty('embeds');
+      expect(sendArgs.embeds.length).toBeGreaterThan(0);
     });
   });
 
