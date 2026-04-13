@@ -1,6 +1,7 @@
 'use client'
 
 import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid } from '@mantine/core';
+import { IconMapRoute } from '@tabler/icons-react';
 
 interface MatchParticipant {
   id: string;
@@ -10,6 +11,7 @@ interface MatchParticipant {
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: boolean;
 }
 
 interface SignupField {
@@ -94,7 +96,16 @@ export function ParticipantsList({
             {index}
           </Avatar>
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-            <Text fw={500} size="sm">{participant.username}</Text>
+            <Group gap={4} align="center">
+              <Text fw={500} size="sm">{participant.username}</Text>
+              {participant.receives_map_codes && (
+                <IconMapRoute
+                  size={14}
+                  style={{ color: `var(--mantine-color-${getBadgeColor(teamColor)}-6)` }}
+                  title="Match Commander"
+                />
+              )}
+            </Group>
             <Text size="xs" c="dimmed">
               Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
             </Text>

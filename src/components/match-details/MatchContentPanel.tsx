@@ -114,8 +114,11 @@ interface MatchParticipant {
   id: string;
   user_id: string;
   username: string;
+  avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
+  team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: boolean;
 }
 
 interface ReminderData {
