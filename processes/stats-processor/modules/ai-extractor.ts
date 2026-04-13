@@ -92,7 +92,14 @@ export class AIExtractor {
         const callProvider = AI_PROVIDER_CALLS[provider.providerId];
         if (!callProvider) { lastError = new Error(`Unknown provider: ${provider.providerId}`); continue; }
         try {
-          rawResponse = await callProvider(apiKey, resolveModelId(provider.providerId, provider.model), imageBase64, mimeType, prompt);
+          const candidateResponse = await callProvider(apiKey, resolveModelId(provider.providerId, provider.model), imageBase64, mimeType, prompt);
+          const validationError = this.validateExtractionResponse(candidateResponse);
+          if (validationError) {
+            lastError = new Error(`Provider ${provider.instanceId} returned unusable data: ${validationError}`);
+            logger.warning(`Provider ${provider.instanceId} returned unusable data (${validationError}), trying next provider`);
+            continue;
+          }
+          rawResponse = candidateResponse;
           break;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -247,6 +254,36 @@ Return JSON matching this exact structure:
     "winner": "team1" | "team2" | null
   }
 }`;
+  }
+
+  validateExtractionResponse(rawResponse: string): string | null {
+    let cleaned = rawResponse.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    }
+
+    let parsed: AIExtractionResult;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return 'invalid JSON';
+    }
+
+    if (!Array.isArray(parsed.players)) return 'players is not an array';
+    if (parsed.players.length === 0) return 'players array is empty';
+
+    for (const player of parsed.players) {
+      if (!player.playerName || typeof player.playerName !== 'string') return 'player missing playerName';
+      if (!player.stats || typeof player.stats !== 'object' || Array.isArray(player.stats)) return 'player missing stats object';
+
+      for (const val of Object.values(player.stats)) {
+        if (typeof val !== 'number' || !isFinite(val)) return 'non-numeric stat value';
+      }
+
+      if (typeof player.confidence !== 'number' || player.confidence < 0.5) return 'low confidence';
+    }
+
+    return null;
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {
