@@ -28,6 +28,7 @@ interface MatchData {
   game_id: string;
   match_format?: MatchFormat;
   status: string;
+  stats_enabled?: number;
 }
 
 export default function ScoringPage({
@@ -186,6 +187,7 @@ export default function ScoringPage({
             onResultSubmit={handleResultSubmit}
             submitting={submitting}
             onAllMapsCompleted={handleAllMapsCompleted}
+            matchStatsEnabled={(match.stats_enabled ?? 0) === 1}
           />
         )}
       </Stack>

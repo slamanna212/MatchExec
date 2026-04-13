@@ -1,7 +1,8 @@
 'use client'
 
-import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button } from '@mantine/core';
+import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button, Tooltip, Box, Group as MGroup } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
+import { IconSparkles } from '@tabler/icons-react';
 import type { MatchFormData } from './useMatchForm';
 import { EventImageUpload } from './EventImageUpload';
 
@@ -14,6 +15,8 @@ interface EventInfoStepProps {
   onImageUpload: (file: File | null) => Promise<void>;
   onRemoveImage: () => Promise<void>;
   uploadingImage: boolean;
+  hasStatDefs: boolean;
+  aiProvidersConfigured: boolean;
 }
 
 export function EventInfoStep({
@@ -24,7 +27,9 @@ export function EventInfoStep({
   onNext,
   onImageUpload,
   onRemoveImage,
-  uploadingImage
+  uploadingImage,
+  hasStatDefs,
+  aiProvidersConfigured,
 }: EventInfoStepProps) {
   return (
     <Stack>
@@ -81,6 +86,44 @@ export function EventInfoStep({
         checked={formData.playerNotifications ?? true}
         onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
       />
+
+      {hasStatDefs && (
+        <Box
+          style={{
+            borderRadius: 'var(--mantine-radius-md)',
+            border: '1px solid color-mix(in srgb, var(--mantine-color-violet-5) 30%, transparent)',
+            background: 'color-mix(in srgb, var(--mantine-color-violet-5) 5%, transparent)',
+            padding: 'var(--mantine-spacing-sm) var(--mantine-spacing-md)',
+          }}
+        >
+          <MGroup gap="xs" mb={6}>
+            <IconSparkles
+              size={13}
+              style={{ color: 'var(--mantine-color-violet-4)', flexShrink: 0 }}
+            />
+            <Text size="xs" c="violet.4" fw={600} tt="uppercase" style={{ letterSpacing: '0.05em' }}>
+              AI Feature
+            </Text>
+          </MGroup>
+
+          <Tooltip
+            label="Configure AI providers in Settings → Stats to enable this"
+            disabled={aiProvidersConfigured}
+            position="top-start"
+            withArrow
+          >
+            <div style={{ display: 'inline-block', width: '100%' }}>
+              <Checkbox
+                label="Enable Stats Collection"
+                description="Upload scorecards after each map to extract player stats with AI"
+                checked={formData.statsEnabled ?? false}
+                onChange={(event) => updateFormData('statsEnabled', event.currentTarget.checked)}
+                disabled={!aiProvidersConfigured}
+              />
+            </div>
+          </Tooltip>
+        </Box>
+      )}
 
       <EventImageUpload
         imagePreview={imagePreview}

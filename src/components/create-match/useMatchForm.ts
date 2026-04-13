@@ -27,6 +27,7 @@ export interface MatchFormData {
   maps: string[];
   eventImageUrl?: string;
   playerNotifications?: boolean;
+  statsEnabled?: boolean;
   announcementVoiceChannel?: string;
   announcements?: AnnouncementTime[];
 }

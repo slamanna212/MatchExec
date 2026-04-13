@@ -25,3 +25,10 @@ DROP TABLE discord_map_code_queue;
 ALTER TABLE discord_map_code_queue_new RENAME TO discord_map_code_queue;
 
 CREATE INDEX IF NOT EXISTS idx_discord_map_code_queue_status ON discord_map_code_queue(status);
+
+-- Stats-aware scoring additions
+ALTER TABLE matches ADD COLUMN stats_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE match_games ADD COLUMN discord_notified INTEGER NOT NULL DEFAULT 0;
+
+-- Mark all already-completed games as notified (notifications already sent pre-feature)
+UPDATE match_games SET discord_notified = 1 WHERE status = 'completed';

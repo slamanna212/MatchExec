@@ -20,6 +20,7 @@ export function buildMatchPayload(formData: Partial<MatchFormData>) {
     maps: formData.maps || [],
     eventImageUrl: formData.eventImageUrl || null,
     playerNotifications: formData.playerNotifications ?? true,
+    statsEnabled: formData.statsEnabled ?? false,
     announcementVoiceChannel: formData.announcementVoiceChannel || null,
     announcements: formData.announcements || []
   };

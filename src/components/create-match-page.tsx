@@ -46,6 +46,8 @@ export function CreateMatchPage() {
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
   const [mapNoteModalOpen, setMapNoteModalOpen] = useState(false);
   const [selectedMapForNote, setSelectedMapForNote] = useState<SelectedMapCard | null>(null);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
 
   // Load games on mount
   useEffect(() => {
@@ -89,8 +91,24 @@ export function CreateMatchPage() {
     router.push(`/matches/create?${params.toString()}`);
   };
 
-  const handleGameSelect = (gameId: string) => {
+  const handleGameSelect = async (gameId: string) => {
     updateFormData('gameId', gameId);
+
+    // Check if the selected game supports stats and if AI providers are configured
+    try {
+      const [statDefsRes, statsSettingsRes] = await Promise.all([
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
+      ]);
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
+    } catch {
+      setHasStatDefs(false);
+      setAiProvidersConfigured(false);
+    }
+
     navigateToStep(2);
   };
 
@@ -370,6 +388,8 @@ export function CreateMatchPage() {
             onImageUpload={handleImageUpload}
             onRemoveImage={handleRemoveImage}
             uploadingImage={uploadingImage}
+            hasStatDefs={hasStatDefs}
+            aiProvidersConfigured={aiProvidersConfigured}
           />
         )}
 

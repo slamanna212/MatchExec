@@ -19,6 +19,7 @@ export interface MatchRequestBody {
   eventImageUrl?: string;
   playerNotifications?: boolean;
   announcements?: Array<{ type: string; time: number }>;
+  statsEnabled?: boolean;
 }
 
 export interface PreparedMatchData {
@@ -90,8 +91,9 @@ export async function insertMatchToDatabase(
   await db.run(`
     INSERT INTO matches (
       id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date, start_time,
-      rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcements, match_format
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcements, match_format,
+      stats_enabled
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     preparedData.matchId,
     body.name,
@@ -110,7 +112,8 @@ export async function insertMatchToDatabase(
     body.eventImageUrl || null,
     body.playerNotifications ?? true,
     body.announcements && body.announcements.length > 0 ? JSON.stringify(body.announcements) : null,
-    body.rules || 'casual'
+    body.rules || 'casual',
+    body.statsEnabled ? 1 : 0
   ]);
 }
 

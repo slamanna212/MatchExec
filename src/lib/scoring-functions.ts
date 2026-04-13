@@ -370,8 +370,16 @@ export async function saveMatchResult(
       logger.error('Error logging map scored feed event:', feedError);
     }
 
-    // Queue Discord score notification
-    await queueScoreNotification(matchGameId, result);
+    // Queue Discord score notification (held for stats-enabled matches until stats are assigned)
+    const matchSettings = await db.get<{ stats_enabled: number }>(
+      'SELECT stats_enabled FROM matches WHERE id = ?', [result.matchId]
+    );
+    if (matchSettings?.stats_enabled) {
+      logger.debug(`Stats-enabled match — holding Discord map notification for game ${matchGameId}`);
+    } else {
+      await queueScoreNotification(matchGameId, result);
+      await db.run('UPDATE match_games SET discord_notified = 1 WHERE id = ?', [matchGameId]);
+    }
 
     // Set the next pending map to 'ongoing' if it exists
     const hasNextMap = await setNextMapToOngoing(result.matchId);
@@ -586,7 +594,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
 /**
  * Queue a Discord score notification for this game result
  */
-async function queueScoreNotification(matchGameId: string, result: MatchResult): Promise<void> {
+export async function queueScoreNotification(matchGameId: string, result: MatchResult): Promise<void> {
   const db = await getDbInstance();
   
   try {

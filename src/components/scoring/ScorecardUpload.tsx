@@ -9,10 +9,11 @@ interface ScorecardUploadProps {
   matchId: string;
   matchGameId: string;
   onUploadComplete: (submissionId: string) => void;
+  onUploadSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onCancel }: ScorecardUploadProps) {
+export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onUploadSuccess, onCancel }: ScorecardUploadProps) {
   const [teamSide, setTeamSide] = useState<'blue' | 'red'>('blue');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onCanc
       const data = await res.json() as { submissionId: string };
       showSuccess('Scorecard uploaded! Processing stats...');
       onUploadComplete(data.submissionId);
+      onUploadSuccess?.();
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
