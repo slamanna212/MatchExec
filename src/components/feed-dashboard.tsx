@@ -271,8 +271,9 @@ export function FeedDashboard() {
     }
   }, [events, filter]);
 
-  const critical = useMemo(() => filtered.filter(e => e.priority === 1), [filtered]);
-  const regular  = useMemo(() => filtered.filter(e => e.priority > 1), [filtered]);
+  const critical        = useMemo(() => filtered.filter(e => e.priority === 1), [filtered]);
+  const scoringRequired = useMemo(() => filtered.filter(e => e.event_type === 'match_scoring_required'), [filtered]);
+  const regular         = useMemo(() => filtered.filter(e => e.priority > 1 && e.event_type !== 'match_scoring_required'), [filtered]);
 
   return (
     <>
@@ -363,6 +364,26 @@ export function FeedDashboard() {
                   </Text>
                 </Group>
                 {critical.map(e => <FeedEventCard key={e.id} event={e} />)}
+                {regular.length > 0 && <Divider my={4} />}
+              </>
+            )}
+
+            {/* Map Scoring Required section */}
+            {scoringRequired.length > 0 && (
+              <>
+                <Group gap={6}>
+                  <IconMap size={13} color="var(--mantine-color-orange-6)" />
+                  <Text
+                    size="xs"
+                    fw={700}
+                    c="orange"
+                    tt="uppercase"
+                    style={{ letterSpacing: '0.06em' }}
+                  >
+                    Map Scoring Required
+                  </Text>
+                </Group>
+                {scoringRequired.map(e => <FeedEventCard key={e.id} event={e} />)}
                 {regular.length > 0 && <Divider my={4} />}
               </>
             )}
