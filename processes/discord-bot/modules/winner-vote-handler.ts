@@ -151,8 +151,14 @@ export class WinnerVoteHandler {
     if (voted.length === totalCommanders) {
       // All commanders have voted
       if (uniqueVotes.size === 1) {
-        // Consensus — submit the winner via full scoring flow
+        // Consensus — check stats gate before submitting
         const winner = voted[0].voted_for as 'blue' | 'red';
+        const blocked = await this.checkStatsGate(matchId, matchGameId);
+        if (blocked) {
+          // Notify commanders scorecard required; leave voted_for set for Path B
+          await this.notifyScorecardRequired(allVotes);
+          return;
+        }
         await this.submitWinner(matchId, matchGameId, winner);
       } else {
         // Conflict — clear any provisional winner and notify commanders
@@ -177,7 +183,45 @@ export class WinnerVoteHandler {
     }
   }
 
-  private async submitWinner(matchId: string, matchGameId: string, winner: 'blue' | 'red'): Promise<void> {
+  /** Returns true if a scorecard is required but not yet submitted. */
+  private async checkStatsGate(matchId: string, matchGameId: string): Promise<boolean> {
+    const matchRow = await this.db.get<{ stats_enabled: number; stat_def_count: number }>(
+      `SELECT m.stats_enabled, COUNT(gsd.id) as stat_def_count
+       FROM matches m
+       LEFT JOIN game_stat_definitions gsd ON gsd.game_id = m.game_id
+       WHERE m.id = ?
+       GROUP BY m.id`,
+      [matchId]
+    );
+    if (!matchRow?.stats_enabled || !matchRow.stat_def_count) return false;
+
+    const submission = await this.db.get<{ id: string }>(
+      'SELECT id FROM scorecard_submissions WHERE match_game_id = ? LIMIT 1',
+      [matchGameId]
+    );
+    return !submission;
+  }
+
+  private async notifyScorecardRequired(votes: VoteRecord[]): Promise<void> {
+    const embed = new EmbedBuilder()
+      .setTitle('📸 Scorecard Required')
+      .setDescription(
+        'Vote recorded ✅ — a scorecard is also required for this match.\n\n' +
+        'Submit your screenshot via DM and the result will confirm automatically.'
+      )
+      .setColor(0xffa500);
+
+    for (const vote of votes) {
+      try {
+        const user = await this.client.users.fetch(vote.discord_user_id);
+        await user.send({ embeds: [embed] });
+      } catch (err) {
+        logger.error(`Failed to send scorecard-required DM to ${vote.discord_user_id}:`, err);
+      }
+    }
+  }
+
+  async submitWinner(matchId: string, matchGameId: string, winner: 'blue' | 'red'): Promise<void> {
     try {
       const { saveMatchResult } = await import('../../../src/lib/scoring-functions');
       await saveMatchResult(matchGameId, {

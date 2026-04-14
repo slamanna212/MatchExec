@@ -71,3 +71,6 @@ CREATE INDEX IF NOT EXISTS idx_winner_vote_messages_game
 
 CREATE INDEX IF NOT EXISTS idx_winner_vote_messages_msg
   ON discord_winner_vote_messages(discord_message_id);
+
+-- Enable/disable winner vote DMs from Discord settings
+ALTER TABLE discord_settings ADD COLUMN winner_vote_enabled INTEGER NOT NULL DEFAULT 1;

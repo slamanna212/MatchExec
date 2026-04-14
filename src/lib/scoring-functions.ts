@@ -1209,6 +1209,12 @@ async function queueWinnerVote(matchId: string, matchGameId: string, mapName: st
   try {
     const db = await getDbInstance();
 
+    // Check winner vote is enabled in Discord settings
+    const discordSettings = await db.get<{ winner_vote_enabled: number }>(
+      'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
+    );
+    if (!discordSettings?.winner_vote_enabled) return;
+
     // Check that at least one commander exists before queuing
     const commanderCount = await db.get<{ cnt: number }>(
       'SELECT COUNT(*) as cnt FROM match_participants WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL',

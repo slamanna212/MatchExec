@@ -154,9 +154,6 @@ export class AIExtractor {
 
       logger.debug(`✅ AI extraction completed for submission ${submissionId}, extracted ${extractionResult.players.length} players`);
 
-      // Check both-sides auto-advance
-      await this.checkBothSidesAndAutoAdvance(submission.match_id, submission.match_game_id);
-
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`❌ AI extraction failed for submission ${submissionId}:`, message);
@@ -356,88 +353,4 @@ Return JSON matching this exact structure:
     }
   }
 
-  async checkBothSidesAndAutoAdvance(matchId: string, matchGameId: string): Promise<void> {
-    const settings = await this.db.get(
-      'SELECT both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
-    );
-    if (!settings?.both_sides_required) return;
-
-    // Check if we have completed submissions for both sides
-    const blueSubmission = await this.db.get(
-      `SELECT * FROM scorecard_submissions WHERE match_id = ? AND match_game_id = ? AND team_side = 'blue' AND ai_extraction_status = 'completed'`,
-      [matchId, matchGameId]
-    );
-    const redSubmission = await this.db.get(
-      `SELECT * FROM scorecard_submissions WHERE match_id = ? AND match_game_id = ? AND team_side = 'red' AND ai_extraction_status = 'completed'`,
-      [matchId, matchGameId]
-    );
-
-    if (!blueSubmission || !redSubmission) return;
-
-    // Load player stats for each submission
-    const blueStats = await this.db.all(
-      'SELECT * FROM scorecard_player_stats WHERE submission_id = ?',
-      [blueSubmission.id]
-    );
-    const redStats = await this.db.all(
-      'SELECT * FROM scorecard_player_stats WHERE submission_id = ?',
-      [redSubmission.id]
-    );
-
-    // Compare stats between submissions
-    let allMatch = true;
-    const allPlayers = [...(blueStats || []), ...(redStats || [])];
-
-    // Find matching players between the two submissions (by team_side + name)
-    for (const stat of blueStats || []) {
-      const matchInRed = (redStats || []).find(
-        (r: { extracted_player_name: string; team_side: string }) =>
-          r.extracted_player_name === stat.extracted_player_name &&
-          r.team_side === stat.team_side
-      );
-      if (!matchInRed) continue;
-
-      try {
-        const blueStatValues = JSON.parse(stat.stats_json);
-        const redStatValues = JSON.parse(matchInRed.stats_json);
-        for (const key of Object.keys(blueStatValues)) {
-          if (Math.round(blueStatValues[key]) !== Math.round(redStatValues[key] || 0)) {
-            allMatch = false;
-            logger.debug(`📊 Stat mismatch for ${stat.extracted_player_name}.${key}: ${blueStatValues[key]} vs ${redStatValues[key]}`);
-          }
-        }
-      } catch {
-        allMatch = false;
-      }
-    }
-
-    if (allMatch && allPlayers.length > 0) {
-      logger.debug(`✅ Both sides match for match ${matchId} game ${matchGameId} — auto-approving`);
-      await this.db.run(
-        `UPDATE scorecard_submissions SET review_status = 'auto_approved' WHERE id IN (?, ?)`,
-        [blueSubmission.id, redSubmission.id]
-      );
-
-      // Auto-advance if enabled
-      if (settings.auto_advance_on_match) {
-        try {
-          const blueRaw = JSON.parse(blueSubmission.ai_raw_response || '{}') as AIExtractionResult;
-          if (blueRaw.gameResult?.winner) {
-            const { saveMatchResult } = await import('../../../src/lib/scoring-functions');
-            // Determine winner team based on team_side mapping
-            const blueTeam = await this.db.get(
-              `SELECT team_assignment FROM match_participants WHERE match_id = ? AND team_assignment = 'blue' LIMIT 1`,
-              [matchId]
-            );
-            const winner = blueRaw.gameResult.winner === 'team1' ? (blueTeam ? 'blue' : 'red') : (blueTeam ? 'red' : 'blue');
-            await saveMatchResult(matchId, matchGameId, winner, null);
-          }
-        } catch (err) {
-          logger.error('Error auto-advancing match after both-sides match:', err);
-        }
-      }
-    } else if (!allMatch) {
-      logger.debug(`⚠️ Stat mismatch between sides for match ${matchId} game ${matchGameId} — flagging for manual review`);
-    }
-  }
 }

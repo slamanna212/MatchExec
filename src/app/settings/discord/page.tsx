@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton, Switch, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
@@ -17,6 +17,7 @@ interface DiscordSettings {
   mention_everyone?: boolean;
   voice_channel_category_id?: string;
   voice_channel_cleanup_delay_minutes?: number;
+  winner_vote_enabled?: boolean;
 }
 
 export default function DiscordSettingsPage() {
@@ -32,6 +33,7 @@ export default function DiscordSettingsPage() {
       mention_everyone: false,
       voice_channel_category_id: '',
       voice_channel_cleanup_delay_minutes: 10,
+      winner_vote_enabled: true,
     },
   });
 
@@ -53,6 +55,7 @@ export default function DiscordSettingsPage() {
             mention_everyone: data.discord.mention_everyone || false,
             voice_channel_category_id: data.discord.voice_channel_category_id || '',
             voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes || 10,
+            winner_vote_enabled: data.discord.winner_vote_enabled !== undefined ? data.discord.winner_vote_enabled : true,
           });
         }
       } catch (error) {
@@ -98,6 +101,7 @@ export default function DiscordSettingsPage() {
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
             voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes || 10,
+            winner_vote_enabled: refreshedData.winner_vote_enabled !== undefined ? refreshedData.winner_vote_enabled : true,
           };
           form.setValues(sanitizedData);
         }
@@ -262,6 +266,16 @@ export default function DiscordSettingsPage() {
                   />
                 </Group>
               </Stack>
+
+              <Divider label="Match Scoring" labelPosition="left" />
+
+              <Switch
+                label="Enable Winner Vote DMs"
+                description="Send commanders a DM after each map asking them to vote on who won via reaction."
+                checked={form.values.winner_vote_enabled ?? true}
+                onChange={(e) => form.setFieldValue('winner_vote_enabled', e.currentTarget.checked)}
+                disabled={loading}
+              />
 
               <Group justify="flex-end" mt="lg">
                 <Button type="submit" loading={saving} disabled={loading}>

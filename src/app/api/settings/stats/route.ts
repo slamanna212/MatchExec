@@ -11,8 +11,6 @@ interface StatsSettingsRow {
   ai_providers_config: string | null;
   google_api_key: string | null;
   openrouter_api_key: string | null;
-  both_sides_required: number;
-  auto_advance_on_match: number;
 }
 
 interface ProviderInstanceConfig {
@@ -74,14 +72,12 @@ export async function GET() {
     const db = await getDbInstance();
 
     const settings = await db.get<StatsSettingsRow>(
-      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
+      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
     );
 
     if (!settings) {
       return apiOk({
         enabled: false,
-        both_sides_required: false,
-        auto_advance_on_match: false,
         providers: [],
       });
     }
@@ -103,8 +99,6 @@ export async function GET() {
 
     return apiOk({
       enabled: Boolean(settings.enabled),
-      both_sides_required: Boolean(settings.both_sides_required),
-      auto_advance_on_match: Boolean(settings.auto_advance_on_match),
       providers,
     });
   } catch (error) {
@@ -127,15 +121,6 @@ export async function PUT(request: NextRequest) {
       updateFields.push('enabled = ?');
       updateValues.push(body.enabled ? 1 : 0);
     }
-    if (body.both_sides_required !== undefined) {
-      updateFields.push('both_sides_required = ?');
-      updateValues.push(body.both_sides_required ? 1 : 0);
-    }
-    if (body.auto_advance_on_match !== undefined) {
-      updateFields.push('auto_advance_on_match = ?');
-      updateValues.push(body.auto_advance_on_match ? 1 : 0);
-    }
-
     if (Array.isArray(body.providers)) {
       const providers = body.providers as Array<{ instanceId: string; providerId: string; model: string; sortOrder: number; apiKey?: string }>;
 

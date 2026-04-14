@@ -141,6 +141,7 @@ export interface DiscordSettingsDbRow {
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
   voice_channel_category_id?: string;
   voice_channel_cleanup_delay_minutes?: number;
+  winner_vote_enabled?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 

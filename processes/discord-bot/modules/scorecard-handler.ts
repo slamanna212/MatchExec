@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import type { WinnerVoteHandler } from './winner-vote-handler';
 
 interface ScorecardDmRecord {
   id: string;
@@ -24,11 +25,17 @@ interface CommanderRecord {
 }
 
 export class ScorecardHandler {
+  private winnerVoteHandler: WinnerVoteHandler | null = null;
+
   constructor(
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null
   ) {}
+
+  setWinnerVoteHandler(handler: WinnerVoteHandler) {
+    this.winnerVoteHandler = handler;
+  }
 
   async sendScorecardPrompts(matchId: string, matchGameId: string, mapName: string): Promise<boolean> {
     try {
@@ -193,6 +200,27 @@ export class ScorecardHandler {
 
       await message.reply('✅ Screenshot received! Processing stats...');
       logger.debug(`📸 Scorecard screenshot received from ${message.author.id} for match ${dmRecord.match_id}`);
+
+      // Path B: if winner votes already reached consensus, advance now that scorecard is submitted
+      if (this.winnerVoteHandler) {
+        try {
+          const votes = await this.db.all<{ discord_user_id: string; voted_for: string | null }>(
+            'SELECT discord_user_id, voted_for FROM discord_winner_vote_messages WHERE match_game_id = ?',
+            [dmRecord.match_game_id]
+          );
+          if (votes && votes.length > 0) {
+            const allVoted = votes.every(v => v.voted_for !== null);
+            const uniqueVotes = new Set(votes.map(v => v.voted_for));
+            if (allVoted && uniqueVotes.size === 1) {
+              const winner = votes[0].voted_for as 'blue' | 'red';
+              logger.info(`🗳️ Scorecard received — triggering held winner vote for game ${dmRecord.match_game_id}`);
+              await this.winnerVoteHandler.submitWinner(dmRecord.match_id, dmRecord.match_game_id, winner);
+            }
+          }
+        } catch (err) {
+          logger.error('Error checking held winner vote after scorecard submission:', err);
+        }
+      }
     } catch (error) {
       logger.error('Error handling DM reply:', error);
     }

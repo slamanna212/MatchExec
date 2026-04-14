@@ -16,8 +16,6 @@ import { PageHeader } from '@/components/PageHeader';
 
 interface StatsSettings {
   enabled: boolean;
-  both_sides_required: boolean;
-  auto_advance_on_match: boolean;
   providers: Array<{ instanceId: string; providerId: string; model: string; hasKey: boolean }>;
 }
 
@@ -204,8 +202,6 @@ export default function StatsSettingsPage() {
   const form = useForm({
     initialValues: {
       enabled: false,
-      both_sides_required: false,
-      auto_advance_on_match: false,
     },
   });
 
@@ -215,8 +211,6 @@ export default function StatsSettingsPage() {
       .then((data: StatsSettings) => {
         form.setValues({
           enabled: data.enabled,
-          both_sides_required: data.both_sides_required,
-          auto_advance_on_match: data.auto_advance_on_match,
         });
 
         setProviders(
@@ -314,7 +308,7 @@ export default function StatsSettingsPage() {
     closeAdd();
   };
 
-  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
+  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean }) => {
     setSaving(true);
     try {
       const body = {
@@ -353,7 +347,7 @@ export default function StatsSettingsPage() {
     }
   };
 
-  const handleSave = async (formValues: { enabled: boolean; both_sides_required: boolean; auto_advance_on_match: boolean }) => {
+  const handleSave = async (formValues: { enabled: boolean }) => {
     await saveProviders(providers, formValues);
   };
 
@@ -512,20 +506,6 @@ export default function StatsSettingsPage() {
                 description="Allow match commanders to upload scorecards for AI analysis"
                 checked={form.values.enabled}
                 onChange={(e) => form.setFieldValue('enabled', e.currentTarget.checked)}
-              />
-
-              <Switch
-                label="Require Both Sides"
-                description="Both team commanders must submit scorecards. If stats match, the map auto-advances."
-                checked={form.values.both_sides_required}
-                onChange={(e) => form.setFieldValue('both_sides_required', e.currentTarget.checked)}
-              />
-
-              <Switch
-                label="Auto-Advance on Match"
-                description="Automatically progress to next map when submitted scorecards agree."
-                checked={form.values.auto_advance_on_match}
-                onChange={(e) => form.setFieldValue('auto_advance_on_match', e.currentTarget.checked)}
               />
             </Stack>
           </Card>

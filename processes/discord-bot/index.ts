@@ -232,6 +232,7 @@ class MatchExecBot {
       this.queueProcessor.setScorecardHandler(this.scorecardHandler);
       this.winnerVoteHandler = new WinnerVoteHandler(this.client, this.db);
       this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
+      this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
 
 
