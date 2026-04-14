@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger/server';
-import { readDbStatus } from '@/lib/database/status';
+import { readDbStatus } from '@lib/database/status';
 
 /**
  * Server-side utility to check if welcome flow is complete
