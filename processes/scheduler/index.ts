@@ -508,7 +508,23 @@ class MatchExecScheduler {
       logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
     }
 
+    await this.cleanupStaleScoringNotifications();
     await this.cleanupFeedEvents();
+  }
+
+  private async cleanupStaleScoringNotifications() {
+    try {
+      const result = await this.db.run(
+        `DELETE FROM activity_feed
+         WHERE event_type = 'match_scoring_required'
+         AND created_at < datetime('now', '-1 day')`
+      );
+      if ((result.changes ?? 0) > 0) {
+        logger.info(`🧹 Removed ${result.changes} stale map scoring notification(s) older than 24 hours`);
+      }
+    } catch (error) {
+      logger.error('❌ Error cleaning up stale scoring notifications:', error);
+    }
   }
 
   private async cleanupFeedEvents() {
