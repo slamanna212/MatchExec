@@ -440,7 +440,7 @@ tests/
 
 ## Technology Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 8
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 9
 - **Backend**: Express (API server), Discord.js 14, node-cron
 - **Process Management**: PM2 (dev), s6-overlay v3 (Docker)
 - **Database**: SQLite3 (callback-based API)
