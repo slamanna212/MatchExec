@@ -196,7 +196,7 @@ export function FeedDashboard() {
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
-  const [displayLimit, setDisplayLimit] = useState(20);
+  const [displayLimit, setDisplayLimit] = useState(10);
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
   const etagRef = useRef<string | null>(null);
   const seenHealthAlertIds = useRef<Set<string>>(new Set());
@@ -306,7 +306,7 @@ export function FeedDashboard() {
                   onChange={(val) => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     setDateRange(val as any);
-                    setDisplayLimit(20);
+                    setDisplayLimit(10);
                     etagRef.current = null;
                   }}
                   clearable
@@ -405,7 +405,7 @@ export function FeedDashboard() {
                 <Button
                   variant="subtle"
                   color="violet"
-                  onClick={() => setDisplayLimit(prev => prev + 20)}
+                  onClick={() => setDisplayLimit(prev => prev + 10)}
                   loading={loading}
                 >
                   Load more ({total - events.length} remaining)
