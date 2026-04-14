@@ -3,9 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
   turbopack: {},
-  ...(process.env.NODE_ENV === 'development' && {
-    allowedDevOrigins: ['*'],
-  }),
+  allowedDevOrigins: ['*.*.*.*', '*.local', '*.lan'],
   ...(process.env.NODE_ENV === 'production' && {
     async redirects() {
       return [
