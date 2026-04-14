@@ -119,7 +119,7 @@ export function MatchPageLayout({
 }: MatchPageLayoutProps) {
   return (
     <div className="container mx-auto py-6 pl-2 pr-2">
-      <Grid gutter="lg">
+      <Grid gap="lg">
         {/* Left column - 33% width on desktop, full width on mobile */}
         <Grid.Col span={{ base: 12, sm: 12, md: 4, lg: 4 }} pl={{ base: 'md', md: 0 }}>
           <MatchInfoPanel

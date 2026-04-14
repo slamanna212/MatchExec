@@ -422,7 +422,7 @@ export default function MatchPage({
   if (loading) {
     return (
       <div className="container mx-auto py-6 pl-2 pr-2">
-        <Grid gutter="lg">
+        <Grid gap="lg">
           <Grid.Col span={{ base: 12, md: 4 }}>
             <Stack gap="md">
               <Card withBorder padding="lg" shadow="sm">

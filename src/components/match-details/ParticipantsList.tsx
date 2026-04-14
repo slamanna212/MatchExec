@@ -164,7 +164,7 @@ export function ParticipantsList({
 
   if (loading) {
     return (
-      <Grid gutter="md">
+      <Grid gap="md">
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Stack gap="xs">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -229,7 +229,7 @@ export function ParticipantsList({
     <Stack gap="lg">
       {/* Team Columns - Blue vs Red */}
       {!allUnassigned && (
-        <Grid gutter="md">
+        <Grid gap="md">
           <Grid.Col span={{ base: 12, md: 6 }}>
             {renderTeamSection('Blue Team', blueTeam, 'blue')}
           </Grid.Col>
@@ -243,7 +243,7 @@ export function ParticipantsList({
       {allUnassigned && unassigned.length > 0 && (
         <>
           <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-          <Grid gutter="md">
+          <Grid gap="md">
             <Grid.Col span={{ base: 12, md: 6 }}>
               <Stack gap="xs">
                 {unassigned.slice(0, Math.ceil(unassigned.length / 2)).map((p, i) =>
@@ -266,7 +266,7 @@ export function ParticipantsList({
       {!allUnassigned && unassigned.length > 0 && (
         <div>
           <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-          <Grid gutter="md">
+          <Grid gap="md">
             {unassigned.map((participant, index) => (
               <Grid.Col key={participant.id} span={{ base: 12, md: 6 }}>
                 {renderParticipantCard(participant, blueTeam.length + redTeam.length + index + 1, 'reserve')}
