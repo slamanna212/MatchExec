@@ -230,12 +230,11 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
   // Log feed events for match started and scoring required
   try {
     const db = await getDbInstance();
-    const matchData = await db.get<{ name: string; maps: string }>(
-      'SELECT name, maps FROM matches WHERE id = ?',
+    const matchData = await db.get<{ name: string }>(
+      'SELECT name FROM matches WHERE id = ?',
       [matchId]
     );
     const name = matchData?.name ?? matchId;
-    const mapCount = matchData?.maps ? JSON.parse(matchData.maps).length : 1;
 
     await logFeedEvent({
       eventType: 'match_started',
@@ -245,14 +244,27 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
       matchId,
     });
 
-    await logFeedEvent({
-      eventType: 'match_scoring_required',
-      priority: 2,
-      title: 'Map Scoring Required',
-      description: `"${name}" needs scoring (${mapCount} map${mapCount !== 1 ? 's' : ''})`,
-      matchId,
-      metadata: { mapCount },
-    });
+    const firstGame = await db.get<{ id: string; round: number; map_id: string | null }>(
+      `SELECT mg.id, mg.round, mg.map_id FROM match_games mg
+       WHERE mg.match_id = ? AND mg.status = 'ongoing' LIMIT 1`,
+      [matchId]
+    );
+    if (firstGame) {
+      let mapName: string | null = null;
+      if (firstGame.map_id) {
+        const strippedId = firstGame.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
+        mapName = mapRow?.name ?? null;
+      }
+      await logFeedEvent({
+        eventType: 'match_scoring_required',
+        priority: 2,
+        title: 'Map Scoring Required',
+        description: `"${name}" — Map ${firstGame.round}: ${mapName ?? 'Unknown Map'}`,
+        matchId,
+        metadata: { matchGameId: firstGame.id, round: firstGame.round, mapName },
+      });
+    }
   } catch (error) {
     logger.error('❌ Error logging battle feed events:', error);
   }
@@ -320,16 +332,6 @@ export async function handleCompleteTransition(matchId: string): Promise<void> {
     logger.debug(`🔇 Voice channels deleted for completed match: ${matchId}`);
   } catch (error) {
     logger.error('❌ Error deleting voice channels for completed match:', error);
-  }
-
-  try {
-    const db = await getDbInstance();
-    await db.run(
-      `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
-      [matchId]
-    );
-  } catch (error) {
-    logger.error('❌ Error removing stale scoring feed events:', error);
   }
 
   try {

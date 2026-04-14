@@ -236,6 +236,16 @@ export async function DELETE(
       }
     }
 
+    // Delete scoring notifications (activity_feed has ON DELETE SET NULL, not CASCADE)
+    try {
+      await db.run(
+        `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+        [matchId]
+      );
+    } catch (error) {
+      logger.error('Error deleting scoring notifications for match:', error);
+    }
+
     // Delete the match (CASCADE will handle related records)
     // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
     await db.run('DELETE FROM matches WHERE id = ?', [matchId]);

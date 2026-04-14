@@ -382,8 +382,36 @@ export async function saveMatchResult(
       await db.run('UPDATE match_games SET discord_notified = 1 WHERE id = ?', [matchGameId]);
     }
 
+    // Remove the scored map's scoring notification
+    try {
+      await db.run(
+        `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+        [result.matchId]
+      );
+    } catch (feedError) {
+      logger.error('Error removing map scoring notification:', feedError);
+    }
+
     // Set the next pending map to 'ongoing' if it exists
-    const hasNextMap = await setNextMapToOngoing(result.matchId);
+    const nextMap = await setNextMapToOngoing(result.matchId);
+    const hasNextMap = nextMap !== null;
+
+    // If there's a next map, create a new scoring notification for it
+    if (nextMap) {
+      try {
+        const matchRow = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [result.matchId]);
+        await logFeedEvent({
+          eventType: 'match_scoring_required',
+          priority: 2,
+          title: 'Map Scoring Required',
+          description: `"${matchRow?.name ?? result.matchId}" — Map ${nextMap.round}: ${nextMap.mapName ?? 'Unknown Map'}`,
+          matchId: result.matchId,
+          metadata: { matchGameId: nextMap.id, round: nextMap.round, mapName: nextMap.mapName },
+        });
+      } catch (feedError) {
+        logger.error('Error creating next map scoring notification:', feedError);
+      }
+    }
 
     // Update match status to complete if all games are done
     const isMatchComplete = await updateMatchStatusIfComplete(matchGameId);
@@ -449,35 +477,43 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
 /**
  * Set the next pending map to ongoing status
  */
-async function setNextMapToOngoing(matchId: string): Promise<boolean> {
+async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round: number; mapName: string | null } | null> {
   const db = await getDbInstance();
-  
+
   try {
     // Find the first pending map and set it to ongoing
     const nextMapQuery = `
-      SELECT mg.id, mg.map_id, gm.name as map_name 
+      SELECT mg.id, mg.round, mg.map_id, gm.name as map_name
       FROM match_games mg
       LEFT JOIN game_maps gm ON mg.map_id = gm.id
-      WHERE mg.match_id = ? AND mg.status = 'pending' 
-      ORDER BY mg.round ASC 
+      WHERE mg.match_id = ? AND mg.status = 'pending'
+      ORDER BY mg.round ASC
       LIMIT 1
     `;
-    
-    const nextMap = await db.get<{ id: string; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
-    
+
+    const nextMap = await db.get<{ id: string; round: number; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
+
     if (nextMap) {
       const updateQuery = `
-        UPDATE match_games 
-        SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP 
+        UPDATE match_games
+        SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      
+
       await db.run(updateQuery, [nextMap.id]);
       logger.debug(`Set next map ${nextMap.id} to ongoing status`);
 
+      // Resolve map name — the JOIN may miss if map_id has a custom suffix
+      let mapName: string | null = nextMap.map_name ?? null;
+      if (!mapName && nextMap.map_id) {
+        const strippedId = nextMap.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
+        mapName = mapRow?.name ?? null;
+      }
+
       // Queue map code PMs for the new map if map codes are supported
       try {
-        await queueMapCodePMsForNext(matchId, nextMap.map_name);
+        await queueMapCodePMsForNext(matchId, mapName ?? undefined);
       } catch (mapCodeError) {
         logger.error('Error queuing map code PMs for next map:', mapCodeError);
         // Don't throw - this is a non-critical operation
@@ -485,21 +521,21 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
 
       // Queue scorecard prompts and winner vote for the next map
       try {
-        await queueScorecardPrompts(matchId, nextMap.id, nextMap.map_name || '');
-        await queueWinnerVote(matchId, nextMap.id, nextMap.map_name || '');
+        await queueScorecardPrompts(matchId, nextMap.id, mapName || '');
+        await queueWinnerVote(matchId, nextMap.id, mapName || '');
       } catch (scorecardError) {
         logger.error('Error queuing scorecard prompts or winner vote for next map:', scorecardError);
       }
 
-      return true; // There is a next map
-    } 
+      return { id: nextMap.id, round: nextMap.round, mapName };
+    }
       logger.debug('No pending maps found to set as ongoing');
-      return false; // No next map
-    
+      return null;
+
   } catch (error) {
     logger.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
-    return false;
+    return null;
   }
 }
 
