@@ -115,6 +115,12 @@ export async function insertParticipant(
       JSON.stringify(signupData),
       avatarUrl
     ]);
+
+    // Update match updated_at so ETag-based polling detects the participant change
+    await db.run(
+      'UPDATE matches SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [parsedId.eventId]
+    );
   }
 
   return participantId;

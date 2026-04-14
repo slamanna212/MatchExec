@@ -72,12 +72,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Compute ETag from count + latest updated_at for efficient polling
+    // Compute ETag from count + latest updated_at + total participants for efficient polling
     const maxUpdatedAt = matches.reduce(
       (max, m) => { const val = String(m.updated_at); return val > max ? val : max; },
       ''
     );
-    const etag = `"${parsedMatches.length}:${maxUpdatedAt}"`;
+    const totalParticipants = (matches as Array<MatchDbRow & { participant_count?: number }>).reduce(
+      (sum, m) => sum + (m.participant_count || 0), 0
+    );
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } });
