@@ -1,5 +1,6 @@
 import type { Client, Message } from 'discord.js';
 import type { ScorecardHandler } from './scorecard-handler';
+import type { WinnerVoteHandler } from './winner-vote-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -357,6 +358,7 @@ function recreateAttachment(eventImageUrl: string | null | undefined, updatedEmb
 export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
   private scorecardHandler: ScorecardHandler | null = null;
+  private winnerVoteHandler: WinnerVoteHandler | null = null;
 
   constructor(
     private client: Client,
@@ -371,6 +373,10 @@ export class QueueProcessor {
 
   setScorecardHandler(handler: ScorecardHandler) {
     this.scorecardHandler = handler;
+  }
+
+  setWinnerVoteHandler(handler: WinnerVoteHandler) {
+    this.winnerVoteHandler = handler;
   }
 
   async processAnnouncementQueue() {
@@ -1728,7 +1734,8 @@ export class QueueProcessor {
       this.processDiscordBotRequests(),
       this.processMatchEditQueue(),
       this.processScorecardPromptQueue(),
-      this.processHealthAlertQueue()
+      this.processHealthAlertQueue(),
+      this.processWinnerVoteQueue()
     ]);
   }
 
@@ -1802,6 +1809,45 @@ export class QueueProcessor {
       }
     } catch (error) {
       logger.error('❌ Error processing scorecard prompt queue:', error);
+    }
+  }
+
+  async processWinnerVoteQueue() {
+    if (!this.client.isReady() || !this.db || !this.winnerVoteHandler) return;
+
+    try {
+      const pending = await this.db.all<{ id: string; match_id: string; match_game_id: string; map_name: string | null }>(
+        `SELECT id, match_id, match_game_id, map_name FROM discord_winner_vote_queue WHERE status = 'pending' LIMIT 5`
+      );
+
+      for (const item of (pending || [])) {
+        try {
+          await this.db.run(
+            `UPDATE discord_winner_vote_queue SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+          const sent = await this.winnerVoteHandler.sendWinnerVotePrompts(
+            item.match_id,
+            item.match_game_id,
+            item.map_name || ''
+          );
+          await this.db.run(
+            `UPDATE discord_winner_vote_queue SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [sent ? 'sent' : 'failed', item.id]
+          );
+          if (!sent) {
+            logger.debug(`No winner vote prompts sent for match ${item.match_id} (no eligible commanders)`);
+          }
+        } catch (err) {
+          logger.error(`Error processing winner vote queue item ${item.id}:`, err);
+          await this.db.run(
+            `UPDATE discord_winner_vote_queue SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing winner vote queue:', error);
     }
   }
 

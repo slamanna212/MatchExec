@@ -131,13 +131,14 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
         await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
         logger.debug(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
 
-        // Queue scorecard prompts for the first (ongoing) map
+        // Queue scorecard prompts and winner vote for the first (ongoing) map
         if (status === 'ongoing') {
           try {
             const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '')]);
             await queueScorecardPrompts(matchId, gameId, mapData?.name || mapId);
+            await queueWinnerVote(matchId, gameId, mapData?.name || mapId);
           } catch (err) {
-            logger.error('Error queuing scorecard prompts for first map:', err);
+            logger.error('Error queuing scorecard prompts or winner vote for first map:', err);
           }
         }
 
@@ -482,11 +483,12 @@ async function setNextMapToOngoing(matchId: string): Promise<boolean> {
         // Don't throw - this is a non-critical operation
       }
 
-      // Queue scorecard prompts for the next map
+      // Queue scorecard prompts and winner vote for the next map
       try {
         await queueScorecardPrompts(matchId, nextMap.id, nextMap.map_name || '');
+        await queueWinnerVote(matchId, nextMap.id, nextMap.map_name || '');
       } catch (scorecardError) {
-        logger.error('Error queuing scorecard prompts for next map:', scorecardError);
+        logger.error('Error queuing scorecard prompts or winner vote for next map:', scorecardError);
       }
 
       return true; // There is a next map
@@ -1200,6 +1202,28 @@ async function queueScorecardPrompts(matchId: string, matchGameId: string, mapNa
     logger.debug(`📸 Scorecard prompt queued for match ${matchId}, game ${matchGameId}`);
   } catch (error) {
     logger.error('Error queuing scorecard prompts:', error);
+  }
+}
+
+async function queueWinnerVote(matchId: string, matchGameId: string, mapName: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    // Check that at least one commander exists before queuing
+    const commanderCount = await db.get<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM match_participants WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL',
+      [matchId]
+    );
+    if (!commanderCount || commanderCount.cnt === 0) return;
+
+    const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    await db.run(
+      'INSERT INTO discord_winner_vote_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
+      [queueId, matchId, matchGameId, mapName, 'pending']
+    );
+    logger.debug(`🗳️ Winner vote queued for match ${matchId}, game ${matchGameId}`);
+  } catch (error) {
+    logger.error('Error queuing winner vote:', error);
   }
 }
 

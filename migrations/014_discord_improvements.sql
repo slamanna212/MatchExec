@@ -32,3 +32,42 @@ ALTER TABLE match_games ADD COLUMN discord_notified INTEGER NOT NULL DEFAULT 0;
 
 -- Mark all already-completed games as notified (notifications already sent pre-feature)
 UPDATE match_games SET discord_notified = 1 WHERE status = 'completed';
+
+-- Winner Vote via Discord DM Reactions
+
+-- Queue for sending winner vote DMs to commanders
+CREATE TABLE IF NOT EXISTS discord_winner_vote_queue (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL,
+  match_game_id TEXT NOT NULL,
+  map_name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
+  retry_count INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+);
+
+-- Tracks sent winner vote DMs and the votes received via reactions
+CREATE TABLE IF NOT EXISTS discord_winner_vote_messages (
+  id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL,
+  match_game_id TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL,
+  discord_message_id TEXT NOT NULL,
+  participant_id TEXT,
+  team_side TEXT CHECK (team_side IN ('blue', 'red')),
+  voted_for TEXT CHECK (voted_for IN ('blue', 'red')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_winner_vote_queue_status
+  ON discord_winner_vote_queue(status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_winner_vote_messages_game
+  ON discord_winner_vote_messages(match_game_id);
+
+CREATE INDEX IF NOT EXISTS idx_winner_vote_messages_msg
+  ON discord_winner_vote_messages(discord_message_id);

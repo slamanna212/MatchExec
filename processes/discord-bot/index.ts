@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { waitForDatabaseReady } from '../../lib/database';
 import type { Database } from '../../lib/database';
 import type { DiscordSettings } from '../../shared/types';
@@ -17,6 +17,7 @@ import { ReminderHandler } from './modules/reminder-handler';
 import { InteractionHandler } from './modules/interaction-handler';
 import { HealthMonitor } from './modules/health-monitor';
 import { ScorecardHandler } from './modules/scorecard-handler';
+import { WinnerVoteHandler } from './modules/winner-vote-handler';
 
 class MatchExecBot {
   private client: Client;
@@ -34,6 +35,7 @@ class MatchExecBot {
   private interactionHandler: InteractionHandler | null = null;
   private healthMonitor: HealthMonitor | null = null;
   private scorecardHandler: ScorecardHandler | null = null;
+  private winnerVoteHandler: WinnerVoteHandler | null = null;
 
   constructor() {
     this.client = new Client({
@@ -42,8 +44,10 @@ class MatchExecBot {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.DirectMessageReactions,
         GatewayIntentBits.MessageContent
-      ]
+      ],
+      partials: [Partials.Message, Partials.Channel, Partials.Reaction]
     });
 
     this.setupEventListeners();
@@ -109,6 +113,17 @@ class MatchExecBot {
       } else if (message.attachments.size > 0) {
         await this.scorecardHandler.handleNonReplyDM(message);
       }
+    });
+
+    this.client.on('messageReactionAdd', async (reaction, user) => {
+      if (user.bot) return;
+      if (!this.winnerVoteHandler) return;
+      try {
+        if (reaction.partial) await reaction.fetch();
+      } catch {
+        return;
+      }
+      await this.winnerVoteHandler.handleReaction(reaction, user);
     });
 
     process.on('SIGINT', () => this.shutdown());
@@ -215,6 +230,8 @@ class MatchExecBot {
       );
       this.scorecardHandler = new ScorecardHandler(this.client, this.db, this.settings);
       this.queueProcessor.setScorecardHandler(this.scorecardHandler);
+      this.winnerVoteHandler = new WinnerVoteHandler(this.client, this.db);
+      this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
 
 

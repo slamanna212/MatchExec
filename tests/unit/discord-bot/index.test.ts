@@ -33,7 +33,13 @@ vi.mock('discord.js', () => ({
     GuildMessages: 2,
     GuildVoiceStates: 4,
     DirectMessages: 8,
+    DirectMessageReactions: 32,
     MessageContent: 16,
+  },
+  Partials: {
+    Message: 0,
+    Channel: 1,
+    Reaction: 2,
   },
 }));
 
@@ -113,6 +119,13 @@ vi.mock('../../../processes/discord-bot/modules/scorecard-handler', () => ({
     handleDMReply: vi.fn().mockResolvedValue(undefined),
     handleNonReplyDM: vi.fn().mockResolvedValue(undefined),
     updateSettings: vi.fn(),
+  })),
+}));
+
+vi.mock('../../../processes/discord-bot/modules/winner-vote-handler', () => ({
+  WinnerVoteHandler: vi.fn().mockImplementation(() => ({
+    sendWinnerVotePrompts: vi.fn().mockResolvedValue(true),
+    handleReaction: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
