@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS discord_map_code_queue_new (
 );
 
 INSERT INTO discord_map_code_queue_new
-  SELECT id, match_id, user_id, map_name, map_code, status, retry_count, created_at, processed_at
+  SELECT id, match_id, user_id, map_name, map_code, status, 0 as retry_count, created_at, processed_at
   FROM discord_map_code_queue;
 
 DROP TABLE discord_map_code_queue;
