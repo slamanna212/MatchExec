@@ -45,7 +45,9 @@ async function generateMatchesForFormat(tournament: Tournament, tournamentId: st
   } else {
     return { error: 'Invalid tournament format' };
   }
-  const tournamentMatches: TournamentMatchRecord[] = matches.map((match, index) => ({
+  const statsEnabled = tournament.stats_enabled ?? 0;
+  const matchesWithStats = matches.map(m => ({ ...m, stats_enabled: statsEnabled }));
+  const tournamentMatches: TournamentMatchRecord[] = matchesWithStats.map((match, index) => ({
     id: match.id,
     tournament_id: tournamentId,
     round: match.tournament_round,
@@ -54,7 +56,7 @@ async function generateMatchesForFormat(tournament: Tournament, tournamentId: st
     team2_id: match.team2_id,
     match_order: index + 1
   }));
-  return { generatedMatches: matches, tournamentMatches };
+  return { generatedMatches: matchesWithStats, tournamentMatches };
 }
 
 async function queueMatchAnnouncements(db: Database, generatedMatches: { id: string }[]): Promise<void> {
@@ -75,6 +77,7 @@ interface Tournament {
   game_id: string;
   rounds_per_match: number;
   start_time?: string;
+  stats_enabled?: number;
 }
 
 interface MatchCount {

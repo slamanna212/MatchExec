@@ -177,6 +177,9 @@ VALUES ('stats_processor_last_heartbeat', '', 'string', '{"description": "ISO ti
 -- Add AI screenshot notes to games table
 ALTER TABLE games ADD COLUMN ai_screenshot_notes TEXT;
 
+-- Add stats_enabled flag to tournaments (propagated to generated matches)
+ALTER TABLE tournaments ADD COLUMN stats_enabled INTEGER NOT NULL DEFAULT 0;
+
 -- Activity Feed
 -- Centralized append-only event log for the Feed page
 CREATE TABLE IF NOT EXISTS activity_feed (

@@ -11,6 +11,8 @@ interface StatsSettingsRow {
   ai_providers_config: string | null;
   google_api_key: string | null;
   openrouter_api_key: string | null;
+  both_sides_required: number;
+  auto_advance_on_match: number;
 }
 
 interface ProviderInstanceConfig {
@@ -72,7 +74,7 @@ export async function GET() {
     const db = await getDbInstance();
 
     const settings = await db.get<StatsSettingsRow>(
-      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
+      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
     );
 
     if (!settings) {
@@ -100,6 +102,8 @@ export async function GET() {
     return apiOk({
       enabled: Boolean(settings.enabled),
       providers,
+      both_sides_required: Boolean(settings.both_sides_required),
+      auto_advance_on_match: Boolean(settings.auto_advance_on_match),
     });
   } catch (error) {
     logger.error('Error fetching stats settings:', error);

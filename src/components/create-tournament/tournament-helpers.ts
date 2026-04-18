@@ -20,7 +20,9 @@ export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
     ruleset: formData.ruleset,
     maxParticipants: formData.maxParticipants,
     eventImageUrl: formData.eventImageUrl || null,
-    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
+    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false,
+    allowMatchEditing: formData.allowMatchEditing !== false,
+    statsEnabled: formData.statsEnabled || false
   };
 }
 

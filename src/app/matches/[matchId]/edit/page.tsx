@@ -16,7 +16,9 @@ import {
   Card,
   Loader,
   Center,
-  Modal
+  Modal,
+  Checkbox,
+  Divider
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { logger } from '@/lib/logger/client';
@@ -40,6 +42,8 @@ interface MatchData {
   maps?: string[];
   status: string;
   tournament_allow_match_editing?: boolean;
+  stats_enabled?: number;
+  player_notifications?: number;
 }
 
 interface MapDetail {
@@ -100,6 +104,10 @@ export default function EditMatchPage({
   const [time, setTime] = useState('');
   const [rules, setRules] = useState<string>('casual');
   const [livestreamLink, setLivestreamLink] = useState('');
+  const [statsEnabled, setStatsEnabled] = useState(false);
+  const [playerNotifications, setPlayerNotifications] = useState(true);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Map state
@@ -117,9 +125,11 @@ export default function EditMatchPage({
 
   const loadGameData = useCallback(async (gameId: string) => {
     try {
-      const [gameRes, modesRes] = await Promise.all([
+      const [gameRes, modesRes, statDefsRes, statsSettingsRes] = await Promise.all([
         fetch(`/api/games/${gameId}`),
-        fetch(`/api/games/${gameId}/modes`)
+        fetch(`/api/games/${gameId}/modes`),
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
       ]);
 
       let supportsAllModes = false;
@@ -128,6 +138,11 @@ export default function EditMatchPage({
         supportsAllModes = gameInfo.supportsAllModes || false;
       }
       setCurrentGameSupportsAllModes(supportsAllModes);
+
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
 
       if (modesRes.ok) {
         const modes = await modesRes.json();
@@ -208,6 +223,8 @@ export default function EditMatchPage({
         setDescription(data.description || '');
         setRules(data.rules || 'casual');
         setLivestreamLink(data.livestream_link || '');
+        setStatsEnabled(data.stats_enabled === 1);
+        setPlayerNotifications(data.player_notifications !== 0);
 
         if (data.start_date) {
           const d = new Date(`${data.start_date}${data.start_date.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(data.start_date) ? '' : 'Z'}`);
@@ -316,7 +333,9 @@ export default function EditMatchPage({
           rules,
           rounds: selectedMaps.length || null,
           livestreamLink: livestreamLink || null,
-          maps: mapIds
+          maps: mapIds,
+          statsEnabled,
+          playerNotifications
         })
       });
 
@@ -422,6 +441,34 @@ export default function EditMatchPage({
               value={livestreamLink}
               onChange={(e) => setLivestreamLink(e.target.value)}
             />
+
+            <Divider
+              label={
+                <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+                  Options
+                </Text>
+              }
+              labelPosition="left"
+            />
+
+            <Stack gap="sm">
+              <Checkbox
+                label="Player Notifications"
+                description="Send Discord DMs to registered players before match starts"
+                checked={playerNotifications}
+                onChange={(e) => setPlayerNotifications(e.currentTarget.checked)}
+              />
+
+              {hasStatDefs && (
+                <Checkbox
+                  label="Enable Stats Collection"
+                  description="Upload scorecards after each map to extract player stats with AI"
+                  checked={statsEnabled}
+                  onChange={(e) => setStatsEnabled(e.currentTarget.checked)}
+                  disabled={!aiProvidersConfigured}
+                />
+              )}
+            </Stack>
           </Stack>
         </Card>
 

@@ -29,6 +29,7 @@ export interface TournamentFormData {
   preCreatedTeams?: string[];
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
+  statsEnabled?: boolean;
 }
 
 /**
@@ -54,7 +55,8 @@ export function useTournamentForm() {
       ruleset: 'casual',
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
-      allowMatchEditing: true
+      allowMatchEditing: true,
+      statsEnabled: false
     };
   });
 
@@ -89,7 +91,8 @@ export function useTournamentForm() {
       ruleset: 'casual',
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
-      allowMatchEditing: true
+      allowMatchEditing: true,
+      statsEnabled: false
     });
     sessionStorage.removeItem('tournamentFormData');
   };

@@ -72,6 +72,7 @@ export interface Tournament {
   start_time?: Date;
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
+  stats_enabled?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -264,6 +265,8 @@ export interface MatchWithGameDetails extends Omit<Match, 'created_at' | 'update
   livestream_link?: string;
   event_image_url?: string;
   tournament_allow_match_editing?: boolean;
+  stats_enabled?: number;
+  player_notifications?: number;
   created_at: string;
   updated_at: string;
   start_date?: string;

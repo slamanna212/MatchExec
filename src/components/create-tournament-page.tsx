@@ -34,6 +34,8 @@ export function CreateTournamentPage() {
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
 
   // Load games on mount
   useEffect(() => {
@@ -71,8 +73,21 @@ export function CreateTournamentPage() {
     }
   };
 
-  const handleGameSelect = (gameId: string) => {
+  const handleGameSelect = async (gameId: string) => {
     updateFormData('gameId', gameId);
+    try {
+      const [statDefsRes, statsSettingsRes] = await Promise.all([
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
+      ]);
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
+    } catch {
+      setHasStatDefs(false);
+      setAiProvidersConfigured(false);
+    }
   };
 
   /**
@@ -245,6 +260,8 @@ export function CreateTournamentPage() {
             onBack={handleBack}
             onNext={handleNext}
             canProceed={canProceedFromStep(2)}
+            hasStatDefs={hasStatDefs}
+            aiProvidersConfigured={aiProvidersConfigured}
           />
         )}
 

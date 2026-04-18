@@ -24,6 +24,7 @@ interface TournamentBody {
   eventImageUrl?: string;
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
+  statsEnabled?: boolean;
 }
 
 function validateTournamentBody(body: Partial<TournamentBody>): string | null {
@@ -75,7 +76,8 @@ function buildTournamentInsertValues(body: TournamentBody, tournamentId: string,
     startTimeOnly,
     body.eventImageUrl || null,
     body.allowPlayerTeamSelection ? 1 : 0,
-    body.allowMatchEditing === false ? 0 : 1
+    body.allowMatchEditing === false ? 0 : 1,
+    body.statsEnabled ? 1 : 0
   ];
 }
 
@@ -181,8 +183,8 @@ export async function POST(request: NextRequest) {
       INSERT INTO tournaments (
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
-        allow_player_team_selection, allow_match_editing
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allow_player_team_selection, allow_match_editing, stats_enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, buildTournamentInsertValues(body, tournamentId, startDateTime, startTimeOnly));
     
     const tournament = await db.get<TournamentDbRow>(`

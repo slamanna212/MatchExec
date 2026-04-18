@@ -7,6 +7,7 @@ import {
   Text,
   Button,
   Card,
+  Badge,
   Image
 } from '@mantine/core';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
@@ -91,6 +92,18 @@ function MatchDetailsCard({
             <Text size="sm">{match.rounds}</Text>
           </Group>
         )}
+        <Group justify="space-between">
+          <Text size="sm" fw={500} c="dimmed">Player Notifications:</Text>
+          <Badge variant="light" color={match.player_notifications !== 0 ? 'green' : 'gray'}>
+            {match.player_notifications !== 0 ? 'Enabled' : 'Disabled'}
+          </Badge>
+        </Group>
+        <Group justify="space-between">
+          <Text size="sm" fw={500} c="dimmed">Stats Collection:</Text>
+          <Badge variant="light" color={match.stats_enabled === 1 ? 'green' : 'gray'}>
+            {match.stats_enabled === 1 ? 'Enabled' : 'Disabled'}
+          </Badge>
+        </Group>
         {match.livestream_link && (
           <Group justify="space-between">
             <Text size="sm" fw={500} c="dimmed">Livestream:</Text>

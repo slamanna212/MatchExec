@@ -144,6 +144,13 @@ export function TournamentReviewStep({
               {formData.allowMatchEditing !== false ? 'Allowed' : 'Disabled'}
             </Badge>
           </Group>
+
+          <Group>
+            <Text fw={500}>Stats Collection:</Text>
+            <Badge variant="light" color={formData.statsEnabled ? 'green' : 'gray'}>
+              {formData.statsEnabled ? 'Enabled' : 'Disabled'}
+            </Badge>
+          </Group>
         </Stack>
       </Card>
 

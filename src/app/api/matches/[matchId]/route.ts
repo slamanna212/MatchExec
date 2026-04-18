@@ -114,7 +114,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, description, startDate, rules, rounds, livestreamLink, maps } = body;
+    const { name, description, startDate, rules, rounds, livestreamLink, maps, statsEnabled, playerNotifications } = body;
 
     const nameError = validateMatchName(name);
     if (nameError) {
@@ -137,7 +137,9 @@ export async function PUT(
     const updateResult = await db.run(`
       UPDATE matches
       SET name = ?, description = ?, start_date = ?, start_time = ?, rules = ?,
-          rounds = ?, livestream_link = ?, maps = ?, updated_at = CURRENT_TIMESTAMP
+          rounds = ?, livestream_link = ?, maps = ?,
+          stats_enabled = ?, player_notifications = ?,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
       (name as string).trim(),
@@ -148,6 +150,8 @@ export async function PUT(
       rounds || null,
       livestreamLink || null,
       mapsJson,
+      statsEnabled ? 1 : 0,
+      playerNotifications === false ? 0 : 1,
       matchId
     ]);
 
