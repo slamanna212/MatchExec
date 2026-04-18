@@ -98,13 +98,6 @@ export function ParticipantsList({
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
             <Group gap={4} align="center">
               <Text fw={500} size="sm">{participant.username}</Text>
-              {participant.receives_map_codes && (
-                <IconMapRoute
-                  size={14}
-                  style={{ color: `var(--mantine-color-${getBadgeColor(teamColor)}-6)` }}
-                  title="Match Commander"
-                />
-              )}
             </Group>
             <Text size="xs" c="dimmed">
               Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
@@ -123,6 +116,13 @@ export function ParticipantsList({
               );
             })}
           </Stack>
+          {participant.receives_map_codes && (
+            <IconMapRoute
+              size={32}
+              style={{ color: `var(--mantine-color-${getBadgeColor(teamColor)}-6)`, flexShrink: 0 }}
+              title="Match Commander"
+            />
+          )}
         </Group>
       </Card>
     );

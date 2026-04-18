@@ -146,9 +146,9 @@ export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onUplo
           onClick={handleUpload}
           disabled={!selectedFile || uploading}
           loading={uploading}
-          leftSection={uploading ? <Loader size={14} /> : <IconUpload size={14} />}
+          leftSection={uploading ? <Loader size={14} /> : <IconCheck size={14} />}
         >
-          Upload Scorecard
+          Confirm
         </Button>
       </Group>
     </Stack>

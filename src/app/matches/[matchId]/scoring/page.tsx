@@ -8,14 +8,13 @@ import {
   Stack,
   Group,
   Text,
-  Breadcrumbs,
-  Anchor,
+  ActionIcon,
   Loader,
   Center,
   Alert,
   Button,
 } from '@mantine/core';
-import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
+import { IconTrophy, IconAlertCircle, IconChevronLeft } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import type { MatchFormat, MatchResult } from '@/shared/types';
 import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
@@ -115,14 +114,14 @@ export default function ScoringPage({
 
   if (error || !match) {
     return (
-      <Container size="md" py="xl">
+      <Container size="md" pt="xs" pb="md">
         <Stack gap="md">
           <Alert color="red" icon={<IconAlertCircle size={16} />}>
             {error || 'Match not found'}
           </Alert>
-          <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>
-            ← Back to Matches
-          </Anchor>
+          <Button variant="outline" onClick={() => router.push('/matches')}>
+            Back to Matches
+          </Button>
         </Stack>
       </Container>
     );
@@ -130,13 +129,8 @@ export default function ScoringPage({
 
   if (match.status !== 'battle') {
     return (
-      <Container size="md" py="xl">
+      <Container size="md" pt="xs" pb="md">
         <Stack gap="md">
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Scoring</Text>
-          </Breadcrumbs>
           <Alert color="yellow" icon={<IconAlertCircle size={16} />}>
             Scoring is only available when the match is in progress (battle status). Current status: {match.status}
           </Alert>
@@ -149,14 +143,20 @@ export default function ScoringPage({
   }
 
   return (
-    <Container size="lg" py="xl">
+    <Container size="lg" pt="xs" pb="md">
       <Stack gap="lg">
         <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Scoring</Text>
-          </Breadcrumbs>
+          <Group mb="xs" gap={4}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => router.push(`/matches/${matchId}`)}
+              aria-label="Back to match"
+            >
+              <IconChevronLeft size={18} />
+            </ActionIcon>
+            <Text size="sm" c="dimmed">Back to match</Text>
+          </Group>
 
           <PageHeader
             icon={IconTrophy}

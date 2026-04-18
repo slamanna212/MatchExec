@@ -45,9 +45,6 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
-    if (!/^\d+$/.test(matchId)) {
-      return apiError('Invalid match ID', 400);
-    }
     const formData = await request.formData();
     const file = formData.get('screenshot') as File;
     const matchGameId = formData.get('matchGameId') as string;
