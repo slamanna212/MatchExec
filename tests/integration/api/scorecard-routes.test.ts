@@ -1,15 +1,41 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { createMockRequest, parseResponse, createRouteParams } from '../../utils/api-helpers';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
+import { NextRequest } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 import { GET as getSubmission, DELETE as deleteSubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/route';
 import { PUT as reviewSubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/review/route';
 import { PUT as assignSubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/assign/route';
 import { POST as retrySubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/retry/route';
-import { GET as getScorecard } from '@/app/api/matches/[matchId]/scorecard/route';
+import { GET as getScorecard, POST as postScorecard } from '@/app/api/matches/[matchId]/scorecard/route';
 import { GET as getGameResult, POST as postGameResult } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
 import { GET as getStats } from '@/app/api/stats/route';
+
+// Minimal valid PNG (magic bytes only — enough to pass isValidImageType)
+const MINIMAL_PNG_BYTES = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+const MINIMAL_PNG: ArrayBuffer = new Uint8Array(MINIMAL_PNG_BYTES).buffer as ArrayBuffer;
+
+function createScorecardRequest(matchId: string, fields: {
+  screenshot?: { bytes: ArrayBuffer; type: string; name: string };
+  matchGameId?: string;
+  teamSide?: string;
+}): NextRequest {
+  const formData = new FormData();
+  if (fields.screenshot) {
+    const blob = new Blob([fields.screenshot.bytes], { type: fields.screenshot.type });
+    formData.append('screenshot', blob, fields.screenshot.name);
+  }
+  if (fields.matchGameId !== undefined) formData.append('matchGameId', fields.matchGameId);
+  if (fields.teamSide !== undefined) formData.append('teamSide', fields.teamSide);
+
+  return new NextRequest(
+    new URL(`/api/matches/${matchId}/scorecard`, 'http://localhost:3000'),
+    { method: 'POST', body: formData }
+  );
+}
 
 async function insertSubmission(db: any, matchId: string, opts: {
   id?: string;
@@ -79,6 +105,92 @@ describe('Scorecard Routes', () => {
 
       expect(status).toBe(200);
       expect(data.every((s: any) => s.match_game_id === 'mg-1')).toBe(true);
+    });
+  });
+
+  // ─── POST /api/matches/[matchId]/scorecard ───────────────────────────────────
+
+  describe('POST /api/matches/[matchId]/scorecard', () => {
+    let uploadedDir: string | null = null;
+
+    afterAll(() => {
+      if (uploadedDir && fs.existsSync(uploadedDir)) {
+        fs.rmSync(uploadedDir, { recursive: true, force: true });
+      }
+    });
+
+    it('returns 400 when no screenshot is provided', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const request = createScorecardRequest(match.id, { matchGameId: 'mg-1', teamSide: 'blue' });
+      const response = await postScorecard(request, createRouteParams({ matchId: match.id }));
+      const { status, data } = await parseResponse(response);
+      expect(status).toBe(400);
+      expect(data.error).toMatch(/screenshot/i);
+    });
+
+    it('returns 400 when matchGameId is missing', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const request = createScorecardRequest(match.id, {
+        screenshot: { bytes: MINIMAL_PNG, type: 'image/png', name: 'test.png' },
+        teamSide: 'blue',
+      });
+      const response = await postScorecard(request, createRouteParams({ matchId: match.id }));
+      const { status, data } = await parseResponse(response);
+      expect(status).toBe(400);
+      expect(data.error).toMatch(/matchGameId/i);
+    });
+
+    it('returns 400 when teamSide is invalid', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const request = createScorecardRequest(match.id, {
+        screenshot: { bytes: MINIMAL_PNG, type: 'image/png', name: 'test.png' },
+        matchGameId: 'mg-1',
+        teamSide: 'purple',
+      });
+      const response = await postScorecard(request, createRouteParams({ matchId: match.id }));
+      const { status, data } = await parseResponse(response);
+      expect(status).toBe(400);
+      expect(data.error).toMatch(/teamSide/i);
+    });
+
+    it('returns 400 when file type is not an image', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const request = createScorecardRequest(match.id, {
+        screenshot: { bytes: new TextEncoder().encode('not an image').buffer as ArrayBuffer, type: 'text/plain', name: 'test.txt' },
+        matchGameId: 'mg-1',
+        teamSide: 'blue',
+      });
+      const response = await postScorecard(request, createRouteParams({ matchId: match.id }));
+      const { status } = await parseResponse(response);
+      expect(status).toBe(400);
+    });
+
+    it('accepts a string-format matchId (regression: was incorrectly rejected as invalid)', async () => {
+      // Match IDs are like "match_1776543433246_erkqcb97t", not purely numeric.
+      // A prior regex check `/^\d+$/` wrongly returned 400 "Invalid match ID" for these.
+      const match = await createMatch(game.id, mode.id);
+      // match.id is generated as "match_<hex>" by fixtures — confirms format is non-numeric
+      expect(match.id).toMatch(/^match_/);
+
+      const request = createScorecardRequest(match.id, {
+        screenshot: { bytes: MINIMAL_PNG, type: 'image/png', name: 'test.png' },
+        matchGameId: 'mg-1',
+        teamSide: 'blue',
+      });
+      const response = await postScorecard(request, createRouteParams({ matchId: match.id }));
+      const { status, data } = await parseResponse(response);
+
+      // Track uploaded dir for cleanup
+      if (status === 200) {
+        uploadedDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', match.id);
+      }
+
+      expect(status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(typeof data.submissionId).toBe('string');
+
+      const row = await db.get('SELECT id FROM scorecard_submissions WHERE id = ?', [data.submissionId]);
+      expect(row).toBeDefined();
     });
   });
 
