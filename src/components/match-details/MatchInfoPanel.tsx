@@ -114,16 +114,16 @@ function MatchDetailsCard({
           <Text size="sm" fw={500} c="dimmed">Max Participants:</Text>
           <Text size="sm">{match.max_participants}</Text>
         </Group>
+        <Group justify="space-between">
+          <Text size="sm" fw={500} c="dimmed">Created:</Text>
+          <Text size="sm">{formatTs(parseDbTimestamp, match.created_at)}</Text>
+        </Group>
         {startDateDisplay && (
           <Group justify="space-between">
             <Text size="sm" fw={500} c="dimmed">Start Date:</Text>
             <Text size="sm">{startDateDisplay}</Text>
           </Group>
         )}
-        <Group justify="space-between">
-          <Text size="sm" fw={500} c="dimmed">Created:</Text>
-          <Text size="sm">{formatTs(parseDbTimestamp, match.created_at)}</Text>
-        </Group>
         {completedDisplay && (
           <Group justify="space-between">
             <Text size="sm" fw={500} c="dimmed">Completed:</Text>
