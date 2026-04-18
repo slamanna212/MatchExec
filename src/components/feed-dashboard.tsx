@@ -14,8 +14,12 @@ import {
   SegmentedControl,
   ThemeIcon,
   useMantineColorScheme,
+  ActionIcon,
+  Popover,
+  Tooltip,
+  Indicator,
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
+import { DatePicker } from '@mantine/dates';
 import {
   IconSwords,
   IconTrophy,
@@ -31,6 +35,7 @@ import {
   IconCircleFilled,
   IconHeartbeat,
   IconActivity,
+  IconCalendar,
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
@@ -73,6 +78,12 @@ function parseDbTimestamp(ts: string): Date {
   return ts.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(ts)
     ? new Date(ts)
     : new Date(`${ts}Z`);
+}
+
+function formatDateShort(date: Date | string | null): string {
+  if (!date) return '?';
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatRelativeTime(timestamp: string): string {
@@ -299,21 +310,74 @@ export function FeedDashboard() {
             action={
               <Group gap="sm" align="center" wrap="nowrap">
                 <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />
-                <DatePickerInput
-                  type="range"
-                  placeholder="Filter by date range"
-                  value={dateRange}
-                  onChange={(val) => {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    setDateRange(val as any);
-                    setDisplayLimit(10);
-                    etagRef.current = null;
-                  }}
-                  clearable
-                  maxDate={new Date()}
-                  size="sm"
-                  style={{ minWidth: 220 }}
-                />
+
+                {/* Date range badge shown when a range is active */}
+                {(dateRange[0] || dateRange[1]) && (
+                  <Badge
+                    variant="light"
+                    color="violet"
+                    size="sm"
+                    radius="sm"
+                    rightSection={
+                      <ActionIcon
+                        size={14}
+                        color="violet"
+                        variant="transparent"
+                        onClick={() => {
+                          setDateRange([null, null]);
+                          setDisplayLimit(10);
+                          etagRef.current = null;
+                        }}
+                        aria-label="Clear date range"
+                      >
+                        <IconX size={10} />
+                      </ActionIcon>
+                    }
+                  >
+                    {formatDateShort(dateRange[0])} – {formatDateShort(dateRange[1])}
+                  </Badge>
+                )}
+
+                <Popover position="bottom-end" shadow="md" withArrow offset={6}>
+                  <Popover.Target>
+                    <Tooltip
+                      label={(dateRange[0] || dateRange[1]) ? 'Change date range' : 'Filter by date range'}
+                      position="bottom"
+                      withArrow
+                    >
+                      <Indicator
+                        disabled={!(dateRange[0] || dateRange[1])}
+                        color="violet"
+                        size={7}
+                        offset={3}
+                        processing
+                      >
+                        <ActionIcon
+                          variant="filled"
+                          color="violet"
+                          size="lg"
+                          radius="md"
+                          aria-label="Filter by date range"
+                        >
+                          <IconCalendar size={16} />
+                        </ActionIcon>
+                      </Indicator>
+                    </Tooltip>
+                  </Popover.Target>
+                  <Popover.Dropdown p="xs">
+                    <DatePicker
+                      type="range"
+                      value={dateRange}
+                      onChange={(val) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        setDateRange(val as any);
+                        setDisplayLimit(10);
+                        etagRef.current = null;
+                      }}
+                      maxDate={new Date()}
+                    />
+                  </Popover.Dropdown>
+                </Popover>
               </Group>
             }
           />
