@@ -13,6 +13,9 @@ interface DiscordSettings {
   player_reminder_minutes: number;
   announcer_voice: string;
   voice_announcements_enabled: number;
+  voice_channel_category_id: string;
+  voice_channel_cleanup_delay_minutes: number;
+  winner_vote_enabled: number;
 }
 
 export async function GET() {
@@ -32,7 +35,10 @@ export async function GET() {
           match_reminder_minutes,
           player_reminder_minutes,
           announcer_voice,
-          voice_announcements_enabled
+          voice_announcements_enabled,
+          voice_channel_category_id,
+          voice_channel_cleanup_delay_minutes,
+          winner_vote_enabled
         FROM discord_settings 
         WHERE id = 1
       `) as Promise<DiscordSettings | undefined>,
@@ -52,7 +58,10 @@ export async function GET() {
       match_reminder_minutes: discordSettings.match_reminder_minutes || 10,
       player_reminder_minutes: discordSettings.player_reminder_minutes || 120,
       announcer_voice: discordSettings.announcer_voice || 'wrestling-announcer',
-      voice_announcements_enabled: Boolean(discordSettings.voice_announcements_enabled)
+      voice_announcements_enabled: Boolean(discordSettings.voice_announcements_enabled),
+      voice_channel_category_id: discordSettings.voice_channel_category_id || '',
+      voice_channel_cleanup_delay_minutes: discordSettings.voice_channel_cleanup_delay_minutes || 10,
+      winner_vote_enabled: Boolean(discordSettings.winner_vote_enabled ?? true),
     } : {
       application_id: '',
       bot_token: '',
@@ -63,7 +72,10 @@ export async function GET() {
       match_reminder_minutes: 10,
       player_reminder_minutes: 120,
       announcer_voice: 'wrestling-announcer',
-      voice_announcements_enabled: false
+      voice_announcements_enabled: false,
+      voice_channel_category_id: '',
+      voice_channel_cleanup_delay_minutes: 10,
+      winner_vote_enabled: true,
     };
 
     // Process UI settings

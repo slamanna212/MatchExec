@@ -73,14 +73,20 @@ export async function GET() {
   try {
     const db = await getDbInstance();
 
-    const settings = await db.get<StatsSettingsRow>(
-      'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
-    );
+    const [settings, discordSettings] = await Promise.all([
+      db.get<StatsSettingsRow>(
+        'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
+      ),
+      db.get<{ winner_vote_enabled: number }>(
+        'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
+      ),
+    ]);
 
     if (!settings) {
       return apiOk({
         enabled: false,
         providers: [],
+        winner_vote_enabled: Boolean(discordSettings?.winner_vote_enabled ?? true),
       });
     }
 
@@ -104,6 +110,7 @@ export async function GET() {
       providers,
       both_sides_required: Boolean(settings.both_sides_required),
       auto_advance_on_match: Boolean(settings.auto_advance_on_match),
+      winner_vote_enabled: Boolean(discordSettings?.winner_vote_enabled ?? true),
     });
   } catch (error) {
     logger.error('Error fetching stats settings:', error);
@@ -171,6 +178,16 @@ export async function PUT(request: NextRequest) {
       await db.run(
         `UPDATE stats_settings SET ${updateFields.join(', ')} WHERE id = 1`,
         updateValues
+      );
+    }
+
+    if (body.winner_vote_enabled !== undefined) {
+      await db.run(
+        'INSERT OR IGNORE INTO discord_settings (id) VALUES (1)'
+      );
+      await db.run(
+        'UPDATE discord_settings SET winner_vote_enabled = ?, updated_at = datetime(\'now\') WHERE id = 1',
+        [body.winner_vote_enabled ? 1 : 0]
       );
     }
 

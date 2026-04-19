@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/PageHeader';
 interface StatsSettings {
   enabled: boolean;
   providers: Array<{ instanceId: string; providerId: string; model: string; hasKey: boolean }>;
+  winner_vote_enabled?: boolean;
 }
 
 interface ProviderInstance {
@@ -203,6 +204,7 @@ export default function StatsSettingsPage() {
   const form = useForm({
     initialValues: {
       enabled: false,
+      winner_vote_enabled: true,
     },
   });
 
@@ -212,6 +214,7 @@ export default function StatsSettingsPage() {
       .then((data: StatsSettings) => {
         form.setValues({
           enabled: data.enabled,
+          winner_vote_enabled: data.winner_vote_enabled ?? true,
         });
 
         setProviders(
@@ -507,6 +510,13 @@ export default function StatsSettingsPage() {
                 description="Allow match commanders to upload scorecards for AI analysis"
                 checked={form.values.enabled}
                 onChange={(e) => form.setFieldValue('enabled', e.currentTarget.checked)}
+              />
+
+              <Switch
+                label="Enable Winner Vote DMs"
+                description="Send commanders a DM after each map asking them to vote on who won via reaction."
+                checked={form.values.winner_vote_enabled}
+                onChange={(e) => form.setFieldValue('winner_vote_enabled', e.currentTarget.checked)}
               />
             </Stack>
           </Card>
