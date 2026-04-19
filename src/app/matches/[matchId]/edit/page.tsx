@@ -11,8 +11,6 @@ import {
   Button,
   Group,
   Text,
-  Breadcrumbs,
-  Anchor,
   Card,
   Loader,
   Center,
@@ -379,11 +377,6 @@ export default function EditMatchPage({
     <Container size="md" py="xl">
       <Stack gap="lg">
         <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Edit Match</Text>
-          </Breadcrumbs>
           <PageHeader
             icon={IconPencil}
             title="Edit Match"

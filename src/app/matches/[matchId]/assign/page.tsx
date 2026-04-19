@@ -8,7 +8,6 @@ import {
   Stack,
   Group,
   Text,
-  Breadcrumbs,
   Anchor,
   Loader,
   Center,
@@ -424,12 +423,6 @@ export default function AssignPage({
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Assign Players</Text>
-          </Breadcrumbs>
-
           <PageHeader
             icon={IconUsers}
             title={match.name}

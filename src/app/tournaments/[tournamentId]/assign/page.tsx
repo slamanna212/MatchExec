@@ -9,7 +9,6 @@ import {
   Stack,
   Group,
   Text,
-  Breadcrumbs,
   Anchor,
   Loader,
   Center,
@@ -351,12 +350,6 @@ export default function AssignTournamentPage({
     <Container size="xl" py="xl">
       <Stack gap="lg">
         <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/tournaments')} style={{ cursor: 'pointer' }}>Tournaments</Anchor>
-            <Anchor onClick={() => router.push(`/tournaments/${tournamentId}`)} style={{ cursor: 'pointer' }}>{tournament.name}</Anchor>
-            <Text>Assign Teams</Text>
-          </Breadcrumbs>
-
           <PageHeader
             icon={IconUsers}
             title={`${tournament.name} — Assign Teams`}
