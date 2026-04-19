@@ -23,7 +23,7 @@ import {
   TextInput,
   Select
 } from '@mantine/core';
-import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar } from '@tabler/icons-react';
+import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar, IconGripVertical } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
@@ -424,6 +424,7 @@ export default function AssignTournamentPage({
                   >
                     <Group justify="space-between" align="center" mb="xs">
                       <Group align="center">
+                        {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                         <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                           {index + 1}
                         </Avatar>
@@ -561,6 +562,7 @@ export default function AssignTournamentPage({
                       >
                         <Group justify="space-between" align="center" mb="xs">
                           <Group align="center">
+                            {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                             <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                               {index + 1}
                             </Avatar>

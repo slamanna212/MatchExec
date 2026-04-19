@@ -21,7 +21,7 @@ import {
   ActionIcon,
   Select
 } from '@mantine/core';
-import { IconUsers, IconAlertCircle, IconMapRoute } from '@tabler/icons-react';
+import { IconUsers, IconAlertCircle, IconMapRoute, IconGripVertical } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 
 interface SignupField {
@@ -269,6 +269,7 @@ export default function AssignPage({
       >
         <Group justify="space-between" align="center" mb="xs">
           <Group align="center">
+            {!isDragDisabled && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
             <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled" src={participant.avatar_url || undefined}>
               {index + 1}
             </Avatar>
