@@ -18,9 +18,10 @@ import {
   getParticipantCount,
   buildConfirmationMessage,
   collectFormData,
+  insertParticipant,
 } from '../../../processes/discord-bot/modules/interaction-helpers';
 import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { seedBasicTestData, createMatch, createTournament } from '../../utils/fixtures';
 
 describe('interaction-helpers', () => {
   let db: any;
@@ -228,6 +229,78 @@ describe('interaction-helpers', () => {
 
       const result = collectFormData(mockInteraction, signupForm);
       expect(result.displayUsername).toBe('BattleTag#1234');
+    });
+  });
+
+  // ─── insertParticipant ────────────────────────────────────────────────────────
+
+  describe('insertParticipant', () => {
+    const mockInteraction = {
+      user: { id: 'discord-user-123', username: 'TestPlayer' },
+      fields: { getTextInputValue: vi.fn() },
+    } as any;
+    const mockClient = {} as any;
+
+    it('inserts a match participant and returns a well-formed participant ID', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const parsedId = { eventId: match.id, isTournament: false, selectedTeamId: null } as any;
+
+      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', { rank: 'Gold' }, mockClient);
+
+      expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
+
+      const row = await db.get(`SELECT * FROM match_participants WHERE id = ?`, [participantId]);
+      expect(row).toBeDefined();
+      expect(row.match_id).toBe(match.id);
+      expect(row.discord_user_id).toBe('discord-user-123');
+      expect(row.username).toBe('TestPlayer');
+    });
+
+    it('generates unique IDs on consecutive calls', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const parsedId = { eventId: match.id, isTournament: false, selectedTeamId: null } as any;
+      const interaction2 = { ...mockInteraction, user: { id: 'discord-user-456', username: 'Player2' } } as any;
+
+      const id1 = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+      const id2 = await insertParticipant(db as any, parsedId, interaction2, 'Player2', {}, mockClient);
+
+      expect(id1).not.toBe(id2);
+    });
+
+    it('inserts a tournament participant without a team', async () => {
+      const tournament = await createTournament(game.id, { game_mode_id: mode.id });
+      const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: null } as any;
+
+      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+
+      expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
+      const row = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
+      expect(row).toBeDefined();
+      expect(row.tournament_id).toBe(tournament.id);
+
+      const memberRow = await db.get(`SELECT * FROM tournament_team_members WHERE user_id = ?`, ['discord-user-123']);
+      expect(memberRow).toBeUndefined();
+    });
+
+    it('inserts tournament participant and team member when team is selected', async () => {
+      const tournament = await createTournament(game.id, { game_mode_id: mode.id });
+      const teamId = `team_test_${Date.now()}`;
+      await db.run(
+        `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, 'Alpha')`,
+        [teamId, tournament.id]
+      );
+      const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: teamId } as any;
+
+      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+
+      const pRow = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
+      expect(pRow).toBeDefined();
+      expect(pRow.team_assignment).toBe(teamId);
+
+      const mRow = await db.get(`SELECT * FROM tournament_team_members WHERE team_id = ?`, [teamId]);
+      expect(mRow).toBeDefined();
+      expect(mRow.id).toMatch(/^member_\d+_[a-z0-9]+$/);
+      expect(mRow.discord_user_id).toBe('discord-user-123');
     });
   });
 });

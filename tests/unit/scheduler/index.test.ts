@@ -180,6 +180,88 @@ describe('MatchExecScheduler', () => {
     });
   });
 
+  // ─── checkDiscordBotHeartbeat ─────────────────────────────────────────────
+
+  describe('checkDiscordBotHeartbeat', () => {
+    it('returns early when no heartbeat record exists in DB', async () => {
+      await (scheduler as any).checkDiscordBotHeartbeat();
+
+      const row = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      expect(row).toBeUndefined();
+    });
+
+    it('returns early when heartbeat is recent (< 10 minutes old)', async () => {
+      const recentHeartbeat = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago
+      await db.run(
+        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
+        [recentHeartbeat]
+      );
+
+      await (scheduler as any).checkDiscordBotHeartbeat();
+
+      const row = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      expect(row).toBeUndefined();
+    });
+
+    it('queues a health alert and updates rate-limit when heartbeat is stale', async () => {
+      const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 min ago
+      await db.run(
+        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
+        [staleHeartbeat]
+      );
+
+      await (scheduler as any).checkDiscordBotHeartbeat();
+
+      const alertRow = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      expect(alertRow).toBeDefined();
+      expect(alertRow.id).toMatch(/^health_alert_\d+_[a-z0-9]+$/);
+      expect(alertRow.severity).toBe('critical');
+      expect(alertRow.status).toBe('pending');
+
+      const rateLimitRow = await db.get(
+        `SELECT * FROM health_alerts_sent WHERE alert_type = 'discord_bot_heartbeat_missing'`
+      );
+      expect(rateLimitRow).toBeDefined();
+    });
+
+    it('skips when within rate-limit window (< 1 hour since last alert)', async () => {
+      const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      await db.run(
+        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
+        [staleHeartbeat]
+      );
+      const recentAlert = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 min ago
+      await db.run(
+        `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,
+        [recentAlert]
+      );
+
+      await (scheduler as any).checkDiscordBotHeartbeat();
+
+      const count = await db.get(`SELECT COUNT(*) as cnt FROM discord_health_alert_queue`);
+      expect(count.cnt).toBe(0);
+    });
+
+    it('queues a new alert when rate-limit window has expired (> 1 hour since last alert)', async () => {
+      const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      await db.run(
+        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
+        [staleHeartbeat]
+      );
+      const expiredAlert = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
+      await db.run(
+        `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,
+        [expiredAlert]
+      );
+
+      await (scheduler as any).checkDiscordBotHeartbeat();
+
+      const alertRow = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      expect(alertRow).toBeDefined();
+      expect(alertRow.severity).toBe('critical');
+    });
+  });
+
   // ─── startCronJob ────────────────────────────────────────────────────────
 
   describe('startCronJob', () => {
