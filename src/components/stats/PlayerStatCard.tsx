@@ -6,13 +6,14 @@ import type { ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';
 interface Participant {
   id: string;
   username: string;
+  team_assignment?: string | null;
 }
 
 interface PlayerStatCardProps {
   stat: ScorecardPlayerStat;
   statDefs: GameStatDefinition[];
   participants: Participant[];
-  onAssignChange: (playerStatId: string, participantId: string) => void;
+  onAssignChange: (playerStatId: string, participantId: string | null) => void;
 }
 
 function confidenceColor(score?: number): string {
@@ -38,7 +39,14 @@ export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }:
     statsObj = JSON.parse(stat.stats_json) as Record<string, number>;
   } catch { /* skip */ }
 
-  const participantOptions = participants.map(p => ({ value: p.id, label: p.username }));
+  const participantOptions = [...participants]
+    .sort((a, b) => {
+      const ta = a.team_assignment ?? 'Unassigned';
+      const tb = b.team_assignment ?? 'Unassigned';
+      if (ta !== tb) return ta.localeCompare(tb);
+      return a.username.localeCompare(b.username);
+    })
+    .map(p => ({ value: p.id, label: p.username, group: p.team_assignment ?? 'Unassigned' }));
 
   return (
     <Card withBorder padding="sm">
@@ -79,7 +87,7 @@ export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }:
           placeholder="Assign to participant..."
           data={participantOptions}
           value={stat.participant_id || null}
-          onChange={(val) => { if (val) onAssignChange(stat.id, val); }}
+          onChange={(val) => onAssignChange(stat.id, val)}
           searchable
           clearable
         />

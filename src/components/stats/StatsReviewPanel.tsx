@@ -11,6 +11,7 @@ import { PlayerStatCard } from './PlayerStatCard';
 interface Participant {
   id: string;
   username: string;
+  team_assignment?: string | null;
 }
 
 interface SubmissionWithStats extends ScorecardSubmission {
@@ -57,14 +58,23 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
 
-  const handleAssign = async (submissionId: string, playerStatId: string, participantId: string) => {
+  const handleAssign = async (submissionId: string, playerStatId: string, participantId: string | null) => {
     try {
       await fetch(`/api/matches/${matchId}/scorecard/${submissionId}/assign`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignments: [{ playerStatId, participantId }] }),
       });
-      await fetchData();
+      setSubmissions(prev =>
+        prev.map(sub =>
+          sub.id !== submissionId ? sub : {
+            ...sub,
+            playerStats: sub.playerStats.map(ps =>
+              ps.id !== playerStatId ? ps : { ...ps, participant_id: participantId ?? undefined }
+            ),
+          }
+        )
+      );
     } catch {
       showError('Failed to assign participant');
     }
