@@ -62,7 +62,7 @@ async function generateMatchesForFormat(tournament: Tournament, tournamentId: st
 async function queueMatchAnnouncements(db: Database, generatedMatches: { id: string }[]): Promise<void> {
   for (const match of generatedMatches) {
     try {
-      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status) VALUES (?, ?, 'standard', 'pending')`, [announcementId, match.id]);
     } catch (error) {
       logger.error(`Failed to queue announcement for match ${match.id}:`, error);

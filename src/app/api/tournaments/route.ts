@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
       return apiError(gameModeError, 400);
     }
 
-    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     const startDateTime = body.startDate ? new Date(body.startDate).toISOString() : null;
     const startTimeOnly = body.startTime ? new Date(body.startTime).toISOString() : null;
 

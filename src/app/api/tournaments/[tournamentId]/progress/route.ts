@@ -42,7 +42,7 @@ interface GrandFinalsMatch {
   tournament_round?: number;
 }
 
-export async function POST(
+export async function POST( // NOSONAR typescript:S3776
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
 ) {

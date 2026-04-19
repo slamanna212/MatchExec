@@ -164,7 +164,7 @@ export async function DELETE(
         logger.debug(`🗑️ Queueing Discord deletions for ${tournamentMatches.length} tournament matches`);
 
         for (const match of tournamentMatches) {
-          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
           await db.run(`
             INSERT INTO discord_deletion_queue (id, match_id, status)
             VALUES (?, ?, 'pending')
@@ -179,7 +179,7 @@ export async function DELETE(
 
     // Queue Discord message deletion for the tournament itself
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')

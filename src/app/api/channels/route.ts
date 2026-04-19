@@ -143,7 +143,7 @@ async function createDiscordChannel(
   data: ReturnType<typeof extractChannelData>,
   guildId: string
 ): Promise<string> {
-  const channelId = `discord_channel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const channelId = `discord_channel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
   const discordType = data.channel_type === 'text' ? 0 : 2;
 
   const getFlag = (flag: boolean) => (data.channel_type === 'text' && flag) ? 1 : 0;

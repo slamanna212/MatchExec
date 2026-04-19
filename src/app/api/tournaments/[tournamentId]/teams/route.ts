@@ -119,7 +119,7 @@ export async function POST(
       return apiError('Team name already exists in this tournament', 409);
     }
     
-    const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     await db.run(`
       INSERT INTO tournament_teams (id, tournament_id, team_name)
@@ -181,7 +181,7 @@ export async function PUT(
     for (const team of teams) {
       if (team.members && team.members.length > 0) {
         for (const member of team.members) {
-          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
           // Get discord_user_id from tournament_participants
           const participant = await db.get<{ discord_user_id: string }>(`

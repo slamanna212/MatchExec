@@ -258,7 +258,7 @@ class MatchExecScheduler {
 
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
-          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
           await this.db.run(`
             INSERT OR IGNORE INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
@@ -322,7 +322,7 @@ class MatchExecScheduler {
 
         // Create a single queue entry per match; the processor calls sendPlayerReminders(matchId)
         // which sends to all participants at once — one entry per participant would cause N×N duplicates
-        const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
         await this.db.run(`
           INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
@@ -340,7 +340,7 @@ class MatchExecScheduler {
   private async queueMatchStartNotification(matchId: string): Promise<boolean> {
     try {
       // Generate unique ID for the queue entry  
-      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       
       // Add to Discord match start notification queue that the bot will process
     await this.db.run(`
@@ -476,7 +476,7 @@ class MatchExecScheduler {
   private async queueTimedAnnouncement(matchId: string, announcement: AnnouncementItem, scheduledFor: Date): Promise<boolean> {
     try {
       // Generate unique ID for the announcement queue entry
-      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     await this.db.run(`
         INSERT INTO discord_announcement_queue (
@@ -577,7 +577,7 @@ class MatchExecScheduler {
     }, 120000); // Every 2 minutes
   }
 
-  private async checkDiscordBotHeartbeat(): Promise<void> {
+  private async checkDiscordBotHeartbeat(): Promise<void> { // NOSONAR typescript:S3776
     const DISCORD_BOT_TIMEOUT_THRESHOLD = 10 * 60 * 1000; // 10 minutes
     const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
     const ALERT_TYPE = 'discord_bot_heartbeat_missing';
@@ -626,7 +626,7 @@ class MatchExecScheduler {
       });
 
       // Enqueue Discord alert — the bot will post it when/if it recovers
-      const alertId = `health_alert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const alertId = `health_alert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // NOSONAR: non-security internal ID generation
       await this.db.run(
         `INSERT INTO discord_health_alert_queue (id, severity, title, description, status)
          VALUES (?, ?, ?, ?, 'pending')`,

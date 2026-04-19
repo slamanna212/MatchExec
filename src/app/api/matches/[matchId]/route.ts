@@ -215,7 +215,7 @@ export async function DELETE(
 
     // Queue Discord message deletion before deleting the match
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')

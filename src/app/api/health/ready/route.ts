@@ -10,6 +10,27 @@ interface ServiceStatus {
   message?: string;
 }
 
+type DbInstance = Awaited<ReturnType<typeof getDbInstance>>;
+
+function heartbeatStatus(value: string): ServiceStatus {
+  const elapsed = Date.now() - new Date(value).getTime();
+  return {
+    status: elapsed < HEARTBEAT_TIMEOUT_MS ? 'up' : 'degraded',
+    lastHeartbeat: value,
+    ...(elapsed >= HEARTBEAT_TIMEOUT_MS && {
+      message: `No heartbeat for ${Math.floor(elapsed / 60000)} minutes`,
+    }),
+  };
+}
+
+async function getHeartbeat(db: DbInstance, key: string): Promise<string | undefined> {
+  const row = await db.get<{ setting_value: string }>(
+    'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+    [key]
+  );
+  return row?.setting_value;
+}
+
 export async function GET() {
   const services: Record<string, ServiceStatus> = {
     database: { status: 'down' },
@@ -27,73 +48,28 @@ export async function GET() {
     services.database = { status: 'up' };
 
     // Check scheduler heartbeat
-    const schedulerHeartbeat = await db.get<{ setting_value: string }>(
-      'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-      ['scheduler_last_heartbeat']
-    );
-
-    if (schedulerHeartbeat?.setting_value) {
-      const lastBeat = new Date(schedulerHeartbeat.setting_value);
-      const elapsed = Date.now() - lastBeat.getTime();
-      services.scheduler = {
-        status: elapsed < HEARTBEAT_TIMEOUT_MS ? 'up' : 'degraded',
-        lastHeartbeat: schedulerHeartbeat.setting_value,
-        ...(elapsed >= HEARTBEAT_TIMEOUT_MS && {
-          message: `No heartbeat for ${Math.floor(elapsed / 60000)} minutes`,
-        }),
-      };
-    } else {
-      services.scheduler = { status: 'down', message: 'No heartbeat recorded yet' };
-    }
+    const schedulerValue = await getHeartbeat(db, 'scheduler_last_heartbeat');
+    services.scheduler = schedulerValue
+      ? heartbeatStatus(schedulerValue)
+      : { status: 'down', message: 'No heartbeat recorded yet' };
 
     // Check Discord bot heartbeat
-    const botHeartbeat = await db.get<{ setting_value: string }>(
-      'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-      ['discord_bot_last_heartbeat']
-    );
-
-    if (botHeartbeat?.setting_value) {
-      const lastBeat = new Date(botHeartbeat.setting_value);
-      const elapsed = Date.now() - lastBeat.getTime();
-      services.discord_bot = {
-        status: elapsed < HEARTBEAT_TIMEOUT_MS ? 'up' : 'degraded',
-        lastHeartbeat: botHeartbeat.setting_value,
-        ...(elapsed >= HEARTBEAT_TIMEOUT_MS && {
-          message: `No heartbeat for ${Math.floor(elapsed / 60000)} minutes`,
-        }),
-      };
+    const botValue = await getHeartbeat(db, 'discord_bot_last_heartbeat');
+    if (botValue) {
+      services.discord_bot = heartbeatStatus(botValue);
     } else {
-      // Bot may not be configured yet (no token) — check if welcome flow is done
-      const welcomeResult = await db.get<{ setting_value: string }>(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['welcome_flow_completed']
-      );
-      if (welcomeResult?.setting_value !== 'true') {
-        services.discord_bot = { status: 'down', message: 'Welcome flow not completed' };
-      } else {
-        services.discord_bot = { status: 'down', message: 'No heartbeat recorded yet' };
-      }
+      const welcomeValue = await getHeartbeat(db, 'welcome_flow_completed');
+      services.discord_bot = {
+        status: 'down',
+        message: welcomeValue !== 'true' ? 'Welcome flow not completed' : 'No heartbeat recorded yet',
+      };
     }
 
     // Check stats processor heartbeat
-    const statsProcessorHeartbeat = await db.get<{ setting_value: string }>(
-      'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-      ['stats_processor_last_heartbeat']
-    );
-
-    if (statsProcessorHeartbeat?.setting_value) {
-      const lastBeat = new Date(statsProcessorHeartbeat.setting_value);
-      const elapsed = Date.now() - lastBeat.getTime();
-      services.stats_processor = {
-        status: elapsed < HEARTBEAT_TIMEOUT_MS ? 'up' : 'degraded',
-        lastHeartbeat: statsProcessorHeartbeat.setting_value,
-        ...(elapsed >= HEARTBEAT_TIMEOUT_MS && {
-          message: `No heartbeat for ${Math.floor(elapsed / 60000)} minutes`,
-        }),
-      };
-    } else {
-      services.stats_processor = { status: 'down', message: 'No heartbeat recorded yet' };
-    }
+    const statsValue = await getHeartbeat(db, 'stats_processor_last_heartbeat');
+    services.stats_processor = statsValue
+      ? heartbeatStatus(statsValue)
+      : { status: 'down', message: 'No heartbeat recorded yet' };
 
     // Overall status
     const allUp = Object.values(services).every(s => s.status === 'up');

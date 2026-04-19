@@ -41,7 +41,7 @@ export class DiscordBotService {
       return existingRequest.id;
     }
 
-    const requestId = `voice_test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const requestId = `voice_test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     await this.db.run(`
       INSERT INTO discord_bot_requests (id, type, data, status, created_at, updated_at)

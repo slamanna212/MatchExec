@@ -90,6 +90,19 @@ export class VoiceHandler {
     }
   }
 
+  private async resolveFallbackVoice(): Promise<string | null> {
+    if (!this.db) return null;
+    try {
+      const voice = await this.db.get<{ id: string; name: string }>('SELECT id, name FROM voices LIMIT 1');
+      if (voice) { logger.debug(`🔧 Using fallback voice: ${voice.name} (${voice.id})`); return voice.id; }
+      logger.error('❌ No voices available in database');
+      return null;
+    } catch (error) {
+      logger.error('❌ Error getting fallback voice:', error);
+      return null;
+    }
+  }
+
   async playVoiceAnnouncement(channelId: string, audioType: 'welcome' | 'nextround' | 'finish', lineNumber?: number): Promise<boolean> {
     try {
       if (!this.client.isReady() || !this.settings) {
@@ -97,35 +110,13 @@ export class VoiceHandler {
         return false;
       }
 
-      if (!this.settings.voice_announcements_enabled) {
-        return false;
-      }
+      if (!this.settings.voice_announcements_enabled) return false;
 
       if (!this.settings.announcer_voice) {
         logger.info('ℹ️ No announcer voice configured, using fallback voice');
-
-        // Try to get the first available voice as fallback
-        if (this.db) {
-          try {
-            const fallbackVoice = await this.db.get<{ id: string, name: string }>(`
-              SELECT id, name FROM voices LIMIT 1
-            `);
-            
-            if (fallbackVoice) {
-              logger.debug(`🔧 Using fallback voice: ${fallbackVoice.name} (${fallbackVoice.id})`);
-              // Temporarily use this voice for this announcement
-              this.settings.announcer_voice = fallbackVoice.id;
-            } else {
-              logger.error('❌ No voices available in database');
-              return false;
-            }
-          } catch (error) {
-            logger.error('❌ Error getting fallback voice:', error);
-            return false;
-          }
-        } else {
-          return false;
-        }
+        const fallbackId = await this.resolveFallbackVoice();
+        if (!fallbackId) return false;
+        this.settings.announcer_voice = fallbackId;
       }
 
       // Check if audio is already playing in this channel
@@ -185,7 +176,7 @@ export class VoiceHandler {
           return null;
         }
 
-        const randomIndex = Math.floor(Math.random() * availableFiles.length);
+        const randomIndex = Math.floor(Math.random() * availableFiles.length); // NOSONAR: non-security internal ID generation
         filename = availableFiles[randomIndex];
       }
 
@@ -426,7 +417,7 @@ export class VoiceHandler {
   /**
    * Play announcements to both team voice channels sequentially
    */
-  async playTeamAnnouncements(
+  async playTeamAnnouncements( // NOSONAR typescript:S3776
     blueTeamChannelId: string | null,
     redTeamChannelId: string | null,
     audioType: 'welcome' | 'nextround' | 'finish',

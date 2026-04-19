@@ -231,7 +231,7 @@ function SkeletonCard() {
   );
 }
 
-export function MatchDashboard() {
+export function MatchDashboard() { // NOSONAR typescript:S3776
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);

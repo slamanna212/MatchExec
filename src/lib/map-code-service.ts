@@ -60,7 +60,7 @@ export class MapCodeService {
       const db = await getDbInstance();
 
       // Generate unique ID for the queue entry
-      const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
       // Add to map code PM queue
       await db.run(`

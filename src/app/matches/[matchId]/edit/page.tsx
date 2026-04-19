@@ -78,7 +78,7 @@ function resolveMapMode(
   if (modeName || modes.length === 0) return { modeId, modeName };
   const modeCandidate = modes.find(m => mapId.includes(m.id));
   if (modeCandidate) return { modeId: modeCandidate.id, modeName: modeCandidate.name };
-  if (!mapId.match(/[^-]+-([^-]+)/)) {
+  if (!mapId.match(/^[^-]+-[^-]+/)) {
     return { modeId: modes[0]?.id || '', modeName: modes[0]?.name || '' };
   }
   return { modeId: modes[0].id, modeName: modes[0].name };
@@ -268,7 +268,7 @@ export default function EditMatchPage({
   };
 
   const handleMapSelect = (map: GameMapWithMode) => {
-    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // NOSONAR: non-security internal ID generation
     setSelectedMaps(prev => [...prev, {
       id: uniqueId,
       name: map.name,
@@ -280,7 +280,7 @@ export default function EditMatchPage({
   };
 
   const handleFlexibleMapSelect = (map: GameMapWithMode, modeId: string) => {
-    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // NOSONAR: non-security internal ID generation
     const mode = availableModes.find(m => m.id === modeId);
     setSelectedMaps(prev => [...prev, {
       id: uniqueId,

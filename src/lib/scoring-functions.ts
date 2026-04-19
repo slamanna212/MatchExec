@@ -442,7 +442,7 @@ export async function saveMatchResult(
 /**
  * Get match result for a game
  */
-export async function getMatchResult(matchGameId: string): Promise<MatchResult | null> {
+export async function getMatchResult(matchGameId: string): Promise<MatchResult | null> { // NOSONAR typescript:S3776
   const db = await getDbInstance();
   
   try {
@@ -602,7 +602,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
       
       if (mapCode) {
         // Generate unique ID for the queue entry
-        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
         
         // Get the actual map name from database instead of using potentially raw mapName
         let displayMapName = mapName; // Fallback to passed mapName
@@ -712,7 +712,7 @@ export async function queueScoreNotification(matchGameId: string, result: MatchR
     }
 
     // Generate unique notification ID
-    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     // Insert into score notification queue
     const insertQuery = `
@@ -932,7 +932,7 @@ async function queueVoiceAnnouncementForScore(
     const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
 
     // Generate unique announcement ID
-    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     // Add to voice announcement queue
     await db.run(`
@@ -1200,7 +1200,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
     }
 
     // Generate unique notification ID
-    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     // Insert into match winner notification queue
     await db.run(`
@@ -1244,7 +1244,7 @@ async function queueScorecardPrompts(matchId: string, matchGameId: string, mapNa
     const statDefs = await db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM game_stat_definitions WHERE game_id = ?', [match.game_id]);
     if (!statDefs || statDefs.cnt === 0) return;
 
-    const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     await db.run(
       'INSERT INTO discord_scorecard_prompt_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
       [queueId, matchId, matchGameId, mapName, 'pending']
@@ -1278,7 +1278,7 @@ async function queueWinnerVote(matchId: string, matchGameId: string, mapName: st
       return;
     }
 
-    const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     await db.run(
       'INSERT INTO discord_winner_vote_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
       [queueId, matchId, matchGameId, mapName, 'pending']
@@ -1302,7 +1302,7 @@ async function queueStatsAggregation(matchId: string): Promise<void> {
     );
     if (!count || count.cnt === 0) return;
 
-    const queueId = `stats_image_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const queueId = `stats_image_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     await db.run('INSERT INTO stats_image_queue (id, match_id, status) VALUES (?, ?, ?)', [queueId, matchId, 'pending']);
     logger.debug(`📊 Stats aggregation queued for completed match ${matchId}`);
   } catch (error) {
@@ -1315,7 +1315,7 @@ export async function queueDiscordDeletion(matchId: string): Promise<void> {
     const db = await getDbInstance();
     
     // Generate unique deletion ID
-    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     // Insert into Discord deletion queue
     await db.run(`

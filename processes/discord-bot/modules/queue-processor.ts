@@ -538,7 +538,7 @@ export class QueueProcessor {
 
   private async storeDiscordMessageTracking(announcement: any, result: any, eventData: Record<string, unknown>) {
     try {
-      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       const threadId = await this.createMapsThreadIfNeeded(result.mainMessage, eventData);
       const discordEventId = await this.createDiscordEventIfNeeded(eventData, result.mainMessage);
 
@@ -727,6 +727,27 @@ export class QueueProcessor {
     }
   }
 
+  private async processSingleStatusUpdate(update: QueuedStatusUpdate): Promise<void> {
+    let success = false;
+    try {
+      if (update.new_status === 'assign') {
+        const isTournament = update.match_id.startsWith('tournament_');
+        success = isTournament
+          ? await this.updateTournamentMessagesForSignupClosure(update.match_id)
+          : await this.updateMatchMessagesForSignupClosure(update.match_id);
+      } else {
+        success = true;
+      }
+    } catch (error) {
+      logger.error(`❌ Error updating Discord messages for status ${update.new_status}:`, error);
+    }
+
+    await this.db!.run(
+      `UPDATE discord_status_update_queue SET status = ?, processed_at = datetime('now'), error_message = ? WHERE id = ?`,
+      [success ? 'completed' : 'failed', success ? null : 'Failed to update Discord messages', update.id]
+    );
+  }
+
   async processStatusUpdateQueue() {
     if (!this.client.isReady() || !this.db) return;
 
@@ -739,61 +760,63 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
-      if (updates.length > 0) {
-      }
-
       for (const update of updates) {
         try {
-          const newStatus = update.new_status;
-          const matchId = update.match_id;
-
-
-          // Update Discord messages based on the new status
-          let success = false;
-          
-          try {
-            if (newStatus === 'assign') {
-              // When transitioning to 'assign' (signups closed), remove signup buttons
-              // Check if this is a tournament or match
-              const isTournament = matchId.startsWith('tournament_');
-              if (isTournament) {
-                success = await this.updateTournamentMessagesForSignupClosure(matchId);
-              } else {
-                success = await this.updateMatchMessagesForSignupClosure(matchId);
-              }
-            } else {
-              // For other status changes, just log for now
-              success = true;
-            }
-          } catch (error) {
-            logger.error(`❌ Error updating Discord messages for status ${newStatus}:`, error);
-            success = false;
-          }
-          
-          // Mark as completed or failed based on result
-          const finalStatus = success ? 'completed' : 'failed';
-          const errorMessage = success ? null : 'Failed to update Discord messages';
-          
-          await this.db.run(`
-            UPDATE discord_status_update_queue 
-            SET status = ?, processed_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [finalStatus, errorMessage, update.id]);
-
-
+          await this.processSingleStatusUpdate(update);
         } catch (error) {
           logger.error(`❌ Error processing status update ${update.id}:`, error);
-          
-          await this.db.run(`
-            UPDATE discord_status_update_queue 
-            SET status = 'failed', processed_at = datetime('now')
-            WHERE id = ?
-          `, [update.id]);
+          await this.db.run(
+            `UPDATE discord_status_update_queue SET status = 'failed', processed_at = datetime('now') WHERE id = ?`,
+            [update.id]
+          );
         }
       }
     } catch (error) {
       logger.error('❌ Error processing status update queue:', error);
     }
+  }
+
+  private calcTimingInfo(startDate: string): { value: number; unit: 'minutes' | 'hours' | 'days' } {
+    const diffMinutes = Math.round((new Date(startDate).getTime() - Date.now()) / 60000);
+    if (diffMinutes > 90) return { value: Math.round(diffMinutes / 60), unit: 'hours' };
+    return { value: diffMinutes, unit: 'minutes' };
+  }
+
+  private async processSingleReminder(reminder: QueuedReminder): Promise<void> {
+    if (!this.announcementHandler) {
+      await this.db!.run(
+        `UPDATE discord_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
+        ['AnnouncementHandler not available', reminder.id]
+      );
+      return;
+    }
+
+    const matchData = await this.db!.get<{
+      id: string; name: string; description: string; game_id: string;
+      start_date: string; status: string; event_image_url?: string;
+    }>('SELECT id, name, description, game_id, start_date, status, event_image_url FROM matches WHERE id = ?', [reminder.match_id]);
+
+    if (!matchData) throw new Error('Match not found');
+
+    if (matchData.status === 'complete' || matchData.status === 'cancelled') {
+      logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (status: ${matchData.status})`);
+      await this.db!.run(`UPDATE discord_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]);
+      return;
+    }
+
+    if (new Date(matchData.start_date) <= new Date()) {
+      logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (start time has passed)`);
+      await this.db!.run(`UPDATE discord_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]);
+      return;
+    }
+
+    logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
+    const success = await this.announcementHandler.postTimedReminder({ ...matchData, _timingInfo: this.calcTimingInfo(matchData.start_date) });
+
+    if (success) logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
+    else logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
+
+    await this.db!.run(`UPDATE discord_reminder_queue SET status = ?, sent_at = datetime('now') WHERE id = ?`, [success ? 'completed' : 'failed', reminder.id]);
   }
 
   async processReminderQueue() {
@@ -809,111 +832,18 @@ export class QueueProcessor {
         LIMIT 5
       `);
 
-      if (reminders.length === 0) {
-        logger.debug('ℹ️ No reminders ready to send');
-        return;
-      }
-
+      if (reminders.length === 0) { logger.debug('ℹ️ No reminders ready to send'); return; }
       logger.debug(`📬 Processing ${reminders.length} reminder(s)`);
 
       for (const reminder of reminders) {
         try {
-
-          if (!this.announcementHandler) {
-            logger.error('❌ AnnouncementHandler not available');
-            await this.db.run(`
-              UPDATE discord_reminder_queue
-              SET status = 'failed', sent_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['AnnouncementHandler not available', reminder.id]);
-            continue;
-          }
-
-          // Get match data for timed reminder
-          const matchData = await this.db.get<{
-            id: string;
-            name: string;
-            description: string;
-            game_id: string;
-            start_date: string;
-            status: string;
-            event_image_url?: string;
-          }>(`
-            SELECT id, name, description, game_id, start_date, status, event_image_url
-            FROM matches WHERE id = ?
-          `, [reminder.match_id]);
-
-          if (!matchData) {
-            throw new Error('Match not found');
-          }
-
-          // Skip if match is already over
-          if (matchData.status === 'complete' || matchData.status === 'cancelled') {
-            logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (status: ${matchData.status})`);
-            await this.db.run(`
-              UPDATE discord_reminder_queue
-              SET status = 'completed', sent_at = datetime('now')
-              WHERE id = ?
-            `, [reminder.id]);
-            continue;
-          }
-
-          // Skip if match start time has already passed
-          if (new Date(matchData.start_date) <= new Date()) {
-            logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (start time has passed)`);
-            await this.db.run(`
-              UPDATE discord_reminder_queue
-              SET status = 'completed', sent_at = datetime('now')
-              WHERE id = ?
-            `, [reminder.id]);
-            continue;
-          }
-
-          logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
-
-          // Calculate actual time difference for display
-          const now = new Date();
-          const matchStart = new Date(matchData.start_date);
-          const timeDiffMs = matchStart.getTime() - now.getTime();
-          const timeDiffMinutes = Math.round(timeDiffMs / (1000 * 60));
-
-          let timingInfo: { value: number; unit: 'minutes' | 'hours' | 'days' } = { value: timeDiffMinutes, unit: 'minutes' };
-
-          // Convert to hours if more than 90 minutes
-          if (timeDiffMinutes > 90) {
-            const hours = Math.round(timeDiffMinutes / 60);
-            timingInfo = { value: hours, unit: 'hours' };
-          }
-
-          // Send timed reminder to channels (not player DMs)
-          const success = await this.announcementHandler.postTimedReminder({
-            ...matchData,
-            _timingInfo: timingInfo
-          });
-
-          if (success) {
-            logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
-          } else {
-            logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
-          }
-
-          // Mark as completed or failed based on result
-          const status = success ? 'completed' : 'failed';
-          await this.db.run(`
-            UPDATE discord_reminder_queue
-            SET status = ?, sent_at = datetime('now')
-            WHERE id = ?
-          `, [status, reminder.id]);
-
-
+          await this.processSingleReminder(reminder);
         } catch (error) {
           logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-
-          await this.db.run(`
-            UPDATE discord_reminder_queue
-            SET status = 'failed', sent_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+          await this.db.run(
+            `UPDATE discord_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
+            [error instanceof Error ? error.message : 'Unknown error', reminder.id]
+          );
         }
       }
     } catch (error) {
@@ -921,19 +851,52 @@ export class QueueProcessor {
     }
   }
 
+  private async processSinglePlayerReminder(reminder: { id: string; match_id: string }): Promise<void> {
+    if (!this.reminderHandler) {
+      await this.db!.run(
+        `UPDATE discord_player_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
+        ['ReminderHandler not available', reminder.id]
+      );
+      return;
+    }
+
+    const matchSettings = await this.db!.get<{
+      player_notifications: number; name: string; status: string; start_date: string;
+    }>('SELECT player_notifications, name, status, start_date FROM matches WHERE id = ?', [reminder.match_id]);
+
+    if (!matchSettings) throw new Error('Match not found');
+
+    const markCompleted = () => this.db!.run(
+      `UPDATE discord_player_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]
+    );
+
+    if (!matchSettings.player_notifications) { await markCompleted(); return; }
+    if (matchSettings.status === 'complete' || matchSettings.status === 'cancelled') {
+      logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (status: ${matchSettings.status})`);
+      await markCompleted(); return;
+    }
+    if (new Date(matchSettings.start_date) <= new Date()) {
+      logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (start time has passed)`);
+      await markCompleted(); return;
+    }
+
+    const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
+    await this.db!.run(
+      `UPDATE discord_player_reminder_queue SET status = ?, sent_at = datetime('now') WHERE id = ?`,
+      [success ? 'completed' : 'failed', reminder.id]
+    );
+  }
+
   async processPlayerReminderQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
       const playerReminders = await this.db.all<{
-        id: string;
-        match_id: string;
-        reminder_time: string;
-        created_at: string;
+        id: string; match_id: string; reminder_time: string; created_at: string;
       }>(`
         SELECT id, match_id, reminder_time, created_at
         FROM discord_player_reminder_queue
-        WHERE status = 'pending' 
+        WHERE status = 'pending'
         AND datetime(reminder_time) <= datetime('now')
         ORDER BY created_at ASC
         LIMIT 5
@@ -941,83 +904,13 @@ export class QueueProcessor {
 
       for (const reminder of playerReminders) {
         try {
-
-          if (!this.reminderHandler) {
-            logger.error('❌ ReminderHandler not available');
-            await this.db.run(`
-              UPDATE discord_player_reminder_queue 
-              SET status = 'failed', sent_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['ReminderHandler not available', reminder.id]);
-            continue;
-          }
-
-          // Check if player notifications are enabled for this match
-          const matchSettings = await this.db.get<{
-            player_notifications: number;
-            name: string;
-            status: string;
-            start_date: string;
-          }>(`
-            SELECT player_notifications, name, status, start_date FROM matches WHERE id = ?
-          `, [reminder.match_id]);
-
-          if (!matchSettings) {
-            throw new Error('Match not found');
-          }
-
-          if (!matchSettings.player_notifications) {
-            // Mark as completed since this is expected behavior
-            await this.db.run(`
-              UPDATE discord_player_reminder_queue
-              SET status = 'completed', sent_at = datetime('now')
-              WHERE id = ?
-            `, [reminder.id]);
-            continue;
-          }
-
-          // Skip if match is already over
-          if (matchSettings.status === 'complete' || matchSettings.status === 'cancelled') {
-            logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (status: ${matchSettings.status})`);
-            await this.db.run(`
-              UPDATE discord_player_reminder_queue
-              SET status = 'completed', sent_at = datetime('now')
-              WHERE id = ?
-            `, [reminder.id]);
-            continue;
-          }
-
-          // Skip if match start time has already passed
-          if (new Date(matchSettings.start_date) <= new Date()) {
-            logger.debug(`⏭️ Skipping stale player reminder for match ${matchSettings.name} (start time has passed)`);
-            await this.db.run(`
-              UPDATE discord_player_reminder_queue
-              SET status = 'completed', sent_at = datetime('now')
-              WHERE id = ?
-            `, [reminder.id]);
-            continue;
-          }
-
-          // Send DMs to players (only if notifications are enabled)
-          const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
-          
-          // Mark as completed or failed based on result
-          const status = success ? 'completed' : 'failed';
-          await this.db.run(`
-            UPDATE discord_player_reminder_queue 
-            SET status = ?, sent_at = datetime('now')
-            WHERE id = ?
-          `, [status, reminder.id]);
-
-
+          await this.processSinglePlayerReminder(reminder);
         } catch (error) {
           logger.error(`❌ Error processing player reminder ${reminder.id}:`, error);
-          
-          await this.db.run(`
-            UPDATE discord_player_reminder_queue 
-            SET status = 'failed', sent_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', reminder.id]);
+          await this.db.run(
+            `UPDATE discord_player_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
+            [error instanceof Error ? error.message : 'Unknown error', reminder.id]
+          );
         }
       }
     } catch (error) {
@@ -1294,6 +1187,36 @@ export class QueueProcessor {
     }
   }
 
+  private async processSingleMapCode(mapCodeRequest: QueuedMapCode): Promise<void> {
+    const updateResult = await this.db!.run(
+      `UPDATE discord_map_code_queue SET status = 'processing', processed_at = datetime('now') WHERE id = ? AND status = 'pending'`,
+      [mapCodeRequest.id]
+    );
+    if (updateResult.changes === 0) return;
+
+    if (!this.reminderHandler) {
+      await this.db!.run(
+        `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
+        ['ReminderHandler not available', mapCodeRequest.id]
+      );
+      return;
+    }
+
+    logger.debug(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+    const result = await this.reminderHandler.sendMapCodePMs(mapCodeRequest.match_id, mapCodeRequest.map_name, mapCodeRequest.map_code);
+
+    if (result) {
+      await this.db!.run(`UPDATE discord_map_code_queue SET status = 'completed', processed_at = datetime('now') WHERE id = ?`, [mapCodeRequest.id]);
+      logger.debug(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
+    } else {
+      await this.db!.run(
+        `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
+        ['Failed to send map code PMs', mapCodeRequest.id]
+      );
+      logger.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
+    }
+  }
+
   async processMapCodeQueue() {
     if (!this.client.isReady() || !this.db) return;
 
@@ -1308,64 +1231,13 @@ export class QueueProcessor {
 
       for (const mapCodeRequest of mapCodes) {
         try {
-          // Immediately mark as processing to prevent duplicate processing
-          const updateResult = await this.db.run(`
-            UPDATE discord_map_code_queue 
-            SET status = 'processing', processed_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [mapCodeRequest.id]);
-          
-          if (updateResult.changes === 0) {
-            continue;
-          }
-
-          if (!this.reminderHandler) {
-            logger.error('❌ ReminderHandler not available');
-            await this.db.run(`
-              UPDATE discord_map_code_queue 
-              SET status = 'failed', processed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['ReminderHandler not available', mapCodeRequest.id]);
-            continue;
-          }
-
-          logger.debug(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
-
-          // Send map code PMs via the reminder handler
-          const result = await this.reminderHandler.sendMapCodePMs(
-            mapCodeRequest.match_id,
-            mapCodeRequest.map_name,
-            mapCodeRequest.map_code
-          );
-
-          if (result) {
-            // Mark as completed
-            await this.db.run(`
-              UPDATE discord_map_code_queue 
-              SET status = 'completed', processed_at = datetime('now')
-              WHERE id = ?
-            `, [mapCodeRequest.id]);
-
-            logger.debug(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
-          } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_map_code_queue 
-              SET status = 'failed', processed_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['Failed to send map code PMs', mapCodeRequest.id]);
-
-            logger.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
-          }
+          await this.processSingleMapCode(mapCodeRequest);
         } catch (error) {
           logger.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
-          
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_map_code_queue 
-            SET status = 'failed', processed_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', mapCodeRequest.id]);
+          await this.db.run(
+            `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
+            [error instanceof Error ? error.message : 'Unknown error', mapCodeRequest.id]
+          );
         }
       }
     } catch (error) {
