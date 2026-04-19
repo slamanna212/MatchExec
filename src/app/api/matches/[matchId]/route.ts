@@ -240,14 +240,15 @@ export async function DELETE(
       }
     }
 
-    // Delete scoring notifications (activity_feed has ON DELETE SET NULL, not CASCADE)
+    // Delete action-required notifications (activity_feed uses ON DELETE SET NULL, not CASCADE,
+    // and SQLite FK constraints are off by default — so we must clean these up manually)
     try {
       await db.run(
-        `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+        `DELETE FROM activity_feed WHERE event_type IN ('match_scoring_required') AND match_id = ?`,
         [matchId]
       );
     } catch (error) {
-      logger.error('Error deleting scoring notifications for match:', error);
+      logger.error('Error deleting action notifications for match:', error);
     }
 
     // Delete the match (CASCADE will handle related records)

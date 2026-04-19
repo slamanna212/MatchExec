@@ -36,18 +36,24 @@ export async function GET(request: NextRequest) {
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
-    if (eventType) { conditions.push('event_type = ?'); params.push(eventType); }
-    if (matchId)   { conditions.push('match_id = ?');   params.push(matchId);   }
-    if (tournamentId) { conditions.push('tournament_id = ?'); params.push(tournamentId); }
-    if (dateFrom)  { conditions.push('created_at >= ?'); params.push(dateFrom); }
-    if (dateTo)    { conditions.push('created_at <= ?'); params.push(dateTo);   }
+    // Exclude action-required events that reference a match that no longer exists
+    conditions.push(
+      `NOT (af.event_type = 'match_scoring_required' AND af.match_id IS NOT NULL AND m.id IS NULL)`
+    );
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    if (eventType) { conditions.push('af.event_type = ?'); params.push(eventType); }
+    if (matchId)   { conditions.push('af.match_id = ?');   params.push(matchId);   }
+    if (tournamentId) { conditions.push('af.tournament_id = ?'); params.push(tournamentId); }
+    if (dateFrom)  { conditions.push('af.created_at >= ?'); params.push(dateFrom); }
+    if (dateTo)    { conditions.push('af.created_at <= ?'); params.push(dateTo);   }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
 
     const events = await db.all<FeedRow>(
-      `SELECT * FROM activity_feed
+      `SELECT af.* FROM activity_feed af
+       LEFT JOIN matches m ON af.match_id = m.id
        ${where}
-       ORDER BY created_at DESC
+       ORDER BY af.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -58,7 +64,9 @@ export async function GET(request: NextRequest) {
     }));
 
     const countRow = await db.get<{ total: number }>(
-      `SELECT COUNT(*) as total FROM activity_feed ${where}`,
+      `SELECT COUNT(*) as total FROM activity_feed af
+       LEFT JOIN matches m ON af.match_id = m.id
+       ${where}`,
       params
     );
     const total = countRow?.total ?? 0;
