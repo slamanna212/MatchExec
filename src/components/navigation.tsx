@@ -15,7 +15,9 @@ import {
   Drawer,
   Stack,
   Tooltip,
-  UnstyledButton
+  UnstyledButton,
+  Avatar,
+  Text
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -38,8 +40,6 @@ import {
   IconDatabaseExport,
   IconChartBar,
   IconRss,
-  IconChevronLeft,
-  IconChevronRight
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -382,33 +382,86 @@ export function Navigation({ children }: NavigationProps) {
         </Stack>
 
         {/* Drawer Footer */}
-        <div style={{ padding: '16px' }}>
-          {versionInfo && (
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Gradient separator */}
+          <div style={{
+            height: '1px',
+            background: 'linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.55), rgba(247, 204, 2, 0.25), transparent)',
+          }} />
+
+          {/* Version + theme toggle row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            {versionInfo ? (
+              <div
+                title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  color: '#f7cc02',
+                  cursor: 'help',
+                  userSelect: 'none',
+                }}
+              >
+                {versionInfo.version}
+              </div>
+            ) : <div />}
+
+            {/* Sun / Moon pill toggle */}
             <div
-              title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+              onClick={() => toggleColorScheme()}
+              role="button"
+              aria-label="Toggle color scheme"
               style={{
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                color: '#C1C2C5',
-                textAlign: 'center',
-                marginBottom: '8px',
-                cursor: 'help'
+                display: 'flex', alignItems: 'center',
+                background: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(124, 58, 237, 0.4)',
+                borderRadius: '20px', padding: '3px', gap: '2px', cursor: 'pointer',
               }}
             >
-              {versionInfo.version}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: colorScheme === 'light' ? 'rgba(247, 204, 2, 0.22)' : 'transparent',
+                color: colorScheme === 'light' ? '#f7cc02' : 'rgba(245, 245, 245, 0.28)',
+                transition: 'all 200ms ease',
+              }}>
+                <IconSun size="14" />
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: colorScheme === 'dark' ? 'rgba(124, 58, 237, 0.4)' : 'transparent',
+                color: colorScheme === 'dark' ? '#c084fc' : 'rgba(245, 245, 245, 0.28)',
+                transition: 'all 200ms ease',
+              }}>
+                <IconMoon size="14" />
+              </div>
             </div>
-          )}
-          <Group justify="center">
-            <ActionIcon
-              variant="outline"
-              size={30}
-              onClick={() => toggleColorScheme()}
-              c="#F5F5F5"
-              style={{ borderColor: '#F5F5F5' }}
+          </div>
+
+          {/* User card */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '9px',
+            padding: '7px 8px', borderRadius: '8px',
+            background: 'rgba(124, 58, 237, 0.09)',
+            border: '1px solid rgba(124, 58, 237, 0.18)',
+          }}>
+            <Avatar
+              size={34}
+              radius="xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))',
+                border: '2px solid rgba(124, 58, 237, 0.5)',
+                fontSize: '17px',
+                flexShrink: 0,
+              }}
             >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-            </ActionIcon>
-          </Group>
+              👽
+            </Avatar>
+            <Text fw={600} c="#F5F5F5" style={{ lineHeight: 1.25, fontSize: '13px' }}>
+              Space Man
+            </Text>
+          </div>
         </div>
       </Drawer>
 
@@ -436,43 +489,125 @@ export function Navigation({ children }: NavigationProps) {
         </AppShell.Section>
 
         <AppShell.Section>
-          {!desktopCollapsed && versionInfo && (
-            <div
-              title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
-              style={{
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                color: '#C1C2C5',
-                textAlign: 'center',
-                marginBottom: '8px',
-                cursor: 'help'
-              }}
-            >
-              {versionInfo.version}
-            </div>
-          )}
-          <Group mt="md" justify="center" gap="xs">
-            <ActionIcon
-              variant="outline"
-              size={30}
-              onClick={() => toggleColorScheme()}
-              c="#F5F5F5"
-              style={{ borderColor: '#F5F5F5' }}
-            >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-            </ActionIcon>
-            <Tooltip label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
-              <ActionIcon
-                variant="subtle"
-                size={30}
-                onClick={toggleDesktopSidebar}
-                c="#F5F5F5"
-                visibleFrom="md"
-              >
-                {desktopCollapsed ? <IconChevronRight size="16" /> : <IconChevronLeft size="16" />}
-              </ActionIcon>
+          <div style={{ padding: desktopCollapsed ? '12px 6px' : '12px 12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Gradient separator */}
+            <div style={{
+              height: '1px',
+              background: 'linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.55), rgba(247, 204, 2, 0.25), transparent)',
+            }} />
+
+            {/* Version + theme toggle row (expanded) */}
+            {!desktopCollapsed && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                {versionInfo ? (
+                  <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        color: '#f7cc02',
+                        cursor: 'help',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {versionInfo.version}
+                    </div>
+                  </Tooltip>
+                ) : <div />}
+
+                {/* Sun / Moon pill toggle */}
+                <div
+                  onClick={() => toggleColorScheme()}
+                  role="button"
+                  aria-label="Toggle color scheme"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(124, 58, 237, 0.4)',
+                    borderRadius: '20px',
+                    padding: '3px',
+                    gap: '2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: colorScheme === 'light' ? 'rgba(247, 204, 2, 0.22)' : 'transparent',
+                    color: colorScheme === 'light' ? '#f7cc02' : 'rgba(245, 245, 245, 0.28)',
+                    transition: 'all 200ms ease',
+                  }}>
+                    <IconSun size="14" />
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: colorScheme === 'dark' ? 'rgba(124, 58, 237, 0.4)' : 'transparent',
+                    color: colorScheme === 'dark' ? '#c084fc' : 'rgba(245, 245, 245, 0.28)',
+                    transition: 'all 200ms ease',
+                  }}>
+                    <IconMoon size="14" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Collapsed: centered theme toggle */}
+            {desktopCollapsed && (
+              <Tooltip label={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} position="right" withArrow>
+                <div
+                  onClick={() => toggleColorScheme()}
+                  role="button"
+                  aria-label="Toggle color scheme"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '36px', height: '36px', margin: '0 auto',
+                    borderRadius: '10px',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(124, 58, 237, 0.4)',
+                    color: colorScheme === 'dark' ? '#c084fc' : '#f7cc02',
+                    cursor: 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  {colorScheme === 'dark' ? <IconSun size="15" /> : <IconMoon size="15" />}
+                </div>
+              </Tooltip>
+            )}
+
+            {/* User card */}
+            <Tooltip label="Space Man" position="right" withArrow disabled={!desktopCollapsed}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: desktopCollapsed ? 0 : '9px',
+                justifyContent: desktopCollapsed ? 'center' : 'flex-start',
+                padding: desktopCollapsed ? '5px' : '7px 8px',
+                borderRadius: '8px',
+                background: 'rgba(124, 58, 237, 0.09)',
+                border: '1px solid rgba(124, 58, 237, 0.18)',
+              }}>
+                <Avatar
+                  size={desktopCollapsed ? 30 : 34}
+                  radius="xl"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))',
+                    border: '2px solid rgba(124, 58, 237, 0.5)',
+                    fontSize: desktopCollapsed ? '14px' : '17px',
+                    flexShrink: 0,
+                  }}
+                >
+                  👽
+                </Avatar>
+                {!desktopCollapsed && (
+                  <Text fw={600} c="#F5F5F5" style={{ lineHeight: 1.25, fontSize: '13px' }}>
+                    Space Man
+                  </Text>
+                )}
+              </div>
             </Tooltip>
-          </Group>
+          </div>
         </AppShell.Section>
       </AppShell.Navbar>
 
