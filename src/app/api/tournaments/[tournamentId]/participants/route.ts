@@ -6,6 +6,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 interface TournamentParticipant {
   id: string;
   user_id: string;
+  discord_user_id: string | null;
   username: string;
   joined_at: string;
   team_assignment: string | null;
@@ -33,6 +34,7 @@ export async function GET(
       SELECT
         tp.id,
         tp.user_id,
+        tp.discord_user_id,
         tp.username,
         tp.joined_at,
         tp.team_assignment,

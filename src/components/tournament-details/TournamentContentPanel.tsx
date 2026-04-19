@@ -13,9 +13,10 @@ import {
   Divider,
   Skeleton,
   SegmentedControl,
-  Button
+  Button,
+  ActionIcon
 } from '@mantine/core';
-import { IconTrophy, IconStar, IconUsers, IconSwords } from '@tabler/icons-react';
+import { IconTrophy, IconStar, IconUsers, IconSwords, IconBrandDiscord } from '@tabler/icons-react';
 import type { TournamentWithGameDetails, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
@@ -192,6 +193,19 @@ export function TournamentContentPanel({
                                   {!member.avatar_url && (memberIndex + 1)}
                                 </Avatar>
                                 <Text size="sm">{member.username}</Text>
+                                {member.discord_user_id && (
+                                  <ActionIcon
+                                    component="a"
+                                    href={`https://discord.com/users/${member.discord_user_id}`}
+                                    target="_blank"
+                                    variant="subtle"
+                                    color="indigo"
+                                    size="xs"
+                                    title="View Discord profile"
+                                  >
+                                    <IconBrandDiscord size={12} />
+                                  </ActionIcon>
+                                )}
                               </Group>
                               {member.is_captain && (
                                 <IconStar size={14} color="var(--mantine-color-yellow-5)" fill="var(--mantine-color-yellow-5)" />

@@ -1,11 +1,12 @@
 'use client'
 
-import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid } from '@mantine/core';
-import { IconMapRoute } from '@tabler/icons-react';
+import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid, ActionIcon } from '@mantine/core';
+import { IconMapRoute, IconBrandDiscord } from '@tabler/icons-react';
 
 interface MatchParticipant {
   id: string;
   user_id: string;
+  discord_user_id?: string | null;
   username: string;
   avatar_url?: string | null;
   joined_at: string;
@@ -98,6 +99,19 @@ export function ParticipantsList({
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
             <Group gap={4} align="center">
               <Text fw={500} size="sm">{participant.username}</Text>
+              {participant.discord_user_id && (
+                <ActionIcon
+                  component="a"
+                  href={`https://discord.com/users/${participant.discord_user_id}`}
+                  target="_blank"
+                  variant="subtle"
+                  color="indigo"
+                  size="xs"
+                  title="View Discord profile"
+                >
+                  <IconBrandDiscord size={12} />
+                </ActionIcon>
+              )}
             </Group>
             <Text size="xs" c="dimmed">
               Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}

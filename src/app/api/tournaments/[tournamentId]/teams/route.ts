@@ -27,6 +27,7 @@ export async function GET(
       member_id?: string;
       member_user_id?: string;
       member_username?: string;
+      member_discord_user_id?: string;
       member_joined_at?: string;
       member_is_captain?: number;
     }>(`
@@ -35,6 +36,7 @@ export async function GET(
         ttm.id as member_id,
         ttm.user_id as member_user_id,
         ttm.username as member_username,
+        ttm.discord_user_id as member_discord_user_id,
         ttm.joined_at as member_joined_at,
         ttm.is_captain as member_is_captain
       FROM tournament_teams tt
@@ -64,6 +66,7 @@ export async function GET(
           team_id: row.id,
           user_id: row.member_user_id!,
           username: row.member_username!,
+          discord_user_id: row.member_discord_user_id || undefined,
           joined_at: new Date(row.member_joined_at!),
           is_captain: row.member_is_captain === 1
         });
