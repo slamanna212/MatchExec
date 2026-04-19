@@ -39,14 +39,15 @@ export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }:
     statsObj = JSON.parse(stat.stats_json) as Record<string, number>;
   } catch { /* skip */ }
 
-  const participantOptions = [...participants]
-    .sort((a, b) => {
-      const ta = a.team_assignment ?? 'Unassigned';
-      const tb = b.team_assignment ?? 'Unassigned';
-      if (ta !== tb) return ta.localeCompare(tb);
-      return a.username.localeCompare(b.username);
-    })
-    .map(p => ({ value: p.id, label: p.username, group: p.team_assignment ?? 'Unassigned' }));
+  const groupedMap = new Map<string, { value: string; label: string }[]>();
+  for (const p of [...participants].sort((a, b) => a.username.localeCompare(b.username))) {
+    const group = p.team_assignment ?? 'Unassigned';
+    if (!groupedMap.has(group)) groupedMap.set(group, []);
+    groupedMap.get(group)!.push({ value: p.id, label: p.username });
+  }
+  const participantOptions = [...groupedMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([group, items]) => ({ group, items }));
 
   return (
     <Card withBorder padding="sm">

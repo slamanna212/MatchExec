@@ -195,29 +195,38 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
               {sub.playerStats.length > 0 && (
                 <>
                   <Text fw={500}>Extracted Players</Text>
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    {sub.playerStats.map(ps => {
-                      const assignedElsewhere = new Set(
-                        sub.playerStats
-                          .filter(other => other.id !== ps.id && other.participant_id)
-                          .map(other => other.participant_id as string)
-                      );
-                      const availableParticipants = participants.filter(
-                        p => !assignedElsewhere.has(p.id)
-                      );
-                      return (
-                        <PlayerStatCard
-                          key={ps.id}
-                          stat={ps}
-                          statDefs={statDefs}
-                          participants={availableParticipants}
-                          onAssignChange={(playerStatId, participantId) =>
-                            handleAssign(sub.id, playerStatId, participantId)
-                          }
-                        />
-                      );
-                    })}
-                  </SimpleGrid>
+                  {[
+                    { label: 'Blue Team', color: 'blue', stats: sub.playerStats.filter(ps => ps.team_side === 'blue') },
+                    { label: 'Red Team', color: 'red', stats: sub.playerStats.filter(ps => ps.team_side === 'red') },
+                    { label: 'Unassigned', color: 'dimmed', stats: sub.playerStats.filter(ps => !ps.team_side) },
+                  ].filter(g => g.stats.length > 0).map(group => (
+                    <Stack key={group.label} gap="xs">
+                      <Text fw={600} c={group.color}>{group.label}</Text>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                        {group.stats.map(ps => {
+                          const assignedElsewhere = new Set(
+                            sub.playerStats
+                              .filter(other => other.id !== ps.id && other.participant_id)
+                              .map(other => other.participant_id as string)
+                          );
+                          const availableParticipants = participants.filter(
+                            p => !assignedElsewhere.has(p.id)
+                          );
+                          return (
+                            <PlayerStatCard
+                              key={ps.id}
+                              stat={ps}
+                              statDefs={statDefs}
+                              participants={availableParticipants}
+                              onAssignChange={(playerStatId, participantId) =>
+                                handleAssign(sub.id, playerStatId, participantId)
+                              }
+                            />
+                          );
+                        })}
+                      </SimpleGrid>
+                    </Stack>
+                  ))}
                 </>
               )}
 
