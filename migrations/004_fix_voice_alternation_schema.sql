@@ -5,7 +5,7 @@
 ALTER TABLE match_voice_alternation ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 -- Copy existing timestamp data to the new column
-UPDATE match_voice_alternation SET updated_at = last_updated_at;
+UPDATE match_voice_alternation SET updated_at = last_updated_at WHERE last_updated_at IS NOT NULL;
 
 -- Create a trigger to keep both columns in sync (for backwards compatibility)
 CREATE TRIGGER IF NOT EXISTS sync_match_voice_alternation_timestamps 
