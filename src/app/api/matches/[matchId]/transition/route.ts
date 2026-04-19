@@ -52,10 +52,16 @@ export async function POST(
     await handleStatusTransition(matchId, newStatus);
 
     // Get updated match data with game information
-    const updatedMatch = await db.get<MatchDbRow>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
+    const updatedMatch = await db.get<MatchDbRow & {
+      map_codes_supported?: number;
+      tournament_allow_match_editing?: number;
+    }>(`
+      SELECT m.*,
+        g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported,
+        t.allow_match_editing as tournament_allow_match_editing
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
+      LEFT JOIN tournaments t ON m.tournament_id = t.id
       WHERE m.id = ?
     `, [matchId]);
 
@@ -67,7 +73,10 @@ export async function POST(
 
     const parsedMatch = {
       ...(updatedMatch || {}),
-      maps
+      maps,
+      map_codes: updatedMatch?.map_codes ? JSON.parse(updatedMatch.map_codes as string) : {},
+      map_codes_supported: Boolean(updatedMatch?.map_codes_supported),
+      tournament_allow_match_editing: updatedMatch?.tournament_allow_match_editing !== 0
     };
 
     return apiOk(parsedMatch);
