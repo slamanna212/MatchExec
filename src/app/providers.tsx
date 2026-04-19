@@ -129,6 +129,21 @@ const theme = createTheme({
         header:  'modal-header',
       },
     },
+
+    DateTimePicker: {
+      styles: INPUT_STYLES,
+      defaultProps: {
+        popoverProps: {
+          classNames: { dropdown: 'date-picker-dropdown' },
+        },
+      },
+    },
+
+    DatePicker: {
+      classNames: {
+        root: 'date-picker-inline',
+      },
+    },
   }
 })
 
