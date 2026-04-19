@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { logger } from '@/lib/logger/client';
+import { notificationHelper } from '@/lib/notifications';
 
 interface Match {
   id: string;
@@ -46,8 +47,16 @@ export function useMapCodes(match: Match | null, opened: boolean) {
       if (match) {
         match.map_codes = mapCodes;
       }
+      notificationHelper.success({
+        title: 'Map Codes Saved',
+        message: 'Map codes have been saved successfully.'
+      });
     } catch (error) {
       logger.error('Failed to save map codes:', error);
+      notificationHelper.error({
+        title: 'Save Failed',
+        message: 'Failed to save map codes. Please try again.'
+      });
     } finally {
       setMapCodesSaving(false);
     }
