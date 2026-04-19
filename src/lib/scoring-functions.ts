@@ -527,7 +527,7 @@ async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round
 
       // Queue map code PMs for the new map if map codes are supported
       try {
-        await queueMapCodePMsForNext(matchId, mapName ?? undefined);
+        await queueMapCodePMsForNext(matchId, mapName ?? undefined, nextMap.map_id ?? undefined);
       } catch (mapCodeError) {
         logger.error('Error queuing map code PMs for next map:', mapCodeError);
         // Don't throw - this is a non-critical operation
@@ -554,16 +554,16 @@ async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round
 }
 
 // Queue map code PMs for the next map
-async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promise<void> {
-  logger.debug('🔍 queueMapCodePMsForNext called with:', matchId, mapName);
-  
+async function queueMapCodePMsForNext(matchId: string, mapName?: string, mapInstanceId?: string): Promise<void> {
+  logger.debug('🔍 queueMapCodePMsForNext called with:', matchId, mapName, mapInstanceId);
+
   if (!mapName) {
     logger.debug('No map name available for map code PMs');
     return;
   }
 
   const db = await getDbInstance();
-  
+
   try {
     // Check if map codes are supported and get the map code
     const matchData = await db.get<{
@@ -577,27 +577,32 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
     `, [matchId]);
 
     logger.debug('🔍 matchData:', matchData);
-    
+
     if (matchData?.map_codes_supported) {
       const mapCodes = matchData.map_codes ? JSON.parse(matchData.map_codes) : {};
-      const cleanMapName = mapName.replace(/-\d+$/, '');
-      
-      // Try exact match first
-      let mapCode = mapCodes[cleanMapName];
-      
-      // If exact match fails, try case-insensitive and normalized lookup
+
+      // Try instance ID exact match first (map_codes keys are instance IDs like "hanamura-1776547135395-abc")
+      let mapCode: string | undefined = mapInstanceId ? mapCodes[mapInstanceId] || undefined : undefined;
+
+      // Fallback: try display name exact match
       if (!mapCode) {
-        const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const mapCodeKey = Object.keys(mapCodes).find(key => 
-          key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
-        );
-        if (mapCodeKey) {
-          mapCode = mapCodes[mapCodeKey];
+        const cleanMapName = mapName.replace(/-\d+$/, '');
+        mapCode = mapCodes[cleanMapName];
+
+        // If exact match fails, try case-insensitive and normalized lookup
+        if (!mapCode) {
+          const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const mapCodeKey = Object.keys(mapCodes).find(key =>
+            key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
+          );
+          if (mapCodeKey) {
+            mapCode = mapCodes[mapCodeKey];
+          }
         }
       }
       
       logger.debug('🔍 mapCodes:', mapCodes);
-      logger.debug('🔍 cleanMapName:', cleanMapName);
+      logger.debug('🔍 mapInstanceId:', mapInstanceId);
       logger.debug('🔍 mapCode:', mapCode);
       
       if (mapCode) {

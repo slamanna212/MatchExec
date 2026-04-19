@@ -20,7 +20,7 @@ export async function POST(
 
     // Validate each map code length (max 24 characters)
     for (const [mapId, code] of Object.entries(mapCodes)) {
-      if (typeof code !== 'string' || code.length > 24) {
+      if (typeof code !== 'string' || [...code].length > 24) {
         return apiError(`Map code for ${mapId} must be a string with max 24 characters`, 400);
       }
     }

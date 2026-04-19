@@ -63,7 +63,7 @@ export function useMapCodes(match: Match | null, opened: boolean) {
   };
 
   const updateMapCode = (mapId: string, code: string) => {
-    const trimmedCode = code.slice(0, 24);
+    const trimmedCode = [...code].slice(0, 24).join('');
     setMapCodes(prev => ({
       ...prev,
       [mapId]: trimmedCode
