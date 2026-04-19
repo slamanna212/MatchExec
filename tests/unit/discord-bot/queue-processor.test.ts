@@ -468,6 +468,17 @@ describe('QueueProcessor', () => {
   });
 
   describe('processMatchWinnerNotificationQueue', () => {
+    beforeEach(() => {
+      vi.spyOn(global, 'setTimeout').mockImplementation((fn: Parameters<typeof setTimeout>[0]) => {
+        if (typeof fn === 'function') fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should post match winner notification', async () => {
       const match = await createMatch(game.id, mode.id);
 

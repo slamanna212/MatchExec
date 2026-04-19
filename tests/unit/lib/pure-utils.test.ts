@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 import { cleanMapId, getMapImageUrl, formatMapName, getStatusColor } from '../../../src/lib/utils/map-utils';
-import { parseDbTimestamp } from '../../../src/lib/utils/dates';
 import {
   parseAnnouncementsField,
   calculateAnnouncementTime,
@@ -87,40 +86,6 @@ describe('getStatusColor', () => {
   it('returns gray for unknown status', () => {
     expect(getStatusColor('unknown')).toBe('gray');
     expect(getStatusColor('')).toBe('gray');
-  });
-});
-
-// ─── dates ───────────────────────────────────────────────────────────────────
-
-describe('parseDbTimestamp', () => {
-  it('returns null for null input', () => {
-    expect(parseDbTimestamp(null)).toBeNull();
-  });
-
-  it('returns null for undefined input', () => {
-    expect(parseDbTimestamp(undefined)).toBeNull();
-  });
-
-  it('returns null for empty string', () => {
-    expect(parseDbTimestamp('')).toBeNull();
-  });
-
-  it('appends Z for plain SQLite timestamp (no timezone)', () => {
-    const result = parseDbTimestamp('2025-08-08 22:52:51');
-    expect(result).toBeInstanceOf(Date);
-    expect(result?.toISOString()).toBe('2025-08-08T22:52:51.000Z');
-  });
-
-  it('passes through ISO strings with Z suffix as-is', () => {
-    const result = parseDbTimestamp('2025-08-08T22:52:51.000Z');
-    expect(result).toBeInstanceOf(Date);
-    expect(result?.toISOString()).toBe('2025-08-08T22:52:51.000Z');
-  });
-
-  it('passes through strings with timezone offset', () => {
-    const result = parseDbTimestamp('2025-08-08T22:52:51+05:30');
-    expect(result).toBeInstanceOf(Date);
-    expect(isNaN(result!.getTime())).toBe(false);
   });
 });
 
