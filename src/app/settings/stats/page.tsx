@@ -3,6 +3,7 @@
 import {
   Card, Text, Stack, Button, Group, Switch, Select, PasswordInput, Badge, Divider, Skeleton, ActionIcon, Alert, Modal, SimpleGrid
 } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import { useEffect, useState } from 'react';
@@ -567,11 +568,7 @@ export default function StatsSettingsPage() {
             </Button>
           </Stack>
 
-          <Group justify="flex-end">
-            <Button type="submit" loading={saving}>
-              Save Settings
-            </Button>
-          </Group>
+          <SettingsSaveButton loading={saving} />
         </Stack>
       </form>
     </PageLayout>

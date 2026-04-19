@@ -1,6 +1,7 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, Grid, NumberInput, Skeleton, Switch, Badge, ThemeIcon } from '@mantine/core';
+import { Card, Text, Stack, Group, Grid, NumberInput, Skeleton, Switch, Badge, ThemeIcon } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconVolume, IconCrown, IconPlayFootball, IconRadio, IconMicrophone, IconMicrophone2, IconCheck } from '@tabler/icons-react';
@@ -285,11 +286,7 @@ export default function AnnouncerSettingsPage() {
             </>
           )}
 
-          <Group justify="flex-end">
-            <Button type="submit" loading={saving} disabled={loading}>
-              Save Announcer Settings
-            </Button>
-          </Group>
+          <SettingsSaveButton loading={saving} disabled={loading} />
         </Stack>
       </form>
     </PageLayout>

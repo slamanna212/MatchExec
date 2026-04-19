@@ -1,15 +1,13 @@
 'use client';
 
 import { useCallback } from 'react';
-import { Card, Group, Text, Select, NumberInput, Stack, Button, Alert } from '@mantine/core';
+import { Card, Group, Text, Select, NumberInput, Stack, Alert } from '@mantine/core';
 import { IconClock } from '@tabler/icons-react';
 
 interface SchedulerConfigProps {
   value: SchedulerSettings;
   onChange: (settings: SchedulerSettings) => void;
-  onSubmit: (settings: SchedulerSettings) => void;
   loading?: boolean;
-  saving?: boolean;
   message?: { type: 'success' | 'error'; text: string } | null;
 }
 
@@ -286,23 +284,17 @@ function ScheduleItem({ label, description, value, onChange, disabled }: Schedul
   );
 }
 
-export default function SchedulerConfig({ 
-  value, 
-  onChange, 
-  onSubmit, 
-  loading = false, 
-  saving = false, 
-  message 
+export default function SchedulerConfig({
+  value,
+  onChange,
+  loading = false,
+  message
 }: SchedulerConfigProps) {
 
   const handleFieldChange = useCallback((field: keyof SchedulerSettings, newValue: string) => {
     const updated = { ...value, [field]: newValue };
     onChange(updated);
   }, [value, onChange]);
-
-  const handleSubmit = useCallback(() => {
-    onSubmit(value);
-  }, [value, onSubmit]);
 
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
@@ -342,15 +334,6 @@ export default function SchedulerConfig({
           disabled={loading}
         />
 
-        <Group justify="flex-end" mt="lg">
-          <Button 
-            onClick={handleSubmit}
-            loading={saving}
-            disabled={loading}
-          >
-            Save Scheduler Settings
-          </Button>
-        </Group>
       </Stack>
     </Card>
   );

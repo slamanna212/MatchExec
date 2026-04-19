@@ -1,6 +1,7 @@
 'use client'
 
-import { Card, Stack, Group, Button, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Stack, Skeleton, NumberInput } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
@@ -28,11 +29,9 @@ export default function UISettingsPage() {
       setLoading(true);
       try {
         const response = await fetch('/api/settings');
-        
+
         if (response.ok) {
           const data = await response.json();
-          
-          // Set UI settings
           form.setValues(data.ui);
         }
       } catch (error) {
@@ -80,25 +79,23 @@ export default function UISettingsPage() {
 
   return (
     <PageLayout narrow>
-      <Stack gap="lg">
-        <PageHeader
-          icon={IconSettings}
-          title="UI Settings"
-          subtitle="Configure user interface behavior and appearance"
-        />
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack gap="lg">
+          <PageHeader
+            icon={IconSettings}
+            title="UI Settings"
+            subtitle="Configure user interface behavior and appearance"
+          />
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {loading ? (
-            <Stack gap="md">
-              <Stack gap={4}>
-                <Skeleton height={14} width={120} />
-                <Skeleton height={36} />
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            {loading ? (
+              <Stack gap="md">
+                <Stack gap={4}>
+                  <Skeleton height={14} width={120} />
+                  <Skeleton height={36} />
+                </Stack>
               </Stack>
-              <Group justify="flex-end"><Skeleton height={36} width={120} /></Group>
-            </Stack>
-          ) : (
-          <form onSubmit={form.onSubmit(handleSubmit)}>
-            <Stack gap="md">
+            ) : (
               <NumberInput
                 label="Auto Refresh Interval"
                 placeholder="30"
@@ -108,17 +105,12 @@ export default function UISettingsPage() {
                 {...form.getInputProps('auto_refresh_interval_seconds')}
                 disabled={loading}
               />
+            )}
+          </Card>
 
-              <Group justify="flex-end" mt="lg">
-                <Button type="submit" loading={saving} disabled={loading}>
-                  Save UI Settings
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-          )}
-        </Card>
-      </Stack>
+          <SettingsSaveButton loading={saving} disabled={loading} />
+        </Stack>
+      </form>
     </PageLayout>
   );
 }

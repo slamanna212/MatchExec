@@ -1,6 +1,7 @@
 'use client'
 
 import { Stack, Group, Card, Skeleton } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
@@ -101,20 +102,22 @@ export default function SchedulerSettingsPage() {
                   </Group>
                 </Stack>
               ))}
-              <Group justify="flex-end">
-                <Skeleton height={36} width={180} />
-              </Group>
             </Stack>
           </Card>
         ) : (
           <SchedulerConfig
             value={schedulerSettings}
             onChange={setSchedulerSettings}
-            onSubmit={handleSchedulerSubmit}
             loading={loading}
-            saving={saving}
           />
         )}
+
+        <SettingsSaveButton
+          type="button"
+          onClick={() => handleSchedulerSubmit(schedulerSettings)}
+          loading={saving}
+          disabled={loading}
+        />
       </Stack>
     </PageLayout>
   );

@@ -1,6 +1,7 @@
 'use client'
 
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton, Switch, Divider } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
@@ -124,26 +125,25 @@ export default function DiscordSettingsPage() {
 
   return (
     <PageLayout narrow>
-      <Stack gap="lg">
-        <PageHeader
-          icon={IconBrandDiscord}
-          title="Discord Settings"
-          subtitle="Configure Discord bot connection and permissions"
-        />
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack gap="lg">
+          <PageHeader
+            icon={IconBrandDiscord}
+            title="Discord Settings"
+            subtitle="Configure Discord bot connection and permissions"
+          />
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {loading ? (
-            <Stack gap="md">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Stack key={i} gap={4}>
-                  <Skeleton height={14} width={120} />
-                  <Skeleton height={36} />
-                </Stack>
-              ))}
-              <Group justify="flex-end"><Skeleton height={36} width={160} /></Group>
-            </Stack>
-          ) : (
-          <form onSubmit={form.onSubmit(handleSubmit)}>
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            {loading ? (
+              <Stack gap="md">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Stack key={i} gap={4}>
+                    <Skeleton height={14} width={120} />
+                    <Skeleton height={36} />
+                  </Stack>
+                ))}
+              </Stack>
+            ) : (
             <Stack gap="md">
               <Group align="end">
                 <TextInput
@@ -277,16 +277,13 @@ export default function DiscordSettingsPage() {
                 disabled={loading}
               />
 
-              <Group justify="flex-end" mt="lg">
-                <Button type="submit" loading={saving} disabled={loading}>
-                  Save Discord Settings
-                </Button>
-              </Group>
             </Stack>
-          </form>
-          )}
-        </Card>
-      </Stack>
+            )}
+          </Card>
+
+          <SettingsSaveButton loading={saving} disabled={loading} />
+        </Stack>
+      </form>
     </PageLayout>
   );
 }
