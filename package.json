@@ -53,7 +53,7 @@
     "bufferutil": "4.1.0",
     "discord.js": "14.26.2",
     "express": "5.2.1",
-"framer-motion": "12.38.0",
+    "framer-motion": "12.38.0",
     "lucide-react": "0.577.0",
     "next": "16.2.3",
     "node-cron": "4.2.1",
@@ -67,7 +67,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.5",
-    "@tailwindcss/postcss": "4.2.1",
+    "@tailwindcss/postcss": "4.2.2",
     "@types/express": "5.0.6",
     "@types/node": "25.6.0",
     "@types/node-cron": "3.0.11",
@@ -82,7 +82,7 @@
     "happy-dom": "20.8.9",
     "husky": "9.1.7",
     "lint-staged": "16.4.0",
-    "tailwindcss": "4.2.1",
+    "tailwindcss": "4.2.2",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.1.4"
