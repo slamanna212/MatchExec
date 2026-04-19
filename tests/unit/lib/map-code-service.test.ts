@@ -102,19 +102,19 @@ describe('MapCodeService', () => {
       expect(result).toBe(true);
     });
 
-    it('strips numeric suffix from map ID before lookup', async () => {
+    it('uses original instance ID for code lookup, strips timestamp suffix only for name lookup', async () => {
       const match = await createMatch(game.id, mode.id);
-      // "hanamura-1" should be cleaned to "hanamura"
-      const mapCodes = { 'hanamura': 'CODE99' };
-      const mapCodesWithSuffix = { 'hanamura-1': 'WRONG' };
+      const instanceId = 'hanamura-1776547135395-lsqxspqvk';
 
-      // With exact key "hanamura-1" in codes — numeric suffix stripped, looks up "hanamura" but code is keyed as "hanamura-1"
-      const noMatch = await MapCodeService.processMapCode(match.id, game.id, 'hanamura-1', mapCodesWithSuffix);
-      expect(noMatch).toBe(false);
-
-      // With base key "hanamura" — finds a match and queues successfully
-      const hasMatch = await MapCodeService.processMapCode(match.id, game.id, 'hanamura-1', mapCodes);
+      // Code lookup uses the original instance ID — exact match finds the code
+      const mapCodesFullId = { [instanceId]: 'CODE99' };
+      const hasMatch = await MapCodeService.processMapCode(match.id, game.id, instanceId, mapCodesFullId);
       expect(hasMatch).toBe(true);
+
+      // Code keyed by base name won't match a full instance ID
+      const mapCodesBase = { 'hanamura': 'WRONG' };
+      const noMatch = await MapCodeService.processMapCode(match.id, game.id, instanceId, mapCodesBase);
+      expect(noMatch).toBe(false);
     });
 
     it('returns false for case where no code found in codes map', async () => {

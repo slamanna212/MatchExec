@@ -130,7 +130,7 @@ export class ScorecardHandler {
 
       if (!dmRecord) return; // Not a scorecard reply
 
-      if (!/^\d+$/.test(String(dmRecord.match_id))) {
+      if (!dmRecord.match_id) {
         logger.error('Invalid match_id in scorecard DM record');
         return;
       }

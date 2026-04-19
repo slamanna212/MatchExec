@@ -86,17 +86,17 @@ export class MapCodeService {
     mapCodes: Record<string, string>
   ): Promise<boolean> {
     try {
-      // Remove any instance suffix from map ID (e.g., "map-1" -> "map")
-      const cleanMapId = mapId.replace(/-\d+$/, '');
+      // Strip instance suffix (e.g., "antarctic-peninsula-1776547135395-lsqxspqvk" -> "antarctic-peninsula")
+      const baseMapId = mapId.replace(/-\d{10,}-[a-zA-Z0-9]+$/, '');
 
-      // Get the actual map name from database
-      const mapName = await this.getMapName(gameId, cleanMapId);
+      // Get the actual map name from database using base ID
+      const mapName = await this.getMapName(gameId, baseMapId);
 
-      // Find map code with triple-fallback logic
-      const mapCode = this.findMapCode(cleanMapId, mapCodes);
+      // Find map code using original instance ID (map_codes keys use full instance IDs)
+      const mapCode = this.findMapCode(mapId, mapCodes);
 
       if (!mapCode) {
-        logger.debug(`ℹ️ No map code found for map "${mapName}" (ID: ${cleanMapId}) in match ${matchId}`);
+        logger.debug(`ℹ️ No map code found for map "${mapName}" (ID: ${baseMapId}) in match ${matchId}`);
         return false;
       }
 

@@ -90,57 +90,47 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
     // Get match data including maps
     const matchQuery = `SELECT maps FROM matches WHERE id = ?`;
     const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
-    
+
     if (!matchRow || !matchRow.maps) {
       logger.debug('initializeMatchGames - No maps found for match');
       return;
     }
-    
+
     const maps = JSON.parse(matchRow.maps);
     logger.debug(`initializeMatchGames - Found ${maps.length} maps:`, maps);
-    
+
     // Create a match_games entry for each map
     for (let i = 0; i < maps.length; i++) {
       const mapId = maps[i];
       const gameId = `${matchId}_game_${i + 1}`;
-      
+
       // Check if this game already exists
       const existsQuery = `SELECT id FROM match_games WHERE id = ?`;
       const existingGame = await db.get(existsQuery, [gameId]);
-      
+
       if (!existingGame) {
         // First map should be 'ongoing', rest should be 'pending'
         const status = i === 0 ? 'ongoing' : 'pending';
-        
+
         // Check if there's a temporary note-only entry (Round 0) for this map
         const noteEntry = await db.get(`
-          SELECT notes FROM match_games 
+          SELECT notes FROM match_games
           WHERE match_id = ? AND map_id = ? AND round = 0
           LIMIT 1
         `, [matchId, mapId]) as { notes: string } | undefined;
-        
+
         const existingNote = noteEntry ? noteEntry.notes : '';
-        
+
         const insertQuery = `
           INSERT INTO match_games (
             id, match_id, round, participant1_id, participant2_id,
             map_id, notes, status, created_at, updated_at
           ) VALUES (?, ?, ?, 'team1', 'team2', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `;
-        
+
         await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
         logger.debug(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
 
-        // Queue scorecard prompts and winner vote for the first (ongoing) map
-        if (status === 'ongoing') {
-          try {
-            const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '')]);
-            await queueScorecardPrompts(matchId, gameId, mapData?.name || mapId);
-            await queueWinnerVote(matchId, gameId, mapData?.name || mapId);
-          } catch (err) {
-            logger.error('Error queuing scorecard prompts or winner vote for first map:', err);
-          }
-        }
 
         // Clean up the temporary Round 0 entry if it exists
         if (noteEntry) {
@@ -159,6 +149,30 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
   } catch (error) {
     logger.error('Error in initializeMatchGames:', error);
     throw error;
+  }
+}
+
+/**
+ * Queue scorecard prompts and winner vote DMs for the first map when a match enters battle.
+ * Called explicitly from handleBattleTransition so it runs after participants are assigned.
+ */
+export async function queueBattleStartDMs(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+    const firstGame = await db.get<{ id: string; map_id: string }>(
+      `SELECT mg.id, mg.map_id FROM match_games mg WHERE mg.match_id = ? AND mg.status = 'ongoing' ORDER BY mg.round ASC LIMIT 1`,
+      [matchId]
+    );
+    if (!firstGame) return;
+
+    const baseMapId = firstGame.map_id.replace(/-\d{10,}-[a-zA-Z0-9]+$/, '');
+    const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [baseMapId]);
+    const mapName = mapData?.name || firstGame.map_id;
+
+    await queueScorecardPrompts(matchId, firstGame.id, mapName);
+    await queueWinnerVote(matchId, firstGame.id, mapName);
+  } catch (err) {
+    logger.error('Error queuing battle start DMs:', err);
   }
 }
 
@@ -1249,14 +1263,20 @@ async function queueWinnerVote(matchId: string, matchGameId: string, mapName: st
     const discordSettings = await db.get<{ winner_vote_enabled: number }>(
       'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
     );
-    if (!discordSettings?.winner_vote_enabled) return;
+    if (!discordSettings?.winner_vote_enabled) {
+      logger.debug(`⏭️ Winner vote skipped for match ${matchId}: winner_vote_enabled is disabled`);
+      return;
+    }
 
     // Check that at least one commander exists before queuing
     const commanderCount = await db.get<{ cnt: number }>(
       'SELECT COUNT(*) as cnt FROM match_participants WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL',
       [matchId]
     );
-    if (!commanderCount || commanderCount.cnt === 0) return;
+    if (!commanderCount || commanderCount.cnt === 0) {
+      logger.debug(`⏭️ Winner vote skipped for match ${matchId}: no eligible commanders`);
+      return;
+    }
 
     const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     await db.run(

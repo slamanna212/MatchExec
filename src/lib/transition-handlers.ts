@@ -209,9 +209,10 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
 
   // Initialize match games for all maps
   try {
-    const { initializeMatchGames } = await import('./scoring-functions');
+    const { initializeMatchGames, queueBattleStartDMs } = await import('./scoring-functions');
     await initializeMatchGames(matchId);
     logger.debug(`🎮 Match games initialized for all maps in match: ${matchId}`);
+    await queueBattleStartDMs(matchId);
   } catch (error) {
     logger.error('❌ Error initializing match games:', error);
   }

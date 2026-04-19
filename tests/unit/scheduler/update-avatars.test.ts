@@ -26,17 +26,21 @@ vi.mock('../../../processes/discord-bot/utils/avatar-fetcher', () => ({
 import { AvatarUpdateJob } from '../../../processes/scheduler/jobs/update-avatars';
 import { getDiscordAvatarUrl } from '../../../processes/discord-bot/utils/avatar-fetcher';
 import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 
 const mockGetDiscordAvatarUrl = getDiscordAvatarUrl as ReturnType<typeof vi.fn>;
 
 describe('AvatarUpdateJob', () => {
   let job: AvatarUpdateJob;
   let db: any;
+  let gameId: string;
+  let modeId: string;
 
   beforeEach(async () => {
     db = getTestDb();
-    await seedBasicTestData();
+    const seed = await seedBasicTestData();
+    gameId = seed.game.id;
+    modeId = seed.mode.id;
     vi.clearAllMocks();
 
     await db.run(
@@ -61,9 +65,11 @@ describe('AvatarUpdateJob', () => {
     });
 
     it('updates avatar_url for a participant with a discord_user_id', async () => {
+      const match = await createMatch(gameId, modeId, { status: 'battle' });
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p1', 'match-1', 'u1', 'discord-111', 'Player1')`
+         VALUES ('p1', ?, 'u1', 'discord-111', 'Player1')`,
+        [match.id]
       );
 
       await job.updateAvatars();
@@ -82,9 +88,11 @@ describe('AvatarUpdateJob', () => {
     });
 
     it('resets failed_avatar_checks to 0 on successful update', async () => {
+      const match = await createMatch(gameId, modeId, { status: 'gather' });
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, failed_avatar_checks)
-         VALUES ('p-reset', 'match-1', 'u-r', 'disc-r1', 'Resettable', 2)`
+         VALUES ('p-reset', ?, 'u-r', 'disc-r1', 'Resettable', 2)`,
+        [match.id]
       );
 
       await job.updateAvatars();
@@ -96,9 +104,11 @@ describe('AvatarUpdateJob', () => {
     });
 
     it('skips participants that have reached the failure threshold (>= 3 failed checks)', async () => {
+      const match = await createMatch(gameId, modeId, { status: 'battle' });
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, failed_avatar_checks)
-         VALUES ('p-skipped', 'match-1', 'u-s', 'disc-s1', 'Skipped', 3)`
+         VALUES ('p-skipped', ?, 'u-s', 'disc-s1', 'Skipped', 3)`,
+        [match.id]
       );
 
       await job.updateAvatars();
@@ -106,14 +116,18 @@ describe('AvatarUpdateJob', () => {
       expect(mockGetDiscordAvatarUrl).not.toHaveBeenCalled();
     });
 
-    it('fetches each unique discord_user_id only once when they appear in multiple matches', async () => {
+    it('fetches each unique discord_user_id only once when they appear in multiple active matches', async () => {
+      const match1 = await createMatch(gameId, modeId, { status: 'gather' });
+      const match2 = await createMatch(gameId, modeId, { status: 'battle' });
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('pd1', 'match-1', 'u-d', 'discord-dup', 'DupPlayer')`
+         VALUES ('pd1', ?, 'u-d', 'discord-dup', 'DupPlayer')`,
+        [match1.id]
       );
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('pd2', 'match-2', 'u-d2', 'discord-dup', 'DupPlayer2')`
+         VALUES ('pd2', ?, 'u-d2', 'discord-dup', 'DupPlayer2')`,
+        [match2.id]
       );
 
       await job.updateAvatars();
@@ -121,10 +135,45 @@ describe('AvatarUpdateJob', () => {
       expect(mockGetDiscordAvatarUrl).toHaveBeenCalledOnce();
     });
 
-    it('does not increment failure count when all avatar fetches fail (connectivity issue)', async () => {
+    it('skips participants in completed matches', async () => {
+      const activeMatch = await createMatch(gameId, modeId, { status: 'battle' });
+      const completeMatch = await createMatch(gameId, modeId, { status: 'complete' });
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-fail', 'match-1', 'u-f', 'disc-f1', 'FailUser')`
+         VALUES ('p-active', ?, 'u-a', 'discord-active', 'ActivePlayer')`,
+        [activeMatch.id]
+      );
+      await db.run(
+        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
+         VALUES ('p-done', ?, 'u-d', 'discord-done', 'DonePlayer')`,
+        [completeMatch.id]
+      );
+
+      await job.updateAvatars();
+
+      expect(mockGetDiscordAvatarUrl).toHaveBeenCalledOnce();
+      expect(mockGetDiscordAvatarUrl).toHaveBeenCalledWith(expect.any(Object), 'discord-active');
+    });
+
+    it('skips participants in cancelled matches', async () => {
+      const cancelledMatch = await createMatch(gameId, modeId, { status: 'cancelled' });
+      await db.run(
+        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
+         VALUES ('p-cancelled', ?, 'u-c', 'discord-cancelled', 'CancelledPlayer')`,
+        [cancelledMatch.id]
+      );
+
+      await job.updateAvatars();
+
+      expect(mockGetDiscordAvatarUrl).not.toHaveBeenCalled();
+    });
+
+    it('does not increment failure count when all avatar fetches fail (connectivity issue)', async () => {
+      const match = await createMatch(gameId, modeId, { status: 'battle' });
+      await db.run(
+        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
+         VALUES ('p-fail', ?, 'u-f', 'disc-f1', 'FailUser')`,
+        [match.id]
       );
 
       mockGetDiscordAvatarUrl.mockRejectedValue(new Error('Network error'));
@@ -135,22 +184,24 @@ describe('AvatarUpdateJob', () => {
         `SELECT failed_avatar_checks FROM match_participants WHERE id = 'p-fail'`
       );
       // When ALL fetches fail, failure count must NOT be incremented (potential connectivity issue).
-      // Column defaults to 0 (integer), so it stays 0 and is not incremented.
       expect(row.failed_avatar_checks).toBe(0);
     });
 
     it('increments failure count for individual failing users when at least one succeeds', async () => {
+      const match = await createMatch(gameId, modeId, { status: 'battle' });
       mockGetDiscordAvatarUrl
         .mockResolvedValueOnce('https://cdn.example.com/avatar1.png') // first user succeeds
-        .mockRejectedValueOnce(new Error('Not found')); // second user fails
+        .mockRejectedValueOnce(new Error('Unknown User')); // second user fails
 
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-ok', 'match-1', 'u1', 'disc-ok', 'SuccessUser')`
+         VALUES ('p-ok', ?, 'u1', 'disc-ok', 'SuccessUser')`,
+        [match.id]
       );
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-err', 'match-1', 'u2', 'disc-err', 'FailUser')`
+         VALUES ('p-err', ?, 'u2', 'disc-err', 'FailUser')`,
+        [match.id]
       );
 
       await job.updateAvatars();

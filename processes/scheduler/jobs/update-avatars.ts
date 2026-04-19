@@ -58,20 +58,24 @@ export class AvatarUpdateJob {
         return;
       }
 
-      // Get all unique Discord user IDs from participants, skipping users with 3+ failures
+      // Get all unique Discord user IDs from active match participants, skipping users with 3+ failures
       const participants = await this.db.all<{ discord_user_id: string }>(`
-        SELECT DISTINCT discord_user_id
-        FROM match_participants
-        WHERE discord_user_id IS NOT NULL
-          AND (failed_avatar_checks IS NULL OR failed_avatar_checks < 3)
+        SELECT DISTINCT mp.discord_user_id
+        FROM match_participants mp
+        JOIN matches m ON m.id = mp.match_id
+        WHERE mp.discord_user_id IS NOT NULL
+          AND (mp.failed_avatar_checks IS NULL OR mp.failed_avatar_checks < 3)
+          AND m.status NOT IN ('complete', 'cancelled')
       `);
 
-      // Check how many users are being skipped
+      // Check how many users are being skipped due to failure threshold
       const skipped = await this.db.get<{ count: number }>(`
-        SELECT COUNT(DISTINCT discord_user_id) as count
-        FROM match_participants
-        WHERE discord_user_id IS NOT NULL
-          AND failed_avatar_checks >= 3
+        SELECT COUNT(DISTINCT mp.discord_user_id) as count
+        FROM match_participants mp
+        JOIN matches m ON m.id = mp.match_id
+        WHERE mp.discord_user_id IS NOT NULL
+          AND mp.failed_avatar_checks >= 3
+          AND m.status NOT IN ('complete', 'cancelled')
       `);
 
       if (skipped && skipped.count > 0) {

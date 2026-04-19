@@ -542,7 +542,7 @@ describe('QueueProcessor', () => {
   });
 
   describe('processAllQueues', () => {
-    it('should process all queue types in parallel', async () => {
+    it('should process all queue types', async () => {
       const match = await createMatch(game.id, mode.id, {
         start_date: new Date().toISOString(),
         player_notifications: 1

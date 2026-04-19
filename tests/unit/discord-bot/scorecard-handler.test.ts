@@ -196,11 +196,10 @@ describe('ScorecardHandler', () => {
         `INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'ongoing')`,
         [matchGameId, match.id]
       );
-      // Use a numeric match_id value since the handler validates with /^\d+$/
       await db.run(
         `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id)
-         VALUES ('dm-reply-1', '12345', ?, 'user-reply', 'msg-scorecard')`,
-        [matchGameId]
+         VALUES ('dm-reply-1', ?, ?, 'user-reply', 'msg-scorecard')`,
+        [match.id, matchGameId]
       );
 
       const mockMessage = {
@@ -233,11 +232,10 @@ describe('ScorecardHandler', () => {
          VALUES (?, ?, 'u1', 'user-img', 'Tester', 'blue')`,
         [participantId, match.id]
       );
-      // Use a numeric match_id since the handler validates with /^\d+$/
       await db.run(
         `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
-         VALUES ('dm-img-1', '99999', ?, 'user-img', 'msg-sc-dm', ?, 'blue')`,
-        [matchGameId, participantId]
+         VALUES ('dm-img-1', ?, ?, 'user-img', 'msg-sc-dm', ?, 'blue')`,
+        [match.id, matchGameId, participantId]
       );
 
       // Mock fs to succeed
@@ -281,13 +279,13 @@ describe('ScorecardHandler', () => {
       expect(mockMessage.reply.mock.calls[0][0]).toContain('Screenshot received');
 
       // Verify submission was created in DB
-      const submissions = await db.all('SELECT * FROM scorecard_submissions WHERE match_id = ?', ['99999']);
+      const submissions = await db.all('SELECT * FROM scorecard_submissions WHERE match_id = ?', [match.id]);
       expect(submissions.length).toBe(1);
       expect(submissions[0].submitted_by_discord_user_id).toBe('user-img');
       expect(submissions[0].team_side).toBe('blue');
 
       // Verify processing queue entry was created
-      const queueEntries = await db.all('SELECT * FROM stats_processing_queue WHERE match_id = ?', ['99999']);
+      const queueEntries = await db.all('SELECT * FROM stats_processing_queue WHERE match_id = ?', [match.id]);
       expect(queueEntries.length).toBe(1);
     });
   });

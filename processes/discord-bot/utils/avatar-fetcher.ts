@@ -11,15 +11,13 @@ export async function getDiscordAvatarUrl(
   client: Client,
   discordUserId: string
 ): Promise<string | null> {
-  try {
-    const user = await client.users.fetch(discordUserId);
-    if (!user.avatar) {
-      return null; // No custom avatar
-    }
-    const format = user.avatar.startsWith('a_') ? 'gif' : 'webp';
-    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${format}?size=128`;
-  } catch (error) {
-    logger.error('Failed to fetch avatar for user:', discordUserId, error);
+  logger.debug(`Fetching avatar for user ${discordUserId}`);
+  const user = await client.users.fetch(discordUserId);
+  if (!user.avatar) {
     return null;
   }
+  const format = user.avatar.startsWith('a_') ? 'gif' : 'webp';
+  const url = `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${format}?size=128`;
+  logger.debug(`Resolved avatar URL for user ${discordUserId}`);
+  return url;
 }

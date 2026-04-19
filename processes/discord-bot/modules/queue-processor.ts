@@ -1729,13 +1729,14 @@ export class QueueProcessor {
       this.processPlayerReminderQueue(),
       this.processScoreNotificationQueue(),
       this.processVoiceAnnouncementQueue(),
-      this.processMapCodeQueue(),
       this.processMatchWinnerNotificationQueue(),
       this.processDiscordBotRequests(),
       this.processMatchEditQueue(),
-      this.processScorecardPromptQueue(),
       this.processHealthAlertQueue(),
-      this.processWinnerVoteQueue()
+      // Must run in order: map code → winner vote → scorecard
+      this.processMapCodeQueue()
+        .then(() => this.processWinnerVoteQueue())
+        .then(() => this.processScorecardPromptQueue()),
     ]);
   }
 
