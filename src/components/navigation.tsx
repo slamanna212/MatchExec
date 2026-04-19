@@ -416,14 +416,18 @@ export function Navigation({ children }: NavigationProps) {
       <AppShell.Navbar p={desktopCollapsed ? 'xs' : 'md'} withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center">
-            <Image
-              src="/logo.svg"
-              alt="MatchExec Logo"
-              w={desktopCollapsed ? 36 : 140}
-              h={desktopCollapsed ? 36 : 140}
-              fit="contain"
-              style={{ transition: 'width 250ms ease, height 250ms ease' }}
-            />
+            <Tooltip label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
+              <UnstyledButton onClick={toggleDesktopSidebar} style={{ display: 'flex', cursor: 'pointer' }}>
+                <Image
+                  src="/logo.svg"
+                  alt="MatchExec Logo"
+                  w={desktopCollapsed ? 36 : 140}
+                  h={desktopCollapsed ? 36 : 140}
+                  fit="contain"
+                  style={{ transition: 'width 250ms ease, height 250ms ease' }}
+                />
+              </UnstyledButton>
+            </Tooltip>
           </Group>
         </AppShell.Section>
 

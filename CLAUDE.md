@@ -297,6 +297,7 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 - Match and tournament dashboards with history
 - Scoring interface with format-specific components
 - Map customization (codes, notes)
+- Logo behavior: On desktop (md+, ≥992px), clicking the logo collapses/expands the sidebar. On mobile, clicking the logo navigates to home.
 
 ## Logging System
 
