@@ -123,5 +123,22 @@ describe('MapCodeService', () => {
       const result = await MapCodeService.processMapCode(match.id, game.id, 'hanamura', mapCodes);
       expect(result).toBe(false);
     });
+
+    it('queues PM when map code value starts with an emoji', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const mapCodes = { 'hanamura': '🎮 EMOJICODE123' };
+
+      const result = await MapCodeService.processMapCode(match.id, game.id, 'hanamura', mapCodes);
+      expect(result).toBe(true);
+    });
+
+    it('queues PM when emoji map code uses instance ID key', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const instanceId = 'hanamura-1776547135395-lsqxspqvk';
+      const mapCodes = { [instanceId]: '🎮 EMOJICODE' };
+
+      const result = await MapCodeService.processMapCode(match.id, game.id, instanceId, mapCodes);
+      expect(result).toBe(true);
+    });
   });
 });
