@@ -46,7 +46,7 @@
     "@mantine/hooks": "8.3.16",
     "@mantine/modals": "8.3.16",
     "@mantine/notifications": "8.3.16",
-    "@snazzah/davey": "0.1.10",
+    "@snazzah/davey": "0.1.11",
     "@tabler/icons-react": "3.40.0",
     "bufferutil": "4.1.0",
     "discord.js": "14.25.1",
