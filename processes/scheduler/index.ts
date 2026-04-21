@@ -103,8 +103,6 @@ class MatchExecScheduler {
       if (settings.channel_refresh_cron) {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
-      // Run voice channel cleanup every 5 minutes
-      this.startCronJob('Voice Channel Cleanup', '*/5 * * * *', this.cleanupVoiceChannels.bind(this));
 
       // Initialize and run avatar update job every 2 hours
       this.avatarUpdateJob = new AvatarUpdateJob(this.db);
@@ -708,100 +706,6 @@ class MatchExecScheduler {
     }
   }
 
-  private async cleanupVoiceChannels() {
-    try {
-      logger.debug('🔄 Starting voice channel cleanup...');
-
-      // Get Discord settings to know the cleanup delay
-      const discordSettings = await this.db.get<{ voice_channel_cleanup_delay_minutes: number }>(
-        'SELECT voice_channel_cleanup_delay_minutes FROM discord_settings WHERE id = 1'
-      );
-
-      const cleanupDelayMinutes = discordSettings?.voice_channel_cleanup_delay_minutes || 10;
-
-      // Calculate the threshold time in JavaScript to avoid SQL injection
-      const thresholdTime = new Date();
-      thresholdTime.setMinutes(thresholdTime.getMinutes() - cleanupDelayMinutes);
-
-      // Find matches that completed/cancelled and are past the cleanup delay
-      const matchesForCleanup = await this.db.all<{ id: string; name: string; status: string; updated_at: string }>(`
-        SELECT DISTINCT m.id, m.name, m.status, m.updated_at
-        FROM matches m
-        INNER JOIN auto_voice_channels avc ON m.id = avc.match_id
-        WHERE m.status IN ('complete', 'cancelled')
-        AND datetime(m.updated_at) <= datetime(?)
-        LIMIT 10
-      `, [thresholdTime.toISOString()]);
-
-      if (matchesForCleanup.length === 0) {
-        logger.debug('ℹ️ No voice channels ready for cleanup');
-        return;
-      }
-
-      logger.debug(`🗑️ Found ${matchesForCleanup.length} matches with voice channels ready for cleanup`);
-
-      // Import and use the voice channel manager to delete channels
-      const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
-
-      for (const match of matchesForCleanup) {
-        try {
-          const success = await deleteMatchVoiceChannels(match.id);
-
-          if (success) {
-            logger.debug(`✅ Cleaned up voice channels for match: ${match.name} (${match.id})`);
-          } else {
-            logger.warning(`⚠️ Failed to cleanup voice channels for match: ${match.name} (${match.id})`);
-          }
-        } catch (error) {
-          logger.error(`❌ Error cleaning up voice channels for match ${match.id}:`, error);
-        }
-      }
-
-      logger.debug(`✅ Voice channel cleanup completed`);
-
-      // Also check for orphaned voice channels (match was manually deleted)
-      const orphanedChannels = await this.db.all<{ id: string; match_id: string; channel_id: string; team_name: string }>(`
-        SELECT avc.id, avc.match_id, avc.channel_id, avc.team_name
-        FROM auto_voice_channels avc
-        WHERE avc.match_id NOT IN (SELECT id FROM matches)
-      `);
-
-      if (orphanedChannels.length > 0) {
-        logger.info(`🗑️ Found ${orphanedChannels.length} orphaned voice channels (from deleted matches)`);
-
-        // Import voice channel manager for cleanup
-        const { deleteMatchVoiceChannels } = await import('../../src/lib/voice-channel-manager');
-
-        // Group orphaned channels by match_id
-        const orphanedByMatch = orphanedChannels.reduce((acc: Map<string, typeof orphanedChannels>, channel) => {
-          if (!acc.has(channel.match_id)) {
-            acc.set(channel.match_id, []);
-          }
-          acc.get(channel.match_id)!.push(channel);
-          return acc;
-        }, new Map());
-
-        // Clean up each orphaned match's voice channels
-        for (const [matchId, channels] of orphanedByMatch.entries()) {
-          try {
-            const success = await deleteMatchVoiceChannels(matchId);
-            if (success) {
-              logger.info(`✅ Cleaned up ${channels.length} orphaned voice channel(s) for deleted match: ${matchId}`);
-            } else {
-              logger.warning(`⚠️ Failed to cleanup orphaned voice channels for match: ${matchId}`);
-            }
-          } catch (error) {
-            logger.error(`❌ Error cleaning up orphaned voice channels for match ${matchId}:`, error);
-          }
-        }
-      } else {
-        logger.debug('ℹ️ No orphaned voice channels found');
-      }
-
-    } catch (error) {
-      logger.error('❌ Error during voice channel cleanup:', error);
-    }
-  }
 }
 
 // Create and start the scheduler

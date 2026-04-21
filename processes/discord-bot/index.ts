@@ -18,6 +18,7 @@ import { InteractionHandler } from './modules/interaction-handler';
 import { HealthMonitor } from './modules/health-monitor';
 import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
+import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 
 class MatchExecBot {
   private client: Client;
@@ -36,6 +37,8 @@ class MatchExecBot {
   private healthMonitor: HealthMonitor | null = null;
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
+  private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
+  private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.client = new Client({
@@ -234,6 +237,7 @@ class MatchExecBot {
       this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
+      this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client, this.db);
 
 
       // Start periodic tasks
@@ -305,6 +309,11 @@ class MatchExecBot {
       await this.processQueues();
     }, 3000);
 
+    // Check for empty auto-created voice channels every minute
+    this.voiceChannelMonitorInterval = setInterval(async () => {
+      await this.processVoiceChannelEmptiness();
+    }, 60000);
+
     // Start health monitoring
     if (this.healthMonitor) {
       this.healthMonitor.start();
@@ -320,6 +329,16 @@ class MatchExecBot {
     } catch (error) {
       logger.error('❌ Error processing queues:', error);
       // Don't let queue processing errors crash the bot
+    }
+  }
+
+  private async processVoiceChannelEmptiness() {
+    if (!this.voiceChannelEmptinessMonitor || !this.isReady) return;
+
+    try {
+      await this.voiceChannelEmptinessMonitor.runCheck();
+    } catch (error) {
+      logger.error('❌ Error processing voice channel emptiness monitor:', error);
     }
   }
 
@@ -394,6 +413,11 @@ class MatchExecBot {
 
   private async shutdown() {
     logger.info('🛑 Discord bot shutting down gracefully...');
+
+    if (this.voiceChannelMonitorInterval) {
+      clearInterval(this.voiceChannelMonitorInterval);
+      this.voiceChannelMonitorInterval = null;
+    }
 
     if (this.healthMonitor) {
       this.healthMonitor.stop();

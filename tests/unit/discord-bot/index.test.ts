@@ -129,6 +129,12 @@ vi.mock('../../../processes/discord-bot/modules/winner-vote-handler', () => ({
   })),
 }));
 
+vi.mock('../../../processes/discord-bot/modules/voice-channel-emptiness-monitor', () => ({
+  VoiceChannelEmptinessMonitor: vi.fn().mockImplementation(() => ({
+    runCheck: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 vi.mock('../../../lib/signup-forms', () => ({
   SignupFormLoader: {
     loadSignupForm: vi.fn().mockResolvedValue({ fields: [], submitButton: { text: 'Sign Up' } }),
