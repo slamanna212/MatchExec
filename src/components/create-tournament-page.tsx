@@ -132,7 +132,6 @@ export function CreateTournamentPage() {
         const result = await response.json();
         updateFormData('eventImageUrl', result.imageUrl);
         setImagePreview(result.imageUrl);
-        showSuccess('Image uploaded successfully!');
       } else {
         const error = await response.json();
         showError(error.error || 'Failed to upload image');
