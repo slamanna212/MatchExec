@@ -51,12 +51,10 @@
   position: relative;
 }
 
-/* Desktop: reserve space on right for absolute-positioned button */
 .contentWithAction {
   padding-right: 130px;
 }
 
-/* Desktop: button floats right, vertically centered */
 .action {
   position: absolute;
   right: var(--mantine-spacing-md);
@@ -77,15 +75,17 @@
     padding: var(--mantine-spacing-sm);
   }
 
-  /* Mobile: no extra right padding, button is in flow */
   .contentWithAction {
     padding-right: var(--mantine-spacing-sm);
   }
 
-  /* Mobile: button returns to normal document flow below text */
   .action {
     position: static;
     transform: none;
     margin-top: var(--mantine-spacing-xs);
+    display: flex;
+    justify-content: center;
+    gap: var(--mantine-spacing-xs);
+    flex-wrap: wrap;
   }
 }
