@@ -815,7 +815,7 @@ async function determineMatchWinner(
 /**
  * Check if all games in a match are completed
  */
-async function areAllGamesCompleted(
+export async function areAllGamesCompleted(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string
 ): Promise<boolean> {

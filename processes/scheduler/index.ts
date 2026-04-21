@@ -188,16 +188,24 @@ class MatchExecScheduler {
     );
 
     for (const match of matchesToComplete) {
+      const statusResult = await this.db.get<{ total: number; completed: number }>(
+        `SELECT COUNT(*) as total,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+         FROM match_games WHERE match_id = ?`,
+        [match.id]
+      );
+      const allScored = statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total;
+
+      if (!allScored) {
+        logger.debug(`⏭️ Skipping auto-complete for match ${match.name} — not all maps scored`);
+        continue;
+      }
+
       logger.debug(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
-    await this.db.run(
+      await this.db.run(
         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         ['complete', match.id]
       );
-      
-      // You could add additional logic here like:
-      // - Queue Discord notification for match completion
-      // - Generate match results/reports
-      // - Clean up related data
     }
 
     if (matchesToComplete.length > 0) {

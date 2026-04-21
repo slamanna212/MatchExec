@@ -4,6 +4,7 @@ import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { handleStatusTransition } from '@/lib/transition-handlers';
+import { areAllGamesCompleted } from '@/lib/scoring-functions';
 import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
@@ -37,6 +38,13 @@ export async function POST(
 
     if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
       return apiError('Cannot move backwards in match flow', 400);
+    }
+
+    if (newStatus === 'complete') {
+      const allScored = await areAllGamesCompleted(db, matchId);
+      if (!allScored) {
+        return apiError('Cannot complete match: not all maps have been scored', 400);
+      }
     }
 
     // Update match status in database
