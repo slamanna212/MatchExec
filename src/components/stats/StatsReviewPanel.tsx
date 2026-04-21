@@ -21,9 +21,10 @@ interface SubmissionWithStats extends ScorecardSubmission {
 interface StatsReviewPanelProps {
   matchId: string;
   gameId: string;
+  matchGameId?: string;
 }
 
-export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
+export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPanelProps) {
   const [submissions, setSubmissions] = useState<SubmissionWithStats[]>([]);
   const [statDefs, setStatDefs] = useState<GameStatDefinition[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -36,7 +37,7 @@ export function StatsReviewPanel({ matchId, gameId }: StatsReviewPanelProps) {
     setLoading(true);
     try {
       const [subsRes, defsRes, partRes] = await Promise.all([
-        fetch(`/api/matches/${matchId}/scorecard`).then(r => r.json()),
+        fetch(`/api/matches/${matchId}/scorecard${matchGameId ? `?matchGameId=${matchGameId}` : ''}`).then(r => r.json()),
         fetch(`/api/games/${encodeURIComponent(gameId)}/stats`).then(r => r.json()),
         fetch(`/api/matches/${matchId}/participants`).then(r => r.json()),
       ]);

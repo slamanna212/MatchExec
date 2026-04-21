@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Stack,
   Group,
@@ -14,6 +15,7 @@ import type { MatchWithGameDetails, MatchGameResult, SignupConfig } from '@/shar
 import { ParticipantsList } from './ParticipantsList';
 import { RemindersList } from './RemindersList';
 import { MapResultsSection } from './MapResultsSection';
+import { StatsVisualizationPlaceholder } from '@/components/stats/StatsVisualizationPlaceholder';
 import classes from '../gradient-segmented-control.module.css';
 
 function MapsTabContent({
@@ -22,7 +24,8 @@ function MapsTabContent({
   mapNotes,
   formatMapName,
   matchGames,
-  showWinner
+  showWinner,
+  onMatchPlayers,
 }: {
   maps?: string[];
   mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
@@ -30,10 +33,16 @@ function MapsTabContent({
   formatMapName: (mapId: string) => string;
   matchGames?: MatchGameResult[];
   showWinner: boolean;
+  onMatchPlayers?: (gameId: string) => void;
 }) {
   if (!maps || maps.length === 0) {
     return <Text size="sm" c="dimmed" ta="center" py="md">No maps configured for this match</Text>;
   }
+
+  const gameIdByMapId = new Map(
+    (matchGames ?? []).map(g => [g.map_id, g.id])
+  );
+
   return (
     <MapResultsSection
       maps={maps}
@@ -42,7 +51,23 @@ function MapsTabContent({
       formatMapName={formatMapName}
       matchGames={matchGames}
       showWinner={showWinner}
-    />
+    >
+      {(mapId) => {
+        if (!onMatchPlayers) return null;
+        const gameId = gameIdByMapId.get(mapId);
+        if (!gameId) return null;
+        return (
+          <Button
+            size="xs"
+            variant="light"
+            color="violet"
+            onClick={() => onMatchPlayers(gameId)}
+          >
+            Match Players
+          </Button>
+        );
+      }}
+    </MapResultsSection>
   );
 }
 
@@ -159,6 +184,8 @@ interface MatchContentPanelProps {
   remindersLoading?: boolean;
 }
 
+type TabValue = 'participants' | 'announcements' | 'maps' | 'matchcodes' | 'stats';
+
 export function MatchContentPanel({
   match,
   participants,
@@ -177,7 +204,39 @@ export function MatchContentPanel({
   participantsLoading = false,
   remindersLoading = false
 }: MatchContentPanelProps) {
-  const [activeTab, setActiveTab] = useState<'participants' | 'announcements' | 'maps' | 'matchcodes'>('participants');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabValue>('participants');
+  const [statsEnabled, setStatsEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/settings/stats')
+      .then(r => r.json())
+      .then((data: { enabled?: boolean }) => setStatsEnabled(data.enabled ?? false))
+      .catch(() => setStatsEnabled(false));
+  }, []);
+
+  const showStats = statsEnabled && (match.status === 'battle' || match.status === 'complete');
+  const showMatchPlayers = showStats;
+
+  const tabData = [
+    {
+      label: <span>Players<span className="hidden md:inline"> ({participants.length}/{match.max_participants})</span></span>,
+      value: 'participants'
+    },
+    {
+      label: <span>Maps<span className="hidden md:inline"> ({match.maps?.length || 0})</span></span>,
+      value: 'maps'
+    },
+    {
+      label: <span>Alerts<span className="hidden md:inline"> ({reminders.length})</span></span>,
+      value: 'announcements'
+    },
+    ...(match.map_codes_supported ? [{
+      label: <span><span className="hidden md:inline">Match </span>Codes</span>,
+      value: 'matchcodes'
+    }] : []),
+    ...(showStats ? [{ label: 'Stats', value: 'stats' }] : []),
+  ];
 
   return (
     <Stack gap="md">
@@ -187,26 +246,9 @@ export function MatchContentPanel({
             <SegmentedControl
               radius="xl"
               size="sm"
-              data={[
-                {
-                  label: <span>Players<span className="hidden md:inline"> ({participants.length}/{match.max_participants})</span></span>,
-                  value: 'participants'
-                },
-                {
-                  label: <span>Maps<span className="hidden md:inline"> ({match.maps?.length || 0})</span></span>,
-                  value: 'maps'
-                },
-                {
-                  label: <span>Alerts<span className="hidden md:inline"> ({reminders.length})</span></span>,
-                  value: 'announcements'
-                },
-                ...(match.map_codes_supported ? [{
-                  label: <span><span className="hidden md:inline">Match </span>Codes</span>,
-                  value: 'matchcodes'
-                }] : [])
-              ]}
+              data={tabData}
               value={activeTab}
-              onChange={(value) => setActiveTab(value as 'participants' | 'announcements' | 'maps' | 'matchcodes')}
+              onChange={(value) => setActiveTab(value as TabValue)}
               classNames={classes}
               style={{ minWidth: 'fit-content' }}
             />
@@ -232,6 +274,7 @@ export function MatchContentPanel({
             formatMapName={formatMapName}
             matchGames={matchGames}
             showWinner={match.status === 'battle' || match.status === 'complete'}
+            onMatchPlayers={showMatchPlayers ? (gameId) => router.push(`/matches/${match.id}/stats/${gameId}`) : undefined}
           />
         )}
 
@@ -256,6 +299,10 @@ export function MatchContentPanel({
             onMapCodesSave={onMapCodesSave}
             mapCodesSaving={mapCodesSaving}
           />
+        )}
+
+        {activeTab === 'stats' && showStats && (
+          <StatsVisualizationPlaceholder />
         )}
     </Stack>
   );

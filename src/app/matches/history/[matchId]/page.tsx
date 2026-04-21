@@ -1,8 +1,8 @@
 'use client'
 
+import React from 'react';
 import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
@@ -57,9 +57,8 @@ export default function HistoryMatchPage({
   params
 }: {
   params: Promise<{ matchId: string }>
-}) {
+}): React.JSX.Element {
   const { matchId } = use(params);
-  const router = useRouter();
   const [match, setMatch] = useState<MatchWithGame | null>(null);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [reminders, setReminders] = useState<ReminderData[]>([]);
@@ -258,7 +257,6 @@ export default function HistoryMatchPage({
       formatMapName={formatMapName}
       showActions={true}
       isHistory={true}
-      onReviewStats={() => router.push(`/matches/${matchId}/stats`)}
       participantsLoading={false}
       remindersLoading={false}
     />
