@@ -512,7 +512,6 @@ export default function MatchPage({
         onMapCodesSave={saveMapCodes}
         mapCodesSaving={mapCodesSaving}
         onAssignPlayers={() => router.push(`/matches/${match.id}/assign`)}
-        onScoring={() => router.push(`/matches/${match.id}/scoring`)}
         onDelete={handleDeleteMatch}
         onEdit={() => router.push(`/matches/${match.id}/edit`)}
         onStatusTransition={handleStatusTransition}

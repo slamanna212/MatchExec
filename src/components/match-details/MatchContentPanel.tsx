@@ -26,6 +26,8 @@ function MapsTabContent({
   matchGames,
   showWinner,
   onMatchPlayers,
+  onScoring,
+  matchInBattle,
 }: {
   maps?: string[];
   mapDetails: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}};
@@ -34,6 +36,8 @@ function MapsTabContent({
   matchGames?: MatchGameResult[];
   showWinner: boolean;
   onMatchPlayers?: (gameId: string) => void;
+  onScoring?: (gameId: string) => void;
+  matchInBattle?: boolean;
 }) {
   if (!maps || maps.length === 0) {
     return <Text size="sm" c="dimmed" ta="center" py="md">No maps configured for this match</Text>;
@@ -41,6 +45,9 @@ function MapsTabContent({
 
   const gameIdByMapId = new Map(
     (matchGames ?? []).map(g => [g.map_id, g.id])
+  );
+  const gameStatusByMapId = new Map(
+    (matchGames ?? []).map(g => [g.map_id, g.status])
   );
 
   return (
@@ -53,18 +60,39 @@ function MapsTabContent({
       showWinner={showWinner}
     >
       {(mapId) => {
-        if (!onMatchPlayers) return null;
         const gameId = gameIdByMapId.get(mapId);
+        const gameStatus = gameStatusByMapId.get(mapId);
         if (!gameId) return null;
+
+        const showScoring = matchInBattle && onScoring;
+        const showMatchPlayers = onMatchPlayers;
+        if (!showScoring && !showMatchPlayers) return null;
+
         return (
-          <Button
-            size="xs"
-            variant="light"
-            color="violet"
-            onClick={() => onMatchPlayers(gameId)}
-          >
-            Match Players
-          </Button>
+          <>
+            {showScoring && (
+              <Button
+                size="xs"
+                variant="light"
+                color="violet"
+                disabled={gameStatus !== 'ongoing'}
+                onClick={() => onScoring(gameId)}
+              >
+                Scoring
+              </Button>
+            )}
+            {showMatchPlayers && (
+              <Button
+                size="xs"
+                variant="light"
+                color="violet"
+                disabled={gameStatus !== 'completed'}
+                onClick={() => onMatchPlayers(gameId)}
+              >
+                Match Players
+              </Button>
+            )}
+          </>
         );
       }}
     </MapResultsSection>
@@ -274,6 +302,8 @@ export function MatchContentPanel({
             formatMapName={formatMapName}
             matchGames={matchGames}
             showWinner={match.status === 'battle' || match.status === 'complete'}
+            matchInBattle={match.status === 'battle'}
+            onScoring={(gameId) => router.push(`/matches/${match.id}/scoring?gameId=${gameId}`)}
             onMatchPlayers={showMatchPlayers ? (gameId) => router.push(`/matches/${match.id}/stats/${gameId}`) : undefined}
           />
         )}

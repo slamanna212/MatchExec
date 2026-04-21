@@ -30,11 +30,14 @@ interface MatchData {
 }
 
 export default function ScoringPage({
-  params
+  params,
+  searchParams,
 }: {
   params: Promise<{ matchId: string }>
+  searchParams: Promise<{ gameId?: string }>
 }) {
   const { matchId } = use(params);
+  const { gameId: initialGameId } = use(searchParams);
   const router = useRouter();
 
   const [match, setMatch] = useState<MatchData | null>(null);
@@ -174,6 +177,7 @@ export default function ScoringPage({
             submitting={submitting}
             onAllMapsCompleted={handleAllMapsCompleted}
             matchStatsEnabled={(match.stats_enabled ?? 0) === 1}
+            initialGameId={initialGameId}
           />
         )}
       </Stack>

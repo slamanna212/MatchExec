@@ -31,7 +31,6 @@ interface MatchInfoPanelProps {
 
   // Action callbacks
   onAssignPlayers?: () => void;
-  onScoring?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
@@ -141,7 +140,6 @@ function MatchActionsCard({
   match,
   isHistory,
   onAssignPlayers,
-  onScoring,
   onDelete,
   onEdit,
   onStatusTransition,
@@ -149,13 +147,11 @@ function MatchActionsCard({
   match: MatchWithGame;
   isHistory: boolean;
   onAssignPlayers?: () => void;
-  onScoring?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
 }) {
   const showAssignPlayers = ASSIGN_STATUSES.has(match.status) && Boolean(onAssignPlayers);
-  const showScoring = match.status === 'battle' && Boolean(onScoring);
   const showEdit = !isHistory && Boolean(onEdit) && !NON_EDIT_STATUSES.has(match.status) && match.tournament_allow_match_editing !== false;
 
   return (
@@ -163,9 +159,6 @@ function MatchActionsCard({
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
         {showAssignPlayers && (
           <Button variant="light" color="violet" fullWidth onClick={onAssignPlayers}>Assign Players</Button>
-        )}
-        {showScoring && (
-          <Button variant="light" color="violet" fullWidth onClick={onScoring}>Scoring</Button>
         )}
         {getStatusTransitionButton(match, isHistory, onStatusTransition)}
         {showEdit && (
@@ -190,7 +183,6 @@ export function MatchInfoPanel({
   showActions = true,
   isHistory = false,
   onAssignPlayers,
-  onScoring,
   onDelete,
   onEdit,
   onStatusTransition,
@@ -230,7 +222,6 @@ export function MatchInfoPanel({
             match={match}
             isHistory={isHistory}
             onAssignPlayers={onAssignPlayers}
-            onScoring={onScoring}
             onDelete={onDelete}
             onEdit={onEdit}
             onStatusTransition={onStatusTransition}

@@ -79,7 +79,6 @@ interface MatchPageLayoutProps {
   onMapCodesSave?: () => void;
   mapCodesSaving?: boolean;
   onAssignPlayers?: () => void;
-  onScoring?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
@@ -106,7 +105,6 @@ export function MatchPageLayout({
   onMapCodesSave,
   mapCodesSaving,
   onAssignPlayers,
-  onScoring,
   onDelete,
   onEdit,
   onStatusTransition,
@@ -155,7 +153,6 @@ export function MatchPageLayout({
             showActions={showActions}
             isHistory={isHistory}
             onAssignPlayers={onAssignPlayers}
-            onScoring={onScoring}
             onDelete={onDelete}
             onEdit={onEdit}
             onStatusTransition={onStatusTransition}
