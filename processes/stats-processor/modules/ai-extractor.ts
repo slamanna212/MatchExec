@@ -83,6 +83,7 @@ export class AIExtractor {
       // Build prompt and try providers in order with fallback
       const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes);
       let rawResponse: string | null = null;
+      let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;
       for (const provider of enabledProviders) {
         const apiKey = provider.providerId === 'anthropic' ? settings?.ai_api_key
@@ -99,12 +100,27 @@ export class AIExtractor {
             logger.warning(`Provider ${provider.instanceId} returned unusable data (${validationError}), trying next provider`);
             continue;
           }
-          rawResponse = candidateResponse;
-          break;
+          const minConfidence = this.getMinPlayerConfidence(candidateResponse);
+          if (minConfidence >= 0.8) {
+            rawResponse = candidateResponse;
+            break;
+          } else if (minConfidence >= 0.5) {
+            logger.info(`Provider ${provider.instanceId} returned confidence ${minConfidence.toFixed(2)}, trying next provider for better result`);
+            if (!bestFallback || minConfidence > bestFallback.minConfidence) {
+              bestFallback = { response: candidateResponse, minConfidence };
+            }
+          } else {
+            lastError = new Error(`Provider ${provider.instanceId} returned low confidence: ${minConfidence.toFixed(2)}`);
+            logger.warning(`Provider ${provider.instanceId} returned confidence below 0.5 (${minConfidence.toFixed(2)}), trying next provider`);
+          }
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
           logger.warning(`Provider ${provider.providerId} failed, trying next: ${lastError.message}`);
         }
+      }
+      if (!rawResponse && bestFallback) {
+        logger.info(`No provider reached 0.8 confidence; using best available result (min confidence: ${bestFallback.minConfidence.toFixed(2)})`);
+        rawResponse = bestFallback.response;
       }
       if (!rawResponse) throw lastError ?? new Error('No configured providers succeeded');
 
@@ -277,10 +293,19 @@ Return JSON matching this exact structure:
         if (typeof val !== 'number' || !isFinite(val)) return 'non-numeric stat value';
       }
 
-      if (typeof player.confidence !== 'number' || player.confidence < 0.5) return 'low confidence';
+      if (typeof player.confidence !== 'number') return 'missing confidence';
     }
 
     return null;
+  }
+
+  private getMinPlayerConfidence(rawResponse: string): number {
+    let cleaned = rawResponse.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    }
+    const parsed: AIExtractionResult = JSON.parse(cleaned);
+    return Math.min(...parsed.players.map(p => typeof p.confidence === 'number' ? p.confidence : 0));
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {
