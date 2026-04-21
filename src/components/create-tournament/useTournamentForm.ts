@@ -11,6 +11,7 @@ export interface GameWithIcon {
   maxPlayers: number;
   iconUrl: string;
   coverUrl: string;
+  color?: string;
   mapCount: number;
   modeCount: number;
 }

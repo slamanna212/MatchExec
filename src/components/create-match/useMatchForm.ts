@@ -12,6 +12,7 @@ export interface GameWithIcon {
   supportsAllModes?: boolean;
   iconUrl: string;
   coverUrl: string;
+  color?: string;
   mapCount: number;
   modeCount: number;
 }

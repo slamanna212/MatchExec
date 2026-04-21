@@ -29,7 +29,18 @@ export function TournamentGameSelectionStep({
               withBorder
               style={{
                 cursor: 'pointer',
-                transition: 'all 0.2s ease'
+                transition: 'all 0.25s ease',
+                borderColor: `${game.color ?? '#888888'}22`,
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = `0 8px 28px ${game.color ?? '#888888'}44`;
+                e.currentTarget.style.borderColor = `${game.color ?? '#888888'}55`;
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '';
+                e.currentTarget.style.borderColor = `${game.color ?? '#888888'}22`;
               }}
               onClick={() => {
                 onGameSelect(game.id);
