@@ -154,6 +154,7 @@ export default function ApplicationSettingsPage() {
             icon={IconAdjustments}
             title="Application Settings"
             subtitle="Configure general application behavior and timing"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
           />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>

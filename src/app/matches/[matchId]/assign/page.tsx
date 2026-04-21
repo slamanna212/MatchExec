@@ -423,13 +423,12 @@ export default function AssignPage({
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <div>
-          <PageHeader
-            icon={IconUsers}
-            title={match.name}
-            subtitle="Assign players to teams"
-          />
-        </div>
+        <PageHeader
+          icon={IconUsers}
+          title={match.name}
+          subtitle="Assign players to teams"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+        />
 
         <Text size="sm" c="dimmed">
           Use the dropdown or drag players between columns to assign them to Reserve, Blue Team, or Red Team.

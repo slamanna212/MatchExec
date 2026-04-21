@@ -6,15 +6,14 @@ import { useRouter } from 'next/navigation';
 import {
   Container,
   Stack,
-  Group,
   Text,
-  ActionIcon,
   Loader,
   Center,
   Alert,
   Button,
+  Group,
 } from '@mantine/core';
-import { IconTrophy, IconAlertCircle, IconChevronLeft } from '@tabler/icons-react';
+import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import type { MatchFormat, MatchResult } from '@/shared/types';
 import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
@@ -145,26 +144,13 @@ export default function ScoringPage({
   return (
     <Container size="lg" pt="xs" pb="md">
       <Stack gap="lg">
-        <div>
-          <Group mb="xs" gap={4}>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => router.push(`/matches/${matchId}`)}
-              aria-label="Back to match"
-            >
-              <IconChevronLeft size={18} />
-            </ActionIcon>
-            <Text size="sm" c="dimmed">Back to match</Text>
-          </Group>
-
-          <PageHeader
-            icon={IconTrophy}
-            title={match.name}
-            subtitle="Scoring"
-            action={<FormatBadge format={match.match_format || 'casual'} />}
-          />
-        </div>
+        <PageHeader
+          icon={IconTrophy}
+          title={match.name}
+          subtitle="Scoring"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+          action={<FormatBadge format={match.match_format || 'casual'} />}
+        />
 
         {scoringType === 'Position' ? (
           <Stack gap="md">

@@ -63,6 +63,7 @@ export default function MatchStatsPage({ params }: { params: Promise<{ matchId: 
           icon={IconChartBar}
           title={`${match?.name || 'Match'} — Stats`}
           subtitle={match?.game_name}
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match?.name || 'Match', href: `/matches/${matchId}` }]}
           action={
             <Button
               variant="subtle"

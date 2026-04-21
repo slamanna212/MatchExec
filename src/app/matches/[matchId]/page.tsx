@@ -523,6 +523,7 @@ export default function MatchPage({
         isHistory={false}
         participantsLoading={participantsLoading}
         remindersLoading={remindersLoading}
+        showBreadcrumbs={true}
       />
 
     </>

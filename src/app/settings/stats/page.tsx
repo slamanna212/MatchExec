@@ -497,6 +497,7 @@ export default function StatsSettingsPage() {
             icon={IconChartBar}
             title="Stats Settings"
             subtitle="Configure AI-powered scorecard analysis and stat tracking"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
           />
 
           {/* General Settings */}

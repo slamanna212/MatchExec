@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, ActionIcon, Breadcrumbs, Anchor, Stepper } from '@mantine/core';
+import { Container, Stack, ActionIcon, Stepper } from '@mantine/core';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap, IconSwords } from '@tabler/icons-react';
 import { PageHeader } from './PageHeader';
 import { showError, showSuccess } from '@/lib/notifications';
@@ -68,22 +68,6 @@ export function CreateMatchPage() {
 
     fetchGames();
   }, []);
-
-  const getStepTitle = () => {
-    switch (currentStep) {
-      case 1: return 'Select Game';
-      case 2: return 'Event Information';
-      case 3: return 'Announcements';
-      case 4: return 'Maps & Configuration';
-      default: return 'Create Match';
-    }
-  };
-
-  const getBreadcrumbs = () => [
-    { title: 'Matches', href: '/' },
-    { title: 'Create Match', href: '/matches/create' },
-    { title: getStepTitle(), href: '#' }
-  ];
 
   const navigateToStep = (step: number) => {
     const params = new URLSearchParams();
@@ -349,21 +333,13 @@ export function CreateMatchPage() {
         <PageHeader
           icon={IconSwords}
           title="Create Match"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }]}
           action={
             <ActionIcon variant="subtle" size="md" onClick={handleBack} aria-label="Go back">
               <IconArrowLeft />
             </ActionIcon>
           }
         />
-
-        {/* Breadcrumbs */}
-        <Breadcrumbs>
-          {getBreadcrumbs().map((item, index) => (
-            <Anchor key={index} href={item.href} size="sm">
-              {item.title}
-            </Anchor>
-          ))}
-        </Breadcrumbs>
 
         {/* Step Indicator */}
         <Stepper active={currentStep - 1} size="sm">

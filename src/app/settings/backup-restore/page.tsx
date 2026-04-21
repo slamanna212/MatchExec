@@ -157,6 +157,7 @@ export default function BackupRestorePage() {
           icon={IconDatabaseImport}
           title="Backup & Restore"
           subtitle="Export or import the entire database. All matches, tournaments, settings, and configuration are included."
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
         />
 
         {/* Backup */}

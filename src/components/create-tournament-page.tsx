@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Breadcrumbs, Anchor, Button, Stepper } from '@mantine/core';
+import { Container, Stack, Button, Stepper } from '@mantine/core';
 import { PageHeader } from './PageHeader';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconTrophy, IconUsers, IconListCheck } from '@tabler/icons-react';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
@@ -213,16 +213,10 @@ export function CreateTournamentPage() {
   return (
     <Container size="lg" py="md">
       <Stack gap="md">
-        {/* Breadcrumbs */}
-        <Breadcrumbs>
-          <Anchor onClick={() => router.push('/tournaments')}>Tournaments</Anchor>
-          <span>Create Tournament</span>
-        </Breadcrumbs>
-
-        {/* Header */}
         <PageHeader
           icon={IconTrophy}
           title="Create Tournament"
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }]}
           action={
             <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
               Back

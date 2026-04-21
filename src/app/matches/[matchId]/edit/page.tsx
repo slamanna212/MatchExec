@@ -376,13 +376,12 @@ export default function EditMatchPage({
   return (
     <Container size="md" py="xl">
       <Stack gap="lg">
-        <div>
-          <PageHeader
-            icon={IconPencil}
-            title="Edit Match"
-            subtitle={match.name}
-          />
-        </div>
+        <PageHeader
+          icon={IconPencil}
+          title="Edit Match"
+          subtitle={match.name}
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+        />
 
         <Card withBorder padding="lg" shadow="sm">
           <Stack gap="md">

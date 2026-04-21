@@ -349,13 +349,12 @@ export default function AssignTournamentPage({
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <div>
-          <PageHeader
-            icon={IconUsers}
-            title={`${tournament.name} — Assign Teams`}
-            subtitle="Assign participants to teams"
-          />
-        </div>
+        <PageHeader
+          icon={IconUsers}
+          title={`${tournament.name} — Assign Teams`}
+          subtitle="Assign participants to teams"
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }, { title: tournament.name, href: `/tournaments/${tournamentId}` }]}
+        />
 
         {/* Create new team section */}
         <Card withBorder p="md">

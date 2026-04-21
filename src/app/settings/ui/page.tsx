@@ -85,6 +85,7 @@ export default function UISettingsPage() {
             icon={IconSettings}
             title="UI Settings"
             subtitle="Configure user interface behavior and appearance"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
           />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>

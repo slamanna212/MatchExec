@@ -235,6 +235,7 @@ export default function CreateChannelPage() {
           icon={IconHash}
           title="Add Channel"
           subtitle="Configure a Discord channel for notifications"
+          breadcrumbs={[{ title: 'Channels', href: '/channels' }]}
           action={
             <Button
               variant="outline"

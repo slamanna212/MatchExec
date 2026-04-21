@@ -10,11 +10,11 @@ import {
   Center,
   Stack,
   Grid,
-  Breadcrumbs,
-  Anchor,
   Card,
   Group
 } from '@mantine/core';
+import { IconTrophy } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import { modals } from '@mantine/modals';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentInfoPanel } from '@/components/tournament-details/TournamentInfoPanel';
@@ -547,12 +547,11 @@ export default function TournamentPage({
   return (
     <div className="container mx-auto py-6 px-2">
       <Stack gap="lg">
-        <Breadcrumbs>
-          <Anchor onClick={() => router.push('/tournaments')} style={{ cursor: 'pointer' }}>
-            Tournaments
-          </Anchor>
-          <Text>{tournament.name}</Text>
-        </Breadcrumbs>
+        <PageHeader
+          icon={IconTrophy}
+          title={tournament.name}
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }]}
+        />
 
         <Grid>
           <Grid.Col span={{ base: 12, md: 4 }}>

@@ -134,6 +134,7 @@ export default function DiscordSettingsPage() {
             icon={IconBrandDiscord}
             title="Discord Settings"
             subtitle="Configure Discord bot connection and permissions"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
           />
 
           {/* Bot Credentials */}

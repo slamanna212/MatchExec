@@ -87,6 +87,7 @@ export default function SchedulerSettingsPage() {
           icon={IconClock}
           title="Scheduler Settings"
           subtitle="Configure automated tasks and their timing"
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
         />
 
         {loading ? (
