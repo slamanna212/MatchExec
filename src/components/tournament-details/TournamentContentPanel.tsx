@@ -97,7 +97,12 @@ export function TournamentContentPanel({
   onStartAllMatches
 }: TournamentContentPanelProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>('teams');
+  const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>(() => {
+    if (typeof window === 'undefined') return 'teams';
+    const saved = localStorage.getItem(`tournament_tab_${tournament.id}`);
+    const valid = ['teams', 'bracket', 'standings', 'control'] as const;
+    return (valid as readonly string[]).includes(saved ?? '') ? (saved as typeof valid[number]) : 'teams';
+  });
 
   return (
     <Stack gap="md">
@@ -117,7 +122,10 @@ export function TournamentContentPanel({
               { label: 'Control', value: 'control' }
             ]}
             value={activeTab}
-            onChange={(value) => setActiveTab(value as 'teams' | 'bracket' | 'standings' | 'control')}
+            onChange={(value) => {
+              localStorage.setItem(`tournament_tab_${tournament.id}`, value);
+              setActiveTab(value as 'teams' | 'bracket' | 'standings' | 'control');
+            }}
             classNames={classes}
             style={{ minWidth: 'fit-content' }}
           />

@@ -233,7 +233,12 @@ export function MatchContentPanel({
   remindersLoading = false
 }: MatchContentPanelProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabValue>('participants');
+  const [activeTab, setActiveTab] = useState<TabValue>(() => {
+    if (typeof window === 'undefined') return 'participants';
+    const saved = localStorage.getItem(`match_tab_${match.id}`);
+    const valid: TabValue[] = ['participants', 'announcements', 'maps', 'matchcodes', 'stats'];
+    return valid.includes(saved as TabValue) ? (saved as TabValue) : 'participants';
+  });
   const [statsEnabled, setStatsEnabled] = useState(false);
 
   useEffect(() => {
@@ -244,6 +249,12 @@ export function MatchContentPanel({
   }, []);
 
   const showStats = statsEnabled && (match.status === 'battle' || match.status === 'complete');
+
+  const effectiveTab: TabValue =
+    (activeTab === 'stats' && !showStats) || (activeTab === 'matchcodes' && !match.map_codes_supported)
+      ? 'participants'
+      : activeTab;
+
   const showMatchPlayers = showStats;
 
   const tabData = [
@@ -275,8 +286,11 @@ export function MatchContentPanel({
               radius="xl"
               size="sm"
               data={tabData}
-              value={activeTab}
-              onChange={(value) => setActiveTab(value as TabValue)}
+              value={effectiveTab}
+              onChange={(value) => {
+                localStorage.setItem(`match_tab_${match.id}`, value);
+                setActiveTab(value as TabValue);
+              }}
               classNames={classes}
               style={{ minWidth: 'fit-content' }}
             />
@@ -284,7 +298,7 @@ export function MatchContentPanel({
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'participants' && (
+        {effectiveTab === 'participants' && (
           <ParticipantsList
             participants={participants}
             loading={participantsLoading}
@@ -294,7 +308,7 @@ export function MatchContentPanel({
           />
         )}
 
-        {activeTab === 'maps' && (
+        {effectiveTab === 'maps' && (
           <MapsTabContent
             maps={match.maps}
             mapDetails={mapDetails}
@@ -308,7 +322,7 @@ export function MatchContentPanel({
           />
         )}
 
-        {activeTab === 'announcements' && (
+        {effectiveTab === 'announcements' && (
           <RemindersList
             reminders={reminders}
             loading={remindersLoading}
@@ -318,7 +332,7 @@ export function MatchContentPanel({
           />
         )}
 
-        {activeTab === 'matchcodes' && match.map_codes_supported && (
+        {effectiveTab === 'matchcodes' && match.map_codes_supported && (
           <MapCodesTabContent
             maps={match.maps}
             mapDetails={mapDetails}
@@ -331,7 +345,7 @@ export function MatchContentPanel({
           />
         )}
 
-        {activeTab === 'stats' && showStats && (
+        {effectiveTab === 'stats' && showStats && (
           <StatsVisualizationPlaceholder />
         )}
     </Stack>
