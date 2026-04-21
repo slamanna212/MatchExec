@@ -497,6 +497,7 @@ export type FeedEventType =
   | 'match_started'
   | 'tournament_started'
   | 'match_scoring_required'
+  | 'scorecard_player_matching_required'
   | 'map_scored'
   | 'match_completed'
   | 'tournament_completed'

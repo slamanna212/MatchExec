@@ -520,16 +520,25 @@ class MatchExecScheduler {
 
   private async cleanupStaleScoringNotifications() {
     try {
-      const result = await this.db.run(
+      const scoringResult = await this.db.run(
         `DELETE FROM activity_feed
          WHERE event_type = 'match_scoring_required'
          AND created_at < datetime('now', '-1 day')`
       );
-      if ((result.changes ?? 0) > 0) {
-        logger.info(`🧹 Removed ${result.changes} stale map scoring notification(s) older than 24 hours`);
+      if ((scoringResult.changes ?? 0) > 0) {
+        logger.info(`🧹 Removed ${scoringResult.changes} stale map scoring notification(s) older than 24 hours`);
+      }
+
+      const matchingResult = await this.db.run(
+        `DELETE FROM activity_feed
+         WHERE event_type = 'scorecard_player_matching_required'
+         AND created_at < datetime('now', '-1 day')`
+      );
+      if ((matchingResult.changes ?? 0) > 0) {
+        logger.info(`🧹 Removed ${matchingResult.changes} stale scorecard player matching notification(s) older than 24 hours`);
       }
     } catch (error) {
-      logger.error('❌ Error cleaning up stale scoring notifications:', error);
+      logger.error('❌ Error cleaning up stale action notifications:', error);
     }
   }
 

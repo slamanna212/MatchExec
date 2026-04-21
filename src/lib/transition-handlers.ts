@@ -259,7 +259,7 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
       }
       await logFeedEvent({
         eventType: 'match_scoring_required',
-        priority: 2,
+        priority: 3,
         title: 'Map Scoring Required',
         description: `"${name}" — Map ${firstGame.round}: ${mapName ?? 'Unknown Map'}`,
         matchId,

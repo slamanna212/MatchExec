@@ -416,7 +416,7 @@ export async function saveMatchResult(
         const matchRow = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [result.matchId]);
         await logFeedEvent({
           eventType: 'match_scoring_required',
-          priority: 2,
+          priority: 3,
           title: 'Map Scoring Required',
           description: `"${matchRow?.name ?? result.matchId}" — Map ${nextMap.round}: ${nextMap.mapName ?? 'Unknown Map'}`,
           matchId: result.matchId,

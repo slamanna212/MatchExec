@@ -36,6 +36,7 @@ import {
   IconHeartbeat,
   IconActivity,
   IconCalendar,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
@@ -62,8 +63,9 @@ const EVENT_ICONS: Record<string, { icon: React.ComponentType<{ size: number }>,
   tournament_phase_changed: { icon: IconRefresh,    color: 'blue'    },
   match_started:            { icon: IconPlayerPlay, color: 'green'   },
   tournament_started:       { icon: IconPlayerPlay, color: 'green'   },
-  match_scoring_required:   { icon: IconMap,        color: 'orange'  },
-  map_scored:               { icon: IconChartBar,   color: 'teal'    },
+  match_scoring_required:              { icon: IconMap,        color: 'blue'    },
+  scorecard_player_matching_required:  { icon: IconUsersGroup, color: 'orange'  },
+  map_scored:                          { icon: IconChartBar,   color: 'teal'    },
   match_completed:          { icon: IconCheck,      color: 'green'   },
   tournament_completed:     { icon: IconCheck,      color: 'green'   },
   match_cancelled:          { icon: IconX,          color: 'red'     },
@@ -107,9 +109,9 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
   const e = EVENT_ICONS[event.event_type] ?? { icon: IconRss, color: 'gray' };
   const Icon = e.icon;
 
-  const isScoring = event.event_type === 'match_scoring_required';
+  const isPlayerMatching = event.event_type === 'scorecard_player_matching_required';
   const isAiError = event.event_type === 'ai_error';
-  const hasWarmBg = isScoring || isAiError;
+  const hasWarmBg = isPlayerMatching || isAiError;
 
   const accentColor = `var(--mantine-color-${p.color}-6)`;
   const warmBg = isDark ? 'rgba(234,88,12,0.07)' : 'rgba(234,88,12,0.04)';
@@ -172,19 +174,19 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
             {formatRelativeTime(event.created_at)}
           </Badge>
 
-          {isScoring && event.match_id && (
+          {isPlayerMatching && event.match_id && (
             <Button
               size="xs"
               color="orange"
               variant="filled"
-              onClick={() => router.push(`/matches/${event.match_id}/scoring`)}
-              className="feed-score-now-btn"
+              onClick={() => router.push(`/matches/${event.match_id}`)}
+              className="feed-assign-players-btn"
             >
-              Score Now
+              Assign Players
             </Button>
           )}
 
-          {!isScoring && navigateTo && (
+          {!isPlayerMatching && navigateTo && (
             <Button
               size="xs"
               variant="filled"
@@ -282,14 +284,14 @@ export function FeedDashboard() {
     }
   }, [events, filter]);
 
-  const critical        = useMemo(() => filtered.filter(e => e.priority === 1), [filtered]);
-  const scoringRequired = useMemo(() => filtered.filter(e => e.event_type === 'match_scoring_required'), [filtered]);
-  const regular         = useMemo(() => filtered.filter(e => e.priority > 1 && e.event_type !== 'match_scoring_required'), [filtered]);
+  const critical              = useMemo(() => filtered.filter(e => e.priority === 1), [filtered]);
+  const playerMatchingRequired = useMemo(() => filtered.filter(e => e.event_type === 'scorecard_player_matching_required'), [filtered]);
+  const regular               = useMemo(() => filtered.filter(e => e.priority > 1 && e.event_type !== 'scorecard_player_matching_required'), [filtered]);
 
   return (
     <>
       <style>{`
-        .feed-score-now-btn {
+        .feed-assign-players-btn {
           animation: feedScorePulse 2.4s ease-in-out infinite;
         }
         @keyframes feedScorePulse {
@@ -432,11 +434,11 @@ export function FeedDashboard() {
               </>
             )}
 
-            {/* Map Scoring Required section */}
-            {scoringRequired.length > 0 && (
+            {/* Scorecard Player Assignment section */}
+            {playerMatchingRequired.length > 0 && (
               <>
                 <Group gap={6}>
-                  <IconMap size={13} color="var(--mantine-color-orange-6)" />
+                  <IconUsersGroup size={13} color="var(--mantine-color-orange-6)" />
                   <Text
                     size="xs"
                     fw={700}
@@ -444,10 +446,10 @@ export function FeedDashboard() {
                     tt="uppercase"
                     style={{ letterSpacing: '0.06em' }}
                   >
-                    Map Scoring Required
+                    Scorecard Player Assignment
                   </Text>
                 </Group>
-                {scoringRequired.map(e => <FeedEventCard key={e.id} event={e} />)}
+                {playerMatchingRequired.map(e => <FeedEventCard key={e.id} event={e} />)}
                 {regular.length > 0 && <Divider my={4} />}
               </>
             )}

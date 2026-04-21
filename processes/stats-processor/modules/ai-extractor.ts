@@ -158,6 +158,34 @@ export class AIExtractor {
       // Auto-assign participants by name matching (fills remaining unassigned rows)
       await this.autoAssignParticipants(submissionId, submission.match_id, extractionResult.players);
 
+      // If any player stats are still unassigned, log a high-priority feed event so admins know to assign them
+      try {
+        const unassignedRow = await this.db.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM scorecard_player_stats WHERE submission_id = ? AND assignment_status = 'unassigned'`,
+          [submissionId]
+        );
+        const unassignedCount = unassignedRow?.count ?? 0;
+        if (unassignedCount > 0) {
+          // Only create one event per match — skip if one already exists
+          const existing = await this.db.get(
+            `SELECT id FROM activity_feed WHERE event_type = 'scorecard_player_matching_required' AND match_id = ?`,
+            [submission.match_id]
+          );
+          if (!existing) {
+            await logFeedEvent({
+              eventType: 'scorecard_player_matching_required',
+              priority: 2,
+              title: 'Scorecard Ready for Player Assignment',
+              description: `${unassignedCount} extracted player stat${unassignedCount === 1 ? '' : 's'} waiting to be matched to participants`,
+              matchId: submission.match_id,
+              metadata: { submissionId, unassignedCount },
+            });
+          }
+        }
+      } catch (feedError) {
+        logger.error('Error creating scorecard player matching feed event:', feedError);
+      }
+
       // Mark as completed
       await this.db.run(
         `UPDATE scorecard_submissions SET ai_extraction_status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
