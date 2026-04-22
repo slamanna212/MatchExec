@@ -192,7 +192,7 @@ class MatchExecScheduler {
          FROM match_games WHERE match_id = ?`,
         [match.id]
       );
-      const allScored = statusResult && statusResult.total > 0 && statusResult.completed === statusResult.total;
+      const allScored = !statusResult || statusResult.total === 0 || statusResult.completed === statusResult.total;
 
       if (!allScored) {
         logger.debug(`⏭️ Skipping auto-complete for match ${match.name} — not all maps scored`);
