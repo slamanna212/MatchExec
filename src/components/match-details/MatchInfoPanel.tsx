@@ -8,8 +8,10 @@ import {
   Button,
   Card,
   Badge,
-  Image
+  Image,
+  Divider,
 } from '@mantine/core';
+import { useRouter } from 'next/navigation';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
 
@@ -138,6 +140,7 @@ const NON_EDIT_STATUSES = new Set(['battle', 'complete', 'cancelled']);
 
 function MatchActionsCard({
   match,
+  matchGames,
   isHistory,
   onAssignPlayers,
   onDelete,
@@ -145,29 +148,57 @@ function MatchActionsCard({
   onStatusTransition,
 }: {
   match: MatchWithGame;
+  matchGames?: MatchGameResult[];
   isHistory: boolean;
   onAssignPlayers?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
 }) {
+  const router = useRouter();
+  const matchInBattle = match.status === 'battle';
+  const ongoingGame = matchGames?.find(g => g.status === 'ongoing');
   const showAssignPlayers = ASSIGN_STATUSES.has(match.status) && Boolean(onAssignPlayers);
   const showEdit = !isHistory && Boolean(onEdit) && !NON_EDIT_STATUSES.has(match.status) && match.tournament_allow_match_editing !== false;
 
   return (
     <Card withBorder padding="lg" shadow="sm">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-        {showAssignPlayers && (
-          <Button variant="light" color="violet" fullWidth onClick={onAssignPlayers}>Assign Players</Button>
+      <Stack gap="xs">
+        {matchInBattle && (
+          <Button
+            variant="filled"
+            color="violet"
+            fullWidth
+            disabled={!ongoingGame}
+            onClick={() => ongoingGame && router.push(`/matches/${match.id}/scoring?gameId=${ongoingGame.id}`)}
+          >
+            Score Next Map
+          </Button>
         )}
         {getStatusTransitionButton(match, isHistory, onStatusTransition)}
-        {showEdit && (
-          <Button variant="light" color="violet" fullWidth onClick={onEdit}>Edit Match</Button>
+        {(showAssignPlayers || showEdit) && (
+          <Group grow gap="xs">
+            {showAssignPlayers && (
+              <Button size="sm" variant="light" color="violet" onClick={onAssignPlayers}>
+                Assign Players
+              </Button>
+            )}
+            {showEdit && (
+              <Button size="sm" variant="light" color="violet" onClick={onEdit}>
+                Edit Match
+              </Button>
+            )}
+          </Group>
         )}
         {onDelete && (
-          <Button color="red" variant="light" fullWidth onClick={onDelete}>Delete Match</Button>
+          <>
+            <Divider />
+            <Button variant="subtle" color="red" fullWidth size="sm" onClick={onDelete}>
+              Delete Match
+            </Button>
+          </>
         )}
-      </div>
+      </Stack>
     </Card>
   );
 }
@@ -176,7 +207,7 @@ export function MatchInfoPanel({
   match,
   mapDetails: _mapDetails,
   mapNotes: _mapNotes,
-  matchGames: _matchGames,
+  matchGames,
   gamesLoading: _gamesLoading,
   formatMapName: _formatMapName,
   parseDbTimestamp,
@@ -220,6 +251,7 @@ export function MatchInfoPanel({
         {showActions && (
           <MatchActionsCard
             match={match}
+            matchGames={matchGames}
             isHistory={isHistory}
             onAssignPlayers={onAssignPlayers}
             onDelete={onDelete}
