@@ -509,7 +509,7 @@ export default function StatsSettingsPage() {
 
               <Switch
                 label="Enable Stats Feature"
-                description="Allow match commanders to upload scorecards for AI analysis"
+                description="Allow AI powered statistics generation"
                 checked={form.values.enabled}
                 onChange={(e) => form.setFieldValue('enabled', e.currentTarget.checked)}
               />
