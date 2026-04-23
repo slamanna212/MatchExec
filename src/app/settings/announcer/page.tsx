@@ -221,8 +221,8 @@ export default function AnnouncerSettingsPage() {
                           style={{
                             padding: 'var(--mantine-spacing-xl)',
                             borderRadius: 'var(--mantine-radius-md)',
-                            border: `${selected ? 2 : 1}px solid ${selected ? VOICE_BORDER[color] : 'var(--mantine-color-dark-4)'}`,
-                            backgroundColor: selected ? VOICE_BG[color] : 'var(--mantine-color-dark-6)',
+                            border: `${selected ? 2 : 1}px solid ${selected ? VOICE_BORDER[color] : 'var(--mantine-color-default-border)'}`,
+                            backgroundColor: selected ? VOICE_BG[color] : 'var(--mantine-color-default)',
                             boxShadow: selected ? `0 0 16px ${VOICE_GLOW[color]}` : undefined,
                             cursor: 'pointer',
                             position: 'relative',
