@@ -36,6 +36,24 @@ export async function PUT(
       );
     }
 
+    // Clear the feed event if no unassigned player stats remain across all submissions for this match
+    try {
+      const remaining = await db.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM scorecard_player_stats sps
+         JOIN scorecard_submissions ss ON sps.submission_id = ss.id
+         WHERE ss.match_id = ? AND sps.assignment_status = 'unassigned'`,
+        [matchId]
+      );
+      if ((remaining?.count ?? 0) === 0) {
+        await db.run(
+          `DELETE FROM activity_feed WHERE event_type = 'scorecard_player_matching_required' AND match_id = ?`,
+          [matchId]
+        );
+      }
+    } catch (feedError) {
+      logger.error('Error clearing scorecard player matching feed event:', feedError);
+    }
+
     // Trigger held Discord notification for stats-enabled matches
     try {
       const submissionRow = await db.get<{ match_game_id: string }>(
