@@ -1,6 +1,12 @@
-# 🏆 MatchExec — Your Personal Video Game Tournament Manager
 <p align="center">
   <img src="https://raw.githubusercontent.com/slamanna212/MatchExec/refs/heads/dev/public/logo.svg" height="200" alt="MatchExec Logo" />
+</p>
+
+<h1 align="center">MatchExec</h1>
+<h2 align="center">Your Personal Video Game Tournament Manager</h2>
+
+<p align="center">
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/slamanna212/matchexec?style=flat-square"> <img alt="GitHub License" src="https://img.shields.io/github/license/slamanna212/matchexec?style=flat-square"> <img alt="Discord" src="https://img.shields.io/discord/1411040188053983383?style=flat-square"> <img alt="Codecov" src="https://img.shields.io/codecov/c/gh/slamanna212/matchexec?style=flat-square">
 </p>
 
 ---
