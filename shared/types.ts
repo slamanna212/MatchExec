@@ -421,6 +421,7 @@ export interface ScorecardSubmission {
   ai_raw_response?: string;
   ai_extraction_status: 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
   ai_error_message?: string;
+  ai_processing_log?: string;
   review_status: 'pending' | 'approved' | 'rejected' | 'auto_approved';
   reviewed_at?: string;
   created_at: string;

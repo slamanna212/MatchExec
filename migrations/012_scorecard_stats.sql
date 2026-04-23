@@ -224,3 +224,6 @@ CREATE TABLE IF NOT EXISTS discord_health_alert_queue (
 
 CREATE INDEX IF NOT EXISTS idx_discord_health_alert_queue_status
   ON discord_health_alert_queue(status);
+
+-- Add processing log to track provider-switching events for frontend toast notifications
+ALTER TABLE scorecard_submissions ADD COLUMN ai_processing_log TEXT;

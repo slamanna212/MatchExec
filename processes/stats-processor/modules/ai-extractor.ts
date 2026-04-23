@@ -14,6 +14,15 @@ const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
 export class AIExtractor {
   constructor(private db: unknown) {}
 
+  private async appendLog(submissionId: string, message: string): Promise<void> {
+    await this.db.run(
+      `UPDATE scorecard_submissions
+       SET ai_processing_log = json_insert(COALESCE(ai_processing_log, '[]'), '$[#]', json(?))
+       WHERE id = ?`,
+      [JSON.stringify({ message, ts: new Date().toISOString() }), submissionId]
+    );
+  }
+
   async processSubmission(submissionId: string, queueId: string): Promise<void> {
     try {
       // Mark as processing
@@ -98,6 +107,7 @@ export class AIExtractor {
           if (validationError) {
             lastError = new Error(`Provider ${provider.instanceId} returned unusable data: ${validationError}`);
             logger.warning(`Provider ${provider.instanceId} returned unusable data (${validationError}), trying next provider`);
+            await this.appendLog(submissionId, `Provider ${provider.instanceId}: unusable data (${validationError}), trying next provider`);
             continue;
           }
           const minConfidence = this.getMinPlayerConfidence(candidateResponse);
@@ -106,20 +116,24 @@ export class AIExtractor {
             break;
           } else if (minConfidence >= 0.5) {
             logger.info(`Provider ${provider.instanceId} returned confidence ${minConfidence.toFixed(2)}, trying next provider for better result`);
+            await this.appendLog(submissionId, `Provider ${provider.instanceId}: confidence ${minConfidence.toFixed(2)}, trying next provider for better result`);
             if (!bestFallback || minConfidence > bestFallback.minConfidence) {
               bestFallback = { response: candidateResponse, minConfidence };
             }
           } else {
             lastError = new Error(`Provider ${provider.instanceId} returned low confidence: ${minConfidence.toFixed(2)}`);
             logger.warning(`Provider ${provider.instanceId} returned confidence below 0.5 (${minConfidence.toFixed(2)}), trying next provider`);
+            await this.appendLog(submissionId, `Provider ${provider.instanceId}: confidence below 0.5 (${minConfidence.toFixed(2)}), trying next provider`);
           }
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
           logger.warning(`Provider ${provider.providerId} failed, trying next: ${lastError.message}`);
+          await this.appendLog(submissionId, `Provider ${provider.providerId}: failed (${lastError.message}), trying next`);
         }
       }
       if (!rawResponse && bestFallback) {
         logger.info(`No provider reached 0.8 confidence; using best available result (min confidence: ${bestFallback.minConfidence.toFixed(2)})`);
+        await this.appendLog(submissionId, `No provider reached 0.8 confidence; using best available result (min confidence: ${bestFallback.minConfidence.toFixed(2)})`);
         rawResponse = bestFallback.response;
       }
       if (!rawResponse) throw lastError ?? new Error('No configured providers succeeded');

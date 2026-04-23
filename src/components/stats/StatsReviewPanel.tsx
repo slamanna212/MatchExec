@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Stack, Text, Group, Button, Alert, Loader, Tabs, Badge, SimpleGrid } from '@mantine/core';
 import { IconCheck, IconX, IconRefresh, IconRotate } from '@tabler/icons-react';
-import { showSuccess, showError } from '@/lib/notifications';
+import { showSuccess, showError, showInfo } from '@/lib/notifications';
 import type { ScorecardSubmission, ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';
 import { SubmissionViewer } from './SubmissionViewer';
 import { PlayerStatCard } from './PlayerStatCard';
@@ -24,7 +24,7 @@ interface StatsReviewPanelProps {
   matchGameId?: string;
 }
 
-export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPanelProps) {
+export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPanelProps): React.ReactElement {
   const [submissions, setSubmissions] = useState<SubmissionWithStats[]>([]);
   const [statDefs, setStatDefs] = useState<GameStatDefinition[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -32,6 +32,8 @@ export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPa
   const [activeSubmission, setActiveSubmission] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const shownLogCount = useRef<Record<string, number>>({});
+  const prevStatus = useRef<Record<string, string>>({});
 
   const fetchData = async () => {
     setLoading(true);
@@ -47,6 +49,11 @@ export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPa
       if ((subsRes as SubmissionWithStats[]).length > 0 && !activeSubmission) {
         setActiveSubmission((subsRes as SubmissionWithStats[])[0].id);
       }
+      for (const sub of (subsRes as SubmissionWithStats[])) {
+        if (!prevStatus.current[sub.id]) {
+          prevStatus.current[sub.id] = sub.ai_extraction_status;
+        }
+      }
     } catch {
       showError('Failed to load submission data');
     } finally {
@@ -58,6 +65,46 @@ export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPa
     void fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    if (submissions.some(s => s.ai_extraction_status === 'processing')) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/matches/${matchId}/scorecard${matchGameId ? `?matchGameId=${matchGameId}` : ''}`);
+          const fresh = await res.json() as SubmissionWithStats[];
+
+          for (const sub of fresh) {
+            const log: Array<{ message: string; ts: string }> = sub.ai_processing_log
+              ? JSON.parse(sub.ai_processing_log) as Array<{ message: string; ts: string }>
+              : [];
+            const seen = shownLogCount.current[sub.id] ?? 0;
+            for (let i = seen; i < log.length; i++) {
+              showInfo(log[i].message, 'AI Processing');
+            }
+            shownLogCount.current[sub.id] = log.length;
+
+            const prev = prevStatus.current[sub.id];
+            if (prev === 'processing' && sub.ai_extraction_status === 'completed') {
+              showSuccess('AI extraction completed!');
+            }
+            if (prev === 'processing' && sub.ai_extraction_status === 'failed') {
+              showError(sub.ai_error_message || 'AI extraction failed', 'AI Processing');
+            }
+            prevStatus.current[sub.id] = sub.ai_extraction_status;
+          }
+
+          setSubmissions(fresh);
+        } catch {
+          // Silent — don't toast on poll errors
+        }
+      }, 3000);
+    }
+
+    return () => { if (interval) clearInterval(interval); };
+   
+  }, [submissions, matchId, matchGameId]);
 
   const handleAssign = async (submissionId: string, playerStatId: string, participantId: string | null) => {
     try {
