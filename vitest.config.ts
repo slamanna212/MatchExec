@@ -25,10 +25,12 @@ export default defineConfig({
       exclude: ['**/*.test.ts', '**/*.d.ts', '**/types.ts'],
     },
     setupFiles: ['./tests/vitest-mocks.ts', './tests/setup.ts'],
-    testTimeout: 30000,      // 30 seconds for individual tests
-    hookTimeout: 30000,      // 30 seconds for beforeEach/afterEach hooks (database setup)
+    testTimeout: 30000,
+    hookTimeout: 60000,      // 60 seconds — CI machines can be slow with many parallel DB setups
     // Pool configuration for better test isolation
     pool: 'forks',
+    // Limit parallelism in CI to avoid I/O contention from 70+ concurrent SQLite setups
+    maxWorkers: process.env.CI ? 8 : undefined,
     // File parallelism to prevent database conflicts
     fileParallelism: true,
     isolate: true,
