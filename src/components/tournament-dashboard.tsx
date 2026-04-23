@@ -560,6 +560,7 @@ export function TournamentDashboard() {
         icon={IconTrophy}
         title="Tournaments"
         subtitle="Manage and advance your active tournaments"
+        docLink="https://docs.matchexec.com/docs/tournaments/tournament-lifecycle/"
         action={
           <Group gap="sm" wrap="nowrap">
             {tournaments.length > 0 && (

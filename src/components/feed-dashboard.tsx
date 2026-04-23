@@ -315,6 +315,7 @@ export function FeedDashboard() {
             icon={IconActivity}
             title="Activity Feed"
             subtitle="Real-time events from every part of MatchExec"
+            docLink="https://docs.matchexec.com/docs/pages/activity-feed/"
             action={
               <Group gap="sm" align="center" wrap="nowrap">
                 <IconCircleFilled size={8} color="var(--mantine-color-green-5)" />

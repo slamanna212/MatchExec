@@ -1,0 +1,12 @@
+.docLink {
+  opacity: 0.6;
+  transition: opacity 180ms ease, color 180ms ease, transform 180ms ease;
+  color: var(--mantine-color-dimmed);
+}
+
+.docLink:hover {
+  opacity: 1;
+  color: var(--mantine-color-violet-5);
+  background-color: var(--mantine-color-violet-light);
+  transform: scale(1.15);
+}

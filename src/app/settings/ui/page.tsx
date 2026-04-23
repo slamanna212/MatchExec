@@ -86,6 +86,7 @@ export default function UISettingsPage() {
             title="UI Settings"
             subtitle="Configure user interface behavior and appearance"
             breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/ui-settings/"
           />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>

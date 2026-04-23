@@ -135,6 +135,7 @@ export default function DiscordSettingsPage() {
             title="Discord Settings"
             subtitle="Configure Discord bot connection and permissions"
             breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/discord-settings/"
           />
 
           {/* Bot Credentials */}

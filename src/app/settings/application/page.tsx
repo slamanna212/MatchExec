@@ -155,6 +155,7 @@ export default function ApplicationSettingsPage() {
             title="Application Settings"
             subtitle="Configure general application behavior and timing"
             breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/application-settings/"
           />
 
           <Card shadow="sm" padding="lg" radius="md" withBorder>

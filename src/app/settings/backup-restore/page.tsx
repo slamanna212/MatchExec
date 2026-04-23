@@ -158,6 +158,7 @@ export default function BackupRestorePage() {
           title="Backup & Restore"
           subtitle="Export or import the entire database. All matches, tournaments, settings, and configuration are included."
           breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+          docLink="https://docs.matchexec.com/docs/settings/backup-and-restore/"
         />
 
         {/* Backup */}

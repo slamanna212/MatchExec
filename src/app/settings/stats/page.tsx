@@ -498,6 +498,7 @@ export default function StatsSettingsPage() {
             title="Stats Settings"
             subtitle="Configure AI-powered scorecard analysis and stat tracking"
             breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/stats-settings/"
           />
 
           {/* General Settings */}

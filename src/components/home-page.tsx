@@ -297,7 +297,7 @@ export function HomePage() {
   return (
     <PageLayout>
       <Stack gap="lg">
-        <PageHeader icon={IconLayoutDashboard} title="Home" subtitle="Active matches, tournaments, and overall stats" />
+        <PageHeader icon={IconLayoutDashboard} title="Home" subtitle="Active matches, tournaments, and overall stats" docLink="https://docs.matchexec.com/docs/getting-started/at-a-glance/#homepage" />
         {/* Mission Control Card */}
         <Card
           shadow={colorScheme === 'light' ? 'lg' : 'sm'}

@@ -88,6 +88,7 @@ export default function SchedulerSettingsPage() {
           title="Scheduler Settings"
           subtitle="Configure automated tasks and their timing"
           breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+          docLink="https://docs.matchexec.com/docs/settings/scheduler-settings/"
         />
 
         {loading ? (

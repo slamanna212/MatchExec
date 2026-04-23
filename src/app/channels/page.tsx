@@ -203,6 +203,7 @@ export default function ChannelsPage() {
           icon={IconHash}
           title="Channels"
           subtitle="Manage Discord channels for announcements and notifications"
+          docLink="https://docs.matchexec.com/docs/discord/embeds/"
           action={
             <Group>
               <Button

@@ -572,6 +572,7 @@ export function MatchDashboard() { // NOSONAR typescript:S3776
         icon={IconSwords}
         title="Matches"
         subtitle="Manage and advance your active matches"
+        docLink="https://docs.matchexec.com/docs/matches/match-lifecycle/"
         action={
           <Group gap="sm" wrap="nowrap">
             {matches.length > 0 && (

@@ -333,6 +333,7 @@ export function CreateMatchPage() {
           icon={IconSwords}
           title="Create Match"
           breadcrumbs={[{ title: 'Matches', href: '/matches' }]}
+          docLink="https://docs.matchexec.com/docs/matches/creating-matches/"
           action={
             <ActionIcon variant="subtle" size="md" onClick={handleBack} aria-label="Go back">
               <IconArrowLeft />

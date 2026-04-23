@@ -1,6 +1,8 @@
-import { Group, ThemeIcon, Title, Text, Breadcrumbs, Anchor } from '@mantine/core';
+import { Group, ThemeIcon, Title, Text, Breadcrumbs, Anchor, ActionIcon, Tooltip } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 import Link from 'next/link';
 import type React from 'react';
+import classes from './PageHeader.module.css';
 
 export interface BreadcrumbItem {
   title: string;
@@ -15,9 +17,38 @@ interface PageHeaderProps {
   action?: React.ReactNode;
   /** Navigation trail shown above the title. Intermediate items link; last item is plain text. */
   breadcrumbs?: BreadcrumbItem[];
+  /** Link to the documentation page for this section */
+  docLink?: string;
 }
 
-export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs }: PageHeaderProps) {
+function DocLink({ href }: { href: string }) {
+  return (
+    <Tooltip
+      label="View documentation"
+      position="right"
+      withArrow
+      openDelay={300}
+      arrowSize={6}
+      styles={{ tooltip: { fontSize: 'var(--mantine-font-size-xs)', padding: '4px 10px' } }}
+    >
+      <ActionIcon
+        component="a"
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        variant="subtle"
+        size="sm"
+        radius="xl"
+        aria-label="View documentation"
+        className={classes.docLink}
+      >
+        <IconInfoCircle size={15} stroke={1.75} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
+export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, docLink }: PageHeaderProps) {
   const parentCrumb = breadcrumbs?.[0];
 
   return (
@@ -60,7 +91,10 @@ export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs }:
             <Icon size={24} />
           </ThemeIcon>
           <div>
-            <Title order={2} size="h3">{title}</Title>
+            <Group gap={6} align="center" wrap="nowrap">
+              <Title order={2} size="h3">{title}</Title>
+              {docLink && <DocLink href={docLink} />}
+            </Group>
             {subtitle && (
               <Text size="sm" c="dimmed" mt={2}>{subtitle}</Text>
             )}

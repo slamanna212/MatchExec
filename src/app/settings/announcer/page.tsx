@@ -151,6 +151,7 @@ export default function AnnouncerSettingsPage() {
             title="Announcer Settings"
             subtitle="Configure voice announcements for matches"
             breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/announcer-settings/"
           />
 
           {/* Card 1: Voice Control toggle */}

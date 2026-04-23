@@ -216,6 +216,7 @@ export function CreateTournamentPage() {
           icon={IconTrophy}
           title="Create Tournament"
           breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }]}
+          docLink="https://docs.matchexec.com/docs/tournaments/creating-tournaments/"
           action={
             <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
               Back
