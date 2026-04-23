@@ -1,0 +1,16 @@
+[
+  {
+    "id": "vsrace",
+    "name": "VS Race",
+    "description": "Custom races with adjustable settings. Players compete for the best finishing position across one or more courses.",
+    "maxTeams": 1,
+    "scoringType": "Position"
+  },
+  {
+    "id": "grandprix",
+    "name": "Grand Prix",
+    "description": "Championship racing across a full cup of 4 courses. Points are awarded based on finishing position each race, with the highest total winning the cup.",
+    "maxTeams": 1,
+    "scoringType": "Position"
+  }
+]

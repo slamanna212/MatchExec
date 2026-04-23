@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface TournamentWithDetails extends Tournament {
   game_name?: string;
@@ -17,8 +17,11 @@ export async function GET(
   { params }: { params: Promise<{ tournamentId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { tournamentId } = await params;
+    if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
     
     // Fetch tournament with game info
     const tournament = await db.get<Tournament & { 
@@ -33,12 +36,9 @@ export async function GET(
     `, [tournamentId]);
     
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
-    
+
     // Fetch teams and their members
     const teams = await db.all<TournamentTeam & {
       member_id?: string;
@@ -115,13 +115,10 @@ export async function GET(
       participant_count: participantCountRow?.count ?? 0
     };
     
-    return NextResponse.json(tournamentWithDetails);
+    return apiOk(tournamentWithDetails);
   } catch (error) {
     logger.error('Error fetching tournament:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournament' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournament');
   }
 }
 
@@ -130,8 +127,11 @@ export async function DELETE(
   { params }: { params: Promise<{ tournamentId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { tournamentId } = await params;
+    if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
     
     // Check if tournament exists and get event image for cleanup
     const existingTournament = await db.get<Tournament & { event_image_url?: string }>(
@@ -140,24 +140,18 @@ export async function DELETE(
     );
 
     if (!existingTournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
-    
+
     // Check if tournament has active matches
     const activeMatches = await db.get<{ count: number }>(
-      `SELECT COUNT(*) as count FROM matches 
+      `SELECT COUNT(*) as count FROM matches
        WHERE tournament_id = ? AND status NOT IN ('complete', 'cancelled')`,
       [tournamentId]
     );
-    
+
     if (activeMatches && activeMatches.count > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete tournament with active matches' },
-        { status: 400 }
-      );
+      return apiError('Cannot delete tournament with active matches', 400);
     }
 
     // Queue Discord deletions for all tournament matches before deleting the tournament
@@ -170,7 +164,7 @@ export async function DELETE(
         logger.debug(`🗑️ Queueing Discord deletions for ${tournamentMatches.length} tournament matches`);
 
         for (const match of tournamentMatches) {
-          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
           await db.run(`
             INSERT INTO discord_deletion_queue (id, match_id, status)
             VALUES (?, ?, 'pending')
@@ -185,7 +179,7 @@ export async function DELETE(
 
     // Queue Discord message deletion for the tournament itself
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')
@@ -215,12 +209,9 @@ export async function DELETE(
     
     logger.debug(`✅ Tournament deleted: ${tournamentId}`);
     
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error deleting tournament:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete tournament' },
-      { status: 500 }
-    );
+    return apiError('Failed to delete tournament');
   }
 }

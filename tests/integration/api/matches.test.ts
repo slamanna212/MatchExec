@@ -3,7 +3,7 @@ import { createMockRequest, parseResponse, createRouteParams } from '../../utils
 import { seedBasicTestData } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 import { GET, POST } from '@/app/api/matches/route';
-import { GET as getMatch, DELETE as deleteMatch } from '@/app/api/matches/[matchId]/route';
+import { GET as getMatch, PUT as putMatch, DELETE as deleteMatch } from '@/app/api/matches/[matchId]/route';
 
 describe('Matches API', () => {
   let game: any;
@@ -152,6 +152,126 @@ describe('Matches API', () => {
       const { status } = await parseResponse(response);
 
       expect(status).toBe(404);
+    });
+  });
+
+  describe('PUT /api/matches/[matchId]', () => {
+    it('should update match fields successfully', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-put-1', 'Original Name', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'created', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-put-1', {
+        name: 'Updated Name',
+        rounds: 5,
+        startDate: new Date().toISOString(),
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-put-1' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.name).toBe('Updated Name');
+    });
+
+    it('should return 404 for non-existent match', async () => {
+      const request = createMockRequest('PUT', '/api/matches/nonexistent', {
+        name: 'Test',
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'nonexistent' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(404);
+    });
+
+    it('should return 403 for match in battle status', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-battle', 'Battle Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'battle', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-battle', {
+        name: 'Try Update',
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-battle' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(403);
+    });
+
+    it('should return 403 for completed match', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-complete', 'Complete Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'complete', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-complete', {
+        name: 'Try Update',
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-complete' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(403);
+    });
+
+    it('should return 400 when name is empty', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-empty-name', 'Valid Name', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'created', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-empty-name', {
+        name: '',
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-empty-name' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should return 400 when rounds is out of range', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-bad-rounds', 'Valid Name', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'created', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-bad-rounds', {
+        name: 'Valid Name',
+        rounds: 99,
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-bad-rounds' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should accept maps array and persist as JSON', async () => {
+      const db = getTestDb();
+      await db.run(
+        `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+         VALUES ('match-maps', 'Maps Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'created', 10, 'casual')`,
+        [game.id]
+      );
+
+      const request = createMockRequest('PUT', '/api/matches/match-maps', {
+        name: 'Maps Match',
+        maps: ['map1', 'map2'],
+        startDate: new Date().toISOString(),
+      });
+      const response = await putMatch(request, createRouteParams({ matchId: 'match-maps' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(200);
     });
   });
 

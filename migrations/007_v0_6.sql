@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS discord_bot_requests_new (
   type TEXT NOT NULL,
   data TEXT,
   result TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')), -- NOSONAR: status literals intentionally repeated across queue tables
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS discord_voice_announcement_queue_new (
   blue_team_voice_channel TEXT,
   red_team_voice_channel TEXT,
   first_team TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')), -- NOSONAR: status literals intentionally repeated across queue tables
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,
@@ -131,7 +131,7 @@ ALTER TABLE discord_voice_announcement_queue_new RENAME TO discord_voice_announc
 
 -- Fix Counter-Strike 2 game ID mismatch
 -- Change cs2 to counterstrike2 to match directory structure
-UPDATE games SET id = 'counterstrike2' WHERE id = 'cs2';
+UPDATE games SET id = 'counterstrike2' WHERE id = 'cs2'; -- NOSONAR: 'counterstrike2' repeated intentionally across related tables
 UPDATE matches SET game_id = 'counterstrike2' WHERE game_id = 'cs2';
 UPDATE game_modes SET game_id = 'counterstrike2' WHERE game_id = 'cs2';
 UPDATE game_maps SET game_id = 'counterstrike2' WHERE game_id = 'cs2';

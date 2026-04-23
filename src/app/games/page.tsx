@@ -72,14 +72,6 @@ function LazyMapCard({ map, gameColor, isEnabled, onToggle, supportsAllModes }: 
         className={styles.mapCard}
         style={{ backgroundImage }}
       >
-        <button
-          className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
-          style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
-          onClick={(e) => { e.stopPropagation(); onToggle(map.name); }}
-          title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
-        >
-          <IconTrophy size={22} />
-        </button>
         <div className={styles.mapCardOverlay}>
           <div className={styles.mapCardBottom}>
             <div>
@@ -88,19 +80,29 @@ function LazyMapCard({ map, gameColor, isEnabled, onToggle, supportsAllModes }: 
                 <div className={styles.mapCardLocation}>{map.location}</div>
               )}
             </div>
-            {!supportsAllModes && mapModes.length > 0 && (
-              <div className={styles.mapCardModes}>
-                {mapModes.map((mode, i) => (
-                  <span
-                    key={i}
-                    className={styles.mapCardModeBadge}
-                    style={{ backgroundColor: `${gameColor}cc` }}
-                  >
-                    {mode}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className={styles.mapCardBottomRight}>
+              {!supportsAllModes && mapModes.length > 0 && (
+                <div className={styles.mapCardModes}>
+                  {mapModes.map((mode, i) => (
+                    <span
+                      key={i}
+                      className={styles.mapCardModeBadge}
+                      style={{ backgroundColor: `${gameColor}cc` }}
+                    >
+                      {mode}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
+                style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
+                onClick={(e) => { e.stopPropagation(); onToggle(map.name); }}
+                title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
+              >
+                <IconTrophy size={22} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -178,6 +180,14 @@ export default function GamesPage() {
     fetchGames();
   }, []);
 
+  const applyMaps = useCallback((mapsData: GameMap[]) => {
+    setMaps(mapsData);
+    const initial: Record<string, boolean> = {};
+    mapsData.forEach(m => { initial[m.name] = m.tournament_enabled !== 0; });
+    setTournamentEnabled(initial);
+    setSavedTournamentEnabled(initial);
+  }, []);
+
   const handleSelectGame = useCallback(async (game: Game) => {
     if (selectedGame?.id === game.id) return;
     setSelectedGame(game);
@@ -186,26 +196,16 @@ export default function GamesPage() {
     setTournamentEnabled({});
     setSavedTournamentEnabled({});
 
-    // Fetch maps
     if (mapCache.current[game.id]) {
-      const cached = mapCache.current[game.id];
-      setMaps(cached);
-      const initial: Record<string, boolean> = {};
-      cached.forEach(m => { initial[m.name] = m.tournament_enabled !== 0; });
-      setTournamentEnabled(initial);
-      setSavedTournamentEnabled(initial);
+      applyMaps(mapCache.current[game.id]);
     } else {
       setMapsLoading(true);
       try {
         const response = await fetch(`/api/games/${game.id}/maps`);
         if (response.ok) {
-          const mapsData = await response.json();
+          const mapsData: GameMap[] = await response.json();
           mapCache.current[game.id] = mapsData;
-          setMaps(mapsData);
-          const initial: Record<string, boolean> = {};
-          mapsData.forEach((m: GameMap) => { initial[m.name] = m.tournament_enabled !== 0; });
-          setTournamentEnabled(initial);
-          setSavedTournamentEnabled(initial);
+          applyMaps(mapsData);
         }
       } catch (error) {
         logger.error('Error fetching maps:', error);
@@ -214,7 +214,6 @@ export default function GamesPage() {
       }
     }
 
-    // Fetch modes
     if (modeCache.current[game.id]) {
       setModes(modeCache.current[game.id]);
     } else {
@@ -229,7 +228,7 @@ export default function GamesPage() {
         logger.error('Error fetching modes:', error);
       }
     }
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, applyMaps]);
 
   const toggleMode = useCallback((modeName: string) => {
     setSelectedMode(prev => prev === modeName ? null : modeName);

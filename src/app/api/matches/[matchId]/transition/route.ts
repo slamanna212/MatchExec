@@ -1,10 +1,11 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { handleStatusTransition } from '@/lib/transition-handlers';
+import { areAllGamesCompleted } from '@/lib/scoring-functions';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   request: NextRequest,
@@ -12,14 +13,14 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
     const { newStatus } = await request.json();
 
     // Validate new status
     if (!newStatus || !MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS]) {
-      return NextResponse.json(
-        { error: 'Invalid status provided' },
-        { status: 400 }
-      );
+      return apiError('Invalid status provided', 400);
     }
 
     const db = await getDbInstance();
@@ -28,10 +29,7 @@ export async function POST(
     const currentMatch = await db.get<MatchDbRow>('SELECT * FROM matches WHERE id = ?', [matchId]);
 
     if (!currentMatch) {
-      return NextResponse.json(
-        { error: 'Match not found' },
-        { status: 404 }
-      );
+      return apiError('Match not found', 404);
     }
 
     // Validate status transition (basic flow validation)
@@ -39,10 +37,14 @@ export async function POST(
     const newStep = MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS];
 
     if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
-      return NextResponse.json(
-        { error: 'Cannot move backwards in match flow' },
-        { status: 400 }
-      );
+      return apiError('Cannot move backwards in match flow', 400);
+    }
+
+    if (newStatus === 'complete') {
+      const allScored = await areAllGamesCompleted(db, matchId);
+      if (!allScored) {
+        return apiError('Cannot complete match: not all maps have been scored', 400);
+      }
     }
 
     // Update match status in database
@@ -58,10 +60,16 @@ export async function POST(
     await handleStatusTransition(matchId, newStatus);
 
     // Get updated match data with game information
-    const updatedMatch = await db.get<MatchDbRow>(`
-      SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
+    const updatedMatch = await db.get<MatchDbRow & {
+      map_codes_supported?: number;
+      tournament_allow_match_editing?: number;
+    }>(`
+      SELECT m.*,
+        g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported,
+        t.allow_match_editing as tournament_allow_match_editing
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
+      LEFT JOIN tournaments t ON m.tournament_id = t.id
       WHERE m.id = ?
     `, [matchId]);
 
@@ -73,16 +81,16 @@ export async function POST(
 
     const parsedMatch = {
       ...(updatedMatch || {}),
-      maps
+      maps,
+      map_codes: updatedMatch?.map_codes ? JSON.parse(updatedMatch.map_codes as string) : {},
+      map_codes_supported: Boolean(updatedMatch?.map_codes_supported),
+      tournament_allow_match_editing: updatedMatch?.tournament_allow_match_editing !== 0
     };
 
-    return NextResponse.json(parsedMatch);
+    return apiOk(parsedMatch);
 
   } catch (error) {
     logger.error('Error transitioning match status:', error);
-    return NextResponse.json(
-      { error: 'Failed to transition match status' },
-      { status: 500 }
-    );
+    return apiError('Failed to transition match status');
   }
 }

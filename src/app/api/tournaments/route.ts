@@ -5,6 +5,8 @@ import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+import { logFeedEvent } from '@/lib/feed-helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 
@@ -22,6 +24,7 @@ interface TournamentBody {
   eventImageUrl?: string;
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
+  statsEnabled?: boolean;
 }
 
 function validateTournamentBody(body: Partial<TournamentBody>): string | null {
@@ -73,7 +76,8 @@ function buildTournamentInsertValues(body: TournamentBody, tournamentId: string,
     startTimeOnly,
     body.eventImageUrl || null,
     body.allowPlayerTeamSelection ? 1 : 0,
-    body.allowMatchEditing === false ? 0 : 1
+    body.allowMatchEditing === false ? 0 : 1,
+    body.statsEnabled ? 1 : 0
   ];
 }
 
@@ -151,10 +155,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(tournaments, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching tournaments:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournaments' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournaments');
   }
 }
 
@@ -164,17 +165,17 @@ export async function POST(request: NextRequest) {
 
     const validationError = validateTournamentBody(body);
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+      return apiError(validationError, 400);
     }
 
     const db = await getDbInstance();
 
     const gameModeError = await validateGameModeId(db, body.gameId, body.gameModeId);
     if (gameModeError) {
-      return NextResponse.json({ error: gameModeError }, { status: 400 });
+      return apiError(gameModeError, 400);
     }
 
-    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     const startDateTime = body.startDate ? new Date(body.startDate).toISOString() : null;
     const startTimeOnly = body.startTime ? new Date(body.startTime).toISOString() : null;
 
@@ -182,8 +183,8 @@ export async function POST(request: NextRequest) {
       INSERT INTO tournaments (
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
-        allow_player_team_selection, allow_match_editing
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allow_player_team_selection, allow_match_editing, stats_enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, buildTournamentInsertValues(body, tournamentId, startDateTime, startTimeOnly));
     
     const tournament = await db.get<TournamentDbRow>(`
@@ -200,13 +201,19 @@ export async function POST(request: NextRequest) {
     `, [tournamentId]);
     
     logger.debug(`✅ Tournament created in "created" status: ${body.name}`);
-    
-    return NextResponse.json(tournament, { status: 201 });
+
+    await logFeedEvent({
+      eventType: 'tournament_created',
+      priority: 3,
+      title: 'Tournament Created',
+      description: `"${body.name}" is ready for setup`,
+      tournamentId,
+      metadata: { format: body.format },
+    });
+
+    return apiOk(tournament, 201);
   } catch (error) {
     logger.error('Error creating tournament:', error);
-    return NextResponse.json(
-      { error: 'Failed to create tournament' },
-      { status: 500 }
-    );
+    return apiError('Failed to create tournament');
   }
 }

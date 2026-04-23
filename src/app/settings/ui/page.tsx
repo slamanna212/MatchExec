@@ -1,11 +1,14 @@
 'use client'
 
-import { Card, Text, Stack, Button, Group, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Stack, Skeleton, NumberInput } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconSettings } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;
@@ -26,11 +29,9 @@ export default function UISettingsPage() {
       setLoading(true);
       try {
         const response = await fetch('/api/settings');
-        
+
         if (response.ok) {
           const data = await response.json();
-          
-          // Set UI settings
           form.setValues(data.ui);
         }
       } catch (error) {
@@ -77,30 +78,26 @@ export default function UISettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <Stack gap="lg">
-        <div>
-          <Group>
-            <IconSettings size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>UI Settings</Text>
-              <Text size="sm" c="dimmed">Configure user interface behavior and appearance</Text>
-            </div>
-          </Group>
-        </div>
+    <PageLayout narrow>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack gap="lg">
+          <PageHeader
+            icon={IconSettings}
+            title="UI Settings"
+            subtitle="Configure user interface behavior and appearance"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/ui-settings/"
+          />
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {loading ? (
-            <Stack gap="md">
-              <Stack gap={4}>
-                <Skeleton height={14} width={120} />
-                <Skeleton height={36} />
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            {loading ? (
+              <Stack gap="md">
+                <Stack gap={4}>
+                  <Skeleton height={14} width={120} />
+                  <Skeleton height={36} />
+                </Stack>
               </Stack>
-              <Group justify="flex-end"><Skeleton height={36} width={120} /></Group>
-            </Stack>
-          ) : (
-          <form onSubmit={form.onSubmit(handleSubmit)}>
-            <Stack gap="md">
+            ) : (
               <NumberInput
                 label="Auto Refresh Interval"
                 placeholder="30"
@@ -110,17 +107,12 @@ export default function UISettingsPage() {
                 {...form.getInputProps('auto_refresh_interval_seconds')}
                 disabled={loading}
               />
+            )}
+          </Card>
 
-              <Group justify="flex-end" mt="lg">
-                <Button type="submit" loading={saving} disabled={loading}>
-                  Save UI Settings
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-          )}
-        </Card>
-      </Stack>
-    </div>
+          <SettingsSaveButton loading={saving} disabled={loading} />
+        </Stack>
+      </form>
+    </PageLayout>
   );
 }

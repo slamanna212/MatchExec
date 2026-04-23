@@ -77,7 +77,7 @@ export class Utils {
   }
 
   generateId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
   }
 
   formatUptime(uptimeSeconds: number): string {

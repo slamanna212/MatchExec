@@ -11,17 +11,18 @@ import {
   Button,
   Group,
   Text,
-  Title,
-  Breadcrumbs,
-  Anchor,
   Card,
   Loader,
   Center,
-  Modal
+  Modal,
+  Checkbox,
+  Divider
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { logger } from '@/lib/logger/client';
 import { showError, notificationHelper } from '@/lib/notifications';
+import { IconPencil } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { GameMode, GameMapWithMode, SelectedMapCard } from '@/components/create-match/useMatchForm';
 import { MapSelector } from '@/components/create-match/MapSelector';
 import { SelectedMapsList } from '@/components/create-match/SelectedMapsList';
@@ -39,6 +40,8 @@ interface MatchData {
   maps?: string[];
   status: string;
   tournament_allow_match_editing?: boolean;
+  stats_enabled?: number;
+  player_notifications?: number;
 }
 
 interface MapDetail {
@@ -75,7 +78,7 @@ function resolveMapMode(
   if (modeName || modes.length === 0) return { modeId, modeName };
   const modeCandidate = modes.find(m => mapId.includes(m.id));
   if (modeCandidate) return { modeId: modeCandidate.id, modeName: modeCandidate.name };
-  if (!mapId.match(/[^-]+-([^-]+)/)) {
+  if (!mapId.match(/^[^-]+-[^-]+/)) {
     return { modeId: modes[0]?.id || '', modeName: modes[0]?.name || '' };
   }
   return { modeId: modes[0].id, modeName: modes[0].name };
@@ -99,6 +102,10 @@ export default function EditMatchPage({
   const [time, setTime] = useState('');
   const [rules, setRules] = useState<string>('casual');
   const [livestreamLink, setLivestreamLink] = useState('');
+  const [statsEnabled, setStatsEnabled] = useState(false);
+  const [playerNotifications, setPlayerNotifications] = useState(true);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Map state
@@ -116,9 +123,11 @@ export default function EditMatchPage({
 
   const loadGameData = useCallback(async (gameId: string) => {
     try {
-      const [gameRes, modesRes] = await Promise.all([
+      const [gameRes, modesRes, statDefsRes, statsSettingsRes] = await Promise.all([
         fetch(`/api/games/${gameId}`),
-        fetch(`/api/games/${gameId}/modes`)
+        fetch(`/api/games/${gameId}/modes`),
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
       ]);
 
       let supportsAllModes = false;
@@ -127,6 +136,11 @@ export default function EditMatchPage({
         supportsAllModes = gameInfo.supportsAllModes || false;
       }
       setCurrentGameSupportsAllModes(supportsAllModes);
+
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
 
       if (modesRes.ok) {
         const modes = await modesRes.json();
@@ -207,6 +221,8 @@ export default function EditMatchPage({
         setDescription(data.description || '');
         setRules(data.rules || 'casual');
         setLivestreamLink(data.livestream_link || '');
+        setStatsEnabled(data.stats_enabled === 1);
+        setPlayerNotifications(data.player_notifications !== 0);
 
         if (data.start_date) {
           const d = new Date(`${data.start_date}${data.start_date.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(data.start_date) ? '' : 'Z'}`);
@@ -252,7 +268,7 @@ export default function EditMatchPage({
   };
 
   const handleMapSelect = (map: GameMapWithMode) => {
-    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // NOSONAR: non-security internal ID generation
     setSelectedMaps(prev => [...prev, {
       id: uniqueId,
       name: map.name,
@@ -264,7 +280,7 @@ export default function EditMatchPage({
   };
 
   const handleFlexibleMapSelect = (map: GameMapWithMode, modeId: string) => {
-    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const uniqueId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // NOSONAR: non-security internal ID generation
     const mode = availableModes.find(m => m.id === modeId);
     setSelectedMaps(prev => [...prev, {
       id: uniqueId,
@@ -315,7 +331,9 @@ export default function EditMatchPage({
           rules,
           rounds: selectedMaps.length || null,
           livestreamLink: livestreamLink || null,
-          maps: mapIds
+          maps: mapIds,
+          statsEnabled,
+          playerNotifications
         })
       });
 
@@ -358,14 +376,12 @@ export default function EditMatchPage({
   return (
     <Container size="md" py="xl">
       <Stack gap="lg">
-        <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Edit Match</Text>
-          </Breadcrumbs>
-          <Title order={2}>Edit Match</Title>
-        </div>
+        <PageHeader
+          icon={IconPencil}
+          title="Edit Match"
+          subtitle={match.name}
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+        />
 
         <Card withBorder padding="lg" shadow="sm">
           <Stack gap="md">
@@ -417,6 +433,34 @@ export default function EditMatchPage({
               value={livestreamLink}
               onChange={(e) => setLivestreamLink(e.target.value)}
             />
+
+            <Divider
+              label={
+                <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+                  Options
+                </Text>
+              }
+              labelPosition="left"
+            />
+
+            <Stack gap="sm">
+              <Checkbox
+                label="Player Notifications"
+                description="Send Discord DMs to registered players before match starts"
+                checked={playerNotifications}
+                onChange={(e) => setPlayerNotifications(e.currentTarget.checked)}
+              />
+
+              {hasStatDefs && (
+                <Checkbox
+                  label="Enable Stats Collection"
+                  description="Upload scorecards after each map to extract player stats with AI"
+                  checked={statsEnabled}
+                  onChange={(e) => setStatsEnabled(e.currentTarget.checked)}
+                  disabled={!aiProvidersConfigured}
+                />
+              )}
+            </Stack>
           </Stack>
         </Card>
 

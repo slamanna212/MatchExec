@@ -60,7 +60,7 @@ jobs:
       - name: Run unit tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/unit.junit.xml
       - name: Upload coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/coverage-final.json
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -96,7 +96,7 @@ jobs:
   docker-test:
     name: Docker Integration Test
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
-    needs: [test, integration-test]
+    needs: [test, integration-test, build]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
@@ -144,7 +144,7 @@ jobs:
           docker inspect matchexec-test --format '{{json .State}}' > container-state.json 2>/dev/null || echo '{}' > container-state.json
       - name: Upload logs as artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-test-logs
           path: |

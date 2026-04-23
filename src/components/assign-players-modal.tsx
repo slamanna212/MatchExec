@@ -17,7 +17,7 @@ import {
   ActionIcon,
   Select
 } from '@mantine/core';
-import { IconStar } from '@tabler/icons-react';
+import { IconStar, IconGripVertical } from '@tabler/icons-react';
 
 interface SignupField {
   id: string;
@@ -263,6 +263,7 @@ export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: Assi
       >
       <Group justify="space-between" align="center" mb="xs">
         <Group align="center">
+          {!isDragDisabled && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
           <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled" src={participant.avatar_url || undefined}>
             {index + 1}
           </Avatar>

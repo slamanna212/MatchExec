@@ -1,11 +1,11 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { parseMatchResponse } from '../helpers';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
 
@@ -42,8 +42,11 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { matchId } = await params;
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
     
     // Fetch match with game info including map_codes_supported
     const match = await db.get<MatchDbRow & {
@@ -63,12 +66,9 @@ export async function GET(
     `, [matchId]);
     
     if (!match) {
-      return NextResponse.json(
-        { error: 'Match not found' },
-        { status: 404 }
-      );
+      return apiError('Match not found', 404);
     }
-    
+
     // Parse JSON fields and convert SQLite integers to booleans
     const parsedMatch = {
       ...match,
@@ -79,13 +79,10 @@ export async function GET(
       tournament_allow_match_editing: match.tournament_allow_match_editing !== 0
     };
     
-    return NextResponse.json(parsedMatch);
+    return apiOk(parsedMatch);
   } catch (error) {
     logger.error('Error fetching match:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch match' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch match');
   }
 }
 
@@ -94,8 +91,11 @@ export async function PUT(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { matchId } = await params;
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
 
     const existingMatch = await db.get<MatchDbRow & { tournament_allow_match_editing?: number }>(
       `SELECT m.id, m.status, m.tournament_id, t.allow_match_editing as tournament_allow_match_editing
@@ -105,20 +105,20 @@ export async function PUT(
       [matchId]
     );
     if (!existingMatch) {
-      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+      return apiError('Match not found', 404);
     }
 
     const permError = getMatchEditPermissionError(existingMatch);
     if (permError) {
-      return NextResponse.json({ error: permError.error }, { status: permError.status });
+      return apiError(permError.error, permError.status);
     }
 
     const body = await request.json();
-    const { name, description, startDate, rules, rounds, livestreamLink, maps } = body;
+    const { name, description, startDate, rules, rounds, livestreamLink, maps, statsEnabled, playerNotifications } = body;
 
     const nameError = validateMatchName(name);
     if (nameError) {
-      return NextResponse.json({ error: nameError }, { status: 400 });
+      return apiError(nameError, 400);
     }
 
     for (const check of [
@@ -128,7 +128,7 @@ export async function PUT(
       validateEnum(rules, RULES_VALUES, 'rules'),
       validateNumberRange(rounds, 1, 9, 'rounds'),
     ]) {
-      if (!check.valid) return NextResponse.json({ error: check.error }, { status: 400 });
+      if (!check.valid) return apiError(check.error!, 400);
     }
 
     const startDateTime = startDate ? new Date(startDate).toISOString() : null;
@@ -137,7 +137,9 @@ export async function PUT(
     const updateResult = await db.run(`
       UPDATE matches
       SET name = ?, description = ?, start_date = ?, start_time = ?, rules = ?,
-          rounds = ?, livestream_link = ?, maps = ?, updated_at = CURRENT_TIMESTAMP
+          rounds = ?, livestream_link = ?, maps = ?,
+          stats_enabled = ?, player_notifications = ?,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
       (name as string).trim(),
@@ -148,11 +150,13 @@ export async function PUT(
       rounds || null,
       livestreamLink || null,
       mapsJson,
+      statsEnabled ? 1 : 0,
+      playerNotifications === false ? 0 : 1,
       matchId
     ]);
 
     if (updateResult.changes === 0) {
-      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+      return apiError('Match not found', 404);
     }
 
     // Queue Discord embed update if announcement message exists
@@ -175,16 +179,16 @@ export async function PUT(
     `, [matchId]);
 
     if (!updatedMatch) {
-      return NextResponse.json({ error: 'Failed to retrieve updated match' }, { status: 500 });
+      return apiError('Failed to retrieve updated match');
     }
 
-    return NextResponse.json({
+    return apiOk({
       ...parseMatchResponse(updatedMatch),
       map_codes_supported: Boolean(updatedMatch.map_codes_supported)
     });
   } catch (error) {
     logger.error('Error updating match:', error);
-    return NextResponse.json({ error: 'Failed to update match' }, { status: 500 });
+    return apiError('Failed to update match');
   }
 }
 
@@ -193,8 +197,11 @@ export async function DELETE(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { matchId } = await params;
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
     
     // Check if match exists and get event image for cleanup
     const existingMatch = await db.get<MatchDbRow>(
@@ -203,15 +210,12 @@ export async function DELETE(
     );
     
     if (!existingMatch) {
-      return NextResponse.json(
-        { error: 'Match not found' },
-        { status: 404 }
-      );
+      return apiError('Match not found', 404);
     }
-    
+
     // Queue Discord message deletion before deleting the match
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')
@@ -236,16 +240,24 @@ export async function DELETE(
       }
     }
 
+    // Delete action-required notifications (activity_feed uses ON DELETE SET NULL, not CASCADE,
+    // and SQLite FK constraints are off by default — so we must clean these up manually)
+    try {
+      await db.run(
+        `DELETE FROM activity_feed WHERE event_type IN ('match_scoring_required') AND match_id = ?`,
+        [matchId]
+      );
+    } catch (error) {
+      logger.error('Error deleting action notifications for match:', error);
+    }
+
     // Delete the match (CASCADE will handle related records)
     // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
     await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
     
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error deleting match:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete match' },
-      { status: 500 }
-    );
+    return apiError('Failed to delete match');
   }
 }

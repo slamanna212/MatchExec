@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, Title, Breadcrumbs, Anchor, Button, Stepper } from '@mantine/core';
+import { Container, Stack, Button, Stepper } from '@mantine/core';
+import { PageHeader } from './PageHeader';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconTrophy, IconUsers, IconListCheck } from '@tabler/icons-react';
 import { showError, showWarning, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
@@ -33,6 +34,8 @@ export function CreateTournamentPage() {
   const [games, setGames] = useState<GameWithIcon[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
 
   // Load games on mount
   useEffect(() => {
@@ -70,8 +73,21 @@ export function CreateTournamentPage() {
     }
   };
 
-  const handleGameSelect = (gameId: string) => {
+  const handleGameSelect = async (gameId: string) => {
     updateFormData('gameId', gameId);
+    try {
+      const [statDefsRes, statsSettingsRes] = await Promise.all([
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
+      ]);
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
+    } catch {
+      setHasStatDefs(false);
+      setAiProvidersConfigured(false);
+    }
   };
 
   /**
@@ -116,7 +132,6 @@ export function CreateTournamentPage() {
         const result = await response.json();
         updateFormData('eventImageUrl', result.imageUrl);
         setImagePreview(result.imageUrl);
-        showSuccess('Image uploaded successfully!');
       } else {
         const error = await response.json();
         showError(error.error || 'Failed to upload image');
@@ -197,19 +212,17 @@ export function CreateTournamentPage() {
   return (
     <Container size="lg" py="md">
       <Stack gap="md">
-        {/* Breadcrumbs */}
-        <Breadcrumbs>
-          <Anchor onClick={() => router.push('/tournaments')}>Tournaments</Anchor>
-          <span>Create Tournament</span>
-        </Breadcrumbs>
-
-        {/* Header */}
-        <Group justify="space-between" align="center">
-          <Title order={2}>Create New Tournament</Title>
-          <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
-            Back
-          </Button>
-        </Group>
+        <PageHeader
+          icon={IconTrophy}
+          title="Create Tournament"
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }]}
+          docLink="https://docs.matchexec.com/docs/tournaments/creating-tournaments/"
+          action={
+            <Button variant="outline" leftSection={<IconArrowLeft size="1rem" />} onClick={handleBack}>
+              Back
+            </Button>
+          }
+        />
 
         {/* Step Indicator */}
         <Stepper active={currentStep - 1} size="sm">
@@ -241,6 +254,8 @@ export function CreateTournamentPage() {
             onBack={handleBack}
             onNext={handleNext}
             canProceed={canProceedFromStep(2)}
+            hasStatDefs={hasStatDefs}
+            aiProvidersConfigured={aiProvidersConfigured}
           />
         )}
 

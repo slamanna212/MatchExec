@@ -118,10 +118,10 @@ export function TournamentReviewStep({
             </Group>
           )}
 
-          {formData.date && formData.time && (
+          {formData.dateTime && (
             <Group>
               <Text fw={500}>Start:</Text>
-              <Text>{new Date(`${formData.date}T${formData.time}`).toLocaleString()}</Text>
+              <Text>{new Date(formData.dateTime).toLocaleString()}</Text>
             </Group>
           )}
 
@@ -142,6 +142,13 @@ export function TournamentReviewStep({
             <Text fw={500}>Match Editing:</Text>
             <Badge variant="light" color={formData.allowMatchEditing !== false ? 'green' : 'red'}>
               {formData.allowMatchEditing !== false ? 'Allowed' : 'Disabled'}
+            </Badge>
+          </Group>
+
+          <Group>
+            <Text fw={500}>Stats Collection:</Text>
+            <Badge variant="light" color={formData.statsEnabled ? 'green' : 'gray'}>
+              {formData.statsEnabled ? 'Enabled' : 'Disabled'}
             </Badge>
           </Group>
         </Stack>

@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Group, Image, Stack, Text, Badge } from '@mantine/core';
+import { Card, Image, Stack, Text, Badge, Group } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import responsiveTextClasses from '../responsive-text.module.css';
 import classes from './map-card.module.css';
@@ -35,7 +35,7 @@ export function MapCard({
 }: MapCardProps) {
   return (
     <Card shadow="sm" padding={0} radius="md" withBorder className={classes.card}>
-      <Group wrap="nowrap" align="stretch" gap={0}>
+      <div className={classes.outerGroup}>
         <div className={classes.imageWrapper}>
           <Image
             src={mapDetail?.imageUrl}
@@ -46,7 +46,7 @@ export function MapCard({
             fallbackSrc="data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f1f3f4'/%3e%3c/svg%3e"
           />
         </div>
-        <div className={classes.content}>
+        <div className={`${classes.content}${children ? ` ${classes.contentWithAction}` : ''}`}>
           <Stack gap="xs" justify="center" style={{ height: '100%' }}>
             <div>
               <Text fw={500} lineClamp={1} className={responsiveTextClasses.mapNameResponsive}>
@@ -76,10 +76,14 @@ export function MapCard({
                 </Badge>
               </Group>
             )}
-            {children}
+            {children && (
+              <div className={classes.action}>
+                {children}
+              </div>
+            )}
           </Stack>
         </div>
-      </Group>
+      </div>
     </Card>
   );
 }

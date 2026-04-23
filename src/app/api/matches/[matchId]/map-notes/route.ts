@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import type { MatchGame } from '../../../../../../shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   request: NextRequest,
@@ -13,19 +13,19 @@ export async function POST(
     const { mapId, note } = await request.json();
     
     if (!mapId) {
-      return NextResponse.json({ error: 'Map ID is required' }, { status: 400 });
+      return apiError('Map ID is required', 400);
     }
 
     if (note !== undefined && note !== null && typeof note === 'string' && note.length > 64) {
-      return NextResponse.json({ error: 'note must be 64 characters or fewer' }, { status: 400 });
+      return apiError('note must be 64 characters or fewer', 400);
     }
 
     const db = await getDbInstance();
-    
+
     // Check if the match exists
     const match = await db.get(`SELECT id FROM matches WHERE id = ?`, [matchId]);
     if (!match) {
-      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+      return apiError('Match not found', 404);
     }
 
     // Check if there's already a match_game entry for this map (from scoring system)
@@ -54,11 +54,11 @@ export async function POST(
       `, [gameId, matchId, mapId, note || '']);
     }
 
-    return NextResponse.json({ success: true, note });
-    
+    return apiOk({ success: true, note });
+
   } catch (error) {
     logger.error('Error saving map note:', error);
-    return NextResponse.json({ error: 'Failed to save map note' }, { status: 500 });
+    return apiError('Failed to save map note');
   }
 }
 
@@ -82,10 +82,10 @@ export async function GET(
       notesMap[note.map_id] = note.notes;
     });
 
-    return NextResponse.json({ notes: notesMap });
-    
+    return apiOk({ notes: notesMap });
+
   } catch (error) {
     logger.error('Error fetching map notes:', error);
-    return NextResponse.json({ error: 'Failed to fetch map notes' }, { status: 500 });
+    return apiError('Failed to fetch map notes');
   }
 }

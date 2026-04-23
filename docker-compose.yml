@@ -11,4 +11,6 @@ services:
     volumes:
       - ./app_data:/app/app_data
       - ./uploads:/app/public/uploads
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped

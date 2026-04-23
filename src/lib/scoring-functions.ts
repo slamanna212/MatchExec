@@ -1,6 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
+import { logFeedEvent } from './feed-helpers';
 import type {
   MatchResult,
   MatchFormat,
@@ -89,47 +90,48 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
     // Get match data including maps
     const matchQuery = `SELECT maps FROM matches WHERE id = ?`;
     const matchRow = await db.get<{ maps?: string }>(matchQuery, [matchId]);
-    
+
     if (!matchRow || !matchRow.maps) {
       logger.debug('initializeMatchGames - No maps found for match');
       return;
     }
-    
+
     const maps = JSON.parse(matchRow.maps);
     logger.debug(`initializeMatchGames - Found ${maps.length} maps:`, maps);
-    
+
     // Create a match_games entry for each map
     for (let i = 0; i < maps.length; i++) {
       const mapId = maps[i];
       const gameId = `${matchId}_game_${i + 1}`;
-      
+
       // Check if this game already exists
       const existsQuery = `SELECT id FROM match_games WHERE id = ?`;
       const existingGame = await db.get(existsQuery, [gameId]);
-      
+
       if (!existingGame) {
         // First map should be 'ongoing', rest should be 'pending'
         const status = i === 0 ? 'ongoing' : 'pending';
-        
+
         // Check if there's a temporary note-only entry (Round 0) for this map
         const noteEntry = await db.get(`
-          SELECT notes FROM match_games 
+          SELECT notes FROM match_games
           WHERE match_id = ? AND map_id = ? AND round = 0
           LIMIT 1
         `, [matchId, mapId]) as { notes: string } | undefined;
-        
+
         const existingNote = noteEntry ? noteEntry.notes : '';
-        
+
         const insertQuery = `
           INSERT INTO match_games (
             id, match_id, round, participant1_id, participant2_id,
             map_id, notes, status, created_at, updated_at
           ) VALUES (?, ?, ?, 'team1', 'team2', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `;
-        
+
         await db.run(insertQuery, [gameId, matchId, i + 1, mapId, existingNote, status]);
         logger.debug(`Created match game ${gameId} for map ${mapId} with status ${status} and note: ${existingNote}`);
-        
+
+
         // Clean up the temporary Round 0 entry if it exists
         if (noteEntry) {
           await db.run(`
@@ -147,6 +149,30 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
   } catch (error) {
     logger.error('Error in initializeMatchGames:', error);
     throw error;
+  }
+}
+
+/**
+ * Queue scorecard prompts and winner vote DMs for the first map when a match enters battle.
+ * Called explicitly from handleBattleTransition so it runs after participants are assigned.
+ */
+export async function queueBattleStartDMs(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+    const firstGame = await db.get<{ id: string; map_id: string }>(
+      `SELECT mg.id, mg.map_id FROM match_games mg WHERE mg.match_id = ? AND mg.status = 'ongoing' ORDER BY mg.round ASC LIMIT 1`,
+      [matchId]
+    );
+    if (!firstGame) return;
+
+    const baseMapId = firstGame.map_id.replace(/-\d{10,}-[a-zA-Z0-9]+$/, '');
+    const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [baseMapId]);
+    const mapName = mapData?.name || firstGame.map_id;
+
+    await queueScorecardPrompts(matchId, firstGame.id, mapName);
+    await queueWinnerVote(matchId, firstGame.id, mapName);
+  } catch (err) {
+    logger.error('Error queuing battle start DMs:', err);
   }
 }
 
@@ -341,11 +367,65 @@ export async function saveMatchResult(
       logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
     }
 
-    // Queue Discord score notification
-    await queueScoreNotification(matchGameId, result);
+    // Log map scored feed event
+    try {
+      const gameInfo = await db.get<{ name: string; round: number }>(
+        `SELECT m.name, mg.round FROM match_games mg JOIN matches m ON mg.match_id = m.id WHERE mg.id = ?`,
+        [matchGameId]
+      );
+      await logFeedEvent({
+        eventType: 'map_scored',
+        priority: 3,
+        title: 'Map Scored',
+        description: `Map ${gameInfo?.round ?? ''} of "${gameInfo?.name ?? matchGameId}" completed`,
+        matchId: result.matchId,
+        metadata: { matchGameId, round: gameInfo?.round },
+      });
+    } catch (feedError) {
+      logger.error('Error logging map scored feed event:', feedError);
+    }
+
+    // Queue Discord score notification (held for stats-enabled matches until stats are assigned)
+    const matchSettings = await db.get<{ stats_enabled: number }>(
+      'SELECT stats_enabled FROM matches WHERE id = ?', [result.matchId]
+    );
+    if (matchSettings?.stats_enabled) {
+      logger.debug(`Stats-enabled match — holding Discord map notification for game ${matchGameId}`);
+    } else {
+      await queueScoreNotification(matchGameId, result);
+      await db.run('UPDATE match_games SET discord_notified = 1 WHERE id = ?', [matchGameId]);
+    }
+
+    // Remove the scored map's scoring notification
+    try {
+      await db.run(
+        `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+        [result.matchId]
+      );
+    } catch (feedError) {
+      logger.error('Error removing map scoring notification:', feedError);
+    }
 
     // Set the next pending map to 'ongoing' if it exists
-    const hasNextMap = await setNextMapToOngoing(result.matchId);
+    const nextMap = await setNextMapToOngoing(result.matchId);
+    const hasNextMap = nextMap !== null;
+
+    // If there's a next map, create a new scoring notification for it
+    if (nextMap) {
+      try {
+        const matchRow = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [result.matchId]);
+        await logFeedEvent({
+          eventType: 'match_scoring_required',
+          priority: 3,
+          title: 'Map Scoring Required',
+          description: `"${matchRow?.name ?? result.matchId}" — Map ${nextMap.round}: ${nextMap.mapName ?? 'Unknown Map'}`,
+          matchId: result.matchId,
+          metadata: { matchGameId: nextMap.id, round: nextMap.round, mapName: nextMap.mapName },
+        });
+      } catch (feedError) {
+        logger.error('Error creating next map scoring notification:', feedError);
+      }
+    }
 
     // Update match status to complete if all games are done
     const isMatchComplete = await updateMatchStatusIfComplete(matchGameId);
@@ -362,7 +442,7 @@ export async function saveMatchResult(
 /**
  * Get match result for a game
  */
-export async function getMatchResult(matchGameId: string): Promise<MatchResult | null> {
+export async function getMatchResult(matchGameId: string): Promise<MatchResult | null> { // NOSONAR typescript:S3776
   const db = await getDbInstance();
   
   try {
@@ -411,63 +491,79 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
 /**
  * Set the next pending map to ongoing status
  */
-async function setNextMapToOngoing(matchId: string): Promise<boolean> {
+async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round: number; mapName: string | null } | null> {
   const db = await getDbInstance();
-  
+
   try {
     // Find the first pending map and set it to ongoing
     const nextMapQuery = `
-      SELECT mg.id, mg.map_id, gm.name as map_name 
+      SELECT mg.id, mg.round, mg.map_id, gm.name as map_name
       FROM match_games mg
       LEFT JOIN game_maps gm ON mg.map_id = gm.id
-      WHERE mg.match_id = ? AND mg.status = 'pending' 
-      ORDER BY mg.round ASC 
+      WHERE mg.match_id = ? AND mg.status = 'pending'
+      ORDER BY mg.round ASC
       LIMIT 1
     `;
-    
-    const nextMap = await db.get<{ id: string; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
-    
+
+    const nextMap = await db.get<{ id: string; round: number; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
+
     if (nextMap) {
       const updateQuery = `
-        UPDATE match_games 
-        SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP 
+        UPDATE match_games
+        SET status = 'ongoing', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
-      
+
       await db.run(updateQuery, [nextMap.id]);
       logger.debug(`Set next map ${nextMap.id} to ongoing status`);
 
+      // Resolve map name — the JOIN may miss if map_id has a custom suffix
+      let mapName: string | null = nextMap.map_name ?? null;
+      if (!mapName && nextMap.map_id) {
+        const strippedId = nextMap.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
+        mapName = mapRow?.name ?? null;
+      }
+
       // Queue map code PMs for the new map if map codes are supported
       try {
-        await queueMapCodePMsForNext(matchId, nextMap.map_name);
+        await queueMapCodePMsForNext(matchId, mapName ?? undefined, nextMap.map_id ?? undefined);
       } catch (mapCodeError) {
         logger.error('Error queuing map code PMs for next map:', mapCodeError);
         // Don't throw - this is a non-critical operation
       }
 
-      return true; // There is a next map
-    } 
+      // Queue scorecard prompts and winner vote for the next map
+      try {
+        await queueScorecardPrompts(matchId, nextMap.id, mapName || '');
+        await queueWinnerVote(matchId, nextMap.id, mapName || '');
+      } catch (scorecardError) {
+        logger.error('Error queuing scorecard prompts or winner vote for next map:', scorecardError);
+      }
+
+      return { id: nextMap.id, round: nextMap.round, mapName };
+    }
       logger.debug('No pending maps found to set as ongoing');
-      return false; // No next map
-    
+      return null;
+
   } catch (error) {
     logger.error('Error setting next map to ongoing:', error);
     // Don't throw - this is a non-critical operation
-    return false;
+    return null;
   }
 }
 
 // Queue map code PMs for the next map
-async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promise<void> {
-  logger.debug('🔍 queueMapCodePMsForNext called with:', matchId, mapName);
-  
+async function queueMapCodePMsForNext(matchId: string, mapName?: string, mapInstanceId?: string): Promise<void> {
+  logger.debug('🔍 queueMapCodePMsForNext called with:', matchId, mapName, mapInstanceId);
+
   if (!mapName) {
     logger.debug('No map name available for map code PMs');
     return;
   }
 
   const db = await getDbInstance();
-  
+
   try {
     // Check if map codes are supported and get the map code
     const matchData = await db.get<{
@@ -481,32 +577,37 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
     `, [matchId]);
 
     logger.debug('🔍 matchData:', matchData);
-    
+
     if (matchData?.map_codes_supported) {
       const mapCodes = matchData.map_codes ? JSON.parse(matchData.map_codes) : {};
-      const cleanMapName = mapName.replace(/-\d+$/, '');
-      
-      // Try exact match first
-      let mapCode = mapCodes[cleanMapName];
-      
-      // If exact match fails, try case-insensitive and normalized lookup
+
+      // Try instance ID exact match first (map_codes keys are instance IDs like "hanamura-1776547135395-abc")
+      let mapCode: string | undefined = mapInstanceId ? mapCodes[mapInstanceId] || undefined : undefined;
+
+      // Fallback: try display name exact match
       if (!mapCode) {
-        const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const mapCodeKey = Object.keys(mapCodes).find(key => 
-          key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
-        );
-        if (mapCodeKey) {
-          mapCode = mapCodes[mapCodeKey];
+        const cleanMapName = mapName.replace(/-\d+$/, '');
+        mapCode = mapCodes[cleanMapName];
+
+        // If exact match fails, try case-insensitive and normalized lookup
+        if (!mapCode) {
+          const normalizedCleanName = cleanMapName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const mapCodeKey = Object.keys(mapCodes).find(key =>
+            key.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedCleanName
+          );
+          if (mapCodeKey) {
+            mapCode = mapCodes[mapCodeKey];
+          }
         }
       }
       
       logger.debug('🔍 mapCodes:', mapCodes);
-      logger.debug('🔍 cleanMapName:', cleanMapName);
+      logger.debug('🔍 mapInstanceId:', mapInstanceId);
       logger.debug('🔍 mapCode:', mapCode);
       
       if (mapCode) {
         // Generate unique ID for the queue entry
-        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
         
         // Get the actual map name from database instead of using potentially raw mapName
         let displayMapName = mapName; // Fallback to passed mapName
@@ -550,7 +651,7 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string): Promis
 /**
  * Queue a Discord score notification for this game result
  */
-async function queueScoreNotification(matchGameId: string, result: MatchResult): Promise<void> {
+export async function queueScoreNotification(matchGameId: string, result: MatchResult): Promise<void> {
   const db = await getDbInstance();
   
   try {
@@ -616,7 +717,7 @@ async function queueScoreNotification(matchGameId: string, result: MatchResult):
     }
 
     // Generate unique notification ID
-    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     // Insert into score notification queue
     const insertQuery = `
@@ -714,7 +815,7 @@ async function determineMatchWinner(
 /**
  * Check if all games in a match are completed
  */
-async function areAllGamesCompleted(
+export async function areAllGamesCompleted(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string
 ): Promise<boolean> {
@@ -765,6 +866,13 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
     // Queue post-match operations
     await queueMatchWinnerNotification(matchId);
     await queueDiscordDeletion(matchId);
+
+    // Queue stats aggregation and image generation
+    try {
+      await queueStatsAggregation(matchId);
+    } catch (statsError) {
+      logger.error('Error queuing stats aggregation:', statsError);
+    }
 
     // Clean up voice channels
     await deleteMatchVoiceChannels(matchId);
@@ -829,7 +937,7 @@ async function queueVoiceAnnouncementForScore(
     const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
 
     // Generate unique announcement ID
-    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     // Add to voice announcement queue
     await db.run(`
@@ -1097,7 +1205,7 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
     }
 
     // Generate unique notification ID
-    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     // Insert into match winner notification queue
     await db.run(`
@@ -1128,12 +1236,91 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
 /**
  * Queue Discord deletion for match announcements and events when match completes
  */
+async function queueScorecardPrompts(matchId: string, matchGameId: string, mapName: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    const statsSettings = await db.get<{ enabled: number }>('SELECT enabled FROM stats_settings WHERE id = 1');
+    if (!statsSettings?.enabled) return;
+
+    const match = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+    if (!match) return;
+
+    const statDefs = await db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM game_stat_definitions WHERE game_id = ?', [match.game_id]);
+    if (!statDefs || statDefs.cnt === 0) return;
+
+    const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+    await db.run(
+      'INSERT INTO discord_scorecard_prompt_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
+      [queueId, matchId, matchGameId, mapName, 'pending']
+    );
+    logger.debug(`📸 Scorecard prompt queued for match ${matchId}, game ${matchGameId}`);
+  } catch (error) {
+    logger.error('Error queuing scorecard prompts:', error);
+  }
+}
+
+async function queueWinnerVote(matchId: string, matchGameId: string, mapName: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    // Check winner vote is enabled in Discord settings
+    const discordSettings = await db.get<{ winner_vote_enabled: number }>(
+      'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
+    );
+    if (!discordSettings?.winner_vote_enabled) {
+      logger.debug(`⏭️ Winner vote skipped for match ${matchId}: winner_vote_enabled is disabled`);
+      return;
+    }
+
+    // Check that at least one commander exists before queuing
+    const commanderCount = await db.get<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM match_participants WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL',
+      [matchId]
+    );
+    if (!commanderCount || commanderCount.cnt === 0) {
+      logger.debug(`⏭️ Winner vote skipped for match ${matchId}: no eligible commanders`);
+      return;
+    }
+
+    const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+    await db.run(
+      'INSERT INTO discord_winner_vote_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
+      [queueId, matchId, matchGameId, mapName, 'pending']
+    );
+    logger.debug(`🗳️ Winner vote queued for match ${matchId}, game ${matchGameId}`);
+  } catch (error) {
+    logger.error('Error queuing winner vote:', error);
+  }
+}
+
+async function queueStatsAggregation(matchId: string): Promise<void> {
+  try {
+    const db = await getDbInstance();
+
+    const statsSettings = await db.get<{ enabled: number }>('SELECT enabled FROM stats_settings WHERE id = 1');
+    if (!statsSettings?.enabled) return;
+
+    const count = await db.get<{ cnt: number }>(
+      "SELECT COUNT(*) as cnt FROM scorecard_submissions WHERE match_id = ? AND review_status IN ('approved', 'auto_approved')",
+      [matchId]
+    );
+    if (!count || count.cnt === 0) return;
+
+    const queueId = `stats_image_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+    await db.run('INSERT INTO stats_image_queue (id, match_id, status) VALUES (?, ?, ?)', [queueId, matchId, 'pending']);
+    logger.debug(`📊 Stats aggregation queued for completed match ${matchId}`);
+  } catch (error) {
+    logger.error('Error queuing stats aggregation:', error);
+  }
+}
+
 export async function queueDiscordDeletion(matchId: string): Promise<void> {
   try {
     const db = await getDbInstance();
     
     // Generate unique deletion ID
-    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     // Insert into Discord deletion queue
     await db.run(`

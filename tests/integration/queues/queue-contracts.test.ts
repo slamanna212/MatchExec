@@ -471,12 +471,11 @@ describe('Queue Contracts', () => {
       await new Promise<void>((resolve, reject) => {
         db.run(
           `INSERT INTO discord_map_code_queue
-           (id, match_id, user_id, map_name, map_code, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+           (id, match_id, map_name, map_code, status, created_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`,
           [
             'map_code_1',
             match.id,
-            'discord_user_789',
             'Ilios',
             'ABC123',
             'pending'
@@ -505,6 +504,25 @@ describe('Queue Contracts', () => {
       expect(entry.map_name).toBe('Ilios');
       expect(entry.map_code).toBe('ABC123');
       expect(entry.status).toBe('pending');
+      // user_id is nullable — queue processor looks up recipients via match_id
+      expect(entry.user_id).toBeNull();
+    });
+
+    it('should allow inserting without user_id', async () => {
+      const db = getTestDb();
+      const match = await createMatch(game.id, mode.id);
+
+      await expect(
+        new Promise<void>((resolve, reject) => {
+          db.run(
+            `INSERT INTO discord_map_code_queue
+             (id, match_id, map_name, map_code, status, created_at)
+             VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            [`map_code_no_user_${Date.now()}`, match.id, 'King\'s Row', 'XYZ789', 'pending'],
+            (err) => err ? reject(err) : resolve()
+          );
+        })
+      ).resolves.not.toThrow();
     });
   });
 

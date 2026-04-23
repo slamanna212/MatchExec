@@ -5,7 +5,16 @@ import { ModalsProvider } from '@mantine/modals'
 import { Notifications } from '@mantine/notifications'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
+import '@mantine/dates/styles.css'
 import './globals.css'
+
+// Shared input styles — avoids repeating the same two strings across every input component
+const INPUT_STYLES = {
+  input: {
+    backgroundColor: 'light-dark(var(--mantine-color-white), #1e1e2e)',
+    borderColor: 'rgba(139, 92, 246, 0.35)',
+  },
+} as const;
 
 const theme = createTheme({
   primaryColor: 'violet',
@@ -52,7 +61,89 @@ const theme = createTheme({
     fontWeight: '700',
   },
   other: {
-    bodyColor: '#e8ebec'
+    // Body background token (legacy — prefer CSS vars directly)
+    bodyColor: '#e8ebec',
+
+    // Page layout
+    pageMaxWidth: '72rem',
+    pageMaxWidthNarrow: '56rem',
+
+    // Navigation active colour (used by navigation.tsx)
+    navActiveColor: '#f7cc02',
+
+    // Card hover lift
+    cardHoverTransform: 'translateY(-3px)',
+    cardHoverShadow: '0 8px 24px rgba(0,0,0,0.25)',
+
+    // Match status colours (used by match dashboard and badges)
+    statusColors: {
+      created:   '#6c757d',
+      gather:    '#3b82f6',
+      assign:    '#f59e0b',
+      battle:    '#22c55e',
+      complete:  '#8b5cf6',
+      cancelled: '#ef4444',
+    },
+
+    // Settings page category colours (used by settings/page.tsx)
+    settingsColors: {
+      application: '#27ae60',
+      stats:       '#e74c3c',
+      announcer:   '#e67e22',
+      discord:     '#5865f2',
+      scheduler:   '#9b59b6',
+      ui:          '#f39c12',
+      backup:      '#16a085',
+    },
+
+    // Input field tokens (values already applied via INPUT_STYLES above)
+    inputBg: 'light-dark(var(--mantine-color-white), #1e1e2e)',
+    inputBorderColor: 'rgba(139, 92, 246, 0.35)',
+  },
+  components: {
+    // Disable auto contrast on buttons — buttons use intentional color choices with white text.
+    // Global autoContrast still applies to other components (Badge, Avatar, etc.)
+    Button: {
+      defaultProps: {
+        autoContrast: false,
+      },
+    },
+
+    TextInput:     { styles: INPUT_STYLES },
+    PasswordInput: { styles: INPUT_STYLES },
+    NumberInput:   { styles: INPUT_STYLES },
+    Textarea:      { styles: INPUT_STYLES },
+    Select:        { styles: INPUT_STYLES },
+
+    // Stable class names for NavLink — replaces fragile .m_XXXXXXXX selectors in globals.css
+    NavLink: {
+      classNames: {
+        root: 'navlink-root',
+      },
+    },
+
+    // Stable class names for Modal — replaces fragile .m_XXXXXXXX selectors in globals.css
+    Modal: {
+      classNames: {
+        content: 'modal-content',
+        header:  'modal-header',
+      },
+    },
+
+    DateTimePicker: {
+      styles: INPUT_STYLES,
+      defaultProps: {
+        popoverProps: {
+          classNames: { dropdown: 'date-picker-dropdown' },
+        },
+      },
+    },
+
+    DatePicker: {
+      classNames: {
+        root: 'date-picker-inline',
+      },
+    },
   }
 })
 

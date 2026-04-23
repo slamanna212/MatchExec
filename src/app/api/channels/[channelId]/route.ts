@@ -1,16 +1,19 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
+    const { channelId } = await params;
+    if (!channelId || typeof channelId !== 'string' || channelId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
     const db = await getDbInstance();
     const body = await request.json();
-    const { channelId } = await params;
 
     /* eslint-disable @typescript-eslint/naming-convention */
     const {
@@ -29,17 +32,11 @@ export async function PUT(
     );
 
     if (!channel) {
-      return NextResponse.json(
-        { error: 'Channel not found' },
-        { status: 404 }
-      );
+      return apiError('Channel not found', 404);
     }
 
     if (channel.channel_type !== 'text') {
-      return NextResponse.json(
-        { error: 'Notification settings only apply to text channels' },
-        { status: 400 }
-      );
+      return apiError('Notification settings only apply to text channels', 400);
     }
 
     await db.run(`
@@ -60,16 +57,13 @@ export async function PUT(
       channelId
     ]);
 
-    return NextResponse.json({ 
+    return apiOk({
       success: true,
-      message: 'Channel notification settings updated successfully' 
+      message: 'Channel notification settings updated successfully'
     });
   } catch (error) {
     logger.error('Error updating Discord channel:', error);
-    return NextResponse.json(
-      { error: 'Failed to update Discord channel' },
-      { status: 500 }
-    );
+    return apiError('Failed to update Discord channel');
   }
 }
 
@@ -78,8 +72,11 @@ export async function DELETE(
   { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const db = await getDbInstance();
     const { channelId } = await params;
+    if (!channelId || typeof channelId !== 'string' || channelId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+    const db = await getDbInstance();
 
     // Check if channel exists
     const channel = await db.get(
@@ -88,23 +85,17 @@ export async function DELETE(
     );
 
     if (!channel) {
-      return NextResponse.json(
-        { error: 'Channel not found' },
-        { status: 404 }
-      );
+      return apiError('Channel not found', 404);
     }
 
     await db.run('DELETE FROM discord_channels WHERE id = ?', [channelId]);
 
-    return NextResponse.json({ 
+    return apiOk({
       success: true,
-      message: 'Channel deleted successfully' 
+      message: 'Channel deleted successfully'
     });
   } catch (error) {
     logger.error('Error deleting Discord channel:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete Discord channel' },
-      { status: 500 }
-    );
+    return apiError('Failed to delete Discord channel');
   }
 }

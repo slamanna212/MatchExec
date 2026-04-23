@@ -568,15 +568,10 @@ export class ReminderHandler {
       .setDescription(`Here's your map code for **${matchData.name}**`)
       .setColor(gameColor)
       .addFields(
-        { 
-          name: '🔢 Map Code', 
-          value: `\`${mapCode}\``, 
-          inline: false 
-        },
-        { 
-          name: '🗺️ Map Name', 
-          value: mapName, 
-          inline: true 
+        {
+          name: '🔢 Map Code',
+          value: `\`${mapCode}\``,
+          inline: false
         }
       )
       .setTimestamp()

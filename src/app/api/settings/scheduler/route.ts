@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { SchedulerSettings } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const CRON_PART_RANGES = [
   { name: 'second',     min: 0, max: 59 },
@@ -77,20 +77,17 @@ export async function GET() {
     );
 
     if (!settings) {
-      return NextResponse.json({
+      return apiOk({
         match_check_cron: '0 */1 * * * *',
         cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *'
       });
     }
 
-    return NextResponse.json(settings);
+    return apiOk(settings);
   } catch (error) {
     logger.error('Error fetching scheduler settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch scheduler settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch scheduler settings');
   }
 }
 
@@ -101,7 +98,7 @@ export async function PUT(request: NextRequest) {
     // Validate cron expressions
     const validation = validateCronFields(body);
     if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return apiError(validation.error!, 400);
     }
 
     const db = await getDbInstance();
@@ -124,12 +121,9 @@ export async function PUT(request: NextRequest) {
       'SELECT * FROM scheduler_settings WHERE id = 1'
     );
 
-    return NextResponse.json(updatedSettings);
+    return apiOk(updatedSettings);
   } catch (error) {
     logger.error('Error updating scheduler settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update scheduler settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to update scheduler settings');
   }
 }

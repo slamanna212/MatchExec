@@ -9,14 +9,11 @@ import {
   Stack,
   Group,
   Text,
-  Title,
-  Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon,
   Card,
   Grid,
   Badge,
@@ -26,7 +23,8 @@ import {
   TextInput,
   Select
 } from '@mantine/core';
-import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar } from '@tabler/icons-react';
+import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar, IconGripVertical } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
 
@@ -351,20 +349,12 @@ export default function AssignTournamentPage({
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/tournaments')} style={{ cursor: 'pointer' }}>Tournaments</Anchor>
-            <Anchor onClick={() => router.push(`/tournaments/${tournamentId}`)} style={{ cursor: 'pointer' }}>{tournament.name}</Anchor>
-            <Text>Assign Teams</Text>
-          </Breadcrumbs>
-
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="violet">
-              <IconUsers size={20} />
-            </ThemeIcon>
-            <Title order={2}>{tournament.name} — Assign Teams</Title>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconUsers}
+          title={`${tournament.name} — Assign Teams`}
+          subtitle="Assign participants to teams"
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }, { title: tournament.name, href: `/tournaments/${tournamentId}` }]}
+        />
 
         {/* Create new team section */}
         <Card withBorder p="md">
@@ -433,6 +423,7 @@ export default function AssignTournamentPage({
                   >
                     <Group justify="space-between" align="center" mb="xs">
                       <Group align="center">
+                        {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                         <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                           {index + 1}
                         </Avatar>
@@ -570,6 +561,7 @@ export default function AssignTournamentPage({
                       >
                         <Group justify="space-between" align="center" mb="xs">
                           <Group align="center">
+                            {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                             <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                               {index + 1}
                             </Avatar>

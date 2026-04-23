@@ -4,17 +4,9 @@ import type { TournamentFormData } from './useTournamentForm';
  * Builds tournament payload from form data
  */
 export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
-  let startDateTime: Date | null = null;
-
-  if (formData.date && formData.time) {
-    // Parse components explicitly to ensure we use the browser's local timezone
-    const [year, month, day] = formData.date.split('-').map(Number);
-    const [hours, minutes] = formData.time.split(':').map(Number);
-
-    // Create Date using Date constructor with components - always uses local timezone
-    // Month is 0-indexed in JavaScript Date constructor
-    startDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
-  }
+  const startDateTime = formData.dateTime
+    ? (formData.dateTime instanceof Date ? formData.dateTime : new Date(formData.dateTime as string))
+    : null;
 
   return {
     name: formData.name,
@@ -28,7 +20,9 @@ export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
     ruleset: formData.ruleset,
     maxParticipants: formData.maxParticipants,
     eventImageUrl: formData.eventImageUrl || null,
-    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false
+    allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false,
+    allowMatchEditing: formData.allowMatchEditing !== false,
+    statsEnabled: formData.statsEnabled || false
   };
 }
 

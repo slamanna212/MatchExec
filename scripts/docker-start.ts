@@ -1,17 +1,14 @@
 #!/usr/bin/env tsx
 
-import { spawn, exec } from 'child_process';
+import { spawn } from 'child_process';
 import { logger } from '../src/lib/logger/server';
-// import { promisify } from 'util'; // Currently unused
-
-// const execAsync = promisify(exec); // Currently unused
 
 logger.debug('🚀 Starting MatchExec application...');
 
-async function runCommand(command: string): Promise<void> {
+async function runCommand(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    logger.debug(`▶️  Running: ${command}`);
-    const child = exec(command, { cwd: process.cwd() });
+    logger.debug(`▶️  Running: ${cmd} ${args.join(' ')}`);
+    const child = spawn(cmd, args, { cwd: process.cwd(), shell: false });
     
     child.stdout?.on('data', (data) => {
       process.stdout.write(data);
@@ -25,7 +22,7 @@ async function runCommand(command: string): Promise<void> {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`Command failed with code ${code}: ${command}`));
+        reject(new Error(`Command failed with code ${code}: ${cmd} ${args.join(' ')}`));
       }
     });
 
@@ -37,7 +34,7 @@ async function start(): Promise<void> {
   try {
     // Run database migrations first
     logger.debug('📊 Running database migrations and seeding...');
-    await runCommand('npx tsx scripts/migrate-background.ts');
+    await runCommand('npx', ['tsx', 'scripts/migrate-background.ts']);
     logger.debug('✅ Database initialization completed');
 
     // Start PM2 processes

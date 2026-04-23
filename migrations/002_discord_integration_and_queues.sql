@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS discord_announcement_queue (
   match_id TEXT NOT NULL,
   announcement_type TEXT,
   announcement_data TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')), -- NOSONAR: status literals intentionally repeated across queue tables
   retry_count INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   processed_at DATETIME,

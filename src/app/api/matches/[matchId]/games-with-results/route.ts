@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getMatchGamesWithResults } from '../../../../../lib/scoring-functions';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -11,20 +11,14 @@ export async function GET(
     const { matchId } = await params;
     
     if (!matchId) {
-      return NextResponse.json(
-        { error: 'Match ID is required' },
-        { status: 400 }
-      );
+      return apiError('Match ID is required', 400);
     }
 
     const games = await getMatchGamesWithResults(matchId);
-    
-    return NextResponse.json({ games });
+
+    return apiOk({ games });
   } catch (error) {
     logger.error('Error fetching match games with results:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch match games with results' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch match games with results');
   }
 }

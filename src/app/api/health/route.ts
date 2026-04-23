@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiOk } from '@/lib/api-response';
 
 export async function GET() {
   try {
@@ -9,7 +9,7 @@ export async function GET() {
     await db.get('SELECT 1');
 
     // Return basic health status
-    return NextResponse.json({
+    return apiOk({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       services: {
@@ -19,13 +19,13 @@ export async function GET() {
     });
   } catch (error) {
     logger.error('Health check failed:', error);
-    return NextResponse.json(
+    return apiOk(
       {
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         error: 'Database connection failed'
       },
-      { status: 503 }
+      503
     );
   }
 }

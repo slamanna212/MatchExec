@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -36,12 +36,9 @@ export async function GET(
       ORDER BY wins DESC, losses ASC, tt.team_name ASC
     `, [tournamentId]);
 
-    return NextResponse.json({ standings });
+    return apiOk({ standings });
   } catch (error) {
     logger.error('Error fetching tournament standings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tournament standings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch tournament standings');
   }
 }

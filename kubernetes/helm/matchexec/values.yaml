@@ -97,6 +97,7 @@ resources:
   limits:
     cpu: 500m
     memory: 1Gi
+    ephemeral-storage: 500Mi
 
 metrics:
   serviceMonitor:

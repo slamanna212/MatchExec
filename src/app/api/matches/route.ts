@@ -4,6 +4,7 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { safeJSONParse } from '@/lib/utils/validation';
+import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   validateMatchRequest,
   prepareMatchData,
@@ -11,6 +12,7 @@ import {
   parseMatchResponse,
   type MatchRequestBody
 } from './helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 
 export async function GET(request: NextRequest) {
@@ -70,12 +72,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Compute ETag from count + latest updated_at for efficient polling
+    // Compute ETag from count + latest updated_at + total participants for efficient polling
     const maxUpdatedAt = matches.reduce(
       (max, m) => { const val = String(m.updated_at); return val > max ? val : max; },
       ''
     );
-    const etag = `"${parsedMatches.length}:${maxUpdatedAt}"`;
+    const totalParticipants = (matches as Array<MatchDbRow & { participant_count?: number }>).reduce(
+      (sum, m) => sum + (m.participant_count || 0), 0
+    );
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } });
@@ -84,10 +89,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(parsedMatches, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching matches:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch matches' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch matches');
   }
 }
 
@@ -98,10 +100,7 @@ export async function POST(request: NextRequest) {
     // Validate request
     const validation = validateMatchRequest(body);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 400 }
-      );
+      return apiError(validation.error!, 400);
     }
 
     const db = await getDbInstance();
@@ -134,12 +133,18 @@ export async function POST(request: NextRequest) {
 
     logger.debug(`✅ Match created in "created" status: ${body.name}`);
 
-    return NextResponse.json(parsedMatch, { status: 201 });
+    await logFeedEvent({
+      eventType: 'match_created',
+      priority: 3,
+      title: 'Match Created',
+      description: `"${body.name}" is ready for setup`,
+      matchId: preparedData.matchId,
+      metadata: { gameName: (match as unknown as Record<string, unknown>)?.game_name },
+    });
+
+    return apiOk(parsedMatch, 201);
   } catch (error) {
     logger.error('Error creating match:', error);
-    return NextResponse.json(
-      { error: 'Failed to create match' },
-      { status: 500 }
-    );
+    return apiError('Failed to create match');
   }
 }

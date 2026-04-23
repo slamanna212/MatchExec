@@ -198,7 +198,7 @@ export class AnnouncementHandler {
     }
   }
 
-  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<ThreadChannel | null> {
+  async createMapsThread(message: Message, eventName: string, gameId: string, maps: string[], matchId?: string): Promise<ThreadChannel | null> { // NOSONAR typescript:S3776
     try {
       // Create thread - using public thread for better visibility
       const thread = await message.startThread({
@@ -237,7 +237,7 @@ export class AnnouncementHandler {
           const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
           
           // Find all notes that match this base map ID and get by index
-          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${cleanMapId  }-`)).sort();
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${cleanMapId}-`)).sort((a, b) => a.localeCompare(b));
           mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
         }
         

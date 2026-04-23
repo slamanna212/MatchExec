@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -19,17 +19,15 @@ export async function GET(
     );
     
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
-    
+
     // Fetch teams and their members
     const teams = await db.all<TournamentTeam & {
       member_id?: string;
       member_user_id?: string;
       member_username?: string;
+      member_discord_user_id?: string;
       member_joined_at?: string;
       member_is_captain?: number;
     }>(`
@@ -38,6 +36,7 @@ export async function GET(
         ttm.id as member_id,
         ttm.user_id as member_user_id,
         ttm.username as member_username,
+        ttm.discord_user_id as member_discord_user_id,
         ttm.joined_at as member_joined_at,
         ttm.is_captain as member_is_captain
       FROM tournament_teams tt
@@ -67,19 +66,17 @@ export async function GET(
           team_id: row.id,
           user_id: row.member_user_id!,
           username: row.member_username!,
+          discord_user_id: row.member_discord_user_id || undefined,
           joined_at: new Date(row.member_joined_at!),
           is_captain: row.member_is_captain === 1
         });
       }
     }
     
-    return NextResponse.json(Array.from(teamsMap.values()));
+    return apiOk(Array.from(teamsMap.values()));
   } catch (error) {
     logger.error('Error fetching tournament teams:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch teams' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch teams');
   }
 }
 
@@ -93,48 +90,36 @@ export async function POST(
     const { tournamentId } = await params;
     
     if (!teamName || teamName.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Team name is required' },
-        { status: 400 }
-      );
+      return apiError('Team name is required', 400);
     }
 
     if (teamName.length > 100) {
-      return NextResponse.json(
-        { error: 'teamName must be 100 characters or fewer' },
-        { status: 400 }
-      );
+      return apiError('teamName must be 100 characters or fewer', 400);
     }
-    
+
     const db = await getDbInstance();
-    
+
     // Check if tournament exists
     const tournament = await db.get(
       'SELECT id FROM tournaments WHERE id = ?',
       [tournamentId]
     );
-    
+
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
-    
+
     // Check if team name already exists in this tournament
     const existingTeam = await db.get(
       'SELECT id FROM tournament_teams WHERE tournament_id = ? AND team_name = ?',
       [tournamentId, teamName.trim()]
     );
-    
+
     if (existingTeam) {
-      return NextResponse.json(
-        { error: 'Team name already exists in this tournament' },
-        { status: 409 }
-      );
+      return apiError('Team name already exists in this tournament', 409);
     }
     
-    const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const teamId = `team_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     
     await db.run(`
       INSERT INTO tournament_teams (id, tournament_id, team_name)
@@ -145,13 +130,10 @@ export async function POST(
       SELECT * FROM tournament_teams WHERE id = ?
     `, [teamId]);
     
-    return NextResponse.json({ ...team, members: [] }, { status: 201 });
+    return apiOk({ ...team, members: [] }, 201);
   } catch (error) {
     logger.error('Error creating team:', error);
-    return NextResponse.json(
-      { error: 'Failed to create team' },
-      { status: 500 }
-    );
+    return apiError('Failed to create team');
   }
 }
 
@@ -165,25 +147,19 @@ export async function PUT(
     const { tournamentId } = await params;
     
     if (!teams || !Array.isArray(teams)) {
-      return NextResponse.json(
-        { error: 'Invalid team assignments data' },
-        { status: 400 }
-      );
+      return apiError('Invalid team assignments data', 400);
     }
-    
+
     const db = await getDbInstance();
-    
+
     // Check if tournament exists
     const tournament = await db.get(
       'SELECT id FROM tournaments WHERE id = ?',
       [tournamentId]
     );
-    
+
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found', 404);
     }
     
     // Clear all existing team member assignments for this tournament
@@ -205,7 +181,7 @@ export async function PUT(
     for (const team of teams) {
       if (team.members && team.members.length > 0) {
         for (const member of team.members) {
-          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
           // Get discord_user_id from tournament_participants
           const participant = await db.get<{ discord_user_id: string }>(`
@@ -229,13 +205,10 @@ export async function PUT(
       }
     }
     
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating team assignments:', error);
-    return NextResponse.json(
-      { error: 'Failed to update team assignments' },
-      { status: 500 }
-    );
+    return apiError('Failed to update team assignments');
   }
 }
 
@@ -249,36 +222,27 @@ export async function DELETE(
     const { tournamentId } = await params;
     
     if (!teamId) {
-      return NextResponse.json(
-        { error: 'Team ID is required' },
-        { status: 400 }
-      );
+      return apiError('Team ID is required', 400);
     }
-    
+
     const db = await getDbInstance();
-    
+
     // Check if team exists and belongs to this tournament
     const team = await db.get(
       'SELECT id FROM tournament_teams WHERE id = ? AND tournament_id = ?',
       [teamId, tournamentId]
     );
-    
+
     if (!team) {
-      return NextResponse.json(
-        { error: 'Team not found' },
-        { status: 404 }
-      );
+      return apiError('Team not found', 404);
     }
-    
+
     // Delete the team (CASCADE will handle team members)
     await db.run('DELETE FROM tournament_teams WHERE id = ?', [teamId]);
-    
-    return NextResponse.json({ success: true });
+
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error deleting team:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete team' },
-      { status: 500 }
-    );
+    return apiError('Failed to delete team');
   }
 }

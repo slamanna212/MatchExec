@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Container, Stack, Group, ActionIcon, Title, Breadcrumbs, Anchor, Stepper } from '@mantine/core';
-import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap } from '@tabler/icons-react';
+import { Container, Stack, ActionIcon, Stepper } from '@mantine/core';
+import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap, IconSwords } from '@tabler/icons-react';
+import { PageHeader } from './PageHeader';
 import { showError, showSuccess } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { MapNoteModal } from './map-note-modal';
@@ -45,6 +46,8 @@ export function CreateMatchPage() {
   const [allMaps, setAllMaps] = useState<GameMapWithMode[]>([]);
   const [mapNoteModalOpen, setMapNoteModalOpen] = useState(false);
   const [selectedMapForNote, setSelectedMapForNote] = useState<SelectedMapCard | null>(null);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
+  const [aiProvidersConfigured, setAiProvidersConfigured] = useState(false);
 
   // Load games on mount
   useEffect(() => {
@@ -66,30 +69,30 @@ export function CreateMatchPage() {
     fetchGames();
   }, []);
 
-  const getStepTitle = () => {
-    switch (currentStep) {
-      case 1: return 'Select Game';
-      case 2: return 'Event Information';
-      case 3: return 'Announcements';
-      case 4: return 'Maps & Configuration';
-      default: return 'Create Match';
-    }
-  };
-
-  const getBreadcrumbs = () => [
-    { title: 'Matches', href: '/' },
-    { title: 'Create Match', href: '/matches/create' },
-    { title: getStepTitle(), href: '#' }
-  ];
-
   const navigateToStep = (step: number) => {
     const params = new URLSearchParams();
     params.set('step', step.toString());
     router.push(`/matches/create?${params.toString()}`);
   };
 
-  const handleGameSelect = (gameId: string) => {
+  const handleGameSelect = async (gameId: string) => {
     updateFormData('gameId', gameId);
+
+    // Check if the selected game supports stats and if AI providers are configured
+    try {
+      const [statDefsRes, statsSettingsRes] = await Promise.all([
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`),
+        fetch('/api/settings/stats'),
+      ]);
+      const statDefs = statDefsRes.ok ? await statDefsRes.json() : [];
+      const statsSettings = statsSettingsRes.ok ? await statsSettingsRes.json() : { enabled: false };
+      setHasStatDefs(Array.isArray(statDefs) && statDefs.length > 0);
+      setAiProvidersConfigured(Boolean(statsSettings.enabled));
+    } catch {
+      setHasStatDefs(false);
+      setAiProvidersConfigured(false);
+    }
+
     navigateToStep(2);
   };
 
@@ -103,7 +106,7 @@ export function CreateMatchPage() {
   };
 
   const handleEventInfoNext = async () => {
-    if (formData.name && formData.date && formData.time && formData.gameId) {
+    if (formData.name && formData.dateTime && formData.gameId) {
       navigateToStep(3);
     }
   };
@@ -185,7 +188,6 @@ export function CreateMatchPage() {
         const result = await response.json();
         updateFormData('eventImageUrl', result.imageUrl);
         setImagePreview(result.imageUrl);
-        showSuccess('Image uploaded successfully!');
       } else {
         const error = await response.json();
         showError(error.error || 'Failed to upload image');
@@ -232,7 +234,7 @@ export function CreateMatchPage() {
     const mode = availableModes.find(m => m.id === selectedMode);
     if (!mode) return;
 
-    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const timestampedId = `${map.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     const selectedMap: SelectedMapCard = {
       id: timestampedId,
       name: map.name,
@@ -255,7 +257,7 @@ export function CreateMatchPage() {
     }
 
     const baseMapId = map.id.includes('-') ? map.id.replace(/-[^-]+$/, '') : map.id;
-    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const combinedId = `${baseMapId}-${modeId}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
     const selectedMap: SelectedMapCard = {
       id: combinedId,
@@ -327,28 +329,17 @@ export function CreateMatchPage() {
     <Container size="md" py={{ base: "md", sm: "xl" }} px={{ base: "md", sm: "xl" }}>
       <Stack gap="md">
         {/* Header */}
-        <Group justify="space-between" align="center">
-          <Group align="center" gap="sm">
-            <ActionIcon
-              variant="subtle"
-              size="md"
-              onClick={handleBack}
-              aria-label="Go back"
-            >
+        <PageHeader
+          icon={IconSwords}
+          title="Create Match"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }]}
+          docLink="https://docs.matchexec.com/docs/matches/creating-matches/"
+          action={
+            <ActionIcon variant="subtle" size="md" onClick={handleBack} aria-label="Go back">
               <IconArrowLeft />
             </ActionIcon>
-            <Title order={2}>Create Match</Title>
-          </Group>
-        </Group>
-
-        {/* Breadcrumbs */}
-        <Breadcrumbs>
-          {getBreadcrumbs().map((item, index) => (
-            <Anchor key={index} href={item.href} size="sm">
-              {item.title}
-            </Anchor>
-          ))}
-        </Breadcrumbs>
+          }
+        />
 
         {/* Step Indicator */}
         <Stepper active={currentStep - 1} size="sm">
@@ -373,6 +364,8 @@ export function CreateMatchPage() {
             onImageUpload={handleImageUpload}
             onRemoveImage={handleRemoveImage}
             uploadingImage={uploadingImage}
+            hasStatDefs={hasStatDefs}
+            aiProvidersConfigured={aiProvidersConfigured}
           />
         )}
 

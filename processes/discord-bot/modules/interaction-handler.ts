@@ -14,7 +14,8 @@ import {
   ActionRowBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  EmbedBuilder
 } from 'discord.js';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
@@ -194,7 +195,16 @@ export class InteractionHandler {
     const commands = [
       new SlashCommandBuilder()
         .setName('status')
-        .setDescription('Check bot status and configuration')
+        .setDescription('Check bot status and configuration'),
+      new SlashCommandBuilder()
+        .setName('matches')
+        .setDescription('List upcoming and active matches (up to 5)'),
+      new SlashCommandBuilder()
+        .setName('tournaments')
+        .setDescription('List upcoming and active tournaments (up to 5)'),
+      new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Get links to MatchExec documentation')
     ];
 
     try {
@@ -218,6 +228,15 @@ export class InteractionHandler {
       switch (commandName) {
         case 'status':
           await this.handleStatusCommand(interaction);
+          break;
+        case 'matches':
+          await this.handleMatchesCommand(interaction);
+          break;
+        case 'tournaments':
+          await this.handleTournamentsCommand(interaction);
+          break;
+        case 'help':
+          await this.handleHelpCommand(interaction);
           break;
         default:
           await interaction.reply({
@@ -257,6 +276,135 @@ export class InteractionHandler {
     });
   }
 
+  private getStatusEmoji(status: string): string {
+    switch (status) {
+      case 'created': return '🟡';
+      case 'gather':  return '🟢';
+      case 'assign':  return '🔵';
+      case 'battle':  return '⚔️';
+      default:        return '⚪';
+    }
+  }
+
+  private buildEventField(
+    item: { id: string; name: string; status: string; start_date: string | null; game_name: string },
+    msg: { message_id: string; channel_id: string } | undefined,
+    guildId: string | undefined
+  ) {
+    const parts: string[] = [`🎮 ${item.game_name}`];
+    if (item.start_date) {
+      const ts = Math.floor(new Date(item.start_date).getTime() / 1000);
+      if (!isNaN(ts)) parts.push(`🕐 <t:${ts}:R>`);
+    }
+    if (msg && guildId) {
+      parts.push(`[View Announcement](https://discord.com/channels/${guildId}/${msg.channel_id}/${msg.message_id})`);
+    }
+    return { name: `${this.getStatusEmoji(item.status)} ${item.name}`, value: parts.join(' · '), inline: false as const };
+  }
+
+  private async handleMatchesCommand(interaction: ChatInputCommandInteraction) {
+    const matches = await this.db.all<{
+      id: string; name: string; status: string; start_date: string | null; game_name: string;
+    }>(`
+      SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
+      FROM matches m
+      JOIN games g ON m.game_id = g.id
+      WHERE m.status IN ('gather', 'assign', 'battle')
+        AND m.tournament_id IS NULL
+      ORDER BY m.start_date ASC
+      LIMIT 5
+    `);
+
+    if (!matches.length) {
+      await interaction.reply({ content: 'No active matches found.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('📋 Upcoming Matches')
+      .setColor(0x5865F2)
+      .setDescription('🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
+      .setFooter({ text: 'Showing up to 5 active matches' });
+
+    for (const match of matches) {
+      const msg = await this.db.get<{ message_id: string; channel_id: string }>(
+        `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+        [match.id]
+      );
+      embed.addFields(this.buildEventField(match, msg, this.settings?.guild_id));
+    }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async handleHelpCommand(interaction: ChatInputCommandInteraction) {
+    const embed = new EmbedBuilder()
+      .setTitle('📚 MatchExec Documentation')
+      .setColor(0x5865F2)
+      .setURL('https://docs.matchexec.com')
+      .setDescription('Find guides and references for MatchExec at [docs.matchexec.com](https://docs.matchexec.com).')
+      .addFields(
+        { name: '📋 Matches', value: '[Match Lifecycle](https://docs.matchexec.com/docs/matches/match-lifecycle/)', inline: false },
+        { name: '🏆 Tournaments', value: '[Tournament Lifecycle](https://docs.matchexec.com/docs/tournaments/tournament-lifecycle/)', inline: false },
+        { name: '🤖 Slash Commands', value: '[Discord Slash Commands](https://docs.matchexec.com/docs/discord/slash-commands/)', inline: false }
+      );
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async handleTournamentsCommand(interaction: ChatInputCommandInteraction) {
+    const tournaments = await this.db.all<{
+      id: string;
+      name: string;
+      status: string;
+      start_date: string | null;
+      format: string;
+      game_name: string;
+    }>(`
+      SELECT t.id, t.name, t.status, t.start_date, t.format, g.name as game_name
+      FROM tournaments t
+      JOIN games g ON t.game_id = g.id
+      WHERE t.status IN ('gather', 'assign', 'battle')
+      ORDER BY t.start_date ASC
+      LIMIT 5
+    `);
+
+    if (!tournaments.length) {
+      await interaction.reply({ content: 'No active tournaments found.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 Upcoming Tournaments')
+      .setColor(0x5865F2)
+      .setDescription('🟢 Signups Open · 🔵 Teams Assigned · ⚔️ In Progress')
+      .setFooter({ text: 'Showing up to 5 active tournaments' });
+
+    for (const tournament of tournaments) {
+      const msg = await this.db.get<{ message_id: string; channel_id: string }>(
+        `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+        [tournament.id]
+      );
+      const field = this.buildEventField(tournament, msg, this.settings?.guild_id);
+      const formatLabel = tournament.format === 'double-elimination' ? 'DE' : 'SE';
+      // Insert format badge after game name
+      const extraParts = field.value.split(' · ').slice(1);
+      field.value = [`🎮 ${tournament.game_name}`, `🏟️ ${formatLabel}`, ...extraParts].join(' · ');
+      embed.addFields(field);
+    }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async getPreSignupDenial(eventId: string, userId: string, isTournament: boolean): Promise<string | null> {
+    if (!isTournament) {
+      const matchData = await this.db.get<{ tournament_id: string | null }>('SELECT tournament_id FROM matches WHERE id = ?', [eventId]);
+      if (matchData?.tournament_id) return '❌ This is a tournament match - participants are assigned from the tournament bracket. You cannot sign up directly.';
+    }
+    if (await checkExistingParticipant(this.db, eventId, userId, isTournament)) return '✅ You are already signed up for this event!';
+    return null;
+  }
+
   async handleButtonInteraction(interaction: ButtonInteraction) {
     if (!interaction.customId.startsWith('signup_')) return;
 
@@ -266,72 +414,27 @@ export class InteractionHandler {
     try {
       if (!this.db) return;
 
-      // Check if this is a tournament match (participants come from bracket, no signups allowed)
-      if (!isTournament) {
-        const matchData = await this.db.get<{ tournament_id: string | null }>(`
-          SELECT tournament_id FROM matches WHERE id = ?
-        `, [eventId]);
+      const denial = await this.getPreSignupDenial(eventId, interaction.user.id, isTournament);
+      if (denial) { await interaction.reply({ content: denial, flags: MessageFlags.Ephemeral }); return; }
 
-        if (matchData?.tournament_id) {
-          await interaction.reply({
-            content: '❌ This is a tournament match - participants are assigned from the tournament bracket. You cannot sign up directly.',
-            flags: MessageFlags.Ephemeral
-          });
-          return;
-        }
-      }
+      // NOTE: We cannot defer this interaction because it may show a modal, and showModal() must
+      // be the immediate response. We rely on signup form pre-loading at bot startup so
+      // loadSignupForm() is instant (cache hit), keeping total time under Discord's 3-second limit.
 
-      // NOTE: We cannot defer this interaction because it may show a modal,
-      // and showModal() must be the immediate response to an interaction.
-      // Instead, we rely on signup form pre-loading at bot startup to make
-      // loadSignupForm() instant (cache hit), avoiding file I/O during interaction.
-      // This keeps the total processing time well under Discord's 3-second limit.
-
-      // Check if user is already signed up
-      const isAlreadySignedUp = await checkExistingParticipant(this.db, eventId, interaction.user.id, isTournament);
-
-      if (isAlreadySignedUp) {
-        await interaction.reply({
-          content: '✅ You are already signed up for this event!',
-          flags: MessageFlags.Ephemeral
-        });
-        return;
-      }
-
-      // Check if event is at capacity
       const { isFull, eventData } = await checkEventCapacity(this.db, eventId, isTournament);
+      if (isFull) { await interaction.reply({ content: '❌ This event is full!', flags: MessageFlags.Ephemeral }); return; }
+      if (!eventData) { await interaction.reply({ content: '❌ Event not found!', flags: MessageFlags.Ephemeral }); return; }
 
-      if (isFull) {
-        await interaction.reply({
-          content: '❌ This event is full!',
-          flags: MessageFlags.Ephemeral
-        });
-        return;
-      }
-
-      if (!eventData) {
-        await interaction.reply({
-          content: '❌ Event not found!',
-          flags: MessageFlags.Ephemeral
-        });
-        return;
-      }
-
-      // Check if tournament has team selection enabled
       if (isTournament && eventData.allow_player_team_selection === 1) {
         const teamSelectionShown = await showTeamSelectionMenu(interaction, this.db, eventId);
         if (teamSelectionShown) return;
       }
 
-      // Show signup modal
       await showSignupModal(interaction, eventId, eventData.game_id);
 
     } catch (error) {
       logger.error('❌ Error handling signup button:', error);
-      await interaction.reply({
-        content: '❌ An error occurred. Please try again.',
-        flags: MessageFlags.Ephemeral
-      });
+      await interaction.reply({ content: '❌ An error occurred. Please try again.', flags: MessageFlags.Ephemeral });
     }
   }
 

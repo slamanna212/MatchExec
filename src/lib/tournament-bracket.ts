@@ -93,6 +93,7 @@ export interface GeneratedMatch {
   team1_id?: string; // Tournament team ID for red team
   team2_id?: string; // Tournament team ID for blue team
   event_image_url?: string | null;
+  stats_enabled?: number;
 }
 
 /**
@@ -814,9 +815,9 @@ async function insertMatch(
       max_participants, status, tournament_id,
       tournament_round, tournament_bracket_type, start_date, start_time,
       team1_name, team2_name, red_team_id, blue_team_id, announcements, rules,
-      event_image_url, created_at, updated_at
+      event_image_url, stats_enabled, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     match.id, match.name, match.description || null, match.game_id, match.game_mode_id, match.map_id,
     match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
@@ -824,7 +825,7 @@ async function insertMatch(
     match.tournament_round, match.tournament_bracket_type, scheduledDate,
     scheduledDateTime, match.team1_name, match.team2_name,
     match.team2_id, match.team1_id, 1, match.rules || 'casual',
-    match.event_image_url || null
+    match.event_image_url || null, match.stats_enabled ?? 0
   ]);
 }
 

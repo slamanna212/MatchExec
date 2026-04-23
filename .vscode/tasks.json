@@ -97,6 +97,20 @@
       "command": "npx vitest run ${relativeFile}",
       "group": "test",
       "problemMatcher": []
+    },
+    {
+      "label": "Add Test Match Participants",
+      "type": "shell",
+      "command": "node scripts/add-test-match-participants.js ${input:matchId}",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "matchId",
+      "type": "promptString",
+      "description": "Match ID to add test participants to"
     }
   ]
 }

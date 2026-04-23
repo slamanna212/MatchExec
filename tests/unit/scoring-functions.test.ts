@@ -561,4 +561,141 @@ describe('Scoring Functions', () => {
       expect(games).toEqual([]);
     });
   });
+
+  describe('round 2+ map code queueing', () => {
+    it('queues map code for round 2 using instance ID key lookup', async () => {
+      const db = getTestDb();
+
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-r1-base', game.id, mode.id, 'Round 1 Map']
+      );
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-r2-base', game.id, mode.id, 'Round 2 Map']
+      );
+
+      // Instance IDs are what the UI stores in match.maps and as map_codes keys
+      const map1InstanceId = 'map-r1-base-1776547135395-aaa';
+      const map2InstanceId = 'map-r2-base-1776547135396-bbb';
+      const map2Code = 'ROUND2CODE';
+
+      await db.run(`UPDATE games SET map_codes_supported = 1 WHERE id = ?`, [game.id]);
+
+      const match = await createMatch(game.id, mode.id, {
+        maps: JSON.stringify([map1InstanceId, map2InstanceId]),
+      });
+      await db.run(
+        `UPDATE matches SET map_codes = ? WHERE id = ?`,
+        [JSON.stringify({ [map1InstanceId]: 'ROUND1CODE', [map2InstanceId]: map2Code }), match.id]
+      );
+
+      await initializeMatchGames(match.id.toString());
+
+      // Submitting round 1 triggers setNextMapToOngoing → queueMapCodePMsForNext
+      const game1Id = `${match.id}_game_1`;
+      await saveMatchResult(game1Id, {
+        matchId: match.id.toString(),
+        gameId: game1Id,
+        winner: 'team1',
+        isFfaMode: false,
+        completedAt: new Date(),
+      });
+
+      const queued = await db.get<{ map_name: string; map_code: string }>(
+        `SELECT map_name, map_code FROM discord_map_code_queue WHERE match_id = ? ORDER BY created_at DESC LIMIT 1`,
+        [match.id.toString()]
+      );
+      expect(queued).toBeTruthy();
+      expect(queued!.map_code).toBe(map2Code);
+      expect(queued!.map_name).toBe('Round 2 Map');
+    });
+
+    it('queues map code for round 2 when map code value starts with an emoji', async () => {
+      const db = getTestDb();
+
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-emoji-r1', game.id, mode.id, 'Emoji Map 1']
+      );
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-emoji-r2', game.id, mode.id, 'Emoji Map 2']
+      );
+
+      const map1Id = 'map-emoji-r1-1776547135395-ccc';
+      const map2Id = 'map-emoji-r2-1776547135396-ddd';
+      const emojiCode = '🎮 JOINCODE999';
+
+      await db.run(`UPDATE games SET map_codes_supported = 1 WHERE id = ?`, [game.id]);
+
+      const match = await createMatch(game.id, mode.id, {
+        maps: JSON.stringify([map1Id, map2Id]),
+      });
+      await db.run(
+        `UPDATE matches SET map_codes = ? WHERE id = ?`,
+        [JSON.stringify({ [map1Id]: 'PLAIN_CODE', [map2Id]: emojiCode }), match.id]
+      );
+
+      await initializeMatchGames(match.id.toString());
+
+      const game1Id = `${match.id}_game_1`;
+      await saveMatchResult(game1Id, {
+        matchId: match.id.toString(),
+        gameId: game1Id,
+        winner: 'team1',
+        isFfaMode: false,
+        completedAt: new Date(),
+      });
+
+      const queued = await db.get<{ map_code: string }>(
+        `SELECT map_code FROM discord_map_code_queue WHERE match_id = ? ORDER BY created_at DESC LIMIT 1`,
+        [match.id.toString()]
+      );
+      expect(queued).toBeTruthy();
+      expect(queued!.map_code).toBe(emojiCode);
+    });
+
+    it('does not queue map code for round 2 when map_codes_supported is disabled', async () => {
+      const db = getTestDb();
+
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-no-support-1', game.id, mode.id, 'No Support Map 1']
+      );
+      await db.run(
+        `INSERT OR IGNORE INTO game_maps (id, game_id, mode_id, name) VALUES (?, ?, ?, ?)`,
+        ['map-no-support-2', game.id, mode.id, 'No Support Map 2']
+      );
+
+      const map1Id = 'map-no-support-1-1776547135395-eee';
+      const map2Id = 'map-no-support-2-1776547135396-fff';
+
+      // map_codes_supported = 0 by default
+      const match = await createMatch(game.id, mode.id, {
+        maps: JSON.stringify([map1Id, map2Id]),
+      });
+      await db.run(
+        `UPDATE matches SET map_codes = ? WHERE id = ?`,
+        [JSON.stringify({ [map1Id]: 'CODE1', [map2Id]: 'CODE2' }), match.id]
+      );
+
+      await initializeMatchGames(match.id.toString());
+
+      const game1Id = `${match.id}_game_1`;
+      await saveMatchResult(game1Id, {
+        matchId: match.id.toString(),
+        gameId: game1Id,
+        winner: 'team1',
+        isFfaMode: false,
+        completedAt: new Date(),
+      });
+
+      const queued = await db.get(
+        `SELECT * FROM discord_map_code_queue WHERE match_id = ?`,
+        [match.id.toString()]
+      );
+      expect(queued).toBeFalsy();
+    });
+  });
 });

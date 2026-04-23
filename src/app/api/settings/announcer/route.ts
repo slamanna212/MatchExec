@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -34,13 +34,10 @@ export async function GET() {
       match_start_delay_seconds: result?.match_start_delay_seconds ?? 45
     };
 
-    return NextResponse.json(settings);
+    return apiOk(settings);
   } catch (error) {
     logger.error('Error fetching announcer settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch announcer settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch announcer settings');
   }
 }
 
@@ -60,10 +57,7 @@ export async function PUT(request: NextRequest) {
       if (typeof match_start_delay_seconds !== 'number' ||
           match_start_delay_seconds < 0 ||
           match_start_delay_seconds > 300) {
-        return NextResponse.json(
-          { error: 'match_start_delay_seconds must be a number between 0 and 300' },
-          { status: 400 }
-        );
+        return apiError('match_start_delay_seconds must be a number between 0 and 300', 400);
       }
     }
 
@@ -103,12 +97,9 @@ export async function PUT(request: NextRequest) {
       `, params);
     }
 
-    return NextResponse.json({ success: true });
+    return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating announcer settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update announcer settings' },
-      { status: 500 }
-    );
+    return apiError('Failed to update announcer settings');
   }
 }

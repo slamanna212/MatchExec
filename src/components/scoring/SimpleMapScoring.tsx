@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useHotkeys } from '@mantine/hooks';
-import { Text, Badge, Alert, Loader, Group, Stack } from '@mantine/core';
-import { IconMap, IconCheck, IconClock, IconTrophy, IconSwords } from '@tabler/icons-react';
+import { Text, Badge, Alert, Loader, Group, Stack, Button, Modal, Tooltip, Divider } from '@mantine/core';
+import { IconMap, IconCheck, IconSwords, IconTrophy } from '@tabler/icons-react';
+import { ScorecardUpload } from './ScorecardUpload';
 import type { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger/client';
 import { getMapImageUrl, formatMapName } from '@/lib/utils/map-utils';
@@ -16,6 +17,8 @@ interface SimpleMapScoringProps {
   onResultSubmit: (result: MatchResult) => Promise<void>;
   submitting: boolean;
   onAllMapsCompleted?: () => void;
+  matchStatsEnabled?: boolean;
+  initialGameId?: string;
 }
 
 // ── Loading / error / empty states ────────────────────────────────────────────
@@ -45,202 +48,37 @@ function EmptyState() {
   );
 }
 
-// ── Map status helpers ─────────────────────────────────────────────────────────
-
-function statusIcon(status: string) {
-  if (status === 'completed') return <IconCheck size={12} />;
-  if (status === 'ongoing') return <IconClock size={12} />;
-  return null;
-}
-
-function statusColor(status: string): string {
-  if (status === 'completed') return 'green';
-  if (status === 'ongoing') return 'blue';
-  return 'gray';
-}
-
-// ── Sidebar map list (desktop) ─────────────────────────────────────────────────
-
-function MapSidebar({
-  matchGames,
-  gameType,
-  selectedGameId,
-  onSelect,
-  disabled
-}: {
-  matchGames: MatchGame[];
-  gameType: string;
-  selectedGameId: string | null;
-  onSelect: (id: string) => void;
-  disabled: boolean;
-}) {
-  const completed = matchGames.filter(g => g.status === 'completed').length;
-
-  return (
-    <div className={styles.sidebarWrapper}>
-      <div className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          Maps — {completed}/{matchGames.length} done
-        </div>
-
-        {matchGames.map(game => {
-          const imageUrl = game.image_url || getMapImageUrl(gameType, game.map_id);
-          const isSelected = selectedGameId === game.id;
-          const itemClass = [
-            styles.mapItem,
-            isSelected ? styles.mapItemSelected : '',
-            game.status === 'ongoing' ? styles.mapItemOngoing : '',
-            game.status === 'completed' ? styles.mapItemCompleted : '',
-          ].filter(Boolean).join(' ');
-
-          return (
-            <div
-              key={game.id}
-              className={itemClass}
-              onClick={() => !disabled && onSelect(game.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && !disabled && onSelect(game.id)}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt={formatMapName(game.map_id, game.map_name)}
-                className={styles.mapThumb}
-              />
-              <div className={styles.mapInfo}>
-                <div className={styles.mapRound}>Map {game.round}</div>
-                <div className={styles.mapName}>
-                  {formatMapName(game.map_id, game.map_name)}
-                </div>
-                <Badge
-                  size="xs"
-                  color={statusColor(game.status)}
-                  leftSection={statusIcon(game.status)}
-                >
-                  {game.status}
-                </Badge>
-              </div>
-            </div>
-          );
-        })}
-
-      </div>
-    </div>
-  );
-}
-
-// ── Mobile horizontal map list ─────────────────────────────────────────────────
-
-function MobileMapList({
-  matchGames,
-  gameType,
-  selectedGameId,
-  onSelect,
-  disabled
-}: {
-  matchGames: MatchGame[];
-  gameType: string;
-  selectedGameId: string | null;
-  onSelect: (id: string) => void;
-  disabled: boolean;
-}) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragScrollLeftRef = useRef(0);
-  const hasDraggedRef = useRef(false);
-  const [listDragging, setListDragging] = useState(false);
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = listRef.current;
-    if (!el) return;
-    isDraggingRef.current = true;
-    hasDraggedRef.current = false;
-    dragStartXRef.current = e.pageX - el.offsetLeft;
-    dragScrollLeftRef.current = el.scrollLeft;
-    setListDragging(true);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    const el = listRef.current;
-    if (!el) return;
-    e.preventDefault();
-    const x = e.pageX - el.offsetLeft;
-    const walk = x - dragStartXRef.current;
-    if (Math.abs(walk) > 5) hasDraggedRef.current = true;
-    el.scrollLeft = dragScrollLeftRef.current - walk;
-  };
-
-  const handleMouseUp = () => {
-    isDraggingRef.current = false;
-    setListDragging(false);
-  };
-
-  return (
-    <div
-      ref={listRef}
-      className={listDragging ? `${styles.mobileMapList} ${styles.mobileMapListDragging}` : styles.mobileMapList}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      {matchGames.map(game => {
-        const imageUrl = game.image_url || getMapImageUrl(gameType, game.map_id);
-        const isSelected = selectedGameId === game.id;
-        const thumbClass = [
-          styles.mobileMapThumb,
-          isSelected ? styles.mobileMapThumbSelected : '',
-          game.status === 'completed' ? styles.mobileMapThumbCompleted : '',
-        ].filter(Boolean).join(' ');
-
-        return (
-          <div
-            key={game.id}
-            className={styles.mobileMapItem}
-            onClick={() => { if (!hasDraggedRef.current && !disabled) onSelect(game.id); }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt={formatMapName(game.map_id, game.map_name)}
-              className={thumbClass}
-            />
-            <span className={styles.mobileMapName}>
-              {formatMapName(game.map_id, game.map_name)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Team win card ──────────────────────────────────────────────────────────────
 
 function TeamWinCard({
   teamName,
   side,
   onClick,
-  disabled
+  disabled,
+  isPending
 }: {
   teamName: string;
   side: 'blue' | 'red';
   onClick: () => void;
   disabled: boolean;
+  isPending?: boolean;
 }) {
   const cardClass = `${styles.teamCard} ${side === 'blue' ? styles.teamCardBlue : styles.teamCardRed}`;
   const iconClass = `${styles.teamCardIcon} ${side === 'blue' ? styles.teamCardIconBlue : styles.teamCardIconRed}`;
 
+  const pendingStyle: React.CSSProperties = isPending ? {
+    outline: `3px solid ${side === 'blue' ? 'var(--mantine-color-blue-4)' : 'var(--mantine-color-red-4)'}`,
+    outlineOffset: '2px',
+    filter: 'brightness(1.15)',
+  } : {};
+
   return (
-    <button className={cardClass} onClick={onClick} disabled={disabled} type="button">
+    <button className={cardClass} onClick={onClick} disabled={disabled} type="button" style={pendingStyle}>
       <div className={iconClass}>
-        <IconTrophy size={18} />
+        {isPending ? <IconCheck size={18} /> : <IconTrophy size={18} />}
       </div>
       <div className={styles.teamCardName}>{teamName}</div>
-      <div className={styles.teamCardLabel}>Wins this map</div>
+      <div className={styles.teamCardLabel}>{isPending ? 'Selected — confirm below' : 'Wins this map'}</div>
     </button>
   );
 }
@@ -277,7 +115,9 @@ function MapWinnerSelection({
   participants,
   onTeamWin,
   onParticipantWin,
-  submitting
+  submitting,
+  pendingWinner,
+  pendingParticipantId
 }: {
   selectedGame: MatchGame;
   team1Name: string | null;
@@ -286,6 +126,8 @@ function MapWinnerSelection({
   onTeamWin: (winner: 'team1' | 'team2') => void;
   onParticipantWin: (id: string) => void;
   submitting: boolean;
+  pendingWinner: 'team1' | 'team2' | null;
+  pendingParticipantId: string | null;
 }) {
   const mode = selectedGame.mode_scoring_type;
   const showTeamCards = mode === 'Normal' || !mode;
@@ -295,20 +137,43 @@ function MapWinnerSelection({
       <Group gap="xs">
         <IconSwords size={16} color="var(--mantine-color-dimmed)" />
         <Text size="sm" c="dimmed" fw={500}>Who won this map?</Text>
-        <Badge size="sm" color={statusColor(selectedGame.status)} ml="auto">
+        <Badge size="sm" color={selectedGame.status === 'completed' ? 'green' : selectedGame.status === 'ongoing' ? 'blue' : 'gray'} ml="auto">
           {selectedGame.status}
         </Badge>
       </Group>
       {showTeamCards && (
         <div className={styles.winnerGrid}>
-          <TeamWinCard teamName={team1Name || 'Blue Team'} side="blue" onClick={() => onTeamWin('team1')} disabled={submitting} />
-          <TeamWinCard teamName={team2Name || 'Red Team'} side="red" onClick={() => onTeamWin('team2')} disabled={submitting} />
+          <TeamWinCard
+            teamName={team1Name || 'Blue Team'}
+            side="blue"
+            onClick={() => onTeamWin('team1')}
+            disabled={submitting}
+            isPending={pendingWinner === 'team1'}
+          />
+          <TeamWinCard
+            teamName={team2Name || 'Red Team'}
+            side="red"
+            onClick={() => onTeamWin('team2')}
+            disabled={submitting}
+            isPending={pendingWinner === 'team2'}
+          />
         </div>
       )}
       {mode === 'FFA' && (
         <div className={styles.ffaGrid}>
           {participants.map(p => (
-            <button key={p.id} className={styles.ffaCard} onClick={() => onParticipantWin(p.id)} disabled={submitting} type="button">
+            <button
+              key={p.id}
+              className={styles.ffaCard}
+              onClick={() => onParticipantWin(p.id)}
+              disabled={submitting}
+              type="button"
+              style={pendingParticipantId === p.id ? {
+                outline: '3px solid var(--mantine-color-violet-4)',
+                outlineOffset: '2px',
+                filter: 'brightness(1.15)',
+              } : {}}
+            >
               <IconTrophy size={18} color="var(--mantine-color-violet-5)" />
               <span className={styles.ffaCardName}>{p.username} Wins</span>
             </button>
@@ -329,7 +194,15 @@ function MapDetailPanel({
   team2Name,
   onTeamWin,
   onParticipantWin,
-  submitting
+  submitting,
+  pendingWinner,
+  pendingParticipantId,
+  matchStatsEnabled,
+  hasStatDefs,
+  scorecardUploaded,
+  onScorecardUploaded,
+  matchId,
+  onConfirm
 }: {
   selectedGame: MatchGame;
   gameType: string;
@@ -339,11 +212,29 @@ function MapDetailPanel({
   onTeamWin: (winner: 'team1' | 'team2') => void;
   onParticipantWin: (id: string) => void;
   submitting: boolean;
+  pendingWinner: 'team1' | 'team2' | null;
+  pendingParticipantId: string | null;
+  matchStatsEnabled: boolean;
+  hasStatDefs: boolean;
+  scorecardUploaded: boolean;
+  onScorecardUploaded: () => void;
+  matchId: string;
+  onConfirm: () => void;
 }) {
   const imageUrl = selectedGame.image_url || getMapImageUrl(gameType, selectedGame.map_id);
   const mapName = formatMapName(selectedGame.map_id, selectedGame.map_name);
   const isCompleted = selectedGame.status === 'completed';
   const mode = selectedGame.mode_scoring_type;
+  const hasPendingSelection = pendingWinner !== null || pendingParticipantId !== null;
+  const requiresScorecard = matchStatsEnabled && hasStatDefs;
+  const confirmBlocked = requiresScorecard && !scorecardUploaded;
+
+  let pendingTeamName = 'Selected player';
+  if (pendingWinner === 'team1') pendingTeamName = team1Name || 'Blue Team';
+  else if (pendingWinner === 'team2') pendingTeamName = team2Name || 'Red Team';
+  else if (pendingParticipantId) {
+    pendingTeamName = participants.find(p => p.id === pendingParticipantId)?.username ?? 'Selected player';
+  }
 
   return (
     <div className={styles.detailPanel}>
@@ -364,15 +255,59 @@ function MapDetailPanel({
       )}
 
       {!isCompleted && mode !== 'Position' && (
-        <MapWinnerSelection
-          selectedGame={selectedGame}
-          team1Name={team1Name}
-          team2Name={team2Name}
-          participants={participants}
-          onTeamWin={onTeamWin}
-          onParticipantWin={onParticipantWin}
-          submitting={submitting}
-        />
+        <Stack gap="md">
+          <MapWinnerSelection
+            selectedGame={selectedGame}
+            team1Name={team1Name}
+            team2Name={team2Name}
+            participants={participants}
+            onTeamWin={onTeamWin}
+            onParticipantWin={onParticipantWin}
+            submitting={submitting}
+            pendingWinner={pendingWinner}
+            pendingParticipantId={pendingParticipantId}
+          />
+
+          {requiresScorecard && selectedGame.status === 'ongoing' && !scorecardUploaded && (
+            <>
+              <Divider label="Scorecard" labelPosition="center" />
+              <ScorecardUpload
+                matchId={matchId}
+                matchGameId={selectedGame.id}
+                onUploadComplete={() => {}}
+                onUploadSuccess={onScorecardUploaded}
+              />
+            </>
+          )}
+
+          {requiresScorecard && scorecardUploaded && (
+            <Alert color="green" icon={<IconCheck size={16} />} variant="light">
+              Scorecard uploaded — ready to confirm
+            </Alert>
+          )}
+
+          {hasPendingSelection && (
+            <Tooltip
+              label="Upload a scorecard before confirming"
+              disabled={!confirmBlocked}
+              position="top"
+              withArrow
+            >
+              <div>
+                <Button
+                  fullWidth
+                  color="green"
+                  leftSection={<IconCheck size={16} />}
+                  disabled={confirmBlocked || submitting}
+                  loading={submitting}
+                  onClick={onConfirm}
+                >
+                  Confirm: {pendingTeamName} wins Map {selectedGame.round}
+                </Button>
+              </div>
+            </Tooltip>
+          )}
+        </Stack>
       )}
 
       {!isCompleted && mode === 'Position' && (
@@ -384,24 +319,42 @@ function MapDetailPanel({
   );
 }
 
-// ── Winner submit hook ─────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
-function useWinnerSubmit(deps: {
-  matchId: string;
-  matchGames: MatchGame[];
-  selectedGameId: string | null;
-  onResultSubmit: (result: MatchResult) => Promise<void>;
-  refetch: () => Promise<void>;
-  setError: (e: string) => void;
-  setSelectedGameId: (id: string) => void;
-  onAllMapsCompleted?: () => void;
-}) {
-  const { matchId, matchGames, selectedGameId, onResultSubmit, refetch, setError, setSelectedGameId, onAllMapsCompleted } = deps;
+export function SimpleMapScoring({
+  matchId,
+  gameType,
+  onResultSubmit,
+  submitting,
+  onAllMapsCompleted,
+  matchStatsEnabled = false,
+  initialGameId,
+}: SimpleMapScoringProps) {
+  const [error, setError] = useState<string | null>(null);
+  const [hasStatDefs, setHasStatDefs] = useState(false);
 
-  return async (winner: 'team1' | 'team2', participantId?: string) => {
-    const selectedGame = matchGames.find(g => g.id === selectedGameId);
+  const [pendingWinner, setPendingWinner] = useState<'team1' | 'team2' | null>(null);
+  const [pendingParticipantId, setPendingParticipantId] = useState<string | null>(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [scorecardUploaded, setScorecardUploaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/games/${encodeURIComponent(gameType)}/stats`)
+      .then(r => r.json())
+      .catch(() => [])
+      .then((defs: unknown[]) => {
+        setHasStatDefs(Array.isArray(defs) && defs.length > 0);
+      });
+  }, [gameType]);
+
+  const { matchGames, participants, team1Name, team2Name, loading, error: fetchError, refetch } = useMatchGamesData(matchId);
+
+  const selectedGame = initialGameId
+    ? matchGames.find(g => g.id === initialGameId)
+    : matchGames.find(g => g.status === 'ongoing') || matchGames[0];
+
+  const handleWinnerSubmit = async (winner: 'team1' | 'team2', participantId?: string) => {
     if (!selectedGame) return;
-
     try {
       const result: MatchResult = {
         matchId,
@@ -411,114 +364,73 @@ function useWinnerSubmit(deps: {
         isFfaMode: !!participantId,
         completedAt: new Date()
       };
-
       await onResultSubmit(result);
       await refetch();
-
-      // Move to next pending/ongoing map
-      const nextGame = matchGames.find(g =>
-        g.id !== selectedGameId && (g.status === 'pending' || g.status === 'ongoing')
-      );
-
-      if (nextGame) {
-        setSelectedGameId(nextGame.id);
-      } else if (onAllMapsCompleted) {
-        onAllMapsCompleted();
-      }
-
-      setTimeout(() => refetch(), 1000);
+      if (onAllMapsCompleted) onAllMapsCompleted();
     } catch (err) {
       logger.error('Error submitting winner:', err);
       setError(err instanceof Error ? err.message : 'Failed to save result');
     }
   };
-}
 
-// ── Main component ─────────────────────────────────────────────────────────────
-
-export function SimpleMapScoring({
-  matchId,
-  gameType,
-  onResultSubmit,
-  submitting,
-  onAllMapsCompleted
-}: SimpleMapScoringProps) {
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const { matchGames, participants, team1Name, team2Name, loading, error: fetchError, refetch } = useMatchGamesData(matchId);
-
-  // Auto-select first pending/ongoing map
-  useEffect(() => {
-    if (matchGames.length > 0 && !selectedGameId) {
-      const first = matchGames.find(g => g.status === 'pending' || g.status === 'ongoing') || matchGames[0];
-      setTimeout(() => setSelectedGameId(first.id), 0);
+  const handleConfirmResult = async () => {
+    if (pendingWinner) {
+      await handleWinnerSubmit(pendingWinner);
+    } else if (pendingParticipantId) {
+      await handleWinnerSubmit('team1', pendingParticipantId);
     }
-  }, [matchGames, selectedGameId]);
+    setPendingWinner(null);
+    setPendingParticipantId(null);
+    setScorecardUploaded(false);
+    setConfirmModalOpen(false);
+  };
 
-  const handleWinnerSubmit = useWinnerSubmit({
-    matchId,
-    matchGames,
-    selectedGameId,
-    onResultSubmit,
-    refetch,
-    setError,
-    setSelectedGameId,
-    onAllMapsCompleted
-  });
+  const handleTeamWin = (winner: 'team1' | 'team2') => {
+    if (!selectedGame || selectedGame.status === 'completed' || submitting) return;
+    setPendingWinner(winner);
+    setPendingParticipantId(null);
+  };
 
-  const cycleMap = useCallback((direction: 'prev' | 'next') => {
-    if (matchGames.length === 0) return;
-    const currentIndex = matchGames.findIndex(g => g.id === selectedGameId);
-    const base = currentIndex === -1 ? 0 : currentIndex;
-    const next = direction === 'next'
-      ? (base + 1) % matchGames.length
-      : (base - 1 + matchGames.length) % matchGames.length;
-    setSelectedGameId(matchGames[next].id);
-  }, [matchGames, selectedGameId, setSelectedGameId]);
+  const handleParticipantWin = (id: string) => {
+    if (!selectedGame || selectedGame.status === 'completed' || submitting) return;
+    setPendingParticipantId(id);
+    setPendingWinner(null);
+  };
 
-  const submitTeamWin = useCallback((team: 'team1' | 'team2') => {
-    const game = matchGames.find(g => g.id === selectedGameId);
-    if (!game || game.status === 'completed' || submitting) return;
-    const mode = game.mode_scoring_type;
+  const setPendingTeam1 = useCallback(() => {
+    if (!selectedGame || selectedGame.status === 'completed' || submitting) return;
+    const mode = selectedGame.mode_scoring_type;
     if (mode === 'Position' || mode === 'FFA') return;
-    handleWinnerSubmit(team);
-  }, [matchGames, selectedGameId, submitting, handleWinnerSubmit]);
+    setPendingWinner('team1');
+    setPendingParticipantId(null);
+  }, [selectedGame, submitting]);
+
+  const setPendingTeam2 = useCallback(() => {
+    if (!selectedGame || selectedGame.status === 'completed' || submitting) return;
+    const mode = selectedGame.mode_scoring_type;
+    if (mode === 'Position' || mode === 'FFA') return;
+    setPendingWinner('team2');
+    setPendingParticipantId(null);
+  }, [selectedGame, submitting]);
 
   useHotkeys([
-    ['ArrowUp', () => cycleMap('prev')],
-    ['ArrowDown', () => cycleMap('next')],
-    ['1', () => submitTeamWin('team1')],
-    ['2', () => submitTeamWin('team2')],
+    ['1', () => setPendingTeam1()],
+    ['2', () => setPendingTeam2()],
   ]);
 
   if (loading) return <LoadingState />;
   if (fetchError || error) return <ErrorState error={fetchError || error || ''} />;
   if (matchGames.length === 0) return <EmptyState />;
 
-  const selectedGame = matchGames.find(g => g.id === selectedGameId);
+  let pendingTeamName = 'Selected player';
+  if (pendingWinner === 'team1') pendingTeamName = team1Name || 'Blue Team';
+  else if (pendingWinner === 'team2') pendingTeamName = team2Name || 'Red Team';
+  else if (pendingParticipantId) {
+    pendingTeamName = participants.find(p => p.id === pendingParticipantId)?.username ?? 'Selected player';
+  }
 
   return (
     <div className={styles.container}>
-      {/* Desktop sidebar */}
-      <MapSidebar
-        matchGames={matchGames}
-        gameType={gameType}
-        selectedGameId={selectedGameId}
-        onSelect={setSelectedGameId}
-        disabled={submitting}
-      />
-
-      {/* Mobile horizontal list */}
-      <MobileMapList
-        matchGames={matchGames}
-        gameType={gameType}
-        selectedGameId={selectedGameId}
-        onSelect={setSelectedGameId}
-        disabled={submitting}
-      />
-
-      {/* Right detail panel */}
       {selectedGame ? (
         <MapDetailPanel
           selectedGame={selectedGame}
@@ -526,17 +438,51 @@ export function SimpleMapScoring({
           participants={participants}
           team1Name={team1Name}
           team2Name={team2Name}
-          onTeamWin={winner => handleWinnerSubmit(winner)}
-          onParticipantWin={id => handleWinnerSubmit('team1', id)}
+          onTeamWin={handleTeamWin}
+          onParticipantWin={handleParticipantWin}
           submitting={submitting}
+          pendingWinner={pendingWinner}
+          pendingParticipantId={pendingParticipantId}
+          matchStatsEnabled={matchStatsEnabled}
+          hasStatDefs={hasStatDefs}
+          scorecardUploaded={scorecardUploaded}
+          onScorecardUploaded={() => setScorecardUploaded(true)}
+          matchId={matchId}
+          onConfirm={() => setConfirmModalOpen(true)}
         />
       ) : (
-        <div className={styles.detailPanel}>
-          <Alert color="blue" icon={<IconMap size={16} />}>
-            Select a map from the list to begin scoring.
-          </Alert>
-        </div>
+        <Alert color="blue" icon={<IconMap size={16} />}>
+          Map not found.
+        </Alert>
       )}
+
+      <Modal
+        opened={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        title="Confirm Map Result"
+        size="sm"
+        centered
+      >
+        <Stack gap="lg">
+          <Text>
+            Confirm <Text span fw={700}>{pendingTeamName}</Text> wins{' '}
+            <Text span fw={700}>Map {selectedGame?.round}</Text>? This cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="green"
+              leftSection={<IconCheck size={16} />}
+              loading={submitting}
+              onClick={handleConfirmResult}
+            >
+              Confirm Result
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   );
 }

@@ -6,18 +6,15 @@ import { useRouter } from 'next/navigation';
 import {
   Container,
   Stack,
-  Group,
   Text,
-  Title,
-  Breadcrumbs,
-  Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon
+  Group,
 } from '@mantine/core';
 import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { MatchFormat, MatchResult } from '@/shared/types';
 import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
 import { SimpleMapScoring } from '@/components/scoring/SimpleMapScoring';
@@ -29,14 +26,18 @@ interface MatchData {
   game_id: string;
   match_format?: MatchFormat;
   status: string;
+  stats_enabled?: number;
 }
 
 export default function ScoringPage({
-  params
+  params,
+  searchParams,
 }: {
   params: Promise<{ matchId: string }>
+  searchParams: Promise<{ gameId?: string }>
 }) {
   const { matchId } = use(params);
+  const { gameId: initialGameId } = use(searchParams);
   const router = useRouter();
 
   const [match, setMatch] = useState<MatchData | null>(null);
@@ -115,14 +116,14 @@ export default function ScoringPage({
 
   if (error || !match) {
     return (
-      <Container size="md" py="xl">
+      <Container size="md" pt="xs" pb="md">
         <Stack gap="md">
           <Alert color="red" icon={<IconAlertCircle size={16} />}>
             {error || 'Match not found'}
           </Alert>
-          <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>
-            ← Back to Matches
-          </Anchor>
+          <Button variant="outline" onClick={() => router.push('/matches')}>
+            Back to Matches
+          </Button>
         </Stack>
       </Container>
     );
@@ -130,13 +131,8 @@ export default function ScoringPage({
 
   if (match.status !== 'battle') {
     return (
-      <Container size="md" py="xl">
+      <Container size="md" pt="xs" pb="md">
         <Stack gap="md">
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Scoring</Text>
-          </Breadcrumbs>
           <Alert color="yellow" icon={<IconAlertCircle size={16} />}>
             Scoring is only available when the match is in progress (battle status). Current status: {match.status}
           </Alert>
@@ -149,23 +145,15 @@ export default function ScoringPage({
   }
 
   return (
-    <Container size="lg" py="xl">
+    <Container size="lg" pt="xs" pb="md">
       <Stack gap="lg">
-        <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Scoring</Text>
-          </Breadcrumbs>
-
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="yellow">
-              <IconTrophy size={20} />
-            </ThemeIcon>
-            <Title order={2}>{match.name}</Title>
-            <FormatBadge format={match.match_format || 'casual'} />
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconTrophy}
+          title={match.name}
+          subtitle="Scoring"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+          action={<FormatBadge format={match.match_format || 'casual'} />}
+        />
 
         {scoringType === 'Position' ? (
           <Stack gap="md">
@@ -188,6 +176,8 @@ export default function ScoringPage({
             onResultSubmit={handleResultSubmit}
             submitting={submitting}
             onAllMapsCompleted={handleAllMapsCompleted}
+            matchStatsEnabled={(match.stats_enabled ?? 0) === 1}
+            initialGameId={initialGameId}
           />
         )}
       </Stack>

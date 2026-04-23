@@ -4,26 +4,14 @@ import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
 import { useHotkeys } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
-import { Skeleton, Container, Text, Center, Stack, Grid } from '@mantine/core';
+import { Skeleton, Container, Text, Center, Stack, Grid, Card, Group } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
 import { showError, notificationHelper } from '@/lib/notifications';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-
-  // Check if timestamp already includes timezone info
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(`${timestamp}Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
 
 const formatMapName = (mapId: string) => {
   // Convert map ID to proper display name
@@ -76,7 +64,6 @@ export default function MatchPage({
   const [refreshInterval, setRefreshInterval] = useState(10);
 
   // Map data states
-  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
   const [mapNotes, setMapNotes] = useState<{[key: string]: string}>({});
 
@@ -98,7 +85,6 @@ export default function MatchPage({
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
         const maps = await response.json();
-        const mapNamesObj: {[key: string]: string} = {};
         const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
 
         if (supportsAllModes) {
@@ -110,7 +96,6 @@ export default function MatchPage({
           }
 
           maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
@@ -123,7 +108,6 @@ export default function MatchPage({
             modes.forEach(mode => {
               const modeSpecificId = `${baseMapName}-${mode.id}`;
               if (modeSpecificId !== map.id) {
-                mapNamesObj[modeSpecificId] = map.name;
                 mapDetailsObj[modeSpecificId] = {
                   name: map.name,
                   imageUrl: map.imageUrl,
@@ -135,7 +119,6 @@ export default function MatchPage({
           });
         } else {
           maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
             mapDetailsObj[map.id] = {
               name: map.name,
               imageUrl: map.imageUrl,
@@ -145,7 +128,6 @@ export default function MatchPage({
           });
         }
 
-        setMapNames(prev => ({ ...prev, ...mapNamesObj }));
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {
@@ -439,21 +421,60 @@ export default function MatchPage({
   // Render loading state
   if (loading) {
     return (
-      <Container>
-        <Grid mt="md">
+      <div className="container mx-auto py-6 pl-2 pr-2">
+        <Grid gap="lg">
           <Grid.Col span={{ base: 12, md: 4 }}>
-            <Stack>
-              <Skeleton height={200} radius="md" />
-              <Skeleton height={250} radius="md" />
-              <Skeleton height={120} radius="md" />
+            <Stack gap="md">
+              <Card withBorder padding="lg" shadow="sm">
+                <Stack gap="md">
+                  <Group>
+                    <Skeleton circle height={50} />
+                    <Stack gap="xs" style={{ flex: 1 }}>
+                      <Skeleton height={20} width="65%" />
+                      <Skeleton height={16} width="45%" />
+                    </Stack>
+                    <Skeleton circle height={60} />
+                  </Group>
+                  <Stack gap="xs">
+                    <Skeleton height={14} width="30%" />
+                    <Skeleton height={14} width="90%" />
+                    <Skeleton height={14} width="70%" />
+                  </Stack>
+                  <Skeleton height={200} radius="md" />
+                </Stack>
+              </Card>
+              <Card withBorder padding="lg" shadow="sm">
+                <Stack gap="sm">
+                  {[35, 30, 40, 25].map((w, i) => (
+                    <Group key={i} justify="space-between">
+                      <Skeleton height={14} width={`${w}%`} />
+                      <Skeleton height={14} width="30%" />
+                    </Group>
+                  ))}
+                </Stack>
+              </Card>
+              <Card withBorder padding="lg" shadow="sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                  <Skeleton height={36} radius="sm" />
+                </div>
+              </Card>
             </Stack>
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 8 }}>
-            <Skeleton height={40} radius="sm" mb="md" />
-            <Skeleton height={400} radius="md" />
+            <Stack gap="md">
+              <Group justify="center">
+                <Skeleton height={36} width={320} radius="xl" />
+              </Group>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} height={64} radius="sm" />
+              ))}
+            </Stack>
           </Grid.Col>
         </Grid>
-      </Container>
+      </div>
     );
   }
 
@@ -491,7 +512,6 @@ export default function MatchPage({
         onMapCodesSave={saveMapCodes}
         mapCodesSaving={mapCodesSaving}
         onAssignPlayers={() => router.push(`/matches/${match.id}/assign`)}
-        onScoring={() => router.push(`/matches/${match.id}/scoring`)}
         onDelete={handleDeleteMatch}
         onEdit={() => router.push(`/matches/${match.id}/edit`)}
         onStatusTransition={handleStatusTransition}
@@ -501,6 +521,7 @@ export default function MatchPage({
         isHistory={false}
         participantsLoading={participantsLoading}
         remindersLoading={remindersLoading}
+        showBreadcrumbs={true}
       />
 
     </>
