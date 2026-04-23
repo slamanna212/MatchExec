@@ -1259,6 +1259,25 @@ export class QueueProcessor {
       `);
 
       for (const notification of winnerNotifications) {
+        // Gate: for regular matches, wait until all map win notifications have been queued
+        // (discord_notified = 1 on all match_games). This prevents the match winner from
+        // firing before map win messages in stats-enabled matches where map notifications
+        // are held until stats are assigned. Bypass after 30 min to prevent permanent blockage.
+        if (notification.winner !== 'tournament') {
+          const mapStatus = await this.db.get<{ total: number; notified: number }>(
+            `SELECT COUNT(*) as total,
+                    SUM(CASE WHEN discord_notified = 1 THEN 1 ELSE 0 END) as notified
+             FROM match_games WHERE match_id = ?`,
+            [notification.match_id]
+          );
+          const allNotified = !mapStatus || mapStatus.total === 0 || (mapStatus.notified ?? 0) >= mapStatus.total;
+          const ageMinutes = (Date.now() - new Date(notification.created_at).getTime()) / 60000;
+          if (!allNotified && ageMinutes < 30) {
+            logger.debug(`⏳ Waiting for map notifications before match winner: ${notification.match_name} (${mapStatus?.notified ?? 0}/${mapStatus?.total ?? 0} maps notified)`);
+            continue;
+          }
+        }
+
         try {
           // Immediately mark as processing to prevent duplicate processing
           const updateResult = await this.db.run(`
