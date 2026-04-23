@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { aggregateMatchStats } from '@/lib/stats-aggregation';
 
 export async function PUT(
   request: NextRequest,
@@ -31,6 +32,10 @@ export async function PUT(
       `UPDATE scorecard_submissions SET review_status = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [status, submissionId]
     );
+
+    if (status === 'approved') {
+      await aggregateMatchStats(db, matchId);
+    }
 
     return apiOk({ success: true });
   } catch (error) {

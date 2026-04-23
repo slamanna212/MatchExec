@@ -12,7 +12,7 @@ export async function GET(
     const db = await getDbInstance();
 
     const stats = await db.all<GameStatDefinition>(
-      'SELECT id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order ASC',
+      'SELECT id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format, chart_type FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order ASC',
       [gameId]
     );
 

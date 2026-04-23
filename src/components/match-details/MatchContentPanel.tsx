@@ -15,7 +15,7 @@ import type { MatchWithGameDetails, MatchGameResult, SignupConfig } from '@/shar
 import { ParticipantsList } from './ParticipantsList';
 import { RemindersList } from './RemindersList';
 import { MapResultsSection } from './MapResultsSection';
-import { StatsVisualizationPlaceholder } from '@/components/stats/StatsVisualizationPlaceholder';
+import { StatsVisualization } from '@/components/stats/StatsVisualization';
 import classes from '../gradient-segmented-control.module.css';
 
 function MapsTabContent({
@@ -346,7 +346,7 @@ export function MatchContentPanel({
         )}
 
         {effectiveTab === 'stats' && showStats && (
-          <StatsVisualizationPlaceholder />
+          <StatsVisualization matchId={match.id} gameId={match.game_id} games={matchGames} />
         )}
     </Stack>
   );

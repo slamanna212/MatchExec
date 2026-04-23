@@ -57,6 +57,7 @@ interface StatData {
   sortOrder: number;
   isPrimary: boolean;
   format?: string;
+  chartType?: string;
 }
 
 interface VoiceData {
@@ -360,9 +361,9 @@ export class DatabaseSeeder {
     await this.db.run('DELETE FROM game_stat_definitions WHERE game_id = ?', [gameId]);
     for (const stat of statsData) {
       await this.db.run(
-        `INSERT INTO game_stat_definitions (id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [stat.id, gameId, stat.name, stat.displayName, stat.statType, stat.category || null, stat.sortOrder, stat.isPrimary ? 1 : 0, stat.format || null]
+        `INSERT INTO game_stat_definitions (id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format, chart_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [stat.id, gameId, stat.name, stat.displayName, stat.statType, stat.category || null, stat.sortOrder, stat.isPrimary ? 1 : 0, stat.format || null, stat.chartType || 'bar']
       );
     }
   }

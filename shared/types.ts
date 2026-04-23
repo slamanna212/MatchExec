@@ -406,6 +406,7 @@ export interface GameStatDefinition {
   sort_order: number;
   is_primary: boolean;
   format?: string;
+  chart_type?: string;
 }
 
 export interface ScorecardSubmission {

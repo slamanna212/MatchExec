@@ -6,7 +6,7 @@ import { Container, Button, Stack, Skeleton, SimpleGrid, Text } from '@mantine/c
 import { IconArrowLeft, IconChartBar } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { MapStatCard } from '@/components/stats/MapStatCard';
-import { StatsVisualizationPlaceholder } from '@/components/stats/StatsVisualizationPlaceholder';
+import { StatsVisualization } from '@/components/stats/StatsVisualization';
 import type { ScorecardSubmission } from '@/shared/types';
 
 interface Match {
@@ -113,7 +113,7 @@ export default function MatchStatsPage({ params }: { params: Promise<{ matchId: 
         )}
 
         {/* Full-width stats area */}
-        <StatsVisualizationPlaceholder />
+        {match && <StatsVisualization matchId={matchId} gameId={match.game_id} games={matchGames} />}
       </Stack>
     </Container>
   );

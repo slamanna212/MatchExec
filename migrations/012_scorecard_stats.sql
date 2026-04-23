@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS game_stat_definitions (
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_primary INTEGER NOT NULL DEFAULT 0,
   format TEXT,
+  chart_type TEXT DEFAULT 'bar',
   PRIMARY KEY (id, game_id),
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 );
