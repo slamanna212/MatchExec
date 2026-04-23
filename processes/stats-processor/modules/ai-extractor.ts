@@ -178,7 +178,7 @@ export class AIExtractor {
               title: 'Scorecard Ready for Player Assignment',
               description: `${unassignedCount} extracted player stat${unassignedCount === 1 ? '' : 's'} waiting to be matched to participants`,
               matchId: submission.match_id,
-              metadata: { submissionId, unassignedCount },
+              metadata: { submissionId, matchGameId: submission.match_game_id, unassignedCount },
             });
           }
         }

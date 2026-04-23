@@ -179,7 +179,13 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
               size="xs"
               color="orange"
               variant="filled"
-              onClick={() => router.push(`/matches/${event.match_id}`)}
+              onClick={() => {
+                const matchGameId = (event.metadata as Record<string, unknown>)?.matchGameId as string | undefined;
+                const dest = matchGameId
+                  ? `/matches/${event.match_id}/stats/${matchGameId}`
+                  : `/matches/${event.match_id}/stats`;
+                router.push(dest);
+              }}
               className="feed-assign-players-btn"
             >
               Assign Players
