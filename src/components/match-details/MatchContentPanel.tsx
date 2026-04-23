@@ -281,7 +281,7 @@ export function MatchContentPanel({
     <Stack gap="md">
         {/* Tab Navigation */}
         <div style={{ width: '100%', overflowX: 'auto' }}>
-          <Group justify="center" mb="sm">
+          <Group justify="center" mb="sm" w="100%">
             <SegmentedControl
               radius="xl"
               size="sm"
