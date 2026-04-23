@@ -96,7 +96,7 @@ jobs:
   docker-test:
     name: Docker Integration Test
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
-    needs: [test, integration-test]
+    needs: [test, integration-test, build]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
