@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
+import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select, Divider } from '@mantine/core';
 import { useState, useEffect, useRef } from 'react';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
@@ -49,6 +49,42 @@ export default function DevPage() {
   >([]);
   const [aiTestError, setAiTestError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  type DiscordNotificationType =
+    | 'match_announcement'
+    | 'tournament_announcement'
+    | 'match_start'
+    | 'timed_reminder'
+    | 'map_score'
+    | 'match_winner'
+    | 'tournament_winner'
+    | 'health_alert_critical'
+    | 'health_alert_warning';
+
+  const [discordNotifLoading, setDiscordNotifLoading] = useState<DiscordNotificationType | null>(null);
+  const [discordNotifResults, setDiscordNotifResults] = useState<Record<string, { type: 'success' | 'error'; text: string }>>({});
+
+  const triggerDiscordNotification = async (type: DiscordNotificationType) => {
+    setDiscordNotifLoading(type);
+    try {
+      const response = await fetch('/api/debug/discord-notification-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDiscordNotifResults(prev => ({ ...prev, [type]: { type: 'success' as const, text: data.message } }));
+      } else {
+        setDiscordNotifResults(prev => ({ ...prev, [type]: { type: 'error' as const, text: data.error || 'Failed' } }));
+      }
+    } catch (error) {
+      logger.error('Error triggering Discord notification:', error);
+      setDiscordNotifResults(prev => ({ ...prev, [type]: { type: 'error' as const, text: 'Request failed' } }));
+    } finally {
+      setDiscordNotifLoading(null);
+    }
+  };
 
   const handleTestVoiceLines = async () => {
     setVoiceTestLoading(true);
@@ -174,6 +210,123 @@ export default function DevPage() {
               >
                 Test Voice Lines
               </Button>
+            </div>
+          </Stack>
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Discord Notification Testing</Text>
+          <Text size="sm" c="dimmed" mb="lg">
+            Trigger every Discord notification type using the real queue pipeline. Notifications go to whatever channels are configured for each type.
+          </Text>
+
+          <Stack gap="md">
+            <div>
+              <Text size="sm" fw={500} mb="xs">Announcement Channel</Text>
+              <Text size="xs" c="dimmed" mb="sm">Uses the most recent match or tournament in the database.</Text>
+              <Group gap="sm" wrap="wrap">
+                {([
+                  { type: 'match_announcement' as DiscordNotificationType, label: 'Match Announcement', color: 'blue' },
+                  { type: 'tournament_announcement' as DiscordNotificationType, label: 'Tournament Announcement', color: 'violet' },
+                ] as const).map(({ type, label, color }) => (
+                  <Stack key={type} gap={4} style={{ minWidth: 200 }}>
+                    <Button
+                      size="sm"
+                      color={color}
+                      loading={discordNotifLoading === type}
+                      onClick={() => triggerDiscordNotification(type)}
+                    >
+                      {label}
+                    </Button>
+                    {discordNotifResults[type] && (
+                      <Text size="xs" c={discordNotifResults[type].type === 'success' ? 'green' : 'red'}>
+                        {discordNotifResults[type].text}
+                      </Text>
+                    )}
+                  </Stack>
+                ))}
+              </Group>
+            </div>
+
+            <Divider />
+
+            <div>
+              <Text size="sm" fw={500} mb="xs">Reminders Channel</Text>
+              <Text size="xs" c="dimmed" mb="sm">Sends a 30-minute reminder for the most recent match.</Text>
+              <Stack gap={4} style={{ display: 'inline-flex' }}>
+                <Button
+                  size="sm"
+                  color="orange"
+                  loading={discordNotifLoading === 'timed_reminder'}
+                  onClick={() => triggerDiscordNotification('timed_reminder')}
+                >
+                  Timed Reminder (30 min)
+                </Button>
+                {discordNotifResults['timed_reminder'] && (
+                  <Text size="xs" c={discordNotifResults['timed_reminder'].type === 'success' ? 'green' : 'red'}>
+                    {discordNotifResults['timed_reminder'].text}
+                  </Text>
+                )}
+              </Stack>
+            </div>
+
+            <Divider />
+
+            <div>
+              <Text size="sm" fw={500} mb="xs">Match Start Channel</Text>
+              <Text size="xs" c="dimmed" mb="sm">Uses the most recent match or tournament. Match winner has a 15-second delay built in.</Text>
+              <Group gap="sm" wrap="wrap">
+                {([
+                  { type: 'match_start' as DiscordNotificationType, label: 'Match Start', color: 'teal' },
+                  { type: 'map_score' as DiscordNotificationType, label: 'Map Score', color: 'cyan' },
+                  { type: 'match_winner' as DiscordNotificationType, label: 'Match Winner', color: 'green' },
+                  { type: 'tournament_winner' as DiscordNotificationType, label: 'Tournament Winner', color: 'yellow' },
+                ] as const).map(({ type, label, color }) => (
+                  <Stack key={type} gap={4} style={{ minWidth: 180 }}>
+                    <Button
+                      size="sm"
+                      color={color}
+                      loading={discordNotifLoading === type}
+                      onClick={() => triggerDiscordNotification(type)}
+                    >
+                      {label}
+                    </Button>
+                    {discordNotifResults[type] && (
+                      <Text size="xs" c={discordNotifResults[type].type === 'success' ? 'green' : 'red'}>
+                        {discordNotifResults[type].text}
+                      </Text>
+                    )}
+                  </Stack>
+                ))}
+              </Group>
+            </div>
+
+            <Divider />
+
+            <div>
+              <Text size="sm" fw={500} mb="xs">Health Alerts Channel</Text>
+              <Group gap="sm" wrap="wrap">
+                {([
+                  { type: 'health_alert_critical' as DiscordNotificationType, label: 'Critical Alert', color: 'red' },
+                  { type: 'health_alert_warning' as DiscordNotificationType, label: 'Warning Alert', color: 'yellow' },
+                ] as const).map(({ type, label, color }) => (
+                  <Stack key={type} gap={4} style={{ minWidth: 180 }}>
+                    <Button
+                      size="sm"
+                      color={color}
+                      loading={discordNotifLoading === type}
+                      onClick={() => triggerDiscordNotification(type)}
+                    >
+                      {label}
+                    </Button>
+                    {discordNotifResults[type] && (
+                      <Text size="xs" c={discordNotifResults[type].type === 'success' ? 'green' : 'red'}>
+                        {discordNotifResults[type].text}
+                      </Text>
+                    )}
+                  </Stack>
+                ))}
+              </Group>
             </div>
           </Stack>
         </Card>
