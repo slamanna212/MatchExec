@@ -47,7 +47,7 @@
     "@mantine/hooks": "9.0.2",
     "@mantine/modals": "9.0.2",
     "@mantine/notifications": "9.0.2",
-    "@napi-rs/canvas": "0.1.99",
+    "@napi-rs/canvas": "0.1.100",
     "@snazzah/davey": "0.1.11",
     "@tabler/icons-react": "3.40.0",
     "bufferutil": "4.1.0",
