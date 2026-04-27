@@ -50,8 +50,6 @@
     "@napi-rs/canvas": "0.1.99",
     "@snazzah/davey": "0.1.11",
     "@tabler/icons-react": "3.40.0",
-    "better-auth": "^1.6.9",
-    "better-sqlite3": "^12.9.0",
     "bufferutil": "4.1.0",
     "discord.js": "14.26.3",
     "express": "5.2.1",
@@ -71,7 +69,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "3.3.5",
     "@tailwindcss/postcss": "4.2.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "5.0.6",
     "@types/node": "25.6.0",
     "@types/node-cron": "3.0.11",
