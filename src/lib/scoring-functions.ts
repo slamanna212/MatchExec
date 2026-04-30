@@ -789,7 +789,7 @@ async function getMatchTeamId(
 /**
  * Determine the winner of a match based on game wins
  */
-async function determineMatchWinner(
+export async function determineMatchWinner(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string
 ): Promise<string | null> {
