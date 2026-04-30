@@ -1,7 +1,8 @@
 'use client'
 
-import { Box, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
 import type { GameMapWithMode } from './useMatchForm';
+import { useLazyBackground } from '@/hooks/useLazyBackground';
 
 interface MapCardProps {
   map: GameMapWithMode;
@@ -9,8 +10,11 @@ interface MapCardProps {
 }
 
 export function MapCard({ map, onClick }: MapCardProps) {
+  const { ref, backgroundImage } = useLazyBackground(map.imageUrl);
+
   return (
-    <Box
+    <div
+      ref={ref}
       onClick={onClick}
       className="hover:scale-[1.02] cursor-pointer"
       style={{
@@ -18,11 +22,13 @@ export function MapCard({ map, onClick }: MapCardProps) {
         height: 190,
         borderRadius: 10,
         overflow: 'hidden',
-        backgroundImage: `url(${map.imageUrl})`,
+        backgroundImage,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundColor: 'var(--mantine-color-dark-6)',
         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        contentVisibility: 'auto',
+        containIntrinsicSize: '0 190px',
       }}
     >
       <div
@@ -47,6 +53,6 @@ export function MapCard({ map, onClick }: MapCardProps) {
           {map.name}
         </Text>
       </div>
-    </Box>
+    </div>
   );
 }

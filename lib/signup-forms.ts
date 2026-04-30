@@ -30,6 +30,11 @@ export class SignupFormLoader {
       return this.cache.get(gameId)!;
     }
 
+    if (!/^[a-z0-9_-]+$/i.test(gameId)) {
+      logger.warning(`Invalid gameId: ${gameId}`);
+      return this.getDefaultSignupForm();
+    }
+
     try {
       const signupPath = path.join(process.cwd(), 'data', 'games', gameId, 'signup.json');
 

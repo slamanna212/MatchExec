@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 const VALID_LOG_LEVELS = ['debug', 'info', 'warning', 'error', 'critical'];
 
@@ -15,13 +15,10 @@ export async function GET() {
 
     const logLevel = result?.setting_value || 'warning';
 
-    return NextResponse.json({ log_level: logLevel });
+    return apiOk({ log_level: logLevel });
   } catch (error) {
     logger.error('Error fetching log level:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch log level' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch log level');
   }
 }
 
@@ -32,10 +29,7 @@ export async function PUT(request: Request) {
 
     // Validate log level
     if (!log_level || !VALID_LOG_LEVELS.includes(log_level)) {
-      return NextResponse.json(
-        { error: 'Invalid log level. Must be one of: debug, info, warning, error, critical' },
-        { status: 400 }
-      );
+      return apiError('Invalid log level. Must be one of: debug, info, warning, error, critical', 400);
     }
 
     const db = await getDbInstance();
@@ -49,15 +43,9 @@ export async function PUT(request: Request) {
     // Reload logger cache
     await logger.reload();
 
-    return NextResponse.json({
-      success: true,
-      log_level
-    });
+    return apiOk({ success: true, log_level });
   } catch (error) {
     logger.error('Error updating log level:', error);
-    return NextResponse.json(
-      { error: 'Failed to update log level' },
-      { status: 500 }
-    );
+    return apiError('Failed to update log level');
   }
 }

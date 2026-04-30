@@ -3,12 +3,14 @@
 import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar, Skeleton } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight, IconLayoutDashboard } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 import { AnimatedCounter } from './AnimatedCounter';
 
 import { logger } from '@/lib/logger/client';
 import { StageRing } from './StageRing';
+import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface Stats {
   totalMatches: number;
@@ -293,8 +295,9 @@ export function HomePage() {
   };
 
   return (
-    <div className="container mx-auto px-6 pt-3 pb-6 max-w-6xl">
+    <PageLayout>
       <Stack gap="lg">
+        <PageHeader icon={IconLayoutDashboard} title="Home" subtitle="Active matches, tournaments, and overall stats" docLink="https://docs.matchexec.com/docs/getting-started/at-a-glance/#homepage" />
         {/* Mission Control Card */}
         <Card
           shadow={colorScheme === 'light' ? 'lg' : 'sm'}
@@ -425,11 +428,11 @@ export function HomePage() {
                   transition: 'all 0.25s ease',
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+                  e.currentTarget.style.transform = 'translateY(-3px)';
                   e.currentTarget.style.boxShadow = `0 8px 24px ${stat.color}33`;
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.transform = '';
                   e.currentTarget.style.boxShadow = '';
                 }}
               >
@@ -479,6 +482,6 @@ export function HomePage() {
           </SimpleGrid>
         </motion.div>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

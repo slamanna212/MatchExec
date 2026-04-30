@@ -19,8 +19,8 @@ COPY scripts ./scripts
 COPY processes ./processes
 COPY src ./src
 COPY public ./public
-COPY *.config.* ./
-COPY tsconfig.json ./
+COPY ecosystem.config.js next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json ./
+COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrator.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
 
 # Build Next.js app and bundle processes
 RUN npm run build
@@ -66,6 +66,7 @@ RUN addgroup -g 1001 abc && \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=abc:abc /app/.next/standalone ./
 COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
+RUN chmod -R a-w /app/public /app/.next/static
 
 # Copy bundled process files (optimized with esbuild)
 COPY --from=builder /app/dist ./dist
@@ -75,6 +76,7 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/shared ./shared
 COPY --from=builder --chown=abc:abc /app/data ./data
+RUN chmod -R a-w /app/data
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
@@ -109,5 +111,5 @@ ENV TZ=UTC
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Use s6-overlay init system
+# s6-overlay requires root to start its supervision tree; individual services drop to abc (uid 1001) via s6 service config
 ENTRYPOINT ["/init"]

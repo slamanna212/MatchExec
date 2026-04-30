@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: Request,
@@ -23,12 +23,9 @@ export async function GET(
       ORDER BY gm.name ASC
     `, [gameId]);
 
-    return NextResponse.json(modes);
+    return apiOk(modes);
   } catch (error) {
     logger.error('Error fetching game modes:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch game modes' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch game modes');
   }
 }

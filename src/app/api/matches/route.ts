@@ -4,6 +4,7 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { safeJSONParse } from '@/lib/utils/validation';
+import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   validateMatchRequest,
   prepareMatchData,
@@ -11,15 +12,20 @@ import {
   parseMatchResponse,
   type MatchRequestBody
 } from './helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const limit = limitParam ? parseInt(limitParam, 10) : null;
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
     const db = await getDbInstance();
-    
+
     let query = `
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
              t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
@@ -32,9 +38,9 @@ export async function GET(request: NextRequest) {
       LEFT JOIN game_maps gm ON m.map_id = gm.id AND m.game_id = gm.game_id
       LEFT JOIN match_participants mp ON m.id = mp.match_id
     `;
-    
-    const params: string[] = [];
-    
+
+    const params: (string | number)[] = [];
+
     if (status === 'complete') {
       query += ` WHERE m.status = 'complete'`;
     } else {
@@ -42,8 +48,13 @@ export async function GET(request: NextRequest) {
       query += ` WHERE m.status != 'complete'`;
     }
 
-    query += ` GROUP BY m.id ORDER BY m.start_time ASC`;
-    
+    query += ` GROUP BY m.id ORDER BY m.updated_at DESC`;
+
+    if (limit !== null) {
+      query += ` LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+    }
+
     const matches = await db.all<MatchDbRow>(query, params);
 
     // Parse maps and map codes JSON for each match
@@ -61,13 +72,24 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(parsedMatches);
+    // Compute ETag from count + latest updated_at + total participants for efficient polling
+    const maxUpdatedAt = matches.reduce(
+      (max, m) => { const val = String(m.updated_at); return val > max ? val : max; },
+      ''
+    );
+    const totalParticipants = (matches as Array<MatchDbRow & { participant_count?: number }>).reduce(
+      (sum, m) => sum + (m.participant_count || 0), 0
+    );
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (limit === null && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+
+    return NextResponse.json(parsedMatches, { headers: { ETag: etag } });
   } catch (error) {
     logger.error('Error fetching matches:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch matches' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch matches');
   }
 }
 
@@ -78,10 +100,7 @@ export async function POST(request: NextRequest) {
     // Validate request
     const validation = validateMatchRequest(body);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 400 }
-      );
+      return apiError(validation.error!, 400);
     }
 
     const db = await getDbInstance();
@@ -114,12 +133,18 @@ export async function POST(request: NextRequest) {
 
     logger.debug(`✅ Match created in "created" status: ${body.name}`);
 
-    return NextResponse.json(parsedMatch, { status: 201 });
+    await logFeedEvent({
+      eventType: 'match_created',
+      priority: 3,
+      title: 'Match Created',
+      description: `"${body.name}" is ready for setup`,
+      matchId: preparedData.matchId,
+      metadata: { gameName: (match as unknown as Record<string, unknown>)?.game_name },
+    });
+
+    return apiOk(parsedMatch, 201);
   } catch (error) {
     logger.error('Error creating match:', error);
-    return NextResponse.json(
-      { error: 'Failed to create match' },
-      { status: 500 }
-    );
+    return apiError('Failed to create match');
   }
 }

@@ -1,11 +1,14 @@
 'use client'
 
-import { Text, Stack, Group, Card, Skeleton } from '@mantine/core';
+import { Stack, Group, Card, Skeleton } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useEffect, useState } from 'react';
 import { IconClock } from '@tabler/icons-react';
 import SchedulerConfig from '@/components/SchedulerConfig';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface SchedulerSettings {
   match_check_cron: string;
@@ -78,17 +81,15 @@ export default function SchedulerSettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Group>
-            <IconClock size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>Scheduler Settings</Text>
-              <Text size="sm" c="dimmed">Configure automated tasks and their timing</Text>
-            </div>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconClock}
+          title="Scheduler Settings"
+          subtitle="Configure automated tasks and their timing"
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+          docLink="https://docs.matchexec.com/docs/settings/scheduler-settings/"
+        />
 
         {loading ? (
           <Card shadow="sm" padding="lg" radius="md" withBorder>
@@ -103,21 +104,23 @@ export default function SchedulerSettingsPage() {
                   </Group>
                 </Stack>
               ))}
-              <Group justify="flex-end">
-                <Skeleton height={36} width={180} />
-              </Group>
             </Stack>
           </Card>
         ) : (
           <SchedulerConfig
             value={schedulerSettings}
             onChange={setSchedulerSettings}
-            onSubmit={handleSchedulerSubmit}
             loading={loading}
-            saving={saving}
           />
         )}
+
+        <SettingsSaveButton
+          type="button"
+          onClick={() => handleSchedulerSubmit(schedulerSettings)}
+          loading={saving}
+          disabled={loading}
+        />
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

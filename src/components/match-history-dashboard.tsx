@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -15,25 +15,15 @@ import {
   Stack,
   Grid,
   Image,
-  TextInput
+  TextInput,
+  Center,
 } from '@mantine/core';
 import type { Match } from '@/shared/types';
 import { StageRing } from './StageRing';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-  
-  // Check if timestamp already includes timezone info (Z, +offset, or -offset at the end)
-  // Note: SQLite date format "2025-08-09 00:40:16" contains dashes but they're part of the date, not timezone
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-  
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  // We need to treat this as UTC, so append 'Z'
-  return new Date(`${timestamp  }Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
+import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
+import { IconClockHour3 } from '@tabler/icons-react';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -87,6 +77,7 @@ const HistoryMatchCard = memo(({
           h={140}
           w="100%"
           fit="cover"
+          loading="lazy"
           style={{ objectFit: 'cover' }}
         />
       </Card.Section>
@@ -148,39 +139,36 @@ function SkeletonCard() {
   );
 }
 
+const PAGE_SIZE = 12;
+
 export function MatchHistoryDashboard() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(30);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const etagRef = useRef<string | null>(null);
 
   const fetchMatches = useCallback(async (silent = false) => {
     try {
-      // Fetch only completed matches
-      const response = await fetch('/api/matches?status=complete');
+      const headers: Record<string, string> = {};
+      if (silent && etagRef.current) {
+        headers['If-None-Match'] = etagRef.current;
+      }
+      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=0`, { headers });
+
+      if (response.status === 304) return;
+
+      const newEtag = response.headers.get('etag');
+      if (newEtag) etagRef.current = newEtag;
+
       if (response.ok) {
         const data = await response.json();
-        // Only update if data actually changed to prevent unnecessary rerenders
-        setMatches(prevMatches => {
-          // More efficient comparison than JSON.stringify for arrays
-          if (prevMatches.length !== data.length) {
-            return data;
-          }
-          
-          // Check if any match has changed by comparing key properties
-          const hasChanges = data.some((match: MatchWithGame, index: number) => {
-            const prevMatch = prevMatches[index];
-            return !prevMatch || 
-              match.id !== prevMatch.id ||
-              match.status !== prevMatch.status ||
-              match.name !== prevMatch.name ||
-              match.created_at !== prevMatch.created_at ||
-              match.updated_at !== prevMatch.updated_at;
-          });
-          
-          return hasChanges ? data : prevMatches;
-        });
+        setMatches(data);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(0);
       }
     } catch (error) {
       logger.error('Error fetching matches:', error);
@@ -191,134 +179,27 @@ export function MatchHistoryDashboard() {
     }
   }, []);
 
-  // Fetch UI settings on component mount
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        logger.error('Error fetching UI settings:', error);
-      }
-    };
-
-    fetchMatches();
-    fetchUISettings();
-  }, [fetchMatches]);
-
-  // Set up auto-refresh with configurable interval (less frequent for history)
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchMatches(true); // Silent refresh to prevent loading states
-    }, refreshInterval * 1000);
-
-    // Cleanup interval on unmount or when refreshInterval changes
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, fetchMatches]);
-
-  const _formatMapName = useCallback((mapId: string) => {
-    // Convert map ID to proper display name
-    // Examples: "circuit-royal" -> "Circuit Royal", "kings-row" -> "Kings Row"
-    return mapId
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }, []);
-
-  const [_mapNames, setMapNames] = useState<{[key: string]: string}>({});
-  const [_mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
-  const [_mapNotes, _setMapNotes] = useState<{[key: string]: string}>({});
-
-  const fetchMapNames = async (gameId: string) => {
+  const loadMore = useCallback(async () => {
+    const nextPage = page + 1;
+    setLoadingMore(true);
     try {
-      const response = await fetch(`/api/games/${gameId}/maps`);
+      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=${nextPage * PAGE_SIZE}`);
       if (response.ok) {
-        const maps = await response.json();
-        const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-
-        // Check if this game supports all modes (flexible mode combinations)
-        // Fetch game data to check the supports_all_modes flag
-        const gameResponse = await fetch(`/api/games/${gameId}`);
-        const gameData = await gameResponse.json();
-        const supportsAllModes = gameData.supports_all_modes || gameData.supportsAllModes || false;
-        
-        if (supportsAllModes) {
-          // For flexible games, get all possible modes and create all combinations
-          const modesResponse = await fetch(`/api/games/${gameId}/modes`);
-          let modes: {id: string, name: string}[] = [];
-          
-          if (modesResponse.ok) {
-            modes = await modesResponse.json();
-          }
-          
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
-            // Add the original map entry
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location,
-              note: map.note
-            };
-            
-            // For flexible games, create entries for all possible mode combinations
-            // Extract base map name by removing the mode suffix
-            const baseMapName = map.id.replace(/-[^-]+$/, '');
-            
-            modes.forEach(mode => {
-              const modeSpecificId = `${baseMapName}-${mode.id}`;
-              if (modeSpecificId !== map.id) {
-                mapNamesObj[modeSpecificId] = map.name;
-                mapDetailsObj[modeSpecificId] = {
-                  name: map.name,
-                  imageUrl: map.imageUrl,
-                  modeName: mode.name,
-                  location: map.location,
-                  note: map.note
-                };
-              }
-            });
-          });
-        } else {
-          // For fixed mode games, use the API data as-is
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string; note?: string }) => {
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location,
-              note: map.note
-            };
-          });
-        }
-        
-        setMapNames(prev => ({ ...prev, ...mapNamesObj }));
-        setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
+        const data = await response.json();
+        setMatches(prev => [...prev, ...data]);
+        setHasMore(data.length >= PAGE_SIZE);
+        setPage(nextPage);
       }
     } catch (error) {
-      logger.error('Error fetching map names:', error);
+      logger.error('Error loading more matches:', error);
+    } finally {
+      setLoadingMore(false);
     }
-  };
+  }, [page]);
 
   useEffect(() => {
-    // Fetch all map names for games that have matches
-    const gameIds = new Set<string>();
-    matches.forEach(match => {
-      if (match.maps && match.maps.length > 0) {
-        gameIds.add(match.game_id);
-      }
-    });
-
-    gameIds.forEach(gameId => {
-      fetchMapNames(gameId);
-    });
-  }, [matches]);
+    fetchMatches();
+  }, [fetchMatches]);
 
   const handleViewDetails = useCallback((match: MatchWithGame) => {
     router.push(`/matches/history/${match.id}`);
@@ -378,7 +259,7 @@ export function MatchHistoryDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
+      <PageLayout>
         <Grid>
           {Array.from({ length: 6 }).map((_, i) => (
             <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
@@ -386,24 +267,25 @@ export function MatchHistoryDashboard() {
             </Grid.Col>
           ))}
         </Grid>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <Group justify="flex-end" mb="xl">
-        {matches.length > 0 && (
+    <PageLayout>
+      <PageHeader
+        icon={IconClockHour3}
+        title="Match History"
+        subtitle="View results from completed matches"
+        action={matches.length > 0 ? (
           <TextInput
             placeholder="Search history..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.currentTarget.value)}
             style={{ width: 300 }}
           />
-        )}
-      </Group>
-
-      <Divider mb="xl" />
+        ) : undefined}
+      />
 
       {matches.length === 0 ? (
         <Card p="xl">
@@ -436,16 +318,29 @@ export function MatchHistoryDashboard() {
           </Stack>
         </Card>
       ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <Grid>
-            {memoizedMatchCards}
-          </Grid>
-        </motion.div>
+        <>
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            <Grid>
+              {memoizedMatchCards}
+            </Grid>
+          </motion.div>
+          {hasMore && !searchQuery && (
+            <Center mt="xl">
+              <Button
+                variant="default"
+                loading={loadingMore}
+                onClick={loadMore}
+              >
+                Load More
+              </Button>
+            </Center>
+          )}
+        </>
       )}
-    </div>
+    </PageLayout>
   );
 }

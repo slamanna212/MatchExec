@@ -41,13 +41,13 @@ export abstract class BaseLogger {
     const envFormat = typeof process !== 'undefined' ? process.env.LOG_FORMAT : undefined;
     this.logFormat = envFormat === 'json' ? 'json' : 'text';
 
-    // Load initial level from database (async, completes in background)
-    this.loadLogLevel();
-
-    // Set up periodic reload every 5 seconds
+    // Set up periodic reload every 5 seconds; first tick also handles initial level load
     this.reloadInterval = setInterval(() => {
-      this.loadLogLevel();
+      void this.loadLogLevel();
     }, this.cacheDuration);
+
+    // Load initial level immediately, fire-and-forget (defaults to 'warning' until resolved)
+    void this.loadLogLevel();
   }
 
   // Abstract method - subclasses must implement

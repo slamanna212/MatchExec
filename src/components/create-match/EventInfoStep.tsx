@@ -1,6 +1,7 @@
 'use client'
 
-import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button } from '@mantine/core';
+import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button, Divider } from '@mantine/core';
+import { DateTimePicker } from '@mantine/dates';
 import type { MatchFormData } from './useMatchForm';
 import { EventImageUpload } from './EventImageUpload';
 
@@ -13,6 +14,8 @@ interface EventInfoStepProps {
   onImageUpload: (file: File | null) => Promise<void>;
   onRemoveImage: () => Promise<void>;
   uploadingImage: boolean;
+  hasStatDefs: boolean;
+  aiProvidersConfigured: boolean;
 }
 
 export function EventInfoStep({
@@ -23,91 +26,137 @@ export function EventInfoStep({
   onNext,
   onImageUpload,
   onRemoveImage,
-  uploadingImage
+  uploadingImage,
+  hasStatDefs,
+  aiProvidersConfigured,
 }: EventInfoStepProps) {
   return (
-    <Stack>
-      <Text mb="md">Enter event information:</Text>
+    <Stack gap="xl">
 
-      <TextInput
-        label="Event Name"
-        placeholder="Enter match name"
-        required
-        value={formData.name || ''}
-        onChange={(e) => updateFormData('name', e.target.value)}
-      />
-
-      <Textarea
-        label="Description"
-        placeholder="Enter match description (optional)"
-        value={formData.description || ''}
-        onChange={(e) => updateFormData('description', e.target.value)}
-        rows={3}
-      />
-
-      <Group grow>
+      {/* Core event details */}
+      <Stack gap="md">
         <TextInput
-          label="Date"
-          type="date"
+          label="Event Name"
+          placeholder="Enter match name"
           required
-          value={formData.date || ''}
-          onChange={(e) => updateFormData('date', e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
+          value={formData.name || ''}
+          onChange={(e) => updateFormData('name', e.target.value)}
         />
+
+        <Group grow align="flex-start">
+          <DateTimePicker
+            label="Date & Time"
+            placeholder="Pick date and time"
+            required
+            value={formData.dateTime ?? null}
+            onChange={(val) => updateFormData('dateTime', val)}
+            minDate={new Date()}
+            timePickerProps={{ format: '12h' }}
+          />
+
+          <Select
+            label="Rules Type"
+            placeholder="Select rules type"
+            required
+            value={formData.rules}
+            onChange={(value) => updateFormData('rules', value)}
+            data={[
+              { value: 'casual', label: 'Casual' },
+              { value: 'competitive', label: 'Competitive' }
+            ]}
+          />
+        </Group>
+      </Stack>
+
+      {/* Optional details */}
+      <Stack gap="md">
+        <Divider
+          label={
+            <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+              Optional Details
+            </Text>
+          }
+          labelPosition="left"
+        />
+
+        <Textarea
+          label="Description"
+          placeholder="Enter match description"
+          value={formData.description || ''}
+          onChange={(e) => updateFormData('description', e.target.value)}
+          rows={3}
+        />
+
         <TextInput
-          label="Time"
-          type="time"
-          required
-          value={formData.time || ''}
-          onChange={(e) => updateFormData('time', e.target.value)}
-          step="60"
+          label="Livestream Link"
+          placeholder="https://twitch.tv/..."
+          value={formData.livestreamLink || ''}
+          onChange={(e) => updateFormData('livestreamLink', e.target.value)}
         />
-      </Group>
+      </Stack>
 
-      <TextInput
-        label="Livestream Link"
-        placeholder="https://twitch.tv/... (optional)"
-        value={formData.livestreamLink || ''}
-        onChange={(e) => updateFormData('livestreamLink', e.target.value)}
-      />
+      {/* Match options */}
+      <Stack gap="md">
+        <Divider
+          label={
+            <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+              Options
+            </Text>
+          }
+          labelPosition="left"
+        />
 
-      <Select
-        label="Rules Type"
-        placeholder="Select rules type"
-        required
-        value={formData.rules}
-        onChange={(value) => updateFormData('rules', value)}
-        data={[
-          { value: 'casual', label: 'Casual' },
-          { value: 'competitive', label: 'Competitive' }
-        ]}
-      />
+        <Stack gap="sm">
+          <Checkbox
+            label="Player Notifications"
+            description="Send Discord DMs to registered players before match starts"
+            checked={formData.playerNotifications ?? true}
+            onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
+          />
 
-      <Checkbox
-        label="Player Notifications"
-        description="Send Discord DMs to registered players before match starts"
-        checked={formData.playerNotifications ?? true}
-        onChange={(event) => updateFormData('playerNotifications', event.currentTarget.checked)}
-      />
+          {hasStatDefs && (
+            <Checkbox
+              label="Enable Stats Collection"
+              description="Upload scorecards after each map to extract player stats with AI"
+              checked={formData.statsEnabled ?? false}
+              onChange={(event) => updateFormData('statsEnabled', event.currentTarget.checked)}
+              disabled={!aiProvidersConfigured}
+            />
+          )}
+        </Stack>
+      </Stack>
 
-      <EventImageUpload
-        imagePreview={imagePreview}
-        uploadingImage={uploadingImage}
-        onImageUpload={onImageUpload}
-        onRemoveImage={onRemoveImage}
-      />
+      {/* Event image */}
+      <Stack gap="md">
+        <Divider
+          label={
+            <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+              Media
+            </Text>
+          }
+          labelPosition="left"
+        />
 
-      <Group justify="space-between" mt="md" gap="xs">
+        <EventImageUpload
+          imagePreview={imagePreview}
+          uploadingImage={uploadingImage}
+          onImageUpload={onImageUpload}
+          onRemoveImage={onRemoveImage}
+        />
+      </Stack>
+
+      <Group justify="space-between" gap="xs">
         <Button variant="outline" onClick={onBack}>
           Back
         </Button>
         <Button
           onClick={onNext}
-          disabled={!formData.name || !formData.date || !formData.time}
+          disabled={!formData.name || !formData.dateTime}
         >
           Next
         </Button>
       </Group>
+
     </Stack>
   );
 }

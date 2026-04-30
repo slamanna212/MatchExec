@@ -1,0 +1,6 @@
+#!/command/with-contenv bash
+
+echo "Starting stats processor..."
+
+cd /app
+exec s6-setuidgid abc node dist/stats-processor.js

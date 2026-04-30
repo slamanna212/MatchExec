@@ -1,7 +1,7 @@
-import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { Tournament } from '@/shared/types';
+import { apiError, apiOk } from '@/lib/api-response';
 import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import {
@@ -62,29 +62,32 @@ export async function POST(
 ) {
   try {
     const { tournamentId } = await params;
+    if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
     const { newStatus } = await request.json();
 
     const statusError = validateNewStatus(newStatus);
     if (statusError) {
-      return NextResponse.json({ error: statusError }, { status: 400 });
+      return apiError(statusError, 400);
     }
 
     const db = await getDbInstance();
 
     const currentTournament = await db.get<Tournament>(`SELECT * FROM tournaments WHERE id = ?`, [tournamentId]);
     if (!currentTournament) {
-      return NextResponse.json({ error: 'Tournament not found' }, { status: 404 });
+      return apiError('Tournament not found', 404);
     }
 
     const transitionError = validateTournamentStatusTransition(currentTournament, newStatus);
     if (transitionError) {
-      return NextResponse.json({ error: transitionError }, { status: 400 });
+      return apiError(transitionError, 400);
     }
 
     if (newStatus === 'battle') {
       const battleError = await validateBattleRequirements(db, tournamentId);
       if (battleError) {
-        return NextResponse.json({ error: battleError }, { status: 400 });
+        return apiError(battleError, 400);
       }
     }
 
@@ -114,13 +117,10 @@ export async function POST(
       GROUP BY t.id
     `, [tournamentId]);
 
-    return NextResponse.json(updatedTournament);
+    return apiOk(updatedTournament);
 
   } catch (error) {
     logger.error('Error transitioning tournament status:', error);
-    return NextResponse.json(
-      { error: 'Failed to transition tournament status' },
-      { status: 500 }
-    );
+    return apiError('Failed to transition tournament status', 500);
   }
 }

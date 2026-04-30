@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getMatchGames, initializeMatchGames } from '../../../../../lib/scoring-functions';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -32,7 +32,7 @@ export async function GET(
     }
     
     logger.debug('API: Returning response...');
-    return NextResponse.json({
+    return apiOk({
       success: true,
       games: matchGames
     });
@@ -40,9 +40,6 @@ export async function GET(
   } catch (error) {
     logger.error('Error getting match games:', error);
     logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get match games' },
-      { status: 500 }
-    );
+    return apiError(error instanceof Error ? error.message : 'Failed to get match games');
   }
 }

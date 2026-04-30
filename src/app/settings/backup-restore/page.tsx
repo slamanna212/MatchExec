@@ -14,9 +14,11 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useState, useRef } from 'react';
-import { IconAlertTriangle, IconDownload, IconUpload, IconLock, IconShieldOff } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDownload, IconUpload, IconLock, IconShieldOff, IconDatabaseImport } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 export default function BackupRestorePage() {
   const [backupPassword, setBackupPassword] = useState('');
@@ -149,20 +151,21 @@ export default function BackupRestorePage() {
   const isEncryptedFile = restoreFile?.name.endsWith('.enc') ?? false;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <PageLayout narrow>
       <Stack gap="lg">
-        <div>
-          <Text size="xl" fw={700} mb="xs">Backup & Restore</Text>
-          <Text size="sm" c="dimmed">
-            Export or import the entire database. All matches, tournaments, settings, and configuration are included.
-          </Text>
-        </div>
+        <PageHeader
+          icon={IconDatabaseImport}
+          title="Backup & Restore"
+          subtitle="Export or import the entire database. All matches, tournaments, settings, and configuration are included."
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+          docLink="https://docs.matchexec.com/docs/settings/backup-and-restore/"
+        />
 
         {/* Backup */}
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Stack gap="md">
             <div>
-              <Text size="lg" fw={600} mb={4}>Create Backup</Text>
+              <Text size="md" fw={600} mb={4}>Create Backup</Text>
               <Text size="sm" c="dimmed">
                 Downloads a snapshot of the database. The bot and scheduler continue running during backup.
               </Text>
@@ -205,7 +208,7 @@ export default function BackupRestorePage() {
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Stack gap="md">
             <div>
-              <Text size="lg" fw={600} mb={4}>Restore Backup</Text>
+              <Text size="md" fw={600} mb={4}>Restore Backup</Text>
               <Text size="sm" c="dimmed">
                 Upload a backup file to replace the current database. The bot and scheduler will restart automatically.
               </Text>
@@ -296,6 +299,6 @@ export default function BackupRestorePage() {
           </Group>
         </Stack>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }

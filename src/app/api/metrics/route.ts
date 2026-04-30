@@ -92,6 +92,15 @@ export async function GET() {
       lines.push(prometheusLine('matchexec_discord_bot_heartbeat_age_seconds', 'Seconds since last Discord bot heartbeat', 'gauge', ageSeconds));
     }
 
+    // Stats processor heartbeat age
+    const statsProcessorHeartbeat = await db.get<{ setting_value: string }>(
+      "SELECT setting_value FROM app_settings WHERE setting_key = 'stats_processor_last_heartbeat'"
+    );
+    if (statsProcessorHeartbeat?.setting_value) {
+      const ageSeconds = Math.floor((Date.now() - new Date(statsProcessorHeartbeat.setting_value).getTime()) / 1000);
+      lines.push(prometheusLine('matchexec_stats_processor_heartbeat_age_seconds', 'Seconds since last stats processor heartbeat', 'gauge', ageSeconds));
+    }
+
     // Database size (file size)
     const dbPath = process.env.DATABASE_PATH || './app_data/data/matchexec.db';
     try {

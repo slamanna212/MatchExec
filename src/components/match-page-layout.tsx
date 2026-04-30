@@ -1,6 +1,7 @@
 'use client'
 
-import { Grid } from '@mantine/core';
+import { Grid, Breadcrumbs, Anchor, Text } from '@mantine/core';
+import Link from 'next/link';
 import { MatchInfoPanel } from './match-details/MatchInfoPanel';
 import { MatchContentPanel } from './match-details/MatchContentPanel';
 import type { Match } from '@/shared/types';
@@ -78,7 +79,6 @@ interface MatchPageLayoutProps {
   onMapCodesSave?: () => void;
   mapCodesSaving?: boolean;
   onAssignPlayers?: () => void;
-  onScoring?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string) => void;
@@ -88,6 +88,7 @@ interface MatchPageLayoutProps {
   isHistory?: boolean;
   participantsLoading?: boolean;
   remindersLoading?: boolean;
+  showBreadcrumbs?: boolean;
 }
 
 export function MatchPageLayout({
@@ -104,7 +105,6 @@ export function MatchPageLayout({
   onMapCodesSave,
   mapCodesSaving,
   onAssignPlayers,
-  onScoring,
   onDelete,
   onEdit,
   onStatusTransition,
@@ -113,11 +113,33 @@ export function MatchPageLayout({
   showActions = true,
   isHistory = false,
   participantsLoading = false,
-  remindersLoading = false
+  remindersLoading = false,
+  showBreadcrumbs = false
 }: MatchPageLayoutProps) {
+  const parentSection = isHistory ? 'Match History' : 'Matches';
+  const parentHref = isHistory ? '/matches/history' : '/matches';
+
   return (
     <div className="container mx-auto py-6 pl-2 pr-2">
-      <Grid gutter="lg">
+      {showBreadcrumbs && (
+        <>
+          <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
+            <Anchor size="sm" c="dimmed" component={Link} href={parentHref}>{parentSection}</Anchor>
+            <Text size="sm">{match.name}</Text>
+          </Breadcrumbs>
+          <Anchor
+            component={Link}
+            href={parentHref}
+            size="sm"
+            c="dimmed"
+            hiddenFrom="sm"
+            style={{ display: 'block', marginBottom: '0.5rem', marginLeft: '0.5rem' }}
+          >
+            ← {parentSection}
+          </Anchor>
+        </>
+      )}
+      <Grid gap="lg">
         {/* Left column - 33% width on desktop, full width on mobile */}
         <Grid.Col span={{ base: 12, sm: 12, md: 4, lg: 4 }} pl={{ base: 'md', md: 0 }}>
           <MatchInfoPanel
@@ -131,7 +153,6 @@ export function MatchPageLayout({
             showActions={showActions}
             isHistory={isHistory}
             onAssignPlayers={onAssignPlayers}
-            onScoring={onScoring}
             onDelete={onDelete}
             onEdit={onEdit}
             onStatusTransition={onStatusTransition}

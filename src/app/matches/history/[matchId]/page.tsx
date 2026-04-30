@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react';
 import { logger } from '@/lib/logger/client';
 import { use, useState, useEffect, useCallback } from 'react';
 import { Loader, Container, Text, Center, Stack } from '@mantine/core';
@@ -56,7 +57,7 @@ export default function HistoryMatchPage({
   params
 }: {
   params: Promise<{ matchId: string }>
-}) {
+}): React.JSX.Element {
   const { matchId } = use(params);
   const [match, setMatch] = useState<MatchWithGame | null>(null);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
@@ -254,7 +255,7 @@ export default function HistoryMatchPage({
       signupConfig={signupConfig}
       parseDbTimestamp={parseDbTimestamp}
       formatMapName={formatMapName}
-      showActions={false}
+      showActions={true}
       isHistory={true}
       participantsLoading={false}
       remindersLoading={false}

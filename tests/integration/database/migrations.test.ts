@@ -188,6 +188,62 @@ describe('Database Migrations', () => {
     }
   });
 
+  it('should preserve data through discord_bot_requests table recreation in migration 007', async () => {
+    const migration007DbPath = path.join(process.cwd(), 'app_data', 'data', 'migration-007-test.db');
+
+    for (const p of [migration007DbPath, `${migration007DbPath}-wal`, `${migration007DbPath}-shm`]) {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+
+    const db = new Database(migration007DbPath);
+    await db.connect();
+
+    try {
+      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const allFiles = fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql'))
+        .sort();
+
+      // Run only migrations before 007
+      for (const file of allFiles.filter(f => f < '007')) {
+        const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+        await db.exec(sql);
+      }
+
+      // Discover actual column names — prefer legacy 'request_type'/'request_data' (NOT NULL in pre-007
+      // schema) over the newer 'type'/'data' aliases which are nullable
+      const colInfo = await db.all<{ name: string }>('PRAGMA table_info(discord_bot_requests)');
+      const colNames = colInfo.map((c: any) => c.name);
+      const typeCol = colNames.includes('request_type') ? 'request_type' : 'type';
+      const dataCol = colNames.includes('request_data') ? 'request_data' : 'data';
+
+      // Insert a row with known data before the migration runs
+      await db.run(
+        `INSERT INTO discord_bot_requests (id, ${typeCol}, ${dataCol}, status) VALUES (?, ?, ?, ?)`,
+        ['data-migrate-test', 'match_update', '{"matchId":"m1"}', 'pending']
+      );
+
+      // Run migration 007 — it recreates discord_bot_requests via CREATE/INSERT/DROP/RENAME
+      const sql007 = fs.readFileSync(path.join(migrationsDir, '007_v0_6.sql'), 'utf-8');
+      await db.exec(sql007);
+
+      // Verify the row survived with its data in the canonical column names
+      const row = await db.get<{ id: string; type: string; data: string; status: string }>(
+        `SELECT * FROM discord_bot_requests WHERE id = ?`,
+        ['data-migrate-test']
+      );
+      expect(row).toBeDefined();
+      expect(row!.type).toBe('match_update');
+      expect(row!.data).toBe('{"matchId":"m1"}');
+      expect(row!.status).toBe('pending');
+    } finally {
+      await db.close();
+      for (const p of [migration007DbPath, `${migration007DbPath}-wal`, `${migration007DbPath}-shm`]) {
+        if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { } }
+      }
+    }
+  });
+
   it('should create migrations tracking table', async () => {
     // Clean up
     for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {

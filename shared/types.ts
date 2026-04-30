@@ -72,6 +72,7 @@ export interface Tournament {
   start_time?: Date;
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
+  stats_enabled?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -91,6 +92,7 @@ export interface TournamentTeamMember {
   discord_user_id?: string;
   avatar_url?: string;
   joined_at: Date;
+  is_captain?: boolean;
 }
 
 // Database row types (includes fields not in the base interface)
@@ -140,6 +142,7 @@ export interface DiscordSettingsDbRow {
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
   voice_channel_category_id?: string;
   voice_channel_cleanup_delay_minutes?: number;
+  winner_vote_enabled?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 
@@ -224,6 +227,62 @@ export interface MatchGame {
   completed_at?: Date;
   created_at: Date;
   updated_at: Date;
+}
+
+// Match game result (used in detail views)
+export interface MatchGameResult {
+  id: string;
+  match_id: string;
+  round: number;
+  map_id: string;
+  map_name: string;
+  winner_id?: string;
+  status: 'pending' | 'ongoing' | 'completed';
+}
+
+// Signup form field definition
+export interface SignupField {
+  id: string;
+  label: string;
+  type: string;
+}
+
+// Signup form configuration
+export interface SignupConfig {
+  fields: SignupField[];
+}
+
+// Match with joined game data (used in detail/info panel views)
+export interface MatchWithGameDetails extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  map_codes_supported?: boolean;
+  rules?: string;
+  rounds?: number;
+  maps?: string[];
+  map_codes?: Record<string, string>;
+  livestream_link?: string;
+  event_image_url?: string;
+  tournament_allow_match_editing?: boolean;
+  stats_enabled?: number;
+  player_notifications?: number;
+  created_at: string;
+  updated_at: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+// Tournament with joined game data (used in detail/info panel views)
+export interface TournamentWithGameDetails extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  participant_count?: number;
+  event_image_url?: string;
+  created_at: string;
+  updated_at: string;
+  start_time?: string;
 }
 
 // Data seeding types
@@ -333,4 +392,139 @@ export interface SchedulerSettings {
   channel_refresh_cron: string;
   created_at: Date;
   updated_at: Date;
+}
+
+// === Scorecard Stats Types ===
+
+export interface GameStatDefinition {
+  id: string;
+  game_id: string;
+  name: string;
+  display_name: string;
+  stat_type: string;
+  category?: string;
+  sort_order: number;
+  is_primary: boolean;
+  format?: string;
+  chart_type?: string;
+}
+
+export interface ScorecardSubmission {
+  id: string;
+  match_id: string;
+  match_game_id: string;
+  submitted_by_participant_id?: string;
+  submitted_by_discord_user_id?: string;
+  team_side: 'blue' | 'red';
+  screenshot_url: string;
+  discord_message_id?: string;
+  ai_raw_response?: string;
+  ai_extraction_status: 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
+  ai_error_message?: string;
+  ai_processing_log?: string;
+  review_status: 'pending' | 'approved' | 'rejected' | 'auto_approved';
+  reviewed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScorecardPlayerStat {
+  id: string;
+  submission_id: string;
+  match_id: string;
+  match_game_id: string;
+  participant_id?: string;
+  extracted_player_name: string;
+  team_side?: 'blue' | 'red';
+  stats_json: string;
+  assignment_status: 'unassigned' | 'assigned' | 'confirmed';
+  confidence_score?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchPlayerStats {
+  id: string;
+  match_id: string;
+  participant_id: string;
+  total_stats_json: string;
+  maps_played: number;
+  stat_image_url?: string;
+  stat_image_sent: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StatsSettings {
+  enabled: boolean;
+  ai_provider: string;
+  ai_api_key?: string;
+  ai_model: string;
+  both_sides_required: boolean;
+  auto_advance_on_match: boolean;
+}
+
+export interface ScorecardDmMessage {
+  id: string;
+  match_id: string;
+  match_game_id: string;
+  discord_user_id: string;
+  discord_message_id: string;
+  participant_id?: string;
+  team_side?: 'blue' | 'red';
+  created_at: string;
+}
+
+export interface AIExtractionResult {
+  players: Array<{
+    playerName: string;
+    teamSide: 'blue' | 'red' | 'unknown';
+    stats: Record<string, number>;
+    confidence: number;
+  }>;
+  mapName?: string;
+  gameResult?: {
+    team1Score?: number;
+    team2Score?: number;
+    winner?: 'team1' | 'team2';
+  };
+}
+
+// Activity Feed types
+export type FeedEventType =
+  | 'match_created'
+  | 'tournament_created'
+  | 'match_phase_changed'
+  | 'tournament_phase_changed'
+  | 'match_started'
+  | 'tournament_started'
+  | 'match_scoring_required'
+  | 'scorecard_player_matching_required'
+  | 'map_scored'
+  | 'match_completed'
+  | 'tournament_completed'
+  | 'match_cancelled'
+  | 'tournament_cancelled'
+  | 'ai_error'
+  | 'health_alert';
+
+export type FeedPriority = 1 | 2 | 3 | 4;
+
+export interface FeedEvent {
+  id: string;
+  event_type: FeedEventType;
+  priority: FeedPriority;
+  title: string;
+  description: string | null;
+  match_id: string | null;
+  tournament_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface FeedResponse {
+  events: FeedEvent[];
+  total: number;
+  limit: number;
+  offset: number;
 }

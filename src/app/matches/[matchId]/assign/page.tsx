@@ -8,14 +8,11 @@ import {
   Stack,
   Group,
   Text,
-  Title,
-  Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon,
   Card,
   Grid,
   Badge,
@@ -24,7 +21,8 @@ import {
   ActionIcon,
   Select
 } from '@mantine/core';
-import { IconUsers, IconAlertCircle, IconMapRoute } from '@tabler/icons-react';
+import { IconUsers, IconAlertCircle, IconMapRoute, IconGripVertical } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 
 interface SignupField {
   id: string;
@@ -271,6 +269,7 @@ export default function AssignPage({
       >
         <Group justify="space-between" align="center" mb="xs">
           <Group align="center">
+            {!isDragDisabled && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
             <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled" src={participant.avatar_url || undefined}>
               {index + 1}
             </Avatar>
@@ -424,20 +423,12 @@ export default function AssignPage({
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/matches')} style={{ cursor: 'pointer' }}>Matches</Anchor>
-            <Anchor onClick={() => router.push(`/matches/${matchId}`)} style={{ cursor: 'pointer' }}>{match.name}</Anchor>
-            <Text>Assign Players</Text>
-          </Breadcrumbs>
-
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="violet">
-              <IconUsers size={20} />
-            </ThemeIcon>
-            <Title order={2}>{match.name}</Title>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconUsers}
+          title={match.name}
+          subtitle="Assign players to teams"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+        />
 
         <Text size="sm" c="dimmed">
           Use the dropdown or drag players between columns to assign them to Reserve, Blue Team, or Red Team.

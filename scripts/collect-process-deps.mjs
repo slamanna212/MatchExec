@@ -22,6 +22,7 @@ const NODE_MODULES = join(ROOT, 'node_modules');
 // These are packages marked as 'external' in esbuild configs
 // that are NOT already provided by Next.js standalone output.
 const PROCESS_DEPS = [
+  '@napi-rs/canvas',
   'discord.js',
   '@discordjs/voice',
   '@discordjs/rest',

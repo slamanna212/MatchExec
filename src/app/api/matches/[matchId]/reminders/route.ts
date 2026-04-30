@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { processMatchAnnouncements } from '../../../../../lib/reminder-helpers';
+import { apiError, apiOk } from '@/lib/api-response';
 
 
 export async function GET(
@@ -13,7 +13,7 @@ export async function GET(
     const { matchId } = await params;
     
     if (!matchId) {
-      return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
+      return apiError('Match ID is required', 400);
     }
 
     const db = await getDbInstance();
@@ -33,7 +33,7 @@ export async function GET(
     `, [matchId]);
 
     if (!match) {
-      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+      return apiError('Match not found', 404);
     }
 
     // Get scheduled announcements from match creation process
@@ -70,7 +70,7 @@ export async function GET(
       return timeB.getTime() - timeA.getTime();
     });
 
-    return NextResponse.json({ 
+    return apiOk({
       match: {
         id: match.id,
         name: match.name,
@@ -84,9 +84,6 @@ export async function GET(
 
   } catch (error) {
     logger.error('Error fetching match reminders:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch match reminders' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch match reminders');
   }
 }

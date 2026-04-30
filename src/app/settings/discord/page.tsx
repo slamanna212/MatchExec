@@ -1,11 +1,14 @@
 'use client'
 
 import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton } from '@mantine/core';
+import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { IconBrandDiscord } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 interface DiscordSettings {
   application_id?: string;
@@ -38,11 +41,10 @@ export default function DiscordSettingsPage() {
       setLoading(true);
       try {
         const response = await fetch('/api/settings');
-        
+
         if (response.ok) {
           const data = await response.json();
-          
-          // Set Discord form values
+
           form.setValues({
             application_id: data.discord.application_id || '',
             bot_token: data.discord.bot_token || '',
@@ -67,7 +69,6 @@ export default function DiscordSettingsPage() {
     setSaving(true);
 
     try {
-      // Don't send the masked bot token, let the server keep the existing one
       const payload = { ...values };
       if (values.bot_token === '••••••••') {
         delete payload.bot_token;
@@ -84,11 +85,10 @@ export default function DiscordSettingsPage() {
           title: 'Settings Saved',
           message: 'Discord settings saved successfully!'
         });
-        // Refresh the form to get the latest data
         const refreshResponse = await fetch('/api/settings/discord');
         if (refreshResponse.ok) {
           const refreshedData = await refreshResponse.json();
-          const sanitizedData = {
+          form.setValues({
             application_id: refreshedData.application_id || '',
             bot_token: refreshedData.bot_token || '',
             guild_id: refreshedData.guild_id || '',
@@ -96,8 +96,7 @@ export default function DiscordSettingsPage() {
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
             voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes || 10,
-          };
-          form.setValues(sanitizedData);
+          });
         }
       } else {
         notificationHelper.error({
@@ -116,165 +115,182 @@ export default function DiscordSettingsPage() {
     }
   };
 
+  const skeletonRows = (count: number) => (
+    <Stack gap="md">
+      {Array.from({ length: count }).map((_, i) => (
+        <Stack key={i} gap={4}>
+          <Skeleton height={14} width={120} />
+          <Skeleton height={36} />
+        </Stack>
+      ))}
+    </Stack>
+  );
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <Stack gap="lg">
-        <div>
-          <Group>
-            <IconBrandDiscord size="1.5rem" />
-            <div>
-              <Text size="xl" fw={700}>Discord Settings</Text>
-              <Text size="sm" c="dimmed">Configure Discord bot connection and permissions</Text>
-            </div>
-          </Group>
-        </div>
+    <PageLayout narrow>
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack gap="lg">
+          <PageHeader
+            icon={IconBrandDiscord}
+            title="Discord Settings"
+            subtitle="Configure Discord bot connection and permissions"
+            breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
+            docLink="https://docs.matchexec.com/docs/settings/discord-settings/"
+          />
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          {loading ? (
+          {/* Bot Credentials */}
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Stack gap="md">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Stack key={i} gap={4}>
-                  <Skeleton height={14} width={120} />
-                  <Skeleton height={36} />
-                </Stack>
-              ))}
-              <Group justify="flex-end"><Skeleton height={36} width={160} /></Group>
-            </Stack>
-          ) : (
-          <form onSubmit={form.onSubmit(handleSubmit)}>
-            <Stack gap="md">
-              <Group align="end">
-                <TextInput
-                  label="Application ID"
-                  placeholder="Discord application ID"
-                  description="Application ID from Discord Developer Portal"
-                  {...form.getInputProps('application_id')}
-                  disabled={loading}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  variant="outline"
-                  disabled={!form.values.application_id || loading}
-                  onClick={async () => {
-                    if (form.values.application_id) {
-                      // Save the application ID first
-                      try {
-                        setSaving(true);
-                        const response = await fetch('/api/settings/discord', {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify((() => {
-                            const payload = { ...form.values };
-                            if (form.values.bot_token === '••••••••') {
-                              delete payload.bot_token;
+              <Text fw={600} size="lg">Bot Credentials</Text>
+
+              {loading ? skeletonRows(2) : (
+                <>
+                  <Group align="end">
+                    <TextInput
+                      label="Application ID"
+                      placeholder="Discord application ID"
+                      description="Application ID from Discord Developer Portal"
+                      {...form.getInputProps('application_id')}
+                      disabled={loading}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={!form.values.application_id || loading}
+                      onClick={async () => {
+                        if (form.values.application_id) {
+                          try {
+                            setSaving(true);
+                            const response = await fetch('/api/settings/discord', {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify((() => {
+                                const payload = { ...form.values };
+                                if (form.values.bot_token === '••••••••') {
+                                  delete payload.bot_token;
+                                }
+                                return payload;
+                              })()),
+                            });
+
+                            if (response.ok) {
+                              notificationHelper.success({
+                                title: 'Application ID Saved',
+                                message: 'Application ID saved! Opening Discord authorization...'
+                              });
+                              const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=2551204168592720&scope=bot%20applications.commands`;
+                              window.open(url, '_blank');
+                            } else {
+                              notificationHelper.error({
+                                title: 'Save Failed',
+                                message: 'Failed to save application ID.'
+                              });
                             }
-                            return payload;
-                          })()),
-                        });
-
-                        if (response.ok) {
-                          notificationHelper.success({
-                            title: 'Application ID Saved',
-                            message: 'Application ID saved! Opening Discord authorization...'
-                          });
-                          // Open Discord authorization URL
-                          const url = `https://discord.com/api/oauth2/authorize?client_id=${form.values.application_id}&permissions=2551204168592720&scope=bot%20applications.commands`;
-                          window.open(url, '_blank');
-                        } else {
-                          notificationHelper.error({
-                            title: 'Save Failed',
-                            message: 'Failed to save application ID.'
-                          });
+                          } catch (error) {
+                            logger.error('Error saving application ID:', error);
+                            notificationHelper.error({
+                              title: 'Connection Error',
+                              message: 'An error occurred while saving application ID.'
+                            });
+                          } finally {
+                            setSaving(false);
+                          }
                         }
-                      } catch (error) {
-                        logger.error('Error saving application ID:', error);
-                        notificationHelper.error({
-                          title: 'Connection Error',
-                          message: 'An error occurred while saving application ID.'
-                        });
-                      } finally {
-                        setSaving(false);
-                      }
-                    }
-                  }}
-                >
-                  Add Bot
-                </Button>
-              </Group>
+                      }}
+                    >
+                      Add Bot
+                    </Button>
+                  </Group>
 
-              <PasswordInput
-                label="Bot Token"
-                placeholder="Your Discord bot token"
-                description="Token from Discord Developer Portal"
-                {...form.getInputProps('bot_token')}
-                disabled={loading}
-              />
-
-              <TextInput
-                label="Guild ID"
-                placeholder="Discord server ID"
-                description="Right-click your Discord server and copy ID"
-                {...form.getInputProps('guild_id')}
-                disabled={loading}
-              />
-
-              <TextInput
-                label="Voice Channel Category ID"
-                placeholder="Category ID for auto-created voice channels"
-                description="Voice channels will be automatically created in this category when matches start"
-                {...form.getInputProps('voice_channel_category_id')}
-                disabled={loading}
-                error={form.values.voice_channel_category_id && !/^\d{17,19}$/.test(form.values.voice_channel_category_id) ? 'Invalid Discord category ID format' : null}
-              />
-
-              <NumberInput
-                label="Voice Channel Cleanup Delay (minutes)"
-                placeholder="10"
-                description="How long to wait after a match ends before deleting auto-created voice channels"
-                {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
-                disabled={loading}
-                min={0}
-                max={1440}
-              />
-
-              <Stack gap="sm">
-                <Text size="sm" fw={500}>Announcement Role</Text>
-                <Text size="xs" c="dimmed">Role to mention in match announcements</Text>
-                
-                <Group align="center" gap="md">
-                  <TextInput
-                    placeholder="Role ID for announcements"
-                    {...form.getInputProps('announcement_role_id')}
-                    disabled={loading || form.values.mention_everyone}
-                    style={{ flex: 1 }}
-                  />
-                  
-                  <Checkbox
-                    label={<Text fw="bold">@Everyone</Text>}
-                    size="md"
-                    {...form.getInputProps('mention_everyone', { type: 'checkbox' })}
+                  <PasswordInput
+                    label="Bot Token"
+                    placeholder="Your Discord bot token"
+                    description="Token from Discord Developer Portal"
+                    {...form.getInputProps('bot_token')}
                     disabled={loading}
-                    onChange={(event) => {
-                      form.setFieldValue('mention_everyone', event.currentTarget.checked);
-                      // Clear the role ID when @everyone is checked
-                      if (event.currentTarget.checked) {
-                        form.setFieldValue('announcement_role_id', '');
-                      }
-                    }}
                   />
-                </Group>
-              </Stack>
-
-              <Group justify="flex-end" mt="lg">
-                <Button type="submit" loading={saving} disabled={loading}>
-                  Save Discord Settings
-                </Button>
-              </Group>
+                </>
+              )}
             </Stack>
-          </form>
-          )}
-        </Card>
-      </Stack>
-    </div>
+          </Card>
+
+          {/* Server Configuration */}
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Stack gap="md">
+              <Text fw={600} size="lg">Server Configuration</Text>
+
+              {loading ? skeletonRows(3) : (
+                <>
+                  <TextInput
+                    label="Guild ID"
+                    placeholder="Discord server ID"
+                    description="Right-click your Discord server and copy ID"
+                    {...form.getInputProps('guild_id')}
+                    disabled={loading}
+                  />
+
+                  <TextInput
+                    label="Voice Channel Category ID"
+                    placeholder="Category ID for auto-created voice channels"
+                    description="Voice channels will be automatically created in this category when matches start"
+                    {...form.getInputProps('voice_channel_category_id')}
+                    disabled={loading}
+                    error={form.values.voice_channel_category_id && !/^\d{17,19}$/.test(form.values.voice_channel_category_id) ? 'Invalid Discord category ID format' : null}
+                  />
+
+                  <Stack gap="sm">
+                    <Text size="sm" fw={500}>Announcement Role</Text>
+                    <Text size="xs" c="dimmed">Role to mention in match announcements</Text>
+
+                    <Group align="center" gap="md">
+                      <TextInput
+                        placeholder="Role ID for announcements"
+                        {...form.getInputProps('announcement_role_id')}
+                        disabled={loading || form.values.mention_everyone}
+                        style={{ flex: 1 }}
+                      />
+
+                      <Checkbox
+                        label={<Text fw="bold">@Everyone</Text>}
+                        size="md"
+                        {...form.getInputProps('mention_everyone', { type: 'checkbox' })}
+                        disabled={loading}
+                        onChange={(event) => {
+                          form.setFieldValue('mention_everyone', event.currentTarget.checked);
+                          if (event.currentTarget.checked) {
+                            form.setFieldValue('announcement_role_id', '');
+                          }
+                        }}
+                      />
+                    </Group>
+                  </Stack>
+                </>
+              )}
+            </Stack>
+          </Card>
+
+          {/* Voice Channels */}
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Stack gap="md">
+              <Text fw={600} size="lg">Voice Channels</Text>
+
+              {loading ? skeletonRows(1) : (
+                <NumberInput
+                  label="Voice Channel Cleanup Delay (minutes)"
+                  placeholder="10"
+                  description="How long to wait after a match ends before deleting auto-created voice channels"
+                  {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
+                  disabled={loading}
+                  min={0}
+                  max={1440}
+                />
+              )}
+            </Stack>
+          </Card>
+
+          <SettingsSaveButton loading={saving} disabled={loading} />
+        </Stack>
+      </form>
+    </PageLayout>
   );
 }

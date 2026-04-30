@@ -1,0 +1,309 @@
+'use client'
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Stack, Text, Group, Button, Alert, Loader, Tabs, Badge, SimpleGrid } from '@mantine/core';
+import { IconCheck, IconX, IconRefresh, IconRotate } from '@tabler/icons-react';
+import { showSuccess, showError, showInfo } from '@/lib/notifications';
+import type { ScorecardSubmission, ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';
+import { SubmissionViewer } from './SubmissionViewer';
+import { PlayerStatCard } from './PlayerStatCard';
+
+interface Participant {
+  id: string;
+  username: string;
+  team_assignment?: string | null;
+}
+
+interface SubmissionWithStats extends ScorecardSubmission {
+  playerStats: ScorecardPlayerStat[];
+}
+
+interface StatsReviewPanelProps {
+  matchId: string;
+  gameId: string;
+  matchGameId?: string;
+}
+
+export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPanelProps): React.ReactElement {
+  const [submissions, setSubmissions] = useState<SubmissionWithStats[]>([]);
+  const [statDefs, setStatDefs] = useState<GameStatDefinition[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSubmission, setActiveSubmission] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const shownLogCount = useRef<Record<string, number>>({});
+  const prevStatus = useRef<Record<string, string>>({});
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [subsRes, defsRes, partRes] = await Promise.all([
+        fetch(`/api/matches/${matchId}/scorecard${matchGameId ? `?matchGameId=${matchGameId}` : ''}`).then(r => r.json()),
+        fetch(`/api/games/${encodeURIComponent(gameId)}/stats`).then(r => r.json()),
+        fetch(`/api/matches/${matchId}/participants`).then(r => r.json()),
+      ]);
+      setSubmissions(subsRes as SubmissionWithStats[]);
+      setStatDefs(defsRes as GameStatDefinition[]);
+      setParticipants((partRes as { participants?: Participant[] }).participants || partRes as Participant[]);
+      if ((subsRes as SubmissionWithStats[]).length > 0 && !activeSubmission) {
+        setActiveSubmission((subsRes as SubmissionWithStats[])[0].id);
+      }
+      for (const sub of (subsRes as SubmissionWithStats[])) {
+        if (!prevStatus.current[sub.id]) {
+          prevStatus.current[sub.id] = sub.ai_extraction_status;
+        }
+      }
+    } catch {
+      showError('Failed to load submission data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    if (submissions.some(s => s.ai_extraction_status === 'processing')) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/matches/${matchId}/scorecard${matchGameId ? `?matchGameId=${matchGameId}` : ''}`);
+          const fresh = await res.json() as SubmissionWithStats[];
+
+          for (const sub of fresh) {
+            const log: Array<{ message: string; ts: string }> = sub.ai_processing_log
+              ? JSON.parse(sub.ai_processing_log) as Array<{ message: string; ts: string }>
+              : [];
+            const seen = shownLogCount.current[sub.id] ?? 0;
+            for (let i = seen; i < log.length; i++) {
+              showInfo(log[i].message, 'AI Processing');
+            }
+            shownLogCount.current[sub.id] = log.length;
+
+            const prev = prevStatus.current[sub.id];
+            if (prev === 'processing' && sub.ai_extraction_status === 'completed') {
+              showSuccess('AI extraction completed!');
+            }
+            if (prev === 'processing' && sub.ai_extraction_status === 'failed') {
+              showError(sub.ai_error_message || 'AI extraction failed', 'AI Processing');
+            }
+            prevStatus.current[sub.id] = sub.ai_extraction_status;
+          }
+
+          setSubmissions(fresh);
+        } catch {
+          // Silent — don't toast on poll errors
+        }
+      }, 3000);
+    }
+
+    return () => { if (interval) clearInterval(interval); };
+   
+  }, [submissions, matchId, matchGameId]);
+
+  const handleAssign = async (submissionId: string, playerStatId: string, participantId: string | null) => {
+    try {
+      await fetch(`/api/matches/${matchId}/scorecard/${submissionId}/assign`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments: [{ playerStatId, participantId }] }),
+      });
+      setSubmissions(prev =>
+        prev.map(sub =>
+          sub.id !== submissionId ? sub : {
+            ...sub,
+            playerStats: sub.playerStats.map(ps =>
+              ps.id !== playerStatId ? ps : { ...ps, participant_id: participantId ?? undefined }
+            ),
+          }
+        )
+      );
+    } catch {
+      showError('Failed to assign participant');
+    }
+  };
+
+  const handleRetry = async (submissionId: string) => {
+    setRetrying(submissionId);
+    try {
+      await fetch(`/api/matches/${matchId}/scorecard/${submissionId}/retry`, { method: 'POST' });
+      showSuccess('Requeued for AI extraction');
+      await fetchData();
+    } catch {
+      showError('Failed to retry extraction');
+    } finally {
+      setRetrying(null);
+    }
+  };
+
+  const handleReview = async (submissionId: string, status: 'approved' | 'rejected') => {
+    setReviewing(true);
+    try {
+      await fetch(`/api/matches/${matchId}/scorecard/${submissionId}/review`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      showSuccess(`Submission ${status}`);
+      await fetchData();
+    } catch {
+      showError('Failed to review submission');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Group justify="center" p="xl">
+        <Loader />
+        <Text>Loading submissions...</Text>
+      </Group>
+    );
+  }
+
+  if (submissions.length === 0) {
+    return (
+      <Alert color="blue">No scorecard submissions yet for this match.</Alert>
+    );
+  }
+
+
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between">
+        <Text fw={600} size="lg">Scorecard Submissions</Text>
+        <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} onClick={fetchData}>
+          Refresh
+        </Button>
+      </Group>
+
+      {/* Submission tabs */}
+      <Tabs value={activeSubmission} onChange={setActiveSubmission}>
+        <Tabs.List>
+          {submissions.map((sub, i) => (
+            <Tabs.Tab
+              key={sub.id}
+              value={sub.id}
+              rightSection={
+                <Badge
+                  size="xs"
+                  color={sub.review_status === 'approved' || sub.review_status === 'auto_approved' ? 'green'
+                    : sub.review_status === 'rejected' ? 'red' : 'gray'}
+                >
+                  {sub.review_status}
+                </Badge>
+              }
+            >
+              {sub.team_side.toUpperCase()} #{i + 1}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+
+        {submissions.map(sub => (
+          <Tabs.Panel key={sub.id} value={sub.id} pt="md">
+            <Stack gap="md">
+              {/* AI status */}
+              <Group>
+                <Text size="sm" c="dimmed">AI Status:</Text>
+                <Badge
+                  color={sub.ai_extraction_status === 'completed' ? 'green'
+                    : sub.ai_extraction_status === 'failed' ? 'red'
+                    : sub.ai_extraction_status === 'processing' ? 'blue' : 'gray'}
+                >
+                  {sub.ai_extraction_status}
+                </Badge>
+                {sub.ai_extraction_status === 'failed' && (
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="orange"
+                    leftSection={<IconRotate size={12} />}
+                    loading={retrying === sub.id}
+                    onClick={() => handleRetry(sub.id)}
+                  >
+                    Retry
+                  </Button>
+                )}
+              </Group>
+
+              {sub.ai_error_message && (
+                <Alert color="red" title="AI Error">{sub.ai_error_message}</Alert>
+              )}
+
+              {/* Screenshot */}
+              <SubmissionViewer screenshotUrl={sub.screenshot_url} />
+
+              {/* Player stats */}
+              {sub.playerStats.length > 0 && (
+                <>
+                  <Text fw={500}>Extracted Players</Text>
+                  {[
+                    { label: 'Blue Team', color: 'blue', stats: sub.playerStats.filter(ps => ps.team_side === 'blue') },
+                    { label: 'Red Team', color: 'red', stats: sub.playerStats.filter(ps => ps.team_side === 'red') },
+                    { label: 'Unassigned', color: 'dimmed', stats: sub.playerStats.filter(ps => !ps.team_side) },
+                  ].filter(g => g.stats.length > 0).map(group => (
+                    <Stack key={group.label} gap="xs">
+                      <Text fw={600} c={group.color}>{group.label}</Text>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                        {group.stats.map(ps => {
+                          const assignedElsewhere = new Set(
+                            sub.playerStats
+                              .filter(other => other.id !== ps.id && other.participant_id)
+                              .map(other => other.participant_id as string)
+                          );
+                          const availableParticipants = participants.filter(
+                            p => !assignedElsewhere.has(p.id)
+                          );
+                          return (
+                            <PlayerStatCard
+                              key={ps.id}
+                              stat={ps}
+                              statDefs={statDefs}
+                              participants={availableParticipants}
+                              onAssignChange={(playerStatId, participantId) =>
+                                handleAssign(sub.id, playerStatId, participantId)
+                              }
+                            />
+                          );
+                        })}
+                      </SimpleGrid>
+                    </Stack>
+                  ))}
+                </>
+              )}
+
+              {/* Review buttons */}
+              {sub.review_status === 'pending' && (
+                <Group>
+                  <Button
+                    color="green"
+                    leftSection={<IconCheck size={14} />}
+                    loading={reviewing}
+                    onClick={() => handleReview(sub.id, 'approved')}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    color="red"
+                    variant="light"
+                    leftSection={<IconX size={14} />}
+                    loading={reviewing}
+                    onClick={() => handleReview(sub.id, 'rejected')}
+                  >
+                    Reject
+                  </Button>
+                </Group>
+              )}
+            </Stack>
+          </Tabs.Panel>
+        ))}
+      </Tabs>
+    </Stack>
+  );
+}

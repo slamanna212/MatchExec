@@ -1,15 +1,18 @@
 'use client'
 
-import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid } from '@mantine/core';
+import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid, ActionIcon } from '@mantine/core';
+import { IconMapRoute, IconBrandDiscord } from '@tabler/icons-react';
 
 interface MatchParticipant {
   id: string;
   user_id: string;
+  discord_user_id?: string | null;
   username: string;
   avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
   team_assignment?: 'reserve' | 'blue' | 'red';
+  receives_map_codes?: boolean;
 }
 
 interface SignupField {
@@ -87,14 +90,29 @@ export function ParticipantsList({
         padding="md"
         radius="md"
         withBorder
-        style={getTeamCardStyles(teamColor)}
+        style={{ ...getTeamCardStyles(teamColor), contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
       >
         <Group align="center" gap="md" wrap="nowrap">
           <Avatar size="lg" color={getAvatarColor(teamColor)} src={participant.avatar_url || undefined}>
             {index}
           </Avatar>
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-            <Text fw={500} size="sm">{participant.username}</Text>
+            <Group gap={4} align="center">
+              <Text fw={500} size="sm">{participant.username}</Text>
+              {participant.discord_user_id && (
+                <ActionIcon
+                  component="a"
+                  href={`https://discord.com/users/${participant.discord_user_id}`}
+                  target="_blank"
+                  variant="subtle"
+                  color="indigo"
+                  size="xs"
+                  title="View Discord profile"
+                >
+                  <IconBrandDiscord size={12} />
+                </ActionIcon>
+              )}
+            </Group>
             <Text size="xs" c="dimmed">
               Joined: {parseDbTimestamp(participant.joined_at)?.toLocaleDateString('en-US') || 'N/A'}
             </Text>
@@ -112,6 +130,13 @@ export function ParticipantsList({
               );
             })}
           </Stack>
+          {participant.receives_map_codes && (
+            <IconMapRoute
+              size={32}
+              style={{ color: `var(--mantine-color-${getBadgeColor(teamColor)}-6)`, flexShrink: 0 }}
+              title="Match Commander"
+            />
+          )}
         </Group>
       </Card>
     );
@@ -126,7 +151,7 @@ export function ParticipantsList({
     return (
       <div>
         <Group justify="space-between" mb="sm">
-          <Text size="lg" fw={600} c={teamColor}>
+          <Text size="md" fw={600} c={teamColor}>
             {title}
           </Text>
           <Badge size="md" color={teamColor} variant="light">
@@ -153,7 +178,7 @@ export function ParticipantsList({
 
   if (loading) {
     return (
-      <Grid gutter="md">
+      <Grid gap="md">
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Stack gap="xs">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -218,7 +243,7 @@ export function ParticipantsList({
     <Stack gap="lg">
       {/* Team Columns - Blue vs Red */}
       {!allUnassigned && (
-        <Grid gutter="md">
+        <Grid gap="md">
           <Grid.Col span={{ base: 12, md: 6 }}>
             {renderTeamSection('Blue Team', blueTeam, 'blue')}
           </Grid.Col>
@@ -231,8 +256,8 @@ export function ParticipantsList({
       {/* Special Case: All Unassigned - Split into 2 columns on desktop */}
       {allUnassigned && unassigned.length > 0 && (
         <>
-          <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-          <Grid gutter="md">
+          <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+          <Grid gap="md">
             <Grid.Col span={{ base: 12, md: 6 }}>
               <Stack gap="xs">
                 {unassigned.slice(0, Math.ceil(unassigned.length / 2)).map((p, i) =>
@@ -254,8 +279,8 @@ export function ParticipantsList({
       {/* Unassigned Players Section - When teams exist */}
       {!allUnassigned && unassigned.length > 0 && (
         <div>
-          <Text size="lg" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-          <Grid gutter="md">
+          <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+          <Grid gap="md">
             {unassigned.map((participant, index) => (
               <Grid.Col key={participant.id} span={{ base: 12, md: 6 }}>
                 {renderParticipantCard(participant, blueTeam.length + redTeam.length + index + 1, 'reserve')}

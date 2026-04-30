@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
 import { logger } from '@/lib/logger/client';
@@ -12,8 +12,43 @@ export default function DevPage() {
       redirect('/');
     }
   }, []);
+  const [systemStatus, setSystemStatus] = useState<{
+    status: string;
+    timestamp: string;
+    services: Record<string, { status: 'up' | 'down' | 'degraded'; lastHeartbeat?: string; message?: string }>;
+  } | null>(null);
+  const [systemStatusLoading, setSystemStatusLoading] = useState(false);
+
+  const fetchSystemStatus = async () => {
+    setSystemStatusLoading(true);
+    try {
+      const res = await fetch('/api/health/ready');
+      const data = await res.json();
+      setSystemStatus(data);
+    } catch {
+      setSystemStatus(null);
+    } finally {
+      setSystemStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemStatus();
+    const interval = setInterval(fetchSystemStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [voiceTestLoading, setVoiceTestLoading] = useState(false);
   const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [aiTestGame, setAiTestGame] = useState<string | null>(null);
+  const [aiTestGames, setAiTestGames] = useState<{ id: string; name: string }[]>([]);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
+  const [aiTestResults, setAiTestResults] = useState<
+    Array<{ provider: string; model: string; rawResponse?: string; error?: string }>
+  >([]);
+  const [aiTestError, setAiTestError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleTestVoiceLines = async () => {
     setVoiceTestLoading(true);
@@ -39,6 +74,34 @@ export default function DevPage() {
     }
   };
 
+  useEffect(() => {
+    fetch('/api/debug/scoring-ai-test')
+      .then(r => r.json())
+      .then((data: { id: string; name: string }[]) => setAiTestGames(data))
+      .catch(() => {});
+  }, []);
+
+  const handleAiTest = async (file: File) => {
+    if (!aiTestGame) return;
+    setAiTestLoading(true);
+    setAiTestResults([]);
+    setAiTestError(null);
+    try {
+      const formData = new FormData();
+      formData.append('game', aiTestGame);
+      formData.append('image', file);
+      const response = await fetch('/api/debug/scoring-ai-test', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) setAiTestError(data.error || 'Request failed');
+      else setAiTestResults(data.results || []);
+    } catch (err) {
+      logger.error('AI test error:', err);
+      setAiTestError('Failed to run AI test');
+    } finally {
+      setAiTestLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <Stack gap="xl">
@@ -46,31 +109,52 @@ export default function DevPage() {
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Group justify="space-between" mb="md">
             <Text size="lg" fw={600}>System Status</Text>
-            <Badge color="green">Online</Badge>
+            <Group gap="xs">
+              {systemStatus && (
+                <Badge color={systemStatus.status === 'healthy' ? 'green' : systemStatus.status === 'degraded' ? 'yellow' : 'red'}>
+                  {systemStatus.status}
+                </Badge>
+              )}
+              <Button size="xs" variant="subtle" loading={systemStatusLoading} onClick={fetchSystemStatus}>
+                Refresh
+              </Button>
+            </Group>
           </Group>
-          <Grid>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Web Server</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Discord Bot</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Scheduler</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Text size="sm" c="dimmed">Worker</Text>
-              <Text fw={600}>Running</Text>
-            </Grid.Col>
-          </Grid>
+          {systemStatus ? (
+            <Grid>
+              {Object.entries(systemStatus.services).map(([name, svc], index, arr) => {
+                const lastRowCount = arr.length % 3;
+                const isFirstOfLastRow = lastRowCount > 0 && index === arr.length - lastRowCount;
+                const offset = isFirstOfLastRow ? Math.floor((3 - lastRowCount) * 4 / 2) : 0;
+                return (
+                <Grid.Col span={4} offset={offset} key={name}>
+                  <Text size="sm" c="dimmed">{name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Text>
+                  <Group gap="xs" align="center">
+                    <Badge size="sm" color={svc.status === 'up' ? 'green' : svc.status === 'degraded' ? 'yellow' : 'red'} variant="light">
+                      {svc.status}
+                    </Badge>
+                    {svc.message && <Text size="xs" c="dimmed">{svc.message}</Text>}
+                  </Group>
+                  {svc.lastHeartbeat && (
+                    <Text size="xs" c="dimmed">
+                      Last seen: {new Date(svc.lastHeartbeat).toLocaleTimeString()}
+                    </Text>
+                  )}
+                </Grid.Col>
+                );
+              })}
+            </Grid>
+          ) : (
+            <Text size="sm" c="dimmed">Loading status...</Text>
+          )}
+          {systemStatus?.timestamp && (
+            <Text size="xs" c="dimmed" mt="sm">Updated: {new Date(systemStatus.timestamp).toLocaleTimeString()}</Text>
+          )}
         </Card>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Text size="lg" fw={600} mb="md">Discord</Text>
-          
+
           {voiceTestMessage && (
             <Alert color={voiceTestMessage.type === 'success' ? 'green' : 'red'} mb="md">
               {voiceTestMessage.text}
@@ -83,7 +167,7 @@ export default function DevPage() {
               <Text size="xs" c="dimmed" mb="md">
                 Tests voice announcements by connecting to user 123546381628604420&apos;s voice channel and playing a random line from the selected voice.
               </Text>
-              <Button 
+              <Button
                 onClick={handleTestVoiceLines}
                 loading={voiceTestLoading}
                 disabled={voiceTestLoading}
@@ -414,6 +498,76 @@ export default function DevPage() {
             </Grid.Col>
           </Grid>
         </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Scoring AI Test</Text>
+          <Text size="sm" c="dimmed" mb="lg">
+            Upload a scoreboard screenshot to test AI extraction using the live system.
+            Reads stat definitions from the database and uses the API key from Stats Settings.
+          </Text>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) { handleAiTest(file); e.target.value = ''; }
+            }}
+          />
+
+          <Stack gap="md">
+            <Group align="flex-end" gap="md">
+              <Select
+                label="Game"
+                placeholder="Select a game"
+                data={aiTestGames.map(g => ({ value: g.id, label: g.name }))}
+                value={aiTestGame}
+                onChange={setAiTestGame}
+                w={220}
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                loading={aiTestLoading}
+                disabled={!aiTestGame || aiTestLoading}
+              >
+                Test AI Extraction
+              </Button>
+            </Group>
+
+            {aiTestError && <Alert color="red">{aiTestError}</Alert>}
+
+            {aiTestResults.map(result => (
+              <div key={`${result.provider}-${result.model}`}>
+                <Group gap="xs" mb="xs">
+                  <Badge color={result.error ? 'red' : 'green'} variant="light">
+                    {result.provider}
+                  </Badge>
+                  <Text size="xs" c="dimmed">{result.model}</Text>
+                </Group>
+                <pre style={{
+                  backgroundColor: 'light-dark(#f8f9fa, #1a1b1e)',
+                  color: result.error ? 'var(--mantine-color-red-6)' : 'var(--mantine-color-green-6)',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  overflowX: 'auto',
+                  overflowY: 'auto',
+                  maxHeight: '400px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  margin: 0,
+                  border: '1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-5))',
+                }}>
+                  {result.error ?? result.rawResponse}
+                </pre>
+              </div>
+            ))}
+          </Stack>
+        </Card>
+
       </Stack>
     </div>
   );

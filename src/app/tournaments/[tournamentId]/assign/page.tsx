@@ -9,14 +9,11 @@ import {
   Stack,
   Group,
   Text,
-  Title,
-  Breadcrumbs,
   Anchor,
   Loader,
   Center,
   Alert,
   Button,
-  ThemeIcon,
   Card,
   Grid,
   Badge,
@@ -26,7 +23,8 @@ import {
   TextInput,
   Select
 } from '@mantine/core';
-import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch } from '@tabler/icons-react';
+import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar, IconGripVertical } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
 
@@ -95,6 +93,7 @@ export default function AssignTournamentPage({
   const [newTeamName, setNewTeamName] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [captainByTeam, setCaptainByTeam] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     try {
@@ -117,6 +116,12 @@ export default function AssignTournamentPage({
       if (teamsRes.ok) {
         const teamsData = await teamsRes.json();
         setTeams(teamsData);
+        const captains: Record<string, string> = {};
+        for (const team of teamsData) {
+          const captain = team.members?.find((m: TournamentTeamMember) => m.is_captain);
+          if (captain) captains[team.id] = captain.user_id;
+        }
+        setCaptainByTeam(captains);
       }
 
       if (participantsRes.ok) {
@@ -188,6 +193,26 @@ export default function AssignTournamentPage({
     setParticipants(prev => prev.map(p =>
       p.id === participantId ? { ...p, team_assignment: newTeamId } : p
     ));
+    // Clear captain if player moves to reserve
+    if (newTeamId === 'reserve') {
+      const participant = participants.find(p => p.id === participantId);
+      if (participant) {
+        setCaptainByTeam(prev => {
+          const updated = { ...prev };
+          for (const [teamId, userId] of Object.entries(updated)) {
+            if (userId === participant.user_id) delete updated[teamId];
+          }
+          return updated;
+        });
+      }
+    }
+  };
+
+  const handleCaptainToggle = (teamId: string, userId: string) => {
+    setCaptainByTeam(prev => ({
+      ...prev,
+      [teamId]: prev[teamId] === userId ? '' : userId
+    }));
   };
 
   const handleSaveAssignments = async () => {
@@ -197,7 +222,7 @@ export default function AssignTournamentPage({
         teamId: team.id,
         members: participants
           .filter(p => p.team_assignment === team.id)
-          .map(p => ({ userId: p.user_id, username: p.username }))
+          .map(p => ({ userId: p.user_id, username: p.username, isCaptain: captainByTeam[team.id] === p.user_id }))
       }));
 
       const response = await fetch(`/api/tournaments/${tournamentId}/teams`, {
@@ -324,20 +349,12 @@ export default function AssignTournamentPage({
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
-        <div>
-          <Breadcrumbs mb="sm">
-            <Anchor onClick={() => router.push('/tournaments')} style={{ cursor: 'pointer' }}>Tournaments</Anchor>
-            <Anchor onClick={() => router.push(`/tournaments/${tournamentId}`)} style={{ cursor: 'pointer' }}>{tournament.name}</Anchor>
-            <Text>Assign Teams</Text>
-          </Breadcrumbs>
-
-          <Group align="center" gap="sm">
-            <ThemeIcon size="lg" variant="light" color="violet">
-              <IconUsers size={20} />
-            </ThemeIcon>
-            <Title order={2}>{tournament.name} — Assign Teams</Title>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconUsers}
+          title={`${tournament.name} — Assign Teams`}
+          subtitle="Assign participants to teams"
+          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }, { title: tournament.name, href: `/tournaments/${tournamentId}` }]}
+        />
 
         {/* Create new team section */}
         <Card withBorder p="md">
@@ -406,6 +423,7 @@ export default function AssignTournamentPage({
                   >
                     <Group justify="space-between" align="center" mb="xs">
                       <Group align="center">
+                        {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                         <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                           {index + 1}
                         </Avatar>
@@ -525,7 +543,9 @@ export default function AssignTournamentPage({
               <div style={{ flex: 1, overflow: 'auto', padding: 'var(--mantine-spacing-md)' }}>
                 {selectedTeamId ? (
                   <Stack gap="xs">
-                    {getParticipantsByTeam(selectedTeamId).map((participant, index) => (
+                    {getParticipantsByTeam(selectedTeamId).map((participant, index) => {
+                      const isCaptain = captainByTeam[selectedTeamId] === participant.user_id;
+                      return (
                       <Card
                         key={participant.id}
                         shadow="md"
@@ -541,6 +561,7 @@ export default function AssignTournamentPage({
                       >
                         <Group justify="space-between" align="center" mb="xs">
                           <Group align="center">
+                            {!isMobile && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
                             <Avatar size="sm" color={getBadgeColor(participant.team_assignment)} variant="filled">
                               {index + 1}
                             </Avatar>
@@ -551,6 +572,15 @@ export default function AssignTournamentPage({
                               </Text>
                             </div>
                           </Group>
+                          <ActionIcon
+                            size="lg"
+                            variant={isCaptain ? 'filled' : 'light'}
+                            color={isCaptain ? 'yellow' : 'dark'}
+                            onClick={() => handleCaptainToggle(selectedTeamId, participant.user_id)}
+                            title={isCaptain ? 'Team Captain (click to unset)' : 'Set as Team Captain'}
+                          >
+                            <IconStar size={18} fill={isCaptain ? 'currentColor' : 'none'} />
+                          </ActionIcon>
                         </Group>
 
                         <Select
@@ -599,7 +629,8 @@ export default function AssignTournamentPage({
                           </Group>
                         )}
                       </Card>
-                    ))}
+                      );
+                    })}
                   </Stack>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

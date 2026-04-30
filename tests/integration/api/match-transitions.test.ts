@@ -118,5 +118,66 @@ describe('Match Transitions API', () => {
 
       expect(status).toBe(404);
     });
+
+    it('should reject transition to complete when maps are not all scored', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+           VALUES ('match-1', 'Test Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'battle', 10, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      // Add an unscored map game
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_games (id, match_id, round, status) VALUES ('game-1', 'match-1', 1, 'pending')`,
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('POST', `/api/matches/match-1/transition`, {
+        newStatus: 'complete',
+      });
+
+      const response = await transitionMatch(request, createRouteParams({ matchId: 'match-1' }));
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should allow transition to complete when all maps are scored', async () => {
+      const db = getTestDb();
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+           VALUES ('match-1', 'Test Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), 'battle', 10, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      // Add a scored map game
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_games (id, match_id, round, status) VALUES ('game-1', 'match-1', 1, 'completed')`,
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('POST', `/api/matches/match-1/transition`, {
+        newStatus: 'complete',
+      });
+
+      const response = await transitionMatch(request, createRouteParams({ matchId: 'match-1' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.status).toBe('complete');
+    });
   });
 });

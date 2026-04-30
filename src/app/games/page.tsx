@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { IconSearch, IconDeviceGamepad2, IconTrophy, IconDeviceFloppy } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logger } from '@/lib/logger/client';
+import { useLazyBackground } from '@/hooks/useLazyBackground';
 import styles from './games-page.module.css';
 
 interface Game {
@@ -42,6 +43,72 @@ interface GameMode {
 }
 
 const FALLBACK_COLOR = '#95a5a6';
+
+interface LazyMapCardProps {
+  map: GameMap;
+  gameColor: string;
+  isEnabled: boolean;
+  onToggle: (mapName: string) => void;
+  supportsAllModes: boolean;
+}
+
+function LazyMapCard({ map, gameColor, isEnabled, onToggle, supportsAllModes }: LazyMapCardProps) {
+  const { ref, backgroundImage } = useLazyBackground(map.imageUrl);
+  const mapModes = map.supportedModes
+    ? map.supportedModes.split(',').map(m => m.trim())
+    : map.modeName ? [map.modeName] : [];
+
+  return (
+    <motion.div
+      ref={ref}
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 190px' }}
+    >
+      <div
+        className={styles.mapCard}
+        style={{ backgroundImage }}
+      >
+        <div className={styles.mapCardOverlay}>
+          <div className={styles.mapCardBottom}>
+            <div>
+              <div className={styles.mapCardName}>{map.name}</div>
+              {map.location && (
+                <div className={styles.mapCardLocation}>{map.location}</div>
+              )}
+            </div>
+            <div className={styles.mapCardBottomRight}>
+              {!supportsAllModes && mapModes.length > 0 && (
+                <div className={styles.mapCardModes}>
+                  {mapModes.map((mode, i) => (
+                    <span
+                      key={i}
+                      className={styles.mapCardModeBadge}
+                      style={{ backgroundColor: `${gameColor}cc` }}
+                    >
+                      {mode}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
+                style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
+                onClick={(e) => { e.stopPropagation(); onToggle(map.name); }}
+                title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
+              >
+                <IconTrophy size={22} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function GamesPage() {
   const [games, setGames] = useState<Game[]>([]);
@@ -113,6 +180,14 @@ export default function GamesPage() {
     fetchGames();
   }, []);
 
+  const applyMaps = useCallback((mapsData: GameMap[]) => {
+    setMaps(mapsData);
+    const initial: Record<string, boolean> = {};
+    mapsData.forEach(m => { initial[m.name] = m.tournament_enabled !== 0; });
+    setTournamentEnabled(initial);
+    setSavedTournamentEnabled(initial);
+  }, []);
+
   const handleSelectGame = useCallback(async (game: Game) => {
     if (selectedGame?.id === game.id) return;
     setSelectedGame(game);
@@ -121,26 +196,16 @@ export default function GamesPage() {
     setTournamentEnabled({});
     setSavedTournamentEnabled({});
 
-    // Fetch maps
     if (mapCache.current[game.id]) {
-      const cached = mapCache.current[game.id];
-      setMaps(cached);
-      const initial: Record<string, boolean> = {};
-      cached.forEach(m => { initial[m.name] = m.tournament_enabled !== 0; });
-      setTournamentEnabled(initial);
-      setSavedTournamentEnabled(initial);
+      applyMaps(mapCache.current[game.id]);
     } else {
       setMapsLoading(true);
       try {
         const response = await fetch(`/api/games/${game.id}/maps`);
         if (response.ok) {
-          const mapsData = await response.json();
+          const mapsData: GameMap[] = await response.json();
           mapCache.current[game.id] = mapsData;
-          setMaps(mapsData);
-          const initial: Record<string, boolean> = {};
-          mapsData.forEach((m: GameMap) => { initial[m.name] = m.tournament_enabled !== 0; });
-          setTournamentEnabled(initial);
-          setSavedTournamentEnabled(initial);
+          applyMaps(mapsData);
         }
       } catch (error) {
         logger.error('Error fetching maps:', error);
@@ -149,7 +214,6 @@ export default function GamesPage() {
       }
     }
 
-    // Fetch modes
     if (modeCache.current[game.id]) {
       setModes(modeCache.current[game.id]);
     } else {
@@ -164,7 +228,7 @@ export default function GamesPage() {
         logger.error('Error fetching modes:', error);
       }
     }
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, applyMaps]);
 
   const toggleMode = useCallback((modeName: string) => {
     setSelectedMode(prev => prev === modeName ? null : modeName);
@@ -253,6 +317,7 @@ export default function GamesPage() {
                   src={game.coverUrl}
                   alt={game.name}
                   className={styles.gameItemCover}
+                  loading="lazy"
                 />
               ) : (
                 <div className={styles.gameItemCover} />
@@ -286,6 +351,7 @@ export default function GamesPage() {
               src={game.coverUrl || ''}
               alt={game.name}
               className={styles.mobileGameCardImage}
+              loading="lazy"
               style={{
                 borderColor: selectedGame?.id === game.id ? (game.color || FALLBACK_COLOR) : 'transparent',
               }}
@@ -346,6 +412,7 @@ export default function GamesPage() {
                       src={selectedGame.iconUrl}
                       alt={selectedGame.name}
                       className={styles.detailHeaderIcon}
+                      loading="lazy"
                     />
                   )}
                   <span className={styles.detailHeaderTitle}>{selectedGame.name}</span>
@@ -418,65 +485,16 @@ export default function GamesPage() {
               ) : (
                 <div className={styles.mapGrid}>
                   <AnimatePresence>
-                  {filteredMaps.map(map => {
-                    const mapModes = map.supportedModes
-                      ? map.supportedModes.split(',').map(m => m.trim())
-                      : map.modeName ? [map.modeName] : [];
-
-                    const isEnabled = tournamentEnabled[map.name] ?? true;
-
-                    return (
-                      <motion.div
-                        key={map.id}
-                        layout
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <div
-                          className={styles.mapCard}
-                          style={{
-                            backgroundImage: map.imageUrl
-                              ? `url(${map.imageUrl})`
-                              : undefined,
-                          }}
-                        >
-                          <button
-                            className={`${styles.tournamentToggle} ${isEnabled ? styles.tournamentToggleOn : ''}`}
-                            style={isEnabled ? { '--accent': gameColor } as React.CSSProperties : undefined}
-                            onClick={(e) => { e.stopPropagation(); handleTournamentToggle(map.name); }}
-                            title={isEnabled ? 'Remove from tournament pool' : 'Add to tournament pool'}
-                          >
-                            <IconTrophy size={22} />
-                          </button>
-                          <div className={styles.mapCardOverlay}>
-                            <div className={styles.mapCardBottom}>
-                              <div>
-                                <div className={styles.mapCardName}>{map.name}</div>
-                                {map.location && (
-                                  <div className={styles.mapCardLocation}>{map.location}</div>
-                                )}
-                              </div>
-                              {!selectedGame.supportsAllModes && mapModes.length > 0 && (
-                                <div className={styles.mapCardModes}>
-                                  {mapModes.map((mode, i) => (
-                                    <span
-                                      key={i}
-                                      className={styles.mapCardModeBadge}
-                                      style={{ backgroundColor: `${gameColor}cc` }}
-                                    >
-                                      {mode}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                  {filteredMaps.map(map => (
+                    <LazyMapCard
+                      key={map.id}
+                      map={map}
+                      gameColor={gameColor}
+                      isEnabled={tournamentEnabled[map.name] ?? true}
+                      onToggle={handleTournamentToggle}
+                      supportsAllModes={selectedGame.supportsAllModes}
+                    />
+                  ))}
                   </AnimatePresence>
                 </div>
               )}

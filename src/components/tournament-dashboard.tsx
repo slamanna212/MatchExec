@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -21,21 +21,13 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
+import { IconTrophy, IconSearch } from '@tabler/icons-react';
 import { StageRing } from './StageRing';
+import { EmptyState } from './EmptyState';
 import { notificationHelper } from '@/lib/notifications';
-
-// Utility function to properly convert SQLite UTC timestamps to Date objects
-const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
-  if (!timestamp) return null;
-  
-  // Check if timestamp already includes timezone info
-  if (timestamp.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(timestamp)) {
-    return new Date(timestamp);
-  }
-  
-  // SQLite CURRENT_TIMESTAMP returns format like "2025-08-08 22:52:51" (UTC)
-  return new Date(`${timestamp  }Z`);
-};
+import { parseDbTimestamp } from '@/lib/utils/dates';
+import { PageLayout } from './PageLayout';
+import { PageHeader } from './PageHeader';
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -90,6 +82,7 @@ const TournamentCard = memo(({
           h={140}
           w="100%"
           fit="cover"
+          loading="lazy"
           style={{ objectFit: 'cover', transition: 'transform 0.3s ease' }}
           onMouseOver={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.04)'; }}
           onMouseOut={(e) => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
@@ -102,7 +95,7 @@ const TournamentCard = memo(({
           alt={tournament.game_name}
           size="md"
         />
-        <Stack gap="xs" style={{ flex: 1 }}>
+        <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
         </Stack>
@@ -185,15 +178,25 @@ function SkeletonCard() {
 
 export function TournamentDashboard() {
   const router = useRouter();
-  const { colorScheme } = useMantineColorScheme();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
+  const etagRef = useRef<string | null>(null);
 
   const fetchTournaments = useCallback(async (silent = false) => {
     try {
-      const response = await fetch('/api/tournaments');
+      const headers: Record<string, string> = {};
+      if (silent && etagRef.current) {
+        headers['If-None-Match'] = etagRef.current;
+      }
+      const response = await fetch('/api/tournaments', { headers });
+
+      if (response.status === 304) return; // Nothing changed
+
+      const newEtag = response.headers.get('etag');
+      if (newEtag) etagRef.current = newEtag;
+
       if (response.ok) {
         const data = await response.json();
         setTournaments(prevTournaments => {
@@ -539,7 +542,7 @@ export function TournamentDashboard() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-6xl">
+      <PageLayout>
         <Grid>
           {Array.from({ length: 6 }).map((_, i) => (
             <Grid.Col key={i} span={{ base: 12, md: 6, lg: 4 }}>
@@ -547,57 +550,49 @@ export function TournamentDashboard() {
             </Grid.Col>
           ))}
         </Grid>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <div className="flex justify-center md:justify-end mb-6">
-        <Group gap="sm" wrap="nowrap">
-          {tournaments.length > 0 && (
-            <TextInput
-              placeholder="Search tournaments..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              style={{ 
-                width: 'clamp(150px, 50vw, 300px)',
-                flexShrink: 1
-              }}
-            />
-          )}
-          <Button 
-            size="md"
-            onClick={handleCreateTournament}
-            style={{ flexShrink: 0 }}
-          >
-            Create Tournament
-          </Button>
-        </Group>
-      </div>
-      <Divider mb="xl" />
+    <PageLayout>
+      <PageHeader
+        icon={IconTrophy}
+        title="Tournaments"
+        subtitle="Manage and advance your active tournaments"
+        docLink="https://docs.matchexec.com/docs/tournaments/tournament-lifecycle/"
+        action={
+          <Group gap="sm" wrap="nowrap">
+            {tournaments.length > 0 && (
+              <TextInput
+                placeholder="Search tournaments..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                style={{ width: 'clamp(150px, 50vw, 300px)', flexShrink: 1 }}
+              />
+            )}
+            <Button size="md" onClick={handleCreateTournament} style={{ flexShrink: 0 }}>
+              Create Tournament
+            </Button>
+          </Group>
+        }
+      />
       {tournaments.length === 0 ? (
-        <Card 
-          shadow="sm" 
-          padding="xl" 
-          radius="md" 
-          withBorder
-          className="text-center py-12"
-          style={{ 
-            borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined
-          }}
-        >
-          <Stack align="center">
-            <Text size="xl" fw={600}>No tournaments yet</Text>
-            <Text c="dimmed">
-              Create a tournament to get started
-            </Text>
-          </Stack>
+        <Card shadow="sm" radius="md" withBorder>
+          <EmptyState
+            icon={IconTrophy}
+            title="No tournaments yet"
+            description="Create a tournament to get started"
+          />
         </Card>
       ) : filteredTournaments.length === 0 ? (
-        <div className="text-center py-12">
-          <Text size="lg" c="dimmed">No tournaments match your search</Text>
-        </div>
+        <Card shadow="sm" withBorder>
+          <EmptyState
+            icon={IconSearch}
+            title="No tournaments found"
+            description="No tournaments match your search"
+          />
+        </Card>
       ) : (
         <motion.div
           variants={containerVariants}
@@ -610,6 +605,6 @@ export function TournamentDashboard() {
         </motion.div>
       )}
 
-    </div>
+    </PageLayout>
   );
 }

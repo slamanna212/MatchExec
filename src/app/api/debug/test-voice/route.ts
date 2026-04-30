@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordBotService } from '../../../../../lib/discord-bot-service';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST() {
   try {
@@ -19,10 +19,7 @@ export async function POST() {
     `);
 
     if (!settings?.voice_announcements_enabled) {
-      return NextResponse.json(
-        { error: 'Voice announcements are disabled in settings' },
-        { status: 400 }
-      );
+      return apiError('Voice announcements are disabled in settings', 400);
     }
 
     // Create a request for the Discord bot to process
@@ -36,19 +33,13 @@ export async function POST() {
 
     if (result.status === 'completed') {
       const resultData = JSON.parse(result.result || '{}');
-      return NextResponse.json(resultData);
-    } 
+      return apiOk(resultData);
+    }
       const errorData = JSON.parse(result.result || '{}');
-      return NextResponse.json(
-        { error: errorData.message || 'Voice test failed' },
-        { status: 500 }
-      );
-    
+      return apiError(errorData.message || 'Voice test failed');
+
   } catch (error) {
     logger.error('Error testing voice lines:', error);
-    return NextResponse.json(
-      { error: 'Failed to test voice lines' },
-      { status: 500 }
-    );
+    return apiError('Failed to test voice lines');
   }
 }

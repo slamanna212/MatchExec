@@ -297,6 +297,7 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 - Match and tournament dashboards with history
 - Scoring interface with format-specific components
 - Map customization (codes, notes)
+- Logo behavior: On desktop (md+, ≥992px), clicking the logo collapses/expands the sidebar. On mobile, clicking the logo navigates to home.
 
 ## Logging System
 
@@ -440,7 +441,7 @@ tests/
 
 ## Technology Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 8
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 9
 - **Backend**: Express (API server), Discord.js 14, node-cron
 - **Process Management**: PM2 (dev), s6-overlay v3 (Docker)
 - **Database**: SQLite3 (callback-based API)

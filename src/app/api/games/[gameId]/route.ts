@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: Request,
@@ -27,18 +27,12 @@ export async function GET(
     `, [gameId]);
 
     if (!game) {
-      return NextResponse.json(
-        { error: 'Game not found' },
-        { status: 404 }
-      );
+      return apiError('Game not found', 404);
     }
 
-    return NextResponse.json(game);
+    return apiOk(game);
   } catch (error) {
     logger.error('Error fetching game:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch game' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch game');
   }
 }

@@ -1,8 +1,8 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { saveMatchResult, getMatchResult } from '../../../../../../../lib/scoring-functions';
 import type { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: NextRequest,
@@ -13,19 +13,13 @@ export async function GET(
     const result = await getMatchResult(gameId);
     
     if (!result) {
-      return NextResponse.json(
-        { error: 'No result found for this game' },
-        { status: 404 }
-      );
+      return apiError('No result found for this game', 404);
     }
 
-    return NextResponse.json(result);
+    return apiOk(result);
   } catch (error) {
     logger.error('Error getting match result:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get match result' },
-      { status: 500 }
-    );
+    return apiError(error instanceof Error ? error.message : 'Failed to get match result');
   }
 }
 
@@ -39,39 +33,27 @@ export async function POST(
 
     // Validate the result
     if (!result.winner || !['team1', 'team2'].includes(result.winner)) {
-      return NextResponse.json(
-        { error: 'Invalid winner. Must be "team1" or "team2"' },
-        { status: 400 }
-      );
+      return apiError('Invalid winner. Must be "team1" or "team2"', 400);
     }
 
     if (result.gameId !== gameId) {
-      return NextResponse.json(
-        { error: 'Game ID mismatch' },
-        { status: 400 }
-      );
+      return apiError('Game ID mismatch', 400);
     }
 
     if (result.matchId !== matchId) {
-      return NextResponse.json(
-        { error: 'Match ID mismatch' },
-        { status: 400 }
-      );
+      return apiError('Match ID mismatch', 400);
     }
 
     // Save the result
     await saveMatchResult(gameId, result);
 
-    return NextResponse.json({
+    return apiOk({
       success: true,
       message: `${result.winner === 'team1' ? 'Blue Team' : 'Red Team'} wins!`
     });
 
   } catch (error) {
     logger.error('Error saving match result:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to save match result' },
-      { status: 500 }
-    );
+    return apiError(error instanceof Error ? error.message : 'Failed to save match result');
   }
 }

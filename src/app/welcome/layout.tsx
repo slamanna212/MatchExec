@@ -25,7 +25,7 @@ export default function WelcomeLayout({ children }: { children: ReactNode }) {
     <Box
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--mantine-color-dark-8)',
+        backgroundColor: 'var(--mantine-color-body)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -44,6 +44,7 @@ export default function WelcomeLayout({ children }: { children: ReactNode }) {
             active={activeStep}
             onStepClick={handleStepClick}
             mb="xl"
+            color="violet"
             allowNextStepsSelect={false}
             size="sm"
             styles={{ steps: { flexWrap: 'nowrap' } }}

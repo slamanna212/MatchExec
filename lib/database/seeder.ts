@@ -48,6 +48,18 @@ interface MapData {
   tournament_enabled?: boolean;
 }
 
+interface StatData {
+  id: string;
+  name: string;
+  displayName: string;
+  statType: string;
+  category?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  format?: string;
+  chartType?: string;
+}
+
 interface VoiceData {
   dataVersion: string;
   voices: Array<{
@@ -142,41 +154,23 @@ export class DatabaseSeeder {
       throw error;
     }
 
-    // Seed modes if they exist
-    const modesPath = path.join(gamePath, 'modes.json');
-    if (fs.existsSync(modesPath)) {
-      try {
-        const modesContent = fs.readFileSync(modesPath, 'utf8').trim();
-        if (modesContent) {
-          const modesData: ModeData[] = JSON.parse(modesContent);
-          await this.seedModes(gameData.id, modesData);
-          console.log(`✅ Seeded ${modesData.length} modes for ${gameData.name}`);
-        }
-      } catch (error) {
-        console.error(`❌ Error seeding modes for ${gameData.name}:`, error);
-        throw error;
-      }
-    } else {
-      console.log(`ℹ️ No modes.json found for ${gameData.name}`);
-    }
+    await this.seedJsonData<ModeData[]>(path.join(gamePath, 'modes.json'), gameData.name, 'modes',
+      async (data) => { await this.seedModes(gameData.id, data); console.log(`✅ Seeded ${data.length} modes for ${gameData.name}`); }
+    );
 
-    // Seed maps if they exist
-    const mapsPath = path.join(gamePath, 'maps.json');
-    if (fs.existsSync(mapsPath)) {
-      try {
-        const mapsContent = fs.readFileSync(mapsPath, 'utf8').trim();
-        if (mapsContent) {
-          const mapsData: MapData[] = JSON.parse(mapsContent);
-          await this.seedMaps(gameData.id, mapsData, gameData.supportsAllModes);
-          console.log(`✅ Seeded ${mapsData.length} maps for ${gameData.name}`);
-        }
-      } catch (error) {
-        console.error(`❌ Error seeding maps for ${gameData.name}:`, error);
-        throw error;
+    await this.seedJsonData<MapData[]>(path.join(gamePath, 'maps.json'), gameData.name, 'maps',
+      async (data) => { await this.seedMaps(gameData.id, data, gameData.supportsAllModes); console.log(`✅ Seeded ${data.length} maps for ${gameData.name}`); }
+    );
+
+    await this.seedJsonData<unknown>(path.join(gamePath, 'stats.json'), gameData.name, 'stats',
+      async (parsed) => {
+        const statsData: StatData[] = Array.isArray(parsed) ? (parsed as StatData[]) : (parsed as { stats: StatData[] }).stats;
+        const aiNotes: string | undefined = Array.isArray(parsed) ? undefined : (parsed as { aiNotes?: string }).aiNotes;
+        await this.seedStats(gameData.id, statsData);
+        if (aiNotes !== undefined) await this.db.run('UPDATE games SET ai_screenshot_notes = ? WHERE id = ?', [aiNotes, gameData.id]);
+        console.log(`✅ Seeded ${statsData.length} stat definitions for ${gameData.name}`);
       }
-    } else {
-      console.log(`ℹ️ No maps.json found for ${gameData.name}`);
-    }
+    );
 
     // Update data version
     try {
@@ -221,6 +215,17 @@ export class DatabaseSeeder {
       gameData.assets.iconUrl,
       gameData.assets.coverUrl || null
     ]);
+  }
+
+  private async seedJsonData<T>(filePath: string, gameName: string, label: string, processFn: (data: T) => Promise<void>): Promise<void> {
+    if (!fs.existsSync(filePath)) { console.log(`ℹ️ No ${label}.json found for ${gameName}`); return; }
+    try {
+      const content = fs.readFileSync(filePath, 'utf8').trim();
+      if (content) await processFn(JSON.parse(content) as T);
+    } catch (error) {
+      console.error(`❌ Error seeding ${label} for ${gameName}:`, error);
+      throw error;
+    }
   }
 
   private async seedModes(gameId: string, modesData: ModeData[]): Promise<void> {
@@ -350,6 +355,17 @@ export class DatabaseSeeder {
       INSERT INTO game_maps (id, game_id, name, mode_id, image_url, location, tournament_enabled, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [id, gameId, name, modeId, imageUrl, location, tournamentEnabled ? 1 : 0]);
+  }
+
+  private async seedStats(gameId: string, statsData: StatData[]): Promise<void> {
+    await this.db.run('DELETE FROM game_stat_definitions WHERE game_id = ?', [gameId]);
+    for (const stat of statsData) {
+      await this.db.run(
+        `INSERT INTO game_stat_definitions (id, game_id, name, display_name, stat_type, category, sort_order, is_primary, format, chart_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [stat.id, gameId, stat.name, stat.displayName, stat.statType, stat.category || null, stat.sortOrder, stat.isPrimary ? 1 : 0, stat.format || null, stat.chartType || 'bar']
+      );
+    }
   }
 
   private async updateDataVersion(gameId: string, dataVersion: string): Promise<void> {

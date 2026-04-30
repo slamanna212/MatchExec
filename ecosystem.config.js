@@ -55,6 +55,20 @@ module.exports = {
       ...(isDev && {
         watch: ['./processes/scheduler', './shared', './lib']
       })
+    },
+    {
+      name: isDev ? 'stats-processor-dev' : 'stats-processor',
+      script: './processes/stats-processor/index.ts',
+      interpreter: 'npx',
+      interpreter_args: 'tsx',
+      env: {
+        NODE_ENV: isDev ? 'development' : 'production',
+        DATABASE_PATH: './app_data/data/matchexec.db',
+        TZ: 'UTC'
+      },
+      ...(isDev && {
+        watch: ['./processes/stats-processor', './shared', './lib']
+      })
     }
   ]
 };

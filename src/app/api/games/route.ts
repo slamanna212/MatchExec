@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError } from '@/lib/api-response';
 
 export async function GET() {
   try {
@@ -28,12 +29,13 @@ export async function GET() {
       ORDER BY g.name
     `);
 
-    return NextResponse.json(games);
+    return NextResponse.json(games, {
+      headers: {
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     logger.error('Error fetching games:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch games' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch games');
   }
 }

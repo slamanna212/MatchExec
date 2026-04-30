@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -13,7 +13,11 @@ import {
   useMantineColorScheme,
   Image,
   Drawer,
-  Stack
+  Stack,
+  Tooltip,
+  UnstyledButton,
+  Avatar,
+  Text
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -33,7 +37,9 @@ import {
   IconInfoCircle,
   IconHome,
   IconSwords,
-  IconDatabaseExport
+  IconDatabaseExport,
+  IconChartBar,
+  IconRss,
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -53,6 +59,7 @@ interface NavRenderContext {
   onNavigate?: () => void;
   router: ReturnType<typeof useRouter>;
   getIcon: (name: string) => React.ComponentType<{ size: string }>;
+  desktopCollapsed: boolean;
 }
 
 function isNavSectionActive(itemHref: string, pathname: string | null): boolean {
@@ -87,6 +94,34 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
   const isActive = ctx.mounted && (ctx.pathname === item.href || sectionActive);
   const shouldShowLinks = Boolean(item.links) && sectionActive;
 
+  if (ctx.desktopCollapsed) {
+    return (
+      <Tooltip key={item.href} label={item.label} position="right" withArrow>
+        <UnstyledButton
+          className="sidebar-icon-btn"
+          onClick={() => {
+            ctx.router.push(item.href);
+            ctx.onNavigate?.();
+          }}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            width: '100%',
+            height: 40,
+            borderRadius: 8,
+            color: isActive ? '#f7cc02' : '#F5F5F5',
+            background: isActive
+              ? 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))'
+              : 'transparent',
+          }}
+        >
+          {React.createElement(ctx.getIcon(item.iconName), { size: ctx.iconSize })}
+        </UnstyledButton>
+      </Tooltip>
+    );
+  }
+
   return (
     <div key={item.href}>
       <NavLink
@@ -110,6 +145,66 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
   );
 }
 
+// Icon map defined once outside the component — avoids object recreation on every render
+const ICON_MAP: Record<string, React.ComponentType<{ size: string }>> = {
+  home: IconHome,
+  feed: IconRss,
+  swords: IconSwords,
+  history: IconHistory,
+  trophy: IconTrophy,
+  gamepad: IconDeviceGamepad2,
+  hash: IconHash,
+  settings: IconSettings,
+  adjustments: IconAdjustments,
+  volume: IconVolume,
+  clock: IconClock,
+  discord: IconBrandDiscord,
+  paint: IconPaint,
+  info: IconInfoCircle,
+  code: IconCode,
+  database: IconDatabaseExport,
+  chart: IconChartBar,
+};
+
+function getIcon(name: string): React.ComponentType<{ size: string }> {
+  return ICON_MAP[name] ?? IconHome;
+}
+
+// Static navigation structure — defined outside the component so it's never re-allocated
+const STATIC_NAV_ITEMS: NavItemData[] = [
+  { label: 'Home',        href: '/',            iconName: 'home' },
+  { label: 'Feed',        href: '/feed',         iconName: 'feed' },
+  {
+    label: 'Matches',
+    href: '/matches',
+    iconName: 'swords',
+    links: [{ label: 'History', href: '/matches/history', iconName: 'history' }],
+  },
+  {
+    label: 'Tournaments',
+    href: '/tournaments',
+    iconName: 'trophy',
+    links: [{ label: 'History', href: '/tournaments/history', iconName: 'history' }],
+  },
+  { label: 'Games',    href: '/games',    iconName: 'gamepad' },
+  { label: 'Channels', href: '/channels', iconName: 'hash' },
+  { label: 'Info',     href: '/info',     iconName: 'info' },
+  {
+    label: 'Settings',
+    href: '/settings',
+    iconName: 'settings',
+    links: [
+      { label: 'Application',   href: '/settings/application',   iconName: 'adjustments' },
+      { label: 'Stats',         href: '/settings/stats',         iconName: 'chart' },
+      { label: 'Announcer',     href: '/settings/announcer',     iconName: 'volume' },
+      { label: 'Discord',       href: '/settings/discord',       iconName: 'discord' },
+      { label: 'Scheduler',     href: '/settings/scheduler',     iconName: 'clock' },
+      { label: 'UI',            href: '/settings/ui',            iconName: 'paint' },
+      { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' },
+    ],
+  },
+];
+
 interface NavigationProps {
   children: React.ReactNode
 }
@@ -121,11 +216,15 @@ export function Navigation({ children }: NavigationProps) {
   const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false)
 
-  // Fix hydration issues by ensuring component is mounted on client
+  // Delay rendering until client is mounted to avoid hydration mismatches
+  // rAF defers the setState call out of the synchronous effect body, satisfying the
+  // react-compiler rule while still giving us the client-only flag we need.
   useEffect(() => {
-    // Use requestAnimationFrame to avoid synchronous setState in effect
     const frame = requestAnimationFrame(() => {
+      const saved = localStorage.getItem('sidebar-collapsed');
+      if (saved === 'true') setDesktopCollapsed(true);
       setMounted(true);
     });
 
@@ -137,68 +236,19 @@ export function Navigation({ children }: NavigationProps) {
     return () => cancelAnimationFrame(frame);
   }, [])
 
-  // Icon mapping to avoid serialization issues with SSR
-  const getIcon = (name: string) => {
-    const iconMap: Record<string, React.ComponentType<{ size: string }>> = {
-      home: IconHome,
-      swords: IconSwords,
-      history: IconHistory,
-      trophy: IconTrophy,
-      gamepad: IconDeviceGamepad2,
-      hash: IconHash,
-      settings: IconSettings,
-      adjustments: IconAdjustments,
-      volume: IconVolume,
-      clock: IconClock,
-      discord: IconBrandDiscord,
-      paint: IconPaint,
-      info: IconInfoCircle,
-      code: IconCode,
-      database: IconDatabaseExport,
-    };
-    return iconMap[name] || IconHome;
+  const toggleDesktopSidebar = () => {
+    setDesktopCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
   };
 
-  const navigationItems = [
-    {
-      label: 'Home',
-      href: '/',
-      iconName: 'home'
-    },
-    {
-      label: 'Matches',
-      href: '/matches',
-      iconName: 'swords',
-      links: [
-        { label: 'History', href: '/matches/history', iconName: 'history' }
-      ]
-    },
-    {
-      label: 'Tournaments',
-      href: '/tournaments',
-      iconName: 'trophy',
-      links: [
-        { label: 'History', href: '/tournaments/history', iconName: 'history' }
-      ]
-    },
-    { label: 'Games', href: '/games', iconName: 'gamepad' },
-    { label: 'Channels', href: '/channels', iconName: 'hash' },
-    {
-      label: 'Settings',
-      href: '/settings',
-      iconName: 'settings',
-      links: [
-        { label: 'Application', href: '/settings/application', iconName: 'adjustments' },
-        { label: 'Announcer', href: '/settings/announcer', iconName: 'volume' },
-        { label: 'Scheduler', href: '/settings/scheduler', iconName: 'clock' },
-        { label: 'Discord', href: '/settings/discord', iconName: 'discord' },
-        { label: 'UI', href: '/settings/ui', iconName: 'paint' },
-        { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' }
-      ]
-    },
-    { label: 'Info', href: '/info', iconName: 'info' },
+  // Append dev-only item at runtime so the static array stays pure
+  const navigationItems = useMemo(() => [
+    ...STATIC_NAV_ITEMS,
     ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
-  ]
+  ], [])
 
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {
@@ -250,7 +300,7 @@ export function Navigation({ children }: NavigationProps) {
     )
   }
 
-  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean }) => {
+  const renderNavItems = (options?: { onNavigate?: () => void; large?: boolean; collapsed?: boolean }) => {
     const ctx: NavRenderContext = {
       pathname,
       mounted,
@@ -258,7 +308,8 @@ export function Navigation({ children }: NavigationProps) {
       fontSize: options?.large ? '1rem' : undefined,
       onNavigate: options?.onNavigate,
       router,
-      getIcon
+      getIcon,
+      desktopCollapsed: options?.collapsed ?? false,
     };
     return navigationItems.map((item) => <NavItem key={item.href} item={item} ctx={ctx} />);
   };
@@ -267,10 +318,12 @@ export function Navigation({ children }: NavigationProps) {
     <AppShell
       header={{ height: { base: 60, md: 0 } }}
       navbar={{
-        width: { base: 200, md: 250 },
+        width: { base: 200, md: desktopCollapsed ? 60 : 250 },
         breakpoint: 'md',
         collapsed: { mobile: true, desktop: false },
       }}
+      transitionDuration={250}
+      transitionTimingFunction="ease"
       padding="md"
     >
       <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
@@ -329,81 +382,232 @@ export function Navigation({ children }: NavigationProps) {
         </Stack>
 
         {/* Drawer Footer */}
-        <div style={{ padding: '16px' }}>
-          {versionInfo && (
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Gradient separator */}
+          <div style={{
+            height: '1px',
+            background: 'linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.55), rgba(247, 204, 2, 0.25), transparent)',
+          }} />
+
+          {/* Version + theme toggle row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            {versionInfo ? (
+              <div
+                title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  color: '#f7cc02',
+                  cursor: 'help',
+                  userSelect: 'none',
+                }}
+              >
+                {versionInfo.version}
+              </div>
+            ) : <div />}
+
+            {/* Sun / Moon pill toggle */}
             <div
-              title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+              onClick={() => toggleColorScheme()}
+              role="button"
+              aria-label="Toggle color scheme"
               style={{
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                color: '#C1C2C5',
-                textAlign: 'center',
-                marginBottom: '8px',
-                cursor: 'help'
+                display: 'flex', alignItems: 'center',
+                background: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid rgba(124, 58, 237, 0.4)',
+                borderRadius: '20px', padding: '3px', gap: '2px', cursor: 'pointer',
               }}
             >
-              {versionInfo.version}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: colorScheme === 'light' ? 'rgba(247, 204, 2, 0.22)' : 'transparent',
+                color: colorScheme === 'light' ? '#f7cc02' : 'rgba(245, 245, 245, 0.28)',
+                transition: 'all 200ms ease',
+              }}>
+                <IconSun size="14" />
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: colorScheme === 'dark' ? 'rgba(124, 58, 237, 0.4)' : 'transparent',
+                color: colorScheme === 'dark' ? '#c084fc' : 'rgba(245, 245, 245, 0.28)',
+                transition: 'all 200ms ease',
+              }}>
+                <IconMoon size="14" />
+              </div>
             </div>
-          )}
-          <Group justify="center">
-            <ActionIcon
-              variant="outline"
-              size={30}
-              onClick={() => toggleColorScheme()}
-              c="#F5F5F5"
-              style={{ borderColor: '#F5F5F5' }}
+          </div>
+
+          {/* User card */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '9px',
+            padding: '7px 8px', borderRadius: '8px',
+            background: 'rgba(124, 58, 237, 0.09)',
+            border: '1px solid rgba(124, 58, 237, 0.18)',
+          }}>
+            <Avatar
+              size={34}
+              radius="xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))',
+                border: '2px solid rgba(124, 58, 237, 0.5)',
+                fontSize: '17px',
+                flexShrink: 0,
+              }}
             >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-            </ActionIcon>
-          </Group>
+              👽
+            </Avatar>
+            <Text fw={600} c="#F5F5F5" style={{ lineHeight: 1.25, fontSize: '13px' }}>
+              Space Man
+            </Text>
+          </div>
         </div>
       </Drawer>
 
       {/* Desktop Sidebar */}
-      <AppShell.Navbar p="md" withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
+      <AppShell.Navbar p={desktopCollapsed ? 'xs' : 'md'} withBorder={false} style={{ background: 'linear-gradient(180deg, #1a0e3d 0%, #241459 40%, #2d1b69 100%)', color: '#F5F5F5', borderRight: '1px solid rgba(124, 58, 237, 0.2)' }}>
         <AppShell.Section>
           <Group mb="xs" justify="center">
-            <Image
-              src="/logo.svg"
-              alt="MatchExec Logo"
-              w={140}
-              h={140}
-              fit="contain"
-            />
+            <Tooltip label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} position="right" withArrow>
+              <UnstyledButton onClick={toggleDesktopSidebar} style={{ display: 'flex', cursor: 'pointer' }}>
+                <Image
+                  src="/logo.svg"
+                  alt="MatchExec Logo"
+                  w={desktopCollapsed ? 36 : 140}
+                  h={desktopCollapsed ? 36 : 140}
+                  fit="contain"
+                  style={{ transition: 'width 250ms ease, height 250ms ease' }}
+                />
+              </UnstyledButton>
+            </Tooltip>
           </Group>
         </AppShell.Section>
 
         <AppShell.Section grow>
-          {renderNavItems({})}
+          {renderNavItems({ collapsed: desktopCollapsed })}
         </AppShell.Section>
 
         <AppShell.Section>
-          {versionInfo && (
-            <div
-              title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
-              style={{
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                color: '#C1C2C5',
-                textAlign: 'center',
-                marginBottom: '8px',
-                cursor: 'help'
-              }}
-            >
-              {versionInfo.version}
-            </div>
-          )}
-          <Group mt="md" justify="center">
-            <ActionIcon
-              variant="outline"
-              size={30}
-              onClick={() => toggleColorScheme()}
-              c="#F5F5F5"
-              style={{ borderColor: '#F5F5F5' }}
-            >
-              {colorScheme === 'dark' ? <IconSun size="16" /> : <IconMoon size="16" />}
-            </ActionIcon>
-          </Group>
+          <div style={{ padding: desktopCollapsed ? '12px 6px' : '12px 12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Gradient separator */}
+            <div style={{
+              height: '1px',
+              background: 'linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.55), rgba(247, 204, 2, 0.25), transparent)',
+            }} />
+
+            {/* Version + theme toggle row (expanded) */}
+            {!desktopCollapsed && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                {versionInfo ? (
+                  <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        color: '#f7cc02',
+                        cursor: 'help',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {versionInfo.version}
+                    </div>
+                  </Tooltip>
+                ) : <div />}
+
+                {/* Sun / Moon pill toggle */}
+                <div
+                  onClick={() => toggleColorScheme()}
+                  role="button"
+                  aria-label="Toggle color scheme"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(124, 58, 237, 0.4)',
+                    borderRadius: '20px',
+                    padding: '3px',
+                    gap: '2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: colorScheme === 'light' ? 'rgba(247, 204, 2, 0.22)' : 'transparent',
+                    color: colorScheme === 'light' ? '#f7cc02' : 'rgba(245, 245, 245, 0.28)',
+                    transition: 'all 200ms ease',
+                  }}>
+                    <IconSun size="14" />
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    background: colorScheme === 'dark' ? 'rgba(124, 58, 237, 0.4)' : 'transparent',
+                    color: colorScheme === 'dark' ? '#c084fc' : 'rgba(245, 245, 245, 0.28)',
+                    transition: 'all 200ms ease',
+                  }}>
+                    <IconMoon size="14" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Collapsed: centered theme toggle */}
+            {desktopCollapsed && (
+              <Tooltip label={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} position="right" withArrow>
+                <div
+                  onClick={() => toggleColorScheme()}
+                  role="button"
+                  aria-label="Toggle color scheme"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '36px', height: '36px', margin: '0 auto',
+                    borderRadius: '10px',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: '1px solid rgba(124, 58, 237, 0.4)',
+                    color: colorScheme === 'dark' ? '#c084fc' : '#f7cc02',
+                    cursor: 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  {colorScheme === 'dark' ? <IconSun size="15" /> : <IconMoon size="15" />}
+                </div>
+              </Tooltip>
+            )}
+
+            {/* User card */}
+            <Tooltip label="Space Man" position="right" withArrow disabled={!desktopCollapsed}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: desktopCollapsed ? 0 : '9px',
+                justifyContent: desktopCollapsed ? 'center' : 'flex-start',
+                padding: desktopCollapsed ? '5px' : '7px 8px',
+                borderRadius: '8px',
+                background: 'rgba(124, 58, 237, 0.09)',
+                border: '1px solid rgba(124, 58, 237, 0.18)',
+              }}>
+                <Avatar
+                  size={desktopCollapsed ? 30 : 34}
+                  radius="xl"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5))',
+                    border: '2px solid rgba(124, 58, 237, 0.5)',
+                    fontSize: desktopCollapsed ? '14px' : '17px',
+                    flexShrink: 0,
+                  }}
+                >
+                  👽
+                </Avatar>
+                {!desktopCollapsed && (
+                  <Text fw={600} c="#F5F5F5" style={{ lineHeight: 1.25, fontSize: '13px' }}>
+                    Space Man
+                  </Text>
+                )}
+              </div>
+            </Tooltip>
+          </div>
         </AppShell.Section>
       </AppShell.Navbar>
 

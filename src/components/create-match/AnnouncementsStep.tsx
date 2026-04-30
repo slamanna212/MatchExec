@@ -33,7 +33,7 @@ export function AnnouncementsStep({
 }: AnnouncementsStepProps) {
   const addAnnouncement = () => {
     const newAnnouncement: AnnouncementTime = {
-      id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+      id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15), // NOSONAR: non-security internal ID generation
       value: 1,
       unit: 'hours'
     };

@@ -2,10 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  turbopack: {},
-  experimental: {
-    turbopackUseSystemTlsCerts: true,
-  },
+  allowedDevOrigins: ['*.*.*.*', '*.local', '*.lan'],
   ...(process.env.NODE_ENV === 'production' && {
     async redirects() {
       return [

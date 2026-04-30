@@ -67,7 +67,7 @@ export async function insertParticipant(
   signupData: Record<string, string>,
   client: Client
 ): Promise<string> {
-  const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
   // Fetch avatar URL when user signs up
   const avatarUrl = await getDiscordAvatarUrl(client, interaction.user.id);
@@ -89,7 +89,7 @@ export async function insertParticipant(
 
     // If team was selected, also add to tournament_team_members
     if (parsedId.selectedTeamId) {
-      const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
         VALUES (?, ?, ?, ?, ?)
@@ -115,6 +115,12 @@ export async function insertParticipant(
       JSON.stringify(signupData),
       avatarUrl
     ]);
+
+    // Update match updated_at so ETag-based polling detects the participant change
+    await db.run(
+      'UPDATE matches SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [parsedId.eventId]
+    );
   }
 
   return participantId;
@@ -169,7 +175,7 @@ export async function buildConfirmationMessage(
   // Show key information from the signup form (first 3 fields)
   for (const field of signupForm.fields.slice(0, 3)) {
     if (signupData[field.id]) {
-      const label = field.label.replace(/\s*\(Optional\)\s*$/i, ''); // Remove "(Optional)" from display
+      const label = field.label.replace(/ \(Optional\)$/i, '').trim(); // Remove "(Optional)" from display
       message += `**${label}:** ${signupData[field.id]}\n`;
     }
   }

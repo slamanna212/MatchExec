@@ -10,7 +10,10 @@ import {
   IconPaint,
   IconSettings,
   IconDatabaseExport,
+  IconChartBar,
 } from '@tabler/icons-react';
+import { PageLayout } from '@/components/PageLayout';
+import { PageHeader } from '@/components/PageHeader';
 
 const settingsCategories = [
   {
@@ -21,6 +24,13 @@ const settingsCategories = [
     color: '#27ae60',
   },
   {
+    title: 'Stats',
+    description: 'Configure AI-powered scorecard analysis and stat tracking',
+    href: '/settings/stats',
+    icon: IconChartBar,
+    color: '#e74c3c',
+  },
+  {
     title: 'Announcer',
     description: 'Configure voice announcements and TTS for matches',
     href: '/settings/announcer',
@@ -28,18 +38,18 @@ const settingsCategories = [
     color: '#e67e22',
   },
   {
-    title: 'Scheduler',
-    description: 'Configure automated tasks and their timing',
-    href: '/settings/scheduler',
-    icon: IconClock,
-    color: '#9b59b6',
-  },
-  {
     title: 'Discord',
     description: 'Configure Discord bot connection and permissions',
     href: '/settings/discord',
     icon: IconBrandDiscord,
     color: '#5865f2',
+  },
+  {
+    title: 'Scheduler',
+    description: 'Configure automated tasks and their timing',
+    href: '/settings/scheduler',
+    icon: IconClock,
+    color: '#9b59b6',
   },
   {
     title: 'UI',
@@ -61,17 +71,13 @@ export default function SettingsPage() {
   const router = useRouter();
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageLayout>
       <Stack gap="lg">
-        <div>
-          <Group>
-            <IconSettings size="2rem" />
-            <div>
-              <Text size="xl" fw={700}>Settings</Text>
-              <Text size="sm" c="dimmed">Configure MatchExec to match your needs</Text>
-            </div>
-          </Group>
-        </div>
+        <PageHeader
+          icon={IconSettings}
+          title="Settings"
+          subtitle="Configure MatchExec to match your needs"
+        />
 
         <div
           style={{
@@ -100,12 +106,12 @@ export default function SettingsPage() {
                   borderColor: `${category.color}22`,
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+                  e.currentTarget.style.transform = 'translateY(-3px)';
                   e.currentTarget.style.boxShadow = `0 8px 28px ${category.color}44`;
                   e.currentTarget.style.borderColor = `${category.color}55`;
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '';
                   e.currentTarget.style.borderColor = `${category.color}22`;
                 }}
@@ -149,6 +155,6 @@ export default function SettingsPage() {
           })}
         </div>
       </Stack>
-    </div>
+    </PageLayout>
   );
 }

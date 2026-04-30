@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 export async function GET(
   request: Request,
@@ -34,7 +35,9 @@ export async function GET(
         `, [gameId]);
 
         logger.debug('[DEBUG] CS2 maps result:', maps);
-        return NextResponse.json(maps);
+        return NextResponse.json(maps, {
+          headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+        });
       } catch (cs2Error) {
         logger.error('[ERROR] CS2 query failed:', cs2Error);
         throw cs2Error;
@@ -86,13 +89,12 @@ export async function GET(
       `, [gameId]);
     }
 
-    return NextResponse.json(maps);
+    return NextResponse.json(maps, {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+    });
   } catch (error) {
     logger.error('Error fetching maps:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch maps' },
-      { status: 500 }
-    );
+    return apiError('Failed to fetch maps');
   }
 }
 
@@ -106,19 +108,13 @@ export async function PATCH(
     const body = await request.json();
 
     if (!body || !Array.isArray(body.updates) || body.updates.length === 0) {
-      return NextResponse.json(
-        { error: 'Missing or invalid updates array' },
-        { status: 400 }
-      );
+      return apiError('Missing or invalid updates array', 400);
     }
 
     let updated = 0;
     for (const item of body.updates) {
       if (typeof item.name !== 'string' || (item.tournament_enabled !== 0 && item.tournament_enabled !== 1)) {
-        return NextResponse.json(
-          { error: 'Each update must have name (string) and tournament_enabled (0 or 1)' },
-          { status: 400 }
-        );
+        return apiError('Each update must have name (string) and tournament_enabled (0 or 1)', 400);
       }
       const result = await db.run(
         `UPDATE game_maps SET tournament_enabled = ?, updated_at = datetime('now') WHERE game_id = ? AND name = ?`,
@@ -127,12 +123,9 @@ export async function PATCH(
       updated += result.changes ?? 0;
     }
 
-    return NextResponse.json({ success: true, updated });
+    return apiOk({ success: true, updated });
   } catch (error) {
     logger.error('Error updating tournament-enabled maps:', error);
-    return NextResponse.json(
-      { error: 'Failed to update maps' },
-      { status: 500 }
-    );
+    return apiError('Failed to update maps');
   }
 }

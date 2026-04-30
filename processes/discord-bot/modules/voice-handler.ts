@@ -19,12 +19,37 @@ export class VoiceHandler {
   private voiceConnections = new Map<string, unknown>(); // channelId -> connection
   private activeAudioPlayers = new Map<string, unknown>(); // channelId -> player
   private playbackStatus = new Map<string, boolean>(); // channelId -> isPlaying
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private client: Client,
     private db: Database,
     private settings: DiscordSettings | null
-  ) {}
+  ) {
+    // Sweep stale map entries once per hour to prevent unbounded growth
+    this.sweepTimer = setInterval(() => this.sweepStaleEntries(), 60 * 60 * 1000);
+  }
+
+  /** Remove map entries for connections that are no longer active. */
+  private sweepStaleEntries(): void {
+    for (const [channelId, connection] of this.voiceConnections) {
+      const status = (connection as { state?: { status: string } }).state?.status;
+      if (status === VoiceConnectionStatus.Destroyed || status === VoiceConnectionStatus.Disconnected) {
+        this.voiceConnections.delete(channelId);
+        this.activeAudioPlayers.delete(channelId);
+        this.playbackStatus.delete(channelId);
+        logger.debug(`🧹 Swept stale voice entry for channel ${channelId}`);
+      }
+    }
+  }
+
+  /** Stop the periodic sweep timer (call during shutdown). */
+  destroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+  }
 
   async testVoiceLineForUser(userId: string, _voiceId?: string): Promise<{ success: boolean; message: string; channelId?: string }> {
     try {
@@ -65,6 +90,19 @@ export class VoiceHandler {
     }
   }
 
+  private async resolveFallbackVoice(): Promise<string | null> {
+    if (!this.db) return null;
+    try {
+      const voice = await this.db.get<{ id: string; name: string }>('SELECT id, name FROM voices LIMIT 1');
+      if (voice) { logger.debug(`🔧 Using fallback voice: ${voice.name} (${voice.id})`); return voice.id; }
+      logger.error('❌ No voices available in database');
+      return null;
+    } catch (error) {
+      logger.error('❌ Error getting fallback voice:', error);
+      return null;
+    }
+  }
+
   async playVoiceAnnouncement(channelId: string, audioType: 'welcome' | 'nextround' | 'finish', lineNumber?: number): Promise<boolean> {
     try {
       if (!this.client.isReady() || !this.settings) {
@@ -72,35 +110,13 @@ export class VoiceHandler {
         return false;
       }
 
-      if (!this.settings.voice_announcements_enabled) {
-        return false;
-      }
+      if (!this.settings.voice_announcements_enabled) return false;
 
       if (!this.settings.announcer_voice) {
         logger.info('ℹ️ No announcer voice configured, using fallback voice');
-
-        // Try to get the first available voice as fallback
-        if (this.db) {
-          try {
-            const fallbackVoice = await this.db.get<{ id: string, name: string }>(`
-              SELECT id, name FROM voices LIMIT 1
-            `);
-            
-            if (fallbackVoice) {
-              logger.debug(`🔧 Using fallback voice: ${fallbackVoice.name} (${fallbackVoice.id})`);
-              // Temporarily use this voice for this announcement
-              this.settings.announcer_voice = fallbackVoice.id;
-            } else {
-              logger.error('❌ No voices available in database');
-              return false;
-            }
-          } catch (error) {
-            logger.error('❌ Error getting fallback voice:', error);
-            return false;
-          }
-        } else {
-          return false;
-        }
+        const fallbackId = await this.resolveFallbackVoice();
+        if (!fallbackId) return false;
+        this.settings.announcer_voice = fallbackId;
       }
 
       // Check if audio is already playing in this channel
@@ -140,7 +156,13 @@ export class VoiceHandler {
 
       // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
       const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
-      const voiceDir = path.join(process.cwd(), cleanVoicePath);
+      const appRoot = process.cwd();
+      const resolvedVoiceDir = path.resolve(appRoot, cleanVoicePath);
+      if (!resolvedVoiceDir.startsWith(appRoot + path.sep)) {
+        logger.error(`Voice path escapes app root: ${resolvedVoiceDir}`);
+        return null;
+      }
+      const voiceDir = resolvedVoiceDir;
 
       // Construct filename
       let filename: string;
@@ -153,12 +175,17 @@ export class VoiceHandler {
           logger.warning(`⚠️ No ${audioType} audio files found in ${voiceDir}`);
           return null;
         }
-        
-        const randomIndex = Math.floor(Math.random() * availableFiles.length);
+
+        const randomIndex = Math.floor(Math.random() * availableFiles.length); // NOSONAR: non-security internal ID generation
         filename = availableFiles[randomIndex];
       }
 
-      const fullPath = path.join(voiceDir, filename);
+      const resolvedFull = path.resolve(voiceDir, filename);
+      if (!resolvedFull.startsWith(voiceDir + path.sep)) {
+        logger.error(`Audio file path escapes voice dir: ${resolvedFull}`);
+        return null;
+      }
+      const fullPath = resolvedFull;
       
       // Check if file exists using fs
       if (!fs.existsSync(fullPath)) {
@@ -233,6 +260,18 @@ export class VoiceHandler {
       });
 
       this.voiceConnections.set(channelId, connection);
+
+      // Clean up maps if the connection is destroyed externally (bot kicked, etc.)
+      connection.on('stateChange', (_old, newState) => {
+        if (
+          newState.status === VoiceConnectionStatus.Destroyed ||
+          newState.status === VoiceConnectionStatus.Disconnected
+        ) {
+          this.voiceConnections.delete(channelId);
+          this.activeAudioPlayers.delete(channelId);
+          this.playbackStatus.delete(channelId);
+        }
+      });
 
       // Wait for connection to be ready
       logger.debug(`🔊 Waiting for voice connection to channel ${channelId} (guild: ${channel.guild.id}) to be ready. Current state: ${connection.state.status}`);
@@ -378,7 +417,7 @@ export class VoiceHandler {
   /**
    * Play announcements to both team voice channels sequentially
    */
-  async playTeamAnnouncements(
+  async playTeamAnnouncements( // NOSONAR typescript:S3776
     blueTeamChannelId: string | null,
     redTeamChannelId: string | null,
     audioType: 'welcome' | 'nextround' | 'finish',

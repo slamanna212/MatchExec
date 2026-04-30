@@ -1,7 +1,7 @@
 import type { NextRequest} from 'next/server';
-import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
+import { apiError, apiOk } from '@/lib/api-response';
 
 interface BracketAssignment {
   position: number;
@@ -17,10 +17,7 @@ export async function POST(
     const { assignments }: { assignments: BracketAssignment[] } = await request.json();
 
     if (!assignments || !Array.isArray(assignments)) {
-      return NextResponse.json(
-        { error: 'Invalid assignments data' },
-        { status: 400 }
-      );
+      return apiError('Invalid assignments data', 400);
     }
 
     const db = await getDbInstance();
@@ -32,10 +29,7 @@ export async function POST(
     );
 
     if (!tournament) {
-      return NextResponse.json(
-        { error: 'Tournament not found or not in assignment phase' },
-        { status: 404 }
-      );
+      return apiError('Tournament not found or not in assignment phase', 404);
     }
 
     // Verify all teams exist and belong to this tournament
@@ -44,29 +38,23 @@ export async function POST(
         'SELECT * FROM tournament_teams WHERE id = ? AND tournament_id = ?',
         [assignment.teamId, tournamentId]
       );
-      
+
       if (!team) {
-        return NextResponse.json(
-          { error: `Team ${assignment.teamId} not found in tournament` },
-          { status: 400 }
-        );
+        return apiError(`Team ${assignment.teamId} not found in tournament`, 400);
       }
     }
 
     // Store bracket assignments (we could create a table for this or store in tournament metadata)
     // For now, we'll just validate and return success since the actual match generation
     // will happen in the generate-matches endpoint
-    
-    return NextResponse.json({ 
+
+    return apiOk({
       message: 'Bracket assignments saved successfully',
-      assignments 
+      assignments
     });
 
   } catch (error) {
     logger.error('Error saving bracket assignments:', error);
-    return NextResponse.json(
-      { error: 'Failed to save bracket assignments' },
-      { status: 500 }
-    );
+    return apiError('Failed to save bracket assignments');
   }
 }

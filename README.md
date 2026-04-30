@@ -1,6 +1,12 @@
-# 🏆 MatchExec — Your Personal Video Game Tournament Manager
 <p align="center">
   <img src="https://raw.githubusercontent.com/slamanna212/MatchExec/refs/heads/dev/public/logo.svg" height="200" alt="MatchExec Logo" />
+</p>
+
+<h1 align="center">MatchExec</h1>
+<h2 align="center">Your Personal Video Game Tournament Manager</h2>
+
+<p align="center">
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/slamanna212/matchexec?style=flat-square"> <img alt="GitHub License" src="https://img.shields.io/github/license/slamanna212/matchexec?style=flat-square"> <img alt="Discord" src="https://img.shields.io/discord/1411040188053983383?style=flat-square"> <img alt="Codecov" src="https://img.shields.io/codecov/c/gh/slamanna212/matchexec?style=flat-square">
 </p>
 
 ---
@@ -17,10 +23,11 @@ Create a Match, and MatchExec handles the rest!
 ## ✨ Features
 ✅ **Full Discord Integration** — Creates native Discord events, Rich detailed Embeds, Sign-up forms inside of Discord, announcements, reminders, and more \
 ✅ **Modern, Responsive Web UI** — No matter the device or size, a beautiful, fast web interface awaits you \
-✅ **No Timezone Issues** — MatchExec shows you all times in your local timezone, and stores them in UTC. No need to worry about missing matches due to conversion errors \
+✅ **Automatic Timezone Management** — MatchExec shows you all times in your local timezone, and stores them in UTC. No need to worry about missing matches due to conversion errors \
 ✅ **Keep Score** — Keep score of who wins each map and declare an overall winner \
 ✅ **Flexible** — Support for different scoring types, custom modes, custom maps, whatever you want, it's playable \
-✅ **Voice Announcers** — 4 different personas to choose from: A evil queen, a British football announcer, a London radio DJ, and an American Wrestling Announcer 
+✅ **Voice Announcers** — 4 different personas to choose from: A evil queen, a British football announcer, a London radio DJ, and an American Wrestling Announcer \
+✅ **Statistics** — Give MatchExec pictures of the scorecard at the end of maps in supported games, and MatchExec will generate statistics and share them
 
 ---
 
@@ -28,8 +35,8 @@ Create a Match, and MatchExec handles the rest!
 
 ![Matches Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/matches.png?raw=true "Matches Screen")
 ![Games Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.7.0/games.png?raw=true "Games Screen")
-![Channels Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Channels.png?raw=true "Channels Screen")
-![Settings Screen](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/WebScreenshots/Settings.png?raw=true "Settings Screen")
+![Channels Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.8/channelspage.png?raw=true "Channels Screen")
+![Settings Screen](https://github.com/slamanna212/MatchExec/blob/dev/.github/assets/release/0.8/settings.png?raw=true "Settings Screen")
 ![Discord Match Embed](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/FlJmJP.png?raw=true "Discord Match Embed")
 ![Discord Sign Up Form](https://github.com/slamanna212/MatchExec/blob/main/.github/assets/DiscordScreenshots/O4CAe4.png?raw=true "Discord Sign Up Form")
 
