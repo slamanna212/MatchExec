@@ -78,7 +78,8 @@ export default function DevPage() {
     fetch('/api/debug/scoring-ai-test')
       .then(r => r.json())
       .then((data: { id: string; name: string }[]) => setAiTestGames(data))
-      .catch(() => {});
+      // eslint-disable-next-line no-console
+      .catch((err) => console.error('Failed to load AI test games:', err));
   }, []);
 
   const handleAiTest = async (file: File) => {

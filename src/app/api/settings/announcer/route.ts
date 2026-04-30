@@ -14,7 +14,6 @@ export async function GET() {
     const db = await getDbInstance();
     
     // Get announcer settings from the Discord settings table for now
-    // TODO: Move to dedicated announcer settings table if needed
     const result = await db.get<{
       announcer_voice?: string;
       voice_announcements_enabled?: number;

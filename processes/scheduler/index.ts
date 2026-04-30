@@ -677,7 +677,8 @@ class MatchExecScheduler {
       logger.debug('🔄 Starting scheduled channel name refresh...');
       
       // Call the channel refresh API
-      const response = await fetch('http://localhost:3000/api/channels/refresh-names', {
+      const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+      const response = await fetch(`${baseUrl}/api/channels/refresh-names`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

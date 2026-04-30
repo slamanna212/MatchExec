@@ -216,7 +216,6 @@ export class ReminderHandler {
       `, [matchId]);
 
       let successCount = 0;
-      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant
       for (const participant of participants) {
@@ -504,7 +503,6 @@ export class ReminderHandler {
       }
 
       let successCount = 0;
-      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant who should receive map codes
       for (const participant of participants) {

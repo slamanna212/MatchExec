@@ -232,10 +232,14 @@ export class AIExtractor {
         // Schedule retry after delay
         const delay = RETRY_DELAYS[retryCount] || 120000;
         setTimeout(async () => {
-          await this.db.run(
-            `UPDATE stats_processing_queue SET status = 'pending' WHERE id = ? AND status = 'processing'`,
-            [queueId]
-          );
+          try {
+            await this.db.run(
+              `UPDATE stats_processing_queue SET status = 'pending' WHERE id = ? AND status = 'processing'`,
+              [queueId]
+            );
+          } catch (retryErr) {
+            logger.error('Failed to reset queue item for retry:', retryErr);
+          }
         }, delay);
       } else {
         await this.db.run(

@@ -74,7 +74,9 @@ export function useMatchForm() {
             parsed.dateTime = new Date(parsed.dateTime);
           }
           return parsed;
-        } catch { /* ignore */ }
+        } catch {
+          sessionStorage.removeItem('createMatchFormData');
+        }
       }
     }
     return { rules: 'casual', playerNotifications: true, announcements: [] };
@@ -86,7 +88,9 @@ export function useMatchForm() {
       if (saved) {
         try {
           return JSON.parse(saved);
-        } catch { /* ignore */ }
+        } catch {
+          sessionStorage.removeItem('createMatchSelectedMaps');
+        }
       }
     }
     return [];
@@ -98,7 +102,9 @@ export function useMatchForm() {
       if (saved) {
         try {
           return JSON.parse(saved).eventImageUrl ?? null;
-        } catch { /* ignore */ }
+        } catch {
+          return null;
+        }
       }
     }
     return null;

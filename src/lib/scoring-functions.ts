@@ -44,7 +44,16 @@ export async function calculatePositionPoints(
       }, {} as Record<string, number>);
     }
 
-    const config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+    let config: PositionScoringConfig;
+    try {
+      config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+    } catch {
+      logger.error('Malformed scoring_config for game, defaulting to 0 points for all positions');
+      return Object.keys(positionResults).reduce((acc, participantId) => {
+        acc[participantId] = 0;
+        return acc;
+      }, {} as Record<string, number>);
+    }
 
     // Calculate points for each participant
     const pointsAwarded: Record<string, number> = {};
@@ -96,7 +105,13 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
       return;
     }
 
-    const maps = JSON.parse(matchRow.maps);
+    let maps: string[];
+    try {
+      maps = JSON.parse(matchRow.maps);
+    } catch {
+      logger.error(`Malformed maps JSON for match ${matchId}, skipping game initialization`);
+      return;
+    }
     logger.debug(`initializeMatchGames - Found ${maps.length} maps:`, maps);
 
     // Create a match_games entry for each map

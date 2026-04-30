@@ -176,8 +176,6 @@ async function handleDoubleEliminationProgress(tournamentId: string, roundInfo: 
   
   // Check current state and determine what needs to progress
   const winnersComplete = await isRoundComplete(tournamentId, roundInfo.maxWinnersRound, 'winners');
-  // const losersComplete = roundInfo.maxLosersRound > 0 ? 
-  //   await isRoundComplete(tournamentId, roundInfo.maxLosersRound, 'losers') : true;
 
   // Check for grand finals
   const grandFinalsMatches = await db.all(`
