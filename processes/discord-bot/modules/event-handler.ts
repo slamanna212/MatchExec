@@ -1,5 +1,4 @@
 import fs from 'fs';
-import path from 'path';
 import type {
   Client,
   Message,
@@ -12,6 +11,7 @@ import {
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import { safePublicPath } from './utils';
 
 export class EventHandler {
   constructor(
@@ -73,14 +73,25 @@ export class EventHandler {
   /**
    * Load event cover image
    */
-  private loadEventImage(imageUrl: string): Buffer | undefined {
+  private async loadEventImage(imageUrl: string): Promise<Buffer | undefined> {
     try {
-      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
-
-      if (fs.existsSync(imagePath)) {
-        return fs.readFileSync(imagePath);
+      const imagePath = safePublicPath(imageUrl);
+      if (!imagePath) {
+        logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
+        return undefined;
       }
-      logger.warning(`⚠️ Event image not found for Discord event: ${imagePath}`);
+
+      const stats = await fs.promises.stat(imagePath).catch(() => null);
+      if (!stats) {
+        logger.warning(`⚠️ Event image not found for Discord event: ${imagePath}`);
+        return undefined;
+      }
+      if (stats.size > 10 * 1024 * 1024) {
+        logger.error(`❌ Event image too large (${stats.size} bytes): ${imagePath}`);
+        return undefined;
+      }
+
+      return await fs.promises.readFile(imagePath);
     } catch (error) {
       logger.error(`❌ Error adding cover image to Discord event:`, error);
     }
@@ -122,7 +133,7 @@ export class EventHandler {
       };
 
       if (eventData.event_image_url) {
-        const imageBuffer = this.loadEventImage(eventData.event_image_url);
+        const imageBuffer = await this.loadEventImage(eventData.event_image_url);
         if (imageBuffer) {
           eventOptions.image = imageBuffer;
         }

@@ -4,6 +4,10 @@ import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST() {
+  if (process.env.ENABLE_DEBUG_ROUTES !== 'true') {
+    return apiError('Not found', 404);
+  }
+
   try {
     const db = await getDbInstance();
     const botService = new DiscordBotService(db);

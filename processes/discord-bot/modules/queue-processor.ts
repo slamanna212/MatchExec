@@ -12,6 +12,7 @@ import type { EventHandler } from './event-handler';
 import type { VoiceHandler } from './voice-handler';
 import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
+import { capTitle } from './utils';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -1494,7 +1495,7 @@ export class QueueProcessor {
 
       const existingEmbed = EmbedBuilder.from(message.embeds[0]);
 
-      existingEmbed.setTitle(matchData.name);
+      existingEmbed.setTitle(capTitle(matchData.name));
       if (matchData.description) {
         existingEmbed.setDescription(matchData.description);
       }

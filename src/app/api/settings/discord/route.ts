@@ -4,6 +4,7 @@ import type { DiscordSettingsDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { validateNumberRange } from '@/lib/utils/validation';
 import { apiError, apiOk } from '@/lib/api-response';
+import { checkRateLimit, clientKey } from '@/lib/rate-limit';
 
 const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> = [
   { key: 'event_duration_minutes', min: 5, max: 720 },
@@ -63,7 +64,7 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
  */
 async function restartDiscordBot(): Promise<void> {
   try {
-    const { exec } = await import('child_process');
+    const { execFile } = await import('child_process');
     const isDev = process.env.NODE_ENV === 'development';
 
     if (isDev) {
@@ -71,11 +72,11 @@ async function restartDiscordBot(): Promise<void> {
       const processName = 'discord-bot-dev';
 
       // Check if process exists first
-      exec(`npx pm2 describe ${processName}`, (error) => {
+      execFile('npx', ['pm2', 'describe', processName], (error) => {
         if (error) {
           // Process doesn't exist, start it
           logger.debug(`🚀 Starting ${processName} process (not currently running)`);
-          exec(`npx pm2 start ecosystem.config.js --only ${processName}`, (startError) => {
+          execFile('npx', ['pm2', 'start', 'ecosystem.config.js', '--only', processName], (startError) => {
             if (startError) {
               logger.error(`❌ Error starting ${processName}:`, startError.message);
             } else {
@@ -85,7 +86,7 @@ async function restartDiscordBot(): Promise<void> {
         } else {
           // Process exists, restart it
           logger.debug(`🔄 Restarting ${processName} process due to Discord settings change`);
-          exec(`npx pm2 restart ${processName}`, (restartError) => {
+          execFile('npx', ['pm2', 'restart', processName], (restartError) => {
             if (restartError) {
               logger.error(`❌ Error restarting ${processName}:`, restartError.message);
             } else {
@@ -97,7 +98,7 @@ async function restartDiscordBot(): Promise<void> {
     } else {
       // Production: Kill the process, s6-overlay will restart it automatically
       logger.debug('🔄 Restarting Discord bot process due to Discord settings change');
-      exec('pkill -TERM -f "node dist/discord-bot.js"', (error) => {
+      execFile('pkill', ['-TERM', '-f', 'node dist/discord-bot.js'], (error) => {
         if (error) {
           logger.error('❌ Error restarting Discord bot:', error.message);
         } else {
@@ -170,6 +171,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const limited = checkRateLimit(clientKey(request, 'discord-settings'), 20, 10 * 60 * 1000);
+  if (limited) return limited;
+
   try {
     const db = await getDbInstance();
     const body = await request.json();

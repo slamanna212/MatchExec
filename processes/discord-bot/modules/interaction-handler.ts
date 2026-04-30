@@ -20,6 +20,7 @@ import {
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import { capTitle } from './utils';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
@@ -584,7 +585,7 @@ export class InteractionHandler {
         this.pendingTeamSelections.set(interaction.user.id, { eventId, teamId: selectedTeamId });
         const modal = new ModalBuilder()
           .setCustomId(`signup_form_${eventId}`)
-          .setTitle(`Sign Up - ${team.team_name}`);
+          .setTitle(capTitle(`Sign Up - ${team.team_name}`, 45));
 
         const rows: ActionRowBuilder<TextInputBuilder>[] = [];
 
