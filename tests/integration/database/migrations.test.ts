@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { Database } from '../../../lib/database/connection';
@@ -242,6 +242,70 @@ describe('Database Migrations', () => {
         if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { } }
       }
     }
+  });
+
+  describe('transaction rollback on migration failure', () => {
+    const workerId = process.env.VITEST_POOL_ID || '0';
+    const rollbackDbPath = path.join(process.cwd(), 'app_data', 'data', `migration-rollback-${workerId}.db`);
+    const tempMigrationsDir = path.join(process.cwd(), 'app_data', 'data', `temp-migrations-${workerId}`);
+    let rollbackDb: Database;
+
+    beforeAll(async () => {
+      for (const p of [rollbackDbPath, `${rollbackDbPath}-wal`, `${rollbackDbPath}-shm`]) {
+        if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { } }
+      }
+      if (fs.existsSync(tempMigrationsDir)) fs.rmSync(tempMigrationsDir, { recursive: true, force: true });
+
+      fs.mkdirSync(tempMigrationsDir, { recursive: true });
+
+      // 001 is valid — creates a table that should be committed
+      fs.writeFileSync(
+        path.join(tempMigrationsDir, '001_valid.sql'),
+        'CREATE TABLE rollback_test_valid (id INTEGER PRIMARY KEY);'
+      );
+
+      // 002 is invalid — creates a table then hits bad SQL; everything should roll back
+      fs.writeFileSync(
+        path.join(tempMigrationsDir, '002_invalid.sql'),
+        'CREATE TABLE rollback_test_partial (id INTEGER PRIMARY KEY);\nTHIS IS NOT VALID SQL;'
+      );
+
+      rollbackDb = new Database(rollbackDbPath);
+      await rollbackDb.connect();
+
+      const runner = createMigrationRunner(rollbackDb, tempMigrationsDir, undefined);
+      // 002 throws — swallow so beforeAll completes and assertions can run
+      await runner.up().catch(() => {});
+    });
+
+    afterAll(async () => {
+      await rollbackDb.close();
+      for (const p of [rollbackDbPath, `${rollbackDbPath}-wal`, `${rollbackDbPath}-shm`]) {
+        if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { } }
+      }
+      if (fs.existsSync(tempMigrationsDir)) fs.rmSync(tempMigrationsDir, { recursive: true, force: true });
+    });
+
+    it('should commit the successful migration', async () => {
+      const tables = await rollbackDb.all<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      );
+      expect(tables.map(t => t.name)).toContain('rollback_test_valid');
+    });
+
+    it('should roll back the failed migration leaving no partial changes', async () => {
+      const tables = await rollbackDb.all<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      );
+      expect(tables.map(t => t.name)).not.toContain('rollback_test_partial');
+    });
+
+    it('should not record a failed migration in the tracking table', async () => {
+      const records = await rollbackDb.all<{ filename: string }>('SELECT filename FROM migrations');
+      const filenames = records.map(r => r.filename);
+      expect(filenames).toContain('001_valid.sql');
+      expect(filenames).not.toContain('002_invalid.sql');
+    });
   });
 
   it('should create migrations tracking table', async () => {
