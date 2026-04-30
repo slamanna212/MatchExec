@@ -113,7 +113,7 @@ export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onUplo
           <Stack align="center" gap="xs">
             <IconCheck size={32} color="var(--mantine-color-green-6)" />
             <Text size="sm" fw={500}>{selectedFile.name}</Text>
-            {previewUrl && (
+            {previewUrl && previewUrl.startsWith('blob:') && (
               <img
                 src={previewUrl}
                 alt="Preview"
