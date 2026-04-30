@@ -1,0 +1,38 @@
+{
+  "name": "MatchExec",
+  "slug": "matchexec",
+  "categories": [22, 24],
+  "date_created": "2026-04-30",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 3000,
+  "documentation": null,
+  "website": "https://github.com/slamanna212/matchexec",
+  "logo": "https://raw.githubusercontent.com/slamanna212/matchexec/main/.github/assets/DiscordLogo.png",
+  "description": "MatchExec is a Discord match and tournament management bot with a web dashboard. Supports match scheduling, single/double elimination tournament brackets, per-map scoring, voice announcements, and six games including Overwatch 2, Valorant, Marvel Rivals, League of Legends, R6 Siege, and Counter-Strike 2. All configuration is handled through the web UI.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/matchexec.sh",
+      "config_path": null,
+      "resources": {
+        "cpu": 2,
+        "ram": 2048,
+        "hdd": 8,
+        "os": "Debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "All configuration including Discord bot settings is done through the web UI after installation.",
+      "type": "info"
+    }
+  ]
+}
