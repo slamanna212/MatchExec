@@ -14,7 +14,6 @@ interface DiscordSettings {
   announcer_voice: string;
   voice_announcements_enabled: number;
   voice_channel_category_id: string;
-  voice_channel_cleanup_delay_minutes: number;
   winner_vote_enabled: number;
 }
 
@@ -37,7 +36,6 @@ export async function GET() {
           announcer_voice,
           voice_announcements_enabled,
           voice_channel_category_id,
-          voice_channel_cleanup_delay_minutes,
           winner_vote_enabled
         FROM discord_settings 
         WHERE id = 1
@@ -60,7 +58,6 @@ export async function GET() {
       announcer_voice: discordSettings.announcer_voice || 'wrestling-announcer',
       voice_announcements_enabled: Boolean(discordSettings.voice_announcements_enabled),
       voice_channel_category_id: discordSettings.voice_channel_category_id || '',
-      voice_channel_cleanup_delay_minutes: discordSettings.voice_channel_cleanup_delay_minutes || 10,
       winner_vote_enabled: Boolean(discordSettings.winner_vote_enabled ?? true),
     } : {
       application_id: '',
@@ -74,7 +71,6 @@ export async function GET() {
       announcer_voice: 'wrestling-announcer',
       voice_announcements_enabled: false,
       voice_channel_category_id: '',
-      voice_channel_cleanup_delay_minutes: 10,
       winner_vote_enabled: true,
     };
 

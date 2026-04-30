@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, Skeleton } from '@mantine/core';
 import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
@@ -17,7 +17,6 @@ interface DiscordSettings {
   announcement_role_id?: string;
   mention_everyone?: boolean;
   voice_channel_category_id?: string;
-  voice_channel_cleanup_delay_minutes?: number;
 }
 
 export default function DiscordSettingsPage() {
@@ -32,7 +31,6 @@ export default function DiscordSettingsPage() {
       announcement_role_id: '',
       mention_everyone: false,
       voice_channel_category_id: '',
-      voice_channel_cleanup_delay_minutes: 10,
     },
   });
 
@@ -52,7 +50,6 @@ export default function DiscordSettingsPage() {
             announcement_role_id: data.discord.announcement_role_id || '',
             mention_everyone: data.discord.mention_everyone || false,
             voice_channel_category_id: data.discord.voice_channel_category_id || '',
-            voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes || 10,
           });
         }
       } catch (error) {
@@ -95,7 +92,6 @@ export default function DiscordSettingsPage() {
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
-            voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes || 10,
           });
         }
       } else {
@@ -265,25 +261,6 @@ export default function DiscordSettingsPage() {
                     </Group>
                   </Stack>
                 </>
-              )}
-            </Stack>
-          </Card>
-
-          {/* Voice Channels */}
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Stack gap="md">
-              <Text fw={600} size="lg">Voice Channels</Text>
-
-              {loading ? skeletonRows(1) : (
-                <NumberInput
-                  label="Voice Channel Cleanup Delay (minutes)"
-                  placeholder="10"
-                  description="How long to wait after a match ends before deleting auto-created voice channels"
-                  {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
-                  disabled={loading}
-                  min={0}
-                  max={1440}
-                />
               )}
             </Stack>
           </Card>

@@ -9,7 +9,6 @@ const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> 
   { key: 'event_duration_minutes', min: 5, max: 720 },
   { key: 'match_reminder_minutes', min: 1, max: 1440 },
   { key: 'player_reminder_minutes', min: 1, max: 10080 },
-  { key: 'voice_channel_cleanup_delay_minutes', min: 0, max: 1440 },
 ];
 
 /**
@@ -26,7 +25,6 @@ const DISCORD_SETTINGS_FIELDS = [
   { key: 'announcer_voice', default: 'wrestling-announcer' },
   { key: 'voice_announcements_enabled', default: false, transform: (v: boolean) => v ? 1 : 0 },
   { key: 'voice_channel_category_id', default: '' },
-  { key: 'voice_channel_cleanup_delay_minutes', default: 10 },
   { key: 'winner_vote_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
 ] as const;
 
@@ -129,7 +127,6 @@ export async function GET() {
         announcer_voice,
         voice_announcements_enabled,
         voice_channel_category_id,
-        voice_channel_cleanup_delay_minutes,
         winner_vote_enabled
       FROM discord_settings
       WHERE id = 1
@@ -149,7 +146,6 @@ export async function GET() {
       announcer_voice: settings.announcer_voice || 'wrestling-announcer',
       voice_announcements_enabled: Boolean(settings.voice_announcements_enabled),
       voice_channel_category_id: settings.voice_channel_category_id || '',
-      voice_channel_cleanup_delay_minutes: settings.voice_channel_cleanup_delay_minutes || 10,
       winner_vote_enabled: settings.winner_vote_enabled !== undefined ? Boolean(settings.winner_vote_enabled) : true,
     } : {
       application_id: '',
@@ -163,7 +159,6 @@ export async function GET() {
       announcer_voice: 'wrestling-announcer',
       voice_announcements_enabled: false,
       voice_channel_category_id: '',
-      voice_channel_cleanup_delay_minutes: 10,
       winner_vote_enabled: true,
     };
 
