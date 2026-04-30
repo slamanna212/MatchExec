@@ -12,7 +12,6 @@ import { PageHeader } from '@/components/PageHeader';
 
 interface SchedulerSettings {
   match_check_cron: string;
-  cleanup_check_cron: string;
   channel_refresh_cron: string;
 }
 
@@ -21,7 +20,6 @@ export default function SchedulerSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
     match_check_cron: '0 */1 * * * *',
-    cleanup_check_cron: '0 0 2 * * *',
     channel_refresh_cron: '0 0 0 * * *',
   });
 
@@ -94,7 +92,7 @@ export default function SchedulerSettingsPage() {
         {loading ? (
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Stack gap="lg">
-              {Array.from({ length: 3 }).map((_, i) => (
+              {Array.from({ length: 2 }).map((_, i) => (
                 <Stack key={i} gap="xs">
                   <Skeleton height={14} width={120} />
                   <Skeleton height={12} width={200} />

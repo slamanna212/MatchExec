@@ -13,7 +13,6 @@ interface SchedulerConfigProps {
 
 interface SchedulerSettings {
   match_check_cron: string;
-  cleanup_check_cron: string;
   channel_refresh_cron: string;
 }
 
@@ -315,14 +314,6 @@ export default function SchedulerConfig({
           description="How often to check for match start times and send notifications"
           value={value.match_check_cron}
           onChange={(newValue) => handleFieldChange('match_check_cron', newValue)}
-          disabled={loading}
-        />
-
-        <ScheduleItem
-          label="Data Cleanup"
-          description="When to clean up old match data"
-          value={value.cleanup_check_cron}
-          onChange={(newValue) => handleFieldChange('cleanup_check_cron', newValue)}
           disabled={loading}
         />
 

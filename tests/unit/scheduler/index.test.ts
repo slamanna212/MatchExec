@@ -162,9 +162,9 @@ describe('MatchExecScheduler', () => {
     it('reads cron settings from the database when available', async () => {
       await db.run(`
         INSERT INTO scheduler_settings (
-          id, match_check_cron, cleanup_check_cron, channel_refresh_cron,
+          id, match_check_cron, channel_refresh_cron,
           created_at, updated_at
-        ) VALUES (1, '*/30 * * * * *', '0 0 3 * * *', '0 0 1 * * *',
+        ) VALUES (1, '*/30 * * * * *', '0 0 1 * * *',
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 

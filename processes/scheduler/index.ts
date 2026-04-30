@@ -78,12 +78,11 @@ class MatchExecScheduler {
         // Use default settings if none exist
         const defaultSettings = {
           match_check_cron: '0 */1 * * * *',
-          cleanup_check_cron: '0 0 2 * * *',
           channel_refresh_cron: '0 0 0 * * *'
         };
-        
+
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
-        this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
+        this.startCronJob('Feed Cleanup', '0 0 2 * * *', this.runFeedCleanup.bind(this));
 
         // Initialize and run avatar update job every 2 hours
         this.avatarUpdateJob = new AvatarUpdateJob(this.db);
@@ -99,7 +98,7 @@ class MatchExecScheduler {
 
       // Start new cron jobs based on settings
       this.startCronJob('Match Check & Reminders', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
-      this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
+      this.startCronJob('Feed Cleanup', '0 0 2 * * *', this.runFeedCleanup.bind(this));
       if (settings.channel_refresh_cron) {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
@@ -498,22 +497,7 @@ class MatchExecScheduler {
     }
   }
 
-  private async cleanupOldMatches() {
-    // Clean up matches completed more than 30 days ago
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const result = await this.db.run(
-      `DELETE FROM matches
-       WHERE status = 'complete'
-       AND updated_at < ?`,
-      [thirtyDaysAgo.toISOString()]
-    );
-
-    if ((result.changes ?? 0) > 0) {
-      logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
-    }
-
+  private async runFeedCleanup() {
     await this.cleanupStaleScoringNotifications();
     await this.cleanupFeedEvents();
   }
