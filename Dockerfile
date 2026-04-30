@@ -112,4 +112,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # s6-overlay requires root to start its supervision tree; individual services drop to abc (uid 1001) via s6 service config
-ENTRYPOINT ["/init"]
+ENTRYPOINT ["/init"] # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint

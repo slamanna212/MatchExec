@@ -37,13 +37,21 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        if (buffer.length < 69) {
+          return apiError('Backup file is too short or corrupted.', 400);
+        }
+
         const salt = buffer.subarray(8, 40);
         const iv = buffer.subarray(40, 52);
         const authTag = buffer.subarray(52, 68);
         const ciphertext = buffer.subarray(68);
 
+        if (authTag.length !== 16) {
+          return apiError('Backup file has invalid authentication tag.', 400);
+        }
+
         const key = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LEN, 'sha256');
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
         decipher.setAuthTag(authTag);
         buffer = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       } catch {

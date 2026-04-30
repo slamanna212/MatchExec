@@ -12,6 +12,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "echo \"$(git branch --show-current) | $(npx ccusage@latest statusline --visual-burn-rate emoji)\""
+    "command": "echo \"$(git branch --show-current) | $(npx ccusage@18.0.11 statusline --visual-burn-rate emoji)\""
   }
 }
