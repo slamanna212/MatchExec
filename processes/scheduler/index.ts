@@ -4,6 +4,7 @@ import * as cron from 'node-cron';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
+import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
 
 interface AnnouncementItem {
@@ -17,6 +18,7 @@ class MatchExecScheduler {
   private _db: Database | null = null;
   private cronJobs: cron.ScheduledTask[] = [];
   private avatarUpdateJob: AvatarUpdateJob | null = null;
+  private updateCheckJob: UpdateCheckJob | null = null;
 
   /** Returns the database connection, throwing if it has not been initialised yet. */
   private get db(): Database {
@@ -88,6 +90,10 @@ class MatchExecScheduler {
         this.avatarUpdateJob = new AvatarUpdateJob(this.db);
         this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
+        // Check for updates daily at 9am UTC
+        this.updateCheckJob = new UpdateCheckJob(this.db);
+        this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
+
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
@@ -106,6 +112,10 @@ class MatchExecScheduler {
       // Initialize and run avatar update job every 2 hours
       this.avatarUpdateJob = new AvatarUpdateJob(this.db);
       this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
+
+      // Check for updates daily at 9am UTC
+      this.updateCheckJob = new UpdateCheckJob(this.db);
+      this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {

@@ -2,6 +2,7 @@
 
 import { Card, Text, Badge, Grid, Stack, Group, Button, Alert, Avatar, Select } from '@mantine/core';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { redirect } from 'next/navigation';
 import { logger } from '@/lib/logger/client';
@@ -12,6 +13,26 @@ export default function DevPage() {
       redirect('/');
     }
   }, []);
+  const router = useRouter();
+  const [triggerUpdateLoading, setTriggerUpdateLoading] = useState(false);
+
+  const handleTriggerUpdateEvent = async () => {
+    setTriggerUpdateLoading(true);
+    try {
+      const res = await fetch('/api/debug/trigger-update-event', { method: 'POST' });
+      if (res.ok) {
+        router.push('/feed');
+      } else {
+        // eslint-disable-next-line no-console
+        console.error('Failed to trigger update event');
+      }
+    } catch (err) {
+      logger.error('Error triggering update event:', err);
+    } finally {
+      setTriggerUpdateLoading(false);
+    }
+  };
+
   const [systemStatus, setSystemStatus] = useState<{
     status: string;
     timestamp: string;
@@ -76,8 +97,8 @@ export default function DevPage() {
 
   useEffect(() => {
     fetch('/api/debug/scoring-ai-test')
-      .then(r => r.json())
-      .then((data: { id: string; name: string }[]) => setAiTestGames(data))
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { id: string; name: string }[]) => setAiTestGames(Array.isArray(data) ? data : []))
       // eslint-disable-next-line no-console
       .catch((err) => console.error('Failed to load AI test games:', err));
   }, []);
@@ -151,6 +172,20 @@ export default function DevPage() {
           {systemStatus?.timestamp && (
             <Text size="xs" c="dimmed" mt="sm">Updated: {new Date(systemStatus.timestamp).toLocaleTimeString()}</Text>
           )}
+        </Card>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Text size="lg" fw={600} mb="md">Feed Card Testing</Text>
+          <Text size="sm" c="dimmed" mb="md">
+            Trigger feed events to preview how cards look on the Activity Feed page.
+          </Text>
+          <Button
+            color="orange"
+            loading={triggerUpdateLoading}
+            onClick={handleTriggerUpdateEvent}
+          >
+            Trigger Update Available Card
+          </Button>
         </Card>
 
         <Card shadow="sm" padding="lg" radius="md" withBorder>

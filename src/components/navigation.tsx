@@ -315,6 +315,22 @@ export function Navigation({ children }: NavigationProps) {
   };
 
   return (
+    <>
+    <style>{`
+      .nav-update-badge-dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--mantine-color-orange-5, #f97316);
+        flex-shrink: 0;
+        animation: navUpdatePulse 2s ease-in-out infinite;
+      }
+      @keyframes navUpdatePulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.35; }
+      }
+    `}</style>
     <AppShell
       header={{ height: { base: 60, md: 0 } }}
       navbar={{
@@ -392,18 +408,24 @@ export function Navigation({ children }: NavigationProps) {
           {/* Version + theme toggle row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             {versionInfo ? (
-              <div
-                title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
-                style={{
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  color: '#f7cc02',
-                  cursor: 'help',
-                  userSelect: 'none',
-                }}
-              >
-                {versionInfo.version}
-              </div>
+              versionInfo.updateAvailable ? (
+                <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="top" withArrow>
+                  <div
+                    onClick={() => router.push('/feed')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02' }}>{versionInfo.version}</span>
+                    <span className="nav-update-badge-dot" />
+                  </div>
+                </Tooltip>
+              ) : (
+                <div
+                  title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+                  style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}
+                >
+                  {versionInfo.version}
+                </div>
+              )
             ) : <div />}
 
             {/* Sun / Moon pill toggle */}
@@ -500,19 +522,23 @@ export function Navigation({ children }: NavigationProps) {
             {!desktopCollapsed && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                 {versionInfo ? (
-                  <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        fontFamily: 'monospace',
-                        color: '#f7cc02',
-                        cursor: 'help',
-                        userSelect: 'none',
-                      }}
-                    >
-                      {versionInfo.version}
-                    </div>
-                  </Tooltip>
+                  versionInfo.updateAvailable ? (
+                    <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="top" withArrow>
+                      <div
+                        onClick={() => router.push('/feed')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02' }}>{versionInfo.version}</span>
+                        <span className="nav-update-badge-dot" />
+                      </div>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
+                      <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}>
+                        {versionInfo.version}
+                      </div>
+                    </Tooltip>
+                  )
                 ) : <div />}
 
                 {/* Sun / Moon pill toggle */}
@@ -551,6 +577,18 @@ export function Navigation({ children }: NavigationProps) {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Collapsed: update badge dot */}
+            {desktopCollapsed && versionInfo?.updateAvailable && (
+              <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="right" withArrow>
+                <div
+                  onClick={() => router.push('/feed')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '0 auto' }}
+                >
+                  <span className="nav-update-badge-dot" />
+                </div>
+              </Tooltip>
             )}
 
             {/* Collapsed: centered theme toggle */}
@@ -613,5 +651,6 @@ export function Navigation({ children }: NavigationProps) {
 
       <AppShell.Main>{children}</AppShell.Main>
     </AppShell>
+    </>
   )
 }
