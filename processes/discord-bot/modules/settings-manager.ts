@@ -22,8 +22,10 @@ export class SettingsManager {
           match_reminder_minutes,
           player_reminder_minutes,
           announcer_voice,
-          voice_announcements_enabled
-        FROM discord_settings 
+          voice_announcements_enabled,
+          signup_dm_enabled,
+          commander_dm_enabled
+        FROM discord_settings
         WHERE id = 1
       `);
       

@@ -142,6 +142,8 @@ export interface DiscordSettingsDbRow {
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
   voice_channel_category_id?: string;
   winner_vote_enabled?: number; // SQLite stores booleans as integers
+  signup_dm_enabled?: number;    // SQLite stores booleans as integers
+  commander_dm_enabled?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 
@@ -170,6 +172,8 @@ export interface DiscordSettings {
   player_reminder_minutes?: number;
   announcer_voice?: string;
   voice_announcements_enabled?: boolean;
+  signup_dm_enabled?: boolean;
+  commander_dm_enabled?: boolean;
 }
 
 // Match progress constants

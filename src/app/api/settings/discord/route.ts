@@ -27,6 +27,8 @@ const DISCORD_SETTINGS_FIELDS = [
   { key: 'voice_announcements_enabled', default: false, transform: (v: boolean) => v ? 1 : 0 },
   { key: 'voice_channel_category_id', default: '' },
   { key: 'winner_vote_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
+  { key: 'signup_dm_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
+  { key: 'commander_dm_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
 ] as const;
 
 /**
@@ -128,7 +130,9 @@ export async function GET() {
         announcer_voice,
         voice_announcements_enabled,
         voice_channel_category_id,
-        winner_vote_enabled
+        winner_vote_enabled,
+        signup_dm_enabled,
+        commander_dm_enabled
       FROM discord_settings
       WHERE id = 1
     `);
@@ -148,6 +152,8 @@ export async function GET() {
       voice_announcements_enabled: Boolean(settings.voice_announcements_enabled),
       voice_channel_category_id: settings.voice_channel_category_id || '',
       winner_vote_enabled: settings.winner_vote_enabled !== undefined ? Boolean(settings.winner_vote_enabled) : true,
+      signup_dm_enabled: settings.signup_dm_enabled !== undefined ? Boolean(settings.signup_dm_enabled) : true,
+      commander_dm_enabled: settings.commander_dm_enabled !== undefined ? Boolean(settings.commander_dm_enabled) : true,
     } : {
       application_id: '',
       bot_token: '',
@@ -161,6 +167,8 @@ export async function GET() {
       voice_announcements_enabled: false,
       voice_channel_category_id: '',
       winner_vote_enabled: true,
+      signup_dm_enabled: true,
+      commander_dm_enabled: true,
     };
 
     return apiOk(safeSettings);
