@@ -49,7 +49,7 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
   // Handle bot token separately (don't update if it's the masked value)
   if (body.bot_token && body.bot_token !== '••••••••') {
     updateFields.push('bot_token = ?');
-    updateValues.push(body.bot_token);
+    updateValues.push((body.bot_token as string).trim());
   }
 
   // Always update the timestamp
