@@ -37,17 +37,21 @@ export function buildSignupWelcomeEmbed(
   const color = parseGameColor(gameColor);
   const eventType = isTournament ? 'Tournament' : 'Match';
 
-  let eventDetails = `${gameName} · ${eventType}`;
+  const eventDetailsLines = [
+    `• **Game:** ${gameName}`,
+    `• **Type:** ${eventType}`,
+  ];
   if (startDate) {
     const ts = Math.floor(new Date(startDate).getTime() / 1000);
-    if (!isNaN(ts)) eventDetails += ` · <t:${ts}:R>`;
+    if (!isNaN(ts)) eventDetailsLines.push(`• **When:** <t:${ts}:F> (<t:${ts}:R>)`);
   }
+  const eventDetails = eventDetailsLines.join('\n');
 
   const whatToExpect: string[] = [];
   if (playerReminderMinutes) {
-    whatToExpect.push(`You'll receive a reminder ${playerReminderMinutes} minutes before the event`);
+    whatToExpect.push(`• You'll receive a reminder ${playerReminderMinutes} minutes before the event`);
   }
-  whatToExpect.push('Team voice channels will be set up for your match');
+  whatToExpect.push('• Team voice channels will be set up for your match');
 
   return new EmbedBuilder()
     .setColor(color)
@@ -58,7 +62,7 @@ export function buildSignupWelcomeEmbed(
       { name: '🤖 Useful Commands', value: '`/matches` · `/tournaments` · `/status` · `/help`', inline: false },
       { name: '⏰ What to Expect', value: whatToExpect.join('\n'), inline: false }
     )
-    .setFooter({ text: 'Need help? Use /help in the server' });
+    .setFooter({ text: 'All times shown are local to you.' });
 }
 
 /**
