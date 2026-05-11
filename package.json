@@ -50,7 +50,7 @@
     "@mantine/notifications": "9.1.1",
     "@napi-rs/canvas": "0.1.99",
     "@snazzah/davey": "0.1.11",
-    "@tabler/icons-react": "3.42.0",
+    "@tabler/icons-react": "3.44.0",
     "bufferutil": "4.1.0",
     "discord.js": "14.26.3",
     "express": "5.2.1",
