@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text } from '@mantine/core';
 import type { GameMapWithMode } from './useMatchForm';
 import { useLazyBackground } from '@/hooks/useLazyBackground';
@@ -9,7 +10,7 @@ interface MapCardProps {
   onClick: () => void;
 }
 
-export function MapCard({ map, onClick }: MapCardProps) {
+export function MapCard({ map, onClick }: MapCardProps): JSX.Element {
   const { ref, backgroundImage } = useLazyBackground(map.imageUrl);
 
   return (

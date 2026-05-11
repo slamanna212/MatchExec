@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { SchedulerSettings } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -68,7 +68,7 @@ function validateCronFields(body: Record<string, unknown>): { valid: boolean; er
   return { valid: true };
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
 
@@ -90,7 +90,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
 

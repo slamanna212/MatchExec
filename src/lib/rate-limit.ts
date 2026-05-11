@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import type { NextResponse } from 'next/server';
 import { apiError } from './api-response';
 
 interface Window {
@@ -16,7 +17,7 @@ const store = new Map<string, Window>();
  * @param max      Max requests allowed per window
  * @param windowMs Window duration in milliseconds
  */
-export function checkRateLimit(key: string, max: number, windowMs: number) {
+export function checkRateLimit(key: string, max: number, windowMs: number): NextResponse<{ error: string }> | null {
   const now = Date.now();
   let w = store.get(key);
 

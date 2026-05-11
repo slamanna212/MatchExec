@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Card } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
@@ -61,7 +62,7 @@ function StatChart({ def, players }: StatChartProps) {
   );
 }
 
-export function PlayerLeaderboard({ players, statDefs }: Props) {
+export function PlayerLeaderboard({ players, statDefs }: Props): JSX.Element | null {
   const isLg = useMediaQuery('(min-width: 75em)', false, { getInitialValueInEffect: true });
   const isMd = useMediaQuery('(min-width: 62em)', false, { getInitialValueInEffect: true });
   const columns = isLg ? 3 : isMd ? 2 : 1;

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react';
+import type { JSX } from 'react';
 import { Button, Group, Text, Stack, SegmentedControl, Paper, Alert, Loader } from '@mantine/core';
 import { IconUpload, IconPhoto, IconCheck, IconX } from '@tabler/icons-react';
 import { showSuccess, showError } from '@/lib/notifications';
@@ -13,7 +14,7 @@ interface ScorecardUploadProps {
   onCancel?: () => void;
 }
 
-export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onUploadSuccess, onCancel }: ScorecardUploadProps) {
+export function ScorecardUpload({ matchId, matchGameId, onUploadComplete, onUploadSuccess, onCancel }: ScorecardUploadProps): JSX.Element {
   const [teamSide, setTeamSide] = useState<'blue' | 'red'>('blue');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);

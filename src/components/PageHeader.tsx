@@ -2,6 +2,7 @@ import { Group, ThemeIcon, Title, Text, Breadcrumbs, Anchor, ActionIcon, Tooltip
 import { IconInfoCircle } from '@tabler/icons-react';
 import Link from 'next/link';
 import type React from 'react';
+import type { JSX } from 'react';
 import classes from './PageHeader.module.css';
 
 export interface BreadcrumbItem {
@@ -48,7 +49,7 @@ function DocLink({ href }: { href: string }) {
   );
 }
 
-export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, docLink }: PageHeaderProps) {
+export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, docLink }: PageHeaderProps): JSX.Element {
   const parentCrumb = breadcrumbs?.[0];
 
   return (

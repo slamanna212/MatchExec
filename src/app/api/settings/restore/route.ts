@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type {NextResponse,  NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 import { checkRateLimit, clientKey } from '@/lib/rate-limit';
@@ -15,7 +15,7 @@ const PBKDF2_ITERATIONS = 100_000;
 const KEY_LEN = 32;
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const limited = checkRateLimit(clientKey(request, 'restore'), 5, 10 * 60 * 1000);
   if (limited) return limited;
 

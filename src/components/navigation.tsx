@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import React, { useState, useEffect, useMemo } from 'react'
+import type { JSX } from 'react';
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -209,7 +210,7 @@ interface NavigationProps {
   children: React.ReactNode
 }
 
-export function Navigation({ children }: NavigationProps) {
+export function Navigation({ children }: NavigationProps): JSX.Element {
   const [opened, { toggle }] = useDisclosure(false)
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
   const router = useRouter()

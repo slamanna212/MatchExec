@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import type { MatchGame } from '../../../../../../shared/types';
 import { logger } from '@/lib/logger';
@@ -7,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const { mapId, note } = await request.json();
@@ -65,7 +65,7 @@ export async function POST(
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const db = await getDbInstance();

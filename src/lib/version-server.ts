@@ -11,7 +11,7 @@ function detectPlatform(): string | null {
   return null;
 }
 
-export function getVersionInfo() {
+export function getVersionInfo(): { version: string; branch: string; commitHash: string; isDev: boolean; platform: string | null } {
   // Read package.json at runtime to avoid Next.js import issues
   const packageJsonPath = join(process.cwd(), 'package.json');
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));

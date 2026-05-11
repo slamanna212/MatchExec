@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Stack,
@@ -319,7 +320,7 @@ function UpdateAvailableCard({ event, platform }: { event: FeedEvent; platform: 
 
 // ─── FeedDashboard ────────────────────────────────────────────────────────────
 
-export function FeedDashboard() {
+export function FeedDashboard(): JSX.Element {
   const [events, setEvents]     = useState<FeedEvent[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);

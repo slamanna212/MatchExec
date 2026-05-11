@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
@@ -6,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const db = await getDbInstance();

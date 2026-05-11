@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { saveMatchResult, getMatchResult } from '../../../../../../../lib/scoring-functions';
 import type { MatchResult } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -7,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string; gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { gameId } = await params;
     const result = await getMatchResult(gameId);
@@ -26,7 +26,7 @@ export async function GET(
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string; gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId, gameId } = await params;
     const result: MatchResult = await request.json();

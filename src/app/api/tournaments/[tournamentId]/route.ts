@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -15,7 +15,7 @@ interface TournamentWithDetails extends Tournament {
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { tournamentId } = await params;
     if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {
@@ -125,7 +125,7 @@ export async function GET(
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { tournamentId } = await params;
     if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {

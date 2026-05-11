@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import type { JSX } from 'react';
 import { Modal, Image, ActionIcon, Tooltip } from '@mantine/core';
 import { IconZoomIn } from '@tabler/icons-react';
 
@@ -8,7 +9,7 @@ interface SubmissionViewerProps {
   screenshotUrl: string;
 }
 
-export function SubmissionViewer({ screenshotUrl }: SubmissionViewerProps) {
+export function SubmissionViewer({ screenshotUrl }: SubmissionViewerProps): JSX.Element {
   const [zoomed, setZoomed] = useState(false);
 
   return (

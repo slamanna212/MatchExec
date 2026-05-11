@@ -6,7 +6,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     const { gameId } = await params;
@@ -101,7 +101,7 @@ export async function GET(
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     const { gameId } = await params;

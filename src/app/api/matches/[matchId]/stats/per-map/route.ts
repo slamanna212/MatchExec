@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type {NextResponse,  NextRequest } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -12,7 +12,7 @@ export interface PerMapStatRow {
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const db = await getDbInstance();

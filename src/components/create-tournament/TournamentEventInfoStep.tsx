@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Checkbox, Button, Group } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
@@ -31,7 +32,7 @@ export function TournamentEventInfoStep({
   canProceed,
   hasStatDefs,
   aiProvidersConfigured
-}: TournamentEventInfoStepProps) {
+}: TournamentEventInfoStepProps): JSX.Element {
   return (
     <Stack>
       <Text mb="md">Enter tournament information:</Text>

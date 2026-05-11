@@ -1,10 +1,11 @@
+import type { NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
-export async function POST() {
+export async function POST(): Promise<NextResponse> {
   if (process.env.ENABLE_DEBUG_ROUTES !== 'true') {
     return apiError('Not found', 404);
   }

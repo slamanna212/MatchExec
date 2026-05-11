@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -45,7 +45,7 @@ interface GrandFinalsMatch {
 export async function POST( // NOSONAR typescript:S3776
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { tournamentId } = await params;
     const db = await getDbInstance();

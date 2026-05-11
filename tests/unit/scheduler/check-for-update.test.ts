@@ -47,7 +47,6 @@ describe('UpdateCheckJob', () => {
     await seedUpdateSettings(db);
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     job = new UpdateCheckJob(db as any);
   });
 

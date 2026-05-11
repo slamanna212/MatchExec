@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Grid, Card, Box, Group, Stack, Text, ActionIcon } from '@mantine/core';
 import { IconNote, IconX, IconPlus } from '@tabler/icons-react';
 import type { SelectedMapCard } from './useMatchForm';
@@ -20,7 +21,7 @@ export function SelectedMapsList({
   onRemoveMap,
   onOpenNoteModal,
   onAddMapClick
-}: SelectedMapsListProps) {
+}: SelectedMapsListProps): JSX.Element {
   return (
     <Grid>
       {selectedMaps.map((map) => (

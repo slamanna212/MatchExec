@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
@@ -10,7 +10,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {

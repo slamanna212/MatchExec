@@ -11,7 +11,7 @@ export interface NotificationOptions {
 }
 
 export const notificationHelper = {
-  success: (options: NotificationOptions) => {
+  success: (options: NotificationOptions): void => {
     notifications.show({
       title: options.title || 'Success',
       message: options.message,
@@ -22,7 +22,7 @@ export const notificationHelper = {
     });
   },
 
-  error: (options: NotificationOptions) => {
+  error: (options: NotificationOptions): void => {
     notifications.show({
       title: options.title || 'Error',
       message: options.message,
@@ -33,7 +33,7 @@ export const notificationHelper = {
     });
   },
 
-  warning: (options: NotificationOptions) => {
+  warning: (options: NotificationOptions): void => {
     notifications.show({
       title: options.title || 'Warning',
       message: options.message,
@@ -44,7 +44,7 @@ export const notificationHelper = {
     });
   },
 
-  info: (options: NotificationOptions) => {
+  info: (options: NotificationOptions): void => {
     notifications.show({
       title: options.title || 'Info',
       message: options.message,
@@ -55,7 +55,7 @@ export const notificationHelper = {
     });
   },
 
-  loading: (options: NotificationOptions) => {
+  loading: (options: NotificationOptions): void => {
     notifications.show({
       id: options.id || 'loading',
       title: options.title || 'Loading',
@@ -66,7 +66,7 @@ export const notificationHelper = {
     });
   },
 
-  update: (id: string, options: NotificationOptions & { type: 'success' | 'error' | 'warning' | 'info' }) => {
+  update: (id: string, options: NotificationOptions & { type: 'success' | 'error' | 'warning' | 'info' }): void => {
     const config = {
       success: { color: 'green', icon: createElement(IconCheck, { size: 16 }) },
       error: { color: 'red', icon: createElement(IconX, { size: 16 }) },
@@ -85,24 +85,24 @@ export const notificationHelper = {
     });
   },
 
-  hide: (id: string) => {
+  hide: (id: string): void => {
     notifications.hide(id);
   },
 
-  clean: () => {
+  clean: (): void => {
     notifications.clean();
   }
 };
 
 // Convenience exports for common patterns
-export const showSuccess = (message: string, title?: string) =>
+export const showSuccess = (message: string, title?: string): void =>
   notificationHelper.success({ message, title });
 
-export const showError = (message: string, title?: string) =>
+export const showError = (message: string, title?: string): void =>
   notificationHelper.error({ message, title });
 
-export const showWarning = (message: string, title?: string) =>
+export const showWarning = (message: string, title?: string): void =>
   notificationHelper.warning({ message, title });
 
-export const showInfo = (message: string, title?: string) =>
+export const showInfo = (message: string, title?: string): void =>
   notificationHelper.info({ message, title });

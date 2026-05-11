@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { RingProgress } from '@mantine/core';
 import { MATCH_FLOW_STEPS, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 
@@ -26,7 +27,7 @@ export function StageRing({
   type = 'match',
   size = 50,
   thickness = 4,
-}: StageRingProps) {
+}: StageRingProps): JSX.Element {
   return (
     <RingProgress
       size={size}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react';
+import type { JSX } from 'react';
 import { Tabs, Stack, Text, Group, Divider, Skeleton } from '@mantine/core';
 import { IconLayoutGrid, IconMap } from '@tabler/icons-react';
 import type { MatchPlayerStats, GameStatDefinition, ParticipantDbRow } from '@/shared/types';
@@ -58,7 +59,7 @@ function buildPlayerEntries(
   }));
 }
 
-export function StatsVisualization({ matchId, gameId, games = [] }: Props) {
+export function StatsVisualization({ matchId, gameId, games = [] }: Props): JSX.Element {
   const [activeTab, setActiveTab] = useState('overall');
   const [overallStats, setOverallStats] = useState<MatchPlayerStats[]>([]);
   const [perMapStats, setPerMapStats] = useState<PerMapStatRow[]>([]);

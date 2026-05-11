@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import {
   Stack,
   Group,
@@ -37,7 +38,7 @@ export function TournamentInfoPanel({
   onStatusTransition,
   onGenerateBracket,
   onProgressTournament
-}: TournamentInfoPanelProps) {
+}: TournamentInfoPanelProps): JSX.Element {
   const showActions = tournament.status !== 'complete' && tournament.status !== 'cancelled';
 
   const getActionButtons = () => {

@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { getMatchGames, initializeMatchGames } from '../../../../../lib/scoring-functions';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -6,7 +6,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     logger.debug('API: Starting to get match games...');
     const { matchId } = await params;

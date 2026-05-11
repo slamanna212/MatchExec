@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Stack, Card, Group, Badge, Text, ActionIcon } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
 
@@ -8,7 +9,7 @@ interface TeamListProps {
   onRemoveTeam: (teamName: string) => void;
 }
 
-export function TeamList({ teams, onRemoveTeam }: TeamListProps) {
+export function TeamList({ teams, onRemoveTeam }: TeamListProps): JSX.Element {
   if (teams.length === 0) {
     return (
       <Text size="sm" c="dimmed" ta="center" py="md">

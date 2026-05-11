@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -231,7 +232,7 @@ function SkeletonCard() {
   );
 }
 
-export function MatchDashboard() { // NOSONAR typescript:S3776
+export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
   const router = useRouter();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);

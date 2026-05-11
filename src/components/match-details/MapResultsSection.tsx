@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Stack } from '@mantine/core';
 import { cleanMapId, getMapWinner } from './helpers';
 import { MapCard } from './MapCard';
@@ -40,7 +41,7 @@ export function MapResultsSection({
   matchGames = [],
   showWinner = false,
   children
-}: MapResultsSectionProps) {
+}: MapResultsSectionProps): JSX.Element {
   return (
     <Stack gap="md">
       {maps.map((mapId, index) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import { Container, Loader, Text, Stack } from '@mantine/core';
 import Image from 'next/image';
 import { logger } from '@/lib/logger/client';
@@ -11,7 +12,7 @@ interface DatabaseStatus {
   timestamp: number;
 }
 
-export function DatabaseLoadingScreen() {
+export function DatabaseLoadingScreen(): JSX.Element | null {
   const [status, setStatus] = useState<DatabaseStatus>({
     ready: false,
     progress: 'Initializing database...',

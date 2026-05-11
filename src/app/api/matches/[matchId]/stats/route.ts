@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { MatchPlayerStats } from '@/shared/types';
@@ -8,7 +8,7 @@ import { aggregateMatchStats } from '@/lib/stats-aggregation';
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const db = await getDbInstance();
@@ -28,7 +28,7 @@ export async function GET(
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const db = await getDbInstance();

@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -33,7 +34,7 @@ async function refreshChannel(db: DbInstance, channel: ChannelRow, botToken: str
   return { updated: 0, removed: 0, error: `Failed to refresh channel ${channel.discord_channel_id}: HTTP ${response.status}` };
 }
 
-export async function POST() {
+export async function POST(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
 

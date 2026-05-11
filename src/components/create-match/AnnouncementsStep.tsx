@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, Card, Group, ActionIcon, NumberInput, Select, Button } from '@mantine/core';
 import { IconPlus, IconX } from '@tabler/icons-react';
 import type { AnnouncementTime, MatchFormData } from './useMatchForm';
@@ -30,7 +31,7 @@ export function AnnouncementsStep({
   updateFormData,
   onBack,
   onNext
-}: AnnouncementsStepProps) {
+}: AnnouncementsStepProps): JSX.Element {
   const addAnnouncement = () => {
     const newAnnouncement: AnnouncementTime = {
       id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15), // NOSONAR: non-security internal ID generation

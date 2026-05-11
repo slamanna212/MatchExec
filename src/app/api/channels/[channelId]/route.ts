@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -6,7 +6,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ channelId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { channelId } = await params;
     if (!channelId || typeof channelId !== 'string' || channelId.length > 100) {
@@ -70,7 +70,7 @@ export async function PUT(
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ channelId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { channelId } = await params;
     if (!channelId || typeof channelId !== 'string' || channelId.length > 100) {

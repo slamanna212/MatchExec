@@ -16,7 +16,7 @@ interface FeedRow {
   created_at: string;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     const ifNoneMatch = request.headers.get('if-none-match');
 
     if (!hasDateFilter && offset === 0 && ifNoneMatch === etag) {
-      return new Response(null, { status: 304, headers: { ETag: etag } });
+      return new NextResponse(null, { status: 304, headers: { ETag: etag } });
     }
 
     return NextResponse.json(

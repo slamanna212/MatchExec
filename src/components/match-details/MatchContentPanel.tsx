@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Stack,
@@ -231,7 +232,7 @@ export function MatchContentPanel({
   mapCodesSaving = false,
   participantsLoading = false,
   remindersLoading = false
-}: MatchContentPanelProps) {
+}: MatchContentPanelProps): JSX.Element {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     if (typeof window === 'undefined') return 'participants';

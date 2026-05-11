@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, Grid, Card, Avatar, Group, Badge } from '@mantine/core';
 import type { GameWithIcon } from './useMatchForm';
 
@@ -8,7 +9,7 @@ interface GameSelectionStepProps {
   onGameSelect: (gameId: string) => void;
 }
 
-export function GameSelectionStep({ games, onGameSelect }: GameSelectionStepProps) {
+export function GameSelectionStep({ games, onGameSelect }: GameSelectionStepProps): JSX.Element {
   return (
     <Stack>
       <Text mb="md">Select the game for your match:</Text>

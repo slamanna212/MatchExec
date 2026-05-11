@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { Modal, TextInput, Group, Button, Text, Stack } from '@mantine/core';
 
 interface MapNoteModalProps {
@@ -17,7 +18,7 @@ export function MapNoteModal({
   mapName, 
   initialNote, 
   onSave 
-}: MapNoteModalProps) {
+}: MapNoteModalProps): JSX.Element {
   const [note, setNote] = useState(initialNote);
 
   // Reset note when modal opens with new data

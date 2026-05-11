@@ -2,6 +2,7 @@
 
 import { Text, Stack, Group, Select, Button } from '@mantine/core';
 import { useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
 import type { TournamentFormat } from '@/shared/types';
 
@@ -26,7 +27,7 @@ export function TournamentFormatStep({
   onBack,
   onNext,
   canProceed
-}: TournamentFormatStepProps) {
+}: TournamentFormatStepProps): JSX.Element {
   const [gameModes, setGameModes] = useState<GameMode[]>([]);
   const [loadingModes, setLoadingModes] = useState(false);
   const [error, setError] = useState<string | null>(null);

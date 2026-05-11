@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import {
   Stack,
   Group,
@@ -240,7 +241,7 @@ export function MatchInfoPanel({
   onDelete,
   onEdit,
   onStatusTransition,
-}: MatchInfoPanelProps) {
+}: MatchInfoPanelProps): JSX.Element {
   return (
     <div style={{ position: 'sticky', top: 20 }}>
       <Stack gap="md">

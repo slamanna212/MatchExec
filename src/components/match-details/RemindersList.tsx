@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Stack, Card, Text, Skeleton } from '@mantine/core';
 import { ReminderCard } from './ReminderCard';
 
@@ -30,7 +31,7 @@ export function RemindersList({
   matchStatus,
   parseDbTimestamp,
   showDescription = true
-}: RemindersListProps) {
+}: RemindersListProps): JSX.Element {
   if (loading) {
     return (
       <Stack gap="md" align="center" py="md">

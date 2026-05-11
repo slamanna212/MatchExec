@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { DiscordSettingsDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -119,7 +119,7 @@ async function restartDiscordBot(): Promise<void> {
   }
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     
@@ -184,7 +184,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest): Promise<NextResponse> {
   const limited = checkRateLimit(clientKey(request, 'discord-settings'), 20, 10 * 60 * 1000);
   if (limited) return limited;
 

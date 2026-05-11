@@ -14,7 +14,7 @@ const MAGIC = Buffer.from('MEXECBAK');
 const PBKDF2_ITERATIONS = 100_000;
 const KEY_LEN = 32;
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const limited = checkRateLimit(clientKey(request, 'backup'), 10, 10 * 60 * 1000);
   if (limited) return limited;
 

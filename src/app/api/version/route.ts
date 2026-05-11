@@ -3,7 +3,7 @@ import { getVersionInfo } from '@/lib/version-server';
 import { logger } from '@/lib/logger';
 import { getDbInstance } from '@/lib/database-init';
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const versionInfo = getVersionInfo();
     const db = await getDbInstance();

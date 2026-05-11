@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Card, Group, Badge, Text, Stack } from '@mantine/core';
 import { getReminderStatusColor, formatReminderStatus } from './helpers';
 
@@ -66,7 +67,7 @@ interface ReminderCardProps {
   showDescription: boolean;
 }
 
-export function ReminderCard({ reminder, parseDbTimestamp, showDescription }: ReminderCardProps) {
+export function ReminderCard({ reminder, parseDbTimestamp, showDescription }: ReminderCardProps): JSX.Element {
   const isTimedAnnouncement = reminder.type === 'timed_announcement';
   const showAnnouncementDescription = showDescription && isTimedAnnouncement && Boolean(reminder.description);
   const textTransform = showDescription ? ('none' as const) : undefined;
