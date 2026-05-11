@@ -532,13 +532,24 @@ export class InteractionHandler {
           [parsedId.eventId]
         );
         if (eventRow) {
+          let announcementUrl: string | null = null;
+          if (interaction.guildId) {
+            const msgRow = await this.db.get<{ message_id: string; channel_id: string }>(
+              `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+              [parsedId.eventId]
+            );
+            if (msgRow) {
+              announcementUrl = `https://discord.com/channels/${interaction.guildId}/${msgRow.channel_id}/${msgRow.message_id}`;
+            }
+          }
           const embed = buildSignupWelcomeEmbed(
             eventRow.name,
             eventRow.game_name,
             eventRow.game_color,
             eventRow.start_date,
             parsedId.isTournament,
-            this.settings.player_reminder_minutes
+            this.settings.player_reminder_minutes,
+            announcementUrl
           );
           await sendDM(this.client, interaction.user.id, embed);
         }

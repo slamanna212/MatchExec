@@ -32,7 +32,8 @@ export function buildSignupWelcomeEmbed(
   gameColor: string | null | undefined,
   startDate: string | null | undefined,
   isTournament: boolean,
-  playerReminderMinutes: number | null | undefined
+  playerReminderMinutes: number | null | undefined,
+  announcementUrl?: string | null
 ): EmbedBuilder {
   const color = parseGameColor(gameColor);
   const eventType = isTournament ? 'Tournament' : 'Match';
@@ -53,7 +54,7 @@ export function buildSignupWelcomeEmbed(
   }
   whatToExpect.push('• Team voice channels will be set up for your match');
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(`🎮 You're registered for ${eventName}!`)
     .setDescription('Your registration has been confirmed.')
@@ -63,6 +64,12 @@ export function buildSignupWelcomeEmbed(
       { name: '⏰ What to Expect', value: whatToExpect.join('\n'), inline: false }
     )
     .setFooter({ text: 'All times shown are local to you.' });
+
+  if (announcementUrl) {
+    embed.addFields({ name: '📢 Announcement', value: `[View full details & maps](${announcementUrl})`, inline: false });
+  }
+
+  return embed;
 }
 
 /**
