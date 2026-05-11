@@ -124,7 +124,13 @@ export default function DiscordSetupClient() {
       const response = await fetch('/api/settings/discord', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          bot_token: values.bot_token?.trim(),
+          application_id: values.application_id?.trim(),
+          guild_id: values.guild_id?.trim(),
+          announcement_role_id: values.announcement_role_id?.trim(),
+        }),
       });
 
       if (response.ok) {

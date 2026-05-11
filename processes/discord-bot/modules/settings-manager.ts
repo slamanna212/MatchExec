@@ -33,7 +33,12 @@ export class SettingsManager {
         return null;
       }
 
-      return settings;
+      return {
+        ...settings,
+        bot_token: settings.bot_token.trim(),
+        guild_id: settings.guild_id.trim(),
+        announcement_role_id: settings.announcement_role_id?.trim(),
+      };
     } catch (error) {
       logger.error('❌ Error loading Discord settings:', error);
       return null;

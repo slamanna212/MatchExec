@@ -72,7 +72,14 @@ export default function DiscordSettingsPage() {
     setSaving(true);
 
     try {
-      const payload = { ...values };
+      const payload = {
+        ...values,
+        ...(values.bot_token && values.bot_token !== '••••••••' ? { bot_token: values.bot_token.trim() } : {}),
+        ...(values.application_id ? { application_id: values.application_id.trim() } : {}),
+        ...(values.guild_id ? { guild_id: values.guild_id.trim() } : {}),
+        ...(values.announcement_role_id ? { announcement_role_id: values.announcement_role_id.trim() } : {}),
+        ...(values.voice_channel_category_id ? { voice_channel_category_id: values.voice_channel_category_id.trim() } : {}),
+      };
       if (values.bot_token === '••••••••') {
         delete payload.bot_token;
       }

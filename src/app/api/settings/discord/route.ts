@@ -43,14 +43,20 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
     if (body[field.key] !== undefined) {
       updateFields.push(`${field.key} = ?`);
       const value = body[field.key] || field.default;
-      updateValues.push('transform' in field ? field.transform(value as boolean) : value);
+      if ('transform' in field) {
+        updateValues.push(field.transform(value as boolean));
+      } else if (typeof field.default === 'string') {
+        updateValues.push((value as string).trim());
+      } else {
+        updateValues.push(value);
+      }
     }
   }
 
   // Handle bot token separately (don't update if it's the masked value)
   if (body.bot_token && body.bot_token !== '••••••••') {
     updateFields.push('bot_token = ?');
-    updateValues.push(body.bot_token);
+    updateValues.push((body.bot_token as string).trim());
   }
 
   // Always update the timestamp
