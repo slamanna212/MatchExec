@@ -1,5 +1,5 @@
 # Builder stage - uses TARGETPLATFORM by default for correct musl binaries
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN npm prune --omit=dev
 # Collect only the process-specific deps (and their transitive deps) from node_modules
 RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
 
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 # Install required packages for s6-overlay and runtime
