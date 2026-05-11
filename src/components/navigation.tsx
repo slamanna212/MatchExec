@@ -18,6 +18,7 @@ import {
   Tooltip,
   UnstyledButton,
   Avatar,
+  ScrollArea,
   Text
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
@@ -507,7 +508,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
           </Group>
         </AppShell.Section>
 
-        <AppShell.Section grow>
+        <AppShell.Section grow component={ScrollArea}>
           {renderNavItems({ collapsed: desktopCollapsed })}
         </AppShell.Section>
 
