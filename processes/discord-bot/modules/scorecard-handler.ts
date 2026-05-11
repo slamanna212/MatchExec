@@ -37,15 +37,105 @@ export class ScorecardHandler {
     this.winnerVoteHandler = handler;
   }
 
+  private getTeamSide(teamAssignment: string): 'blue' | 'red' | null {
+    if (teamAssignment === 'blue') return 'blue';
+    if (teamAssignment === 'red') return 'red';
+    return null;
+  }
+
+  private getTeamColor(teamSide: 'blue' | 'red' | null): number {
+    if (teamSide === 'blue') return 0x5b9bd5;
+    if (teamSide === 'red') return 0xe06c75;
+    return 0x7289da;
+  }
+
+  private async sendCommanderScorecardDM(
+    commander: CommanderRecord,
+    matchId: string,
+    matchGameId: string,
+    mapName: string
+  ): Promise<boolean> {
+    try {
+      const teamSide = this.getTeamSide(commander.team_assignment);
+      const embed = new EmbedBuilder()
+        .setTitle('📸 Scorecard Needed')
+        .setDescription(
+          `**Map:** ${mapName || 'Current Map'}\n\n` +
+          `Please take a screenshot of the end-of-match scorecard and **reply to this message** with your screenshot.\n\n` +
+          `Make sure the full scorecard is visible in your screenshot.`
+        )
+        .setColor(this.getTeamColor(teamSide))
+        .setFooter({ text: 'MatchExec Stats System' });
+
+      const user = await this.client.users.fetch(commander.discord_user_id);
+      const sentMessage = await user.send({ embeds: [embed] });
+
+      await this.db.run(
+        `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), matchId, matchGameId, commander.discord_user_id, sentMessage.id, commander.id, teamSide]
+      );
+
+      logger.debug(`📩 Scorecard prompt sent to ${commander.discord_user_id} for match ${matchId}`);
+      return true;
+    } catch (err) {
+      logger.error(`Failed to DM commander ${commander.discord_user_id}:`, err);
+      return false;
+    }
+  }
+
+  private async downloadAndSaveScreenshot(
+    attachment: { url: string; contentType: string | null; name: string | null },
+    matchId: string
+  ): Promise<string> {
+    const response = await fetch(attachment.url);
+    if (!response.ok) throw new Error('download_failed');
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = (attachment.contentType?.split(';')[0] ?? 'image/jpeg').trim();
+    const MIME_TO_EXT: Record<string, string> = {
+      'image/jpeg': '.jpg', 'image/png': '.png',
+      'image/webp': '.webp', 'image/gif': '.gif',
+    };
+    const ext = MIME_TO_EXT[contentType] ?? '.jpg';
+
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', matchId);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const filename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
+    fs.writeFileSync(path.join(uploadDir, filename), buffer);
+
+    return `/uploads/scorecards/${matchId}/${filename}`;
+  }
+
+  private async checkHeldWinnerVote(matchId: string, matchGameId: string): Promise<void> {
+    try {
+      const votes = await this.db.all<{ discord_user_id: string; voted_for: string | null }>(
+        'SELECT discord_user_id, voted_for FROM discord_winner_vote_messages WHERE match_game_id = ?',
+        [matchGameId]
+      );
+      if (!votes || votes.length === 0) return;
+      const allVoted = votes.every(v => v.voted_for !== null);
+      const uniqueVotes = new Set(votes.map(v => v.voted_for));
+      if (allVoted && uniqueVotes.size === 1) {
+        const winner = votes[0].voted_for as 'blue' | 'red';
+        logger.info(`🗳️ Scorecard received — triggering held winner vote for game ${matchGameId}`);
+        await this.winnerVoteHandler!.submitWinner(matchId, matchGameId, winner);
+      }
+    } catch (err) {
+      logger.error('Error checking held winner vote after scorecard submission:', err);
+    }
+  }
+
   async sendScorecardPrompts(matchId: string, matchGameId: string, mapName: string): Promise<boolean> {
     try {
-      // Check stats feature enabled
       const statsSettings = await this.db.get<{ enabled: number }>(
         'SELECT enabled FROM stats_settings WHERE id = 1'
       );
       if (!statsSettings?.enabled) return false;
 
-      // Check game has stat definitions
       const match = await this.db.get<{ game_id: string }>(
         'SELECT game_id FROM matches WHERE id = ?',
         [matchId]
@@ -58,59 +148,17 @@ export class ScorecardHandler {
       );
       if (!statCount || statCount.cnt === 0) return false;
 
-      // Get commanders (participants with receives_map_codes=1)
       const commanders = await this.db.all<CommanderRecord>(
         `SELECT id, discord_user_id, team_assignment FROM match_participants
          WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL`,
         [matchId]
       );
-
       if (!commanders || commanders.length === 0) return false;
 
-      let dmsSent = 0;
-
-      for (const commander of commanders) {
-        try {
-          const teamSide = commander.team_assignment === 'blue' ? 'blue'
-            : commander.team_assignment === 'red' ? 'red'
-            : null;
-
-          const embed = new EmbedBuilder()
-            .setTitle('📸 Scorecard Needed')
-            .setDescription(
-              `**Map:** ${mapName || 'Current Map'}\n\n` +
-              `Please take a screenshot of the end-of-match scorecard and **reply to this message** with your screenshot.\n\n` +
-              `Make sure the full scorecard is visible in your screenshot.`
-            )
-            .setColor(teamSide === 'blue' ? 0x5b9bd5 : teamSide === 'red' ? 0xe06c75 : 0x7289da)
-            .setFooter({ text: 'MatchExec Stats System' });
-
-          const user = await this.client.users.fetch(commander.discord_user_id);
-          const sentMessage = await user.send({ embeds: [embed] });
-
-          // Save DM message record
-          await this.db.run(
-            `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              crypto.randomUUID(),
-              matchId,
-              matchGameId,
-              commander.discord_user_id,
-              sentMessage.id,
-              commander.id,
-              teamSide,
-            ]
-          );
-
-          dmsSent++;
-          logger.debug(`📩 Scorecard prompt sent to ${commander.discord_user_id} for match ${matchId}`);
-        } catch (err) {
-          logger.error(`Failed to DM commander ${commander.discord_user_id}:`, err);
-        }
-      }
-
-      return dmsSent > 0;
+      const results = await Promise.all(
+        commanders.map(c => this.sendCommanderScorecardDM(c, matchId, matchGameId, mapName))
+      );
+      return results.some(Boolean);
     } catch (error) {
       logger.error('Error sending scorecard prompts:', error);
       return false;
@@ -121,21 +169,19 @@ export class ScorecardHandler {
     if (!message.reference?.messageId) return;
 
     try {
-      // Look up the replied-to message in our DM records
       const dmRecord = await this.db.get<ScorecardDmRecord>(
         `SELECT * FROM scorecard_dm_messages
          WHERE discord_message_id = ? AND discord_user_id = ?`,
         [message.reference.messageId, message.author.id]
       );
 
-      if (!dmRecord) return; // Not a scorecard reply
+      if (!dmRecord) return;
 
       if (!dmRecord.match_id) {
         logger.error('Invalid match_id in scorecard DM record');
         return;
       }
 
-      // Check for image attachments
       const imageAttachments = message.attachments.filter(
         (a) => a.contentType?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(a.name || '')
       );
@@ -146,53 +192,24 @@ export class ScorecardHandler {
       }
 
       const attachment = imageAttachments.first()!;
-
-      // Download the image
-      const response = await fetch(attachment.url);
-      if (!response.ok) {
+      let screenshotUrl: string;
+      try {
+        screenshotUrl = await this.downloadAndSaveScreenshot(attachment, dmRecord.match_id);
+      } catch {
         await message.reply('Failed to download your screenshot. Please try again.');
         return;
       }
 
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const contentType = (attachment.contentType?.split(';')[0] ?? 'image/jpeg').trim();
-      const MIME_TO_EXT: Record<string, string> = {
-        'image/jpeg': '.jpg', 'image/png': '.png',
-        'image/webp': '.webp', 'image/gif': '.gif',
-      };
-      const ext = MIME_TO_EXT[contentType] ?? '.jpg';
-
-      // Save to disk
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', dmRecord.match_id);
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      const filename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
-      const filePath = path.join(uploadDir, filename);
-      fs.writeFileSync(filePath, buffer);
-
-      const screenshotUrl = `/uploads/scorecards/${dmRecord.match_id}/${filename}`;
       const submissionId = crypto.randomUUID();
       const queueId = crypto.randomUUID();
 
-      // Create submission record
       await this.db.run(
         `INSERT INTO scorecard_submissions (id, match_id, match_game_id, submitted_by_participant_id, submitted_by_discord_user_id, team_side, screenshot_url, discord_message_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          submissionId,
-          dmRecord.match_id,
-          dmRecord.match_game_id,
-          dmRecord.participant_id,
-          message.author.id,
-          dmRecord.team_side || 'blue',
-          screenshotUrl,
-          message.id,
-        ]
+        [submissionId, dmRecord.match_id, dmRecord.match_game_id, dmRecord.participant_id,
+         message.author.id, dmRecord.team_side || 'blue', screenshotUrl, message.id]
       );
 
-      // Queue for AI processing
       await this.db.run(
         `INSERT INTO stats_processing_queue (id, submission_id, match_id, match_game_id) VALUES (?, ?, ?, ?)`,
         [queueId, submissionId, dmRecord.match_id, dmRecord.match_game_id]
@@ -201,25 +218,8 @@ export class ScorecardHandler {
       await message.reply('✅ Screenshot received! Processing stats...');
       logger.debug(`📸 Scorecard screenshot received from ${message.author.id} for match ${dmRecord.match_id}`);
 
-      // Path B: if winner votes already reached consensus, advance now that scorecard is submitted
       if (this.winnerVoteHandler) {
-        try {
-          const votes = await this.db.all<{ discord_user_id: string; voted_for: string | null }>(
-            'SELECT discord_user_id, voted_for FROM discord_winner_vote_messages WHERE match_game_id = ?',
-            [dmRecord.match_game_id]
-          );
-          if (votes && votes.length > 0) {
-            const allVoted = votes.every(v => v.voted_for !== null);
-            const uniqueVotes = new Set(votes.map(v => v.voted_for));
-            if (allVoted && uniqueVotes.size === 1) {
-              const winner = votes[0].voted_for as 'blue' | 'red';
-              logger.info(`🗳️ Scorecard received — triggering held winner vote for game ${dmRecord.match_game_id}`);
-              await this.winnerVoteHandler.submitWinner(dmRecord.match_id, dmRecord.match_game_id, winner);
-            }
-          }
-        } catch (err) {
-          logger.error('Error checking held winner vote after scorecard submission:', err);
-        }
+        await this.checkHeldWinnerVote(dmRecord.match_id, dmRecord.match_game_id);
       }
     } catch (error) {
       logger.error('Error handling DM reply:', error);
