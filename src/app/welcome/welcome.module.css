@@ -1,0 +1,136 @@
+/* Direction C — Welcome Flow animations */
+
+@keyframes logoBob {
+  0%, 100% {
+    transform: translateY(0px);
+    filter: drop-shadow(0 0 24px rgba(124, 58, 237, 0.65));
+  }
+  50% {
+    transform: translateY(-4px);
+    filter: drop-shadow(0 0 36px rgba(124, 58, 237, 0.9));
+  }
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(0.85); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+@keyframes nodePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.18), 0 4px 16px rgba(124, 58, 237, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(124, 58, 237, 0.08), 0 6px 22px rgba(124, 58, 237, 0.65);
+  }
+}
+
+
+.logoBob {
+  animation: logoBob 5s ease-in-out infinite;
+}
+
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  animation: ringPulse 4s ease-in-out infinite;
+  animation-fill-mode: both;
+}
+
+.ring1 {
+  inset: 10px;
+  animation-delay: 0s;
+}
+
+.ring2 {
+  inset: -8px;
+  border-color: rgba(247, 204, 2, 0.25);
+  animation-delay: 1.3s;
+}
+
+.ring3 {
+  inset: -26px;
+  animation-delay: 2.6s;
+}
+
+.nodePulseAnim {
+  animation: nodePulse 2.4s ease-in-out infinite;
+}
+
+.stage {
+  position: relative;
+  z-index: 1;
+  padding: 28px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ctaRow {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .ctaRow {
+    flex-direction: column;
+    width: 100%;
+  }
+}
+
+.resourceGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 24px;
+  width: 100%;
+  max-width: 720px;
+}
+
+@media (max-width: 640px) {
+  .resourceGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.logoStage {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  display: grid;
+  place-items: center;
+  margin: 4px 0;
+  overflow: visible;
+}
+
+.logoImg {
+  display: block;
+  position: relative;
+  z-index: 2;
+  width: 275px;
+  height: 275px;
+}
+
+@media (max-width: 640px) {
+  .logoStage {
+    width: 240px;
+    height: 240px;
+  }
+
+  .logoImg {
+    width: 190px;
+    height: 190px;
+  }
+}
+
+@media (max-width: 640px) {
+  .stage {
+    padding: 20px 16px 28px;
+  }
+}
+

@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Title, Text, Button, Stack, Group, Card, Badge,
-  ActionIcon, Modal, Checkbox, Alert, TextInput, Progress,
-  useMantineColorScheme
+  Text, Button, Stack, Group, ActionIcon, Modal, Checkbox,
+  TextInput, Badge,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
-import { IconPlus, IconSettings, IconTrash, IconMicrophone, IconMessage, IconArrowRight, IconCheck, IconCircle } from '@tabler/icons-react';
+import {
+  IconPlus, IconSettings, IconTrash, IconMicrophone, IconArrowLeft, IconSparkles, IconHash,
+} from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
 
@@ -41,112 +42,114 @@ interface ChannelEditData {
   send_health_alerts: boolean;
 }
 
+function fireConfetti() {
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;';
+  document.body.appendChild(container);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes confetti-burst {
+      0%   { transform: translate(0,0) rotate(0deg) scale(1); opacity:1; }
+      100% { transform: translate(var(--tx),var(--ty)) rotate(var(--rot)) scale(0.3); opacity:0; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  const colors = ['#7c3aed', '#c084fc', '#f7cc02', '#4ade80', '#60a5fa', '#f472b6', '#a855f7'];
+
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const w = 6 + Math.random() * 6;
+    const h = Math.random() < 0.5 ? w : w * 2;
+    const startX = 45 + Math.random() * 10;
+    const tx = (Math.random() - 0.5) * 240;
+    const ty = -(40 + Math.random() * 60);
+    const rot = (Math.random() - 0.5) * 900;
+    const delay = Math.random() * 0.25;
+
+    piece.style.cssText = `
+      position:absolute; bottom:8%; left:${startX}%;
+      width:${w}px; height:${h}px;
+      background:${color}; border-radius:${Math.random() < 0.5 ? '50%' : '2px'};
+      animation:confetti-burst 1.4s cubic-bezier(0.2,0.6,0.4,1) ${delay}s forwards;
+      --tx:${tx}vw; --ty:${ty}vh; --rot:${rot}deg;
+    `;
+    container.appendChild(piece);
+  }
+
+  setTimeout(() => {
+    container.remove();
+    style.remove();
+  }, 2200);
+}
+
 export default function ChannelsSetupClient() {
-  const { colorScheme } = useMantineColorScheme();
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [voiceCategoryId, setVoiceCategoryId] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
-
-  // Create channel form state
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
   const [createLoading, setCreateLoading] = useState(false);
-
-  const handleOpenCreateForm = () => {
-    setShowCreateForm(true);
-    setCurrentStep(0);
-    createForm.reset();
-  };
-
-  const closeCreateForm = () => {
-    setShowCreateForm(false);
-    setCurrentStep(0);
-    createForm.reset();
-  };
-
-  // Edit channel modal
   const [editModalOpened, setEditModalOpened] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
   const [editData, setEditData] = useState<ChannelEditData>({
-    send_announcements: false,
-    send_reminders: false,
-    send_match_start: false,
-    send_signup_updates: false,
-    send_health_alerts: false
+    send_announcements: false, send_reminders: false,
+    send_match_start: false, send_signup_updates: false, send_health_alerts: false,
   });
 
   const createForm = useForm<CreateChannelForm>({
     initialValues: {
-      discord_channel_id: '',
-      send_announcements: false,
-      send_reminders: false,
-      send_match_start: false,
-      send_signup_updates: false,
-      send_health_alerts: false,
+      discord_channel_id: '', send_announcements: false, send_reminders: false,
+      send_match_start: false, send_signup_updates: false, send_health_alerts: false,
     },
     validate: {
-      discord_channel_id: (value) => {
-        if (!value.trim()) return 'Channel ID is required';
-        if (!/^\d{17,19}$/.test(value.trim())) return 'Invalid Discord channel ID format';
+      discord_channel_id: (v) => {
+        if (!v.trim()) return 'Channel ID is required';
+        if (!/^\d{17,19}$/.test(v.trim())) return 'Invalid Discord channel ID format';
         return null;
       },
     },
   });
 
-  const steps = [
-    { title: 'Channel ID', description: 'Enter the Discord channel ID' },
-    { title: 'Notifications', description: 'Configure notification settings for this text channel' },
-    { title: 'Review', description: 'Review and create the channel' }
-  ];
+  const fetchChannels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/channels');
+      if (res.ok) setChannels(await res.json());
+    } catch (err) {
+      logger.error('Error fetching channels:', err);
+    }
+  }, []);
 
-  const totalSteps = steps.length;
-  const progressValue = ((currentStep + 1) / totalSteps) * 100;
+  const fetchVoiceCategoryId = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/discord');
+      if (res.ok) {
+        const data = await res.json();
+        setVoiceCategoryId(data.voice_channel_category_id || '');
+      }
+    } catch (err) {
+      logger.error('Error fetching voice category ID:', err);
+    }
+  }, []);
 
   useEffect(() => {
     fetchChannels();
     fetchVoiceCategoryId();
-  }, []);
-
-  const fetchChannels = async () => {
-    try {
-      const response = await fetch('/api/channels');
-      if (response.ok) {
-        const data = await response.json();
-        setChannels(data);
-      }
-    } catch (error) {
-      logger.error('Error fetching channels:', error);
-    }
-  };
-
-  const fetchVoiceCategoryId = async () => {
-    try {
-      const response = await fetch('/api/settings/discord');
-      if (response.ok) {
-        const data = await response.json();
-        setVoiceCategoryId(data.voice_channel_category_id || '');
-      }
-    } catch (error) {
-      logger.error('Error fetching voice category ID:', error);
-    }
-  };
+  }, [fetchChannels, fetchVoiceCategoryId]);
 
   const saveVoiceCategoryId = async () => {
     setSavingCategory(true);
     try {
-      const response = await fetch('/api/settings/discord', {
+      const res = await fetch('/api/settings/discord', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voice_channel_category_id: voiceCategoryId }),
       });
-
-      if (response.ok) {
-        showSuccess('Voice channel category saved successfully!');
-      } else {
-        showError('Failed to save voice channel category');
-      }
-    } catch (error) {
-      logger.error('Error saving voice category ID:', error);
+      if (res.ok) showSuccess('Voice channel category saved!');
+      else showError('Failed to save voice channel category');
+    } catch (err) {
+      logger.error('Error saving voice category ID:', err);
       showError('An error occurred while saving');
     } finally {
       setSavingCategory(false);
@@ -154,45 +157,42 @@ export default function ChannelsSetupClient() {
   };
 
   const handleFinish = async () => {
+    fireConfetti();
     try {
-      const response = await fetch('/api/welcome-flow', {
+      const res = await fetch('/api/welcome-flow', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ setupType: 'get_started' }),
       });
-
-      if (response.ok) {
-        // Force full page reload to completely bypass client-side router cache
-        window.location.href = '/';
+      if (res.ok) {
+        setTimeout(() => { window.location.href = '/'; }, 800);
       }
-    } catch (error) {
-      logger.error('Error completing welcome flow:', error);
+    } catch (err) {
+      logger.error('Error completing welcome flow:', err);
     }
   };
 
   const handleCreateChannel = async () => {
+    const validation = createForm.validate();
+    if (validation.hasErrors) return;
     setCreateLoading(true);
-
     try {
-      const response = await fetch('/api/channels', {
+      const res = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...createForm.values,
-          channel_type: 'text' // Text channels only (voice channels are auto-created)
-        }),
+        body: JSON.stringify({ ...createForm.values, channel_type: 'text' }),
       });
-
-      if (response.ok) {
-        showSuccess('Channel created successfully!');
-        closeCreateForm();
+      if (res.ok) {
+        showSuccess('Channel added!');
+        setShowCreateForm(false);
+        createForm.reset();
         await fetchChannels();
       } else {
-        const errorData = await response.json();
-        showError(errorData.error || 'Failed to create channel');
+        const err = await res.json();
+        showError(err.error || 'Failed to create channel');
       }
-    } catch (error) {
-      logger.error('Error creating channel:', error);
+    } catch (err) {
+      logger.error('Error creating channel:', err);
       showError('An error occurred while creating the channel');
     } finally {
       setCreateLoading(false);
@@ -206,522 +206,401 @@ export default function ChannelsSetupClient() {
       send_reminders: channel.send_reminders || false,
       send_match_start: channel.send_match_start || false,
       send_signup_updates: channel.send_signup_updates || false,
-      send_health_alerts: channel.send_health_alerts || false
+      send_health_alerts: channel.send_health_alerts || false,
     });
     setEditModalOpened(true);
   };
 
-  const closeEditModal = () => {
-    setEditModalOpened(false);
-    setSelectedChannel(null);
-  };
-
   const handleSaveNotifications = async () => {
     if (!selectedChannel) return;
-
     try {
-      const response = await fetch(`/api/channels/${selectedChannel.id}`, {
+      const res = await fetch(`/api/channels/${selectedChannel.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editData),
       });
-
-      if (response.ok) {
-        showSuccess('Notification settings updated successfully!');
-        closeEditModal();
+      if (res.ok) {
+        showSuccess('Notification settings updated!');
+        setEditModalOpened(false);
+        setSelectedChannel(null);
         await fetchChannels();
       } else {
         showError('Failed to update notification settings');
       }
-    } catch (error) {
-      logger.error('Error updating notifications:', error);
+    } catch (err) {
+      logger.error('Error updating notifications:', err);
       showError('An error occurred while updating settings');
     }
   };
 
-  const handleDeleteChannel = async (channelId: string, channelName?: string) => {
+  const handleDeleteChannel = (channelId: string, channelName?: string) => {
     modals.openConfirmModal({
       title: 'Delete Channel',
-      children: (
-        <Text size="sm">
-          Are you sure you want to delete {channelName || 'this channel'}? This action cannot be undone.
-        </Text>
-      ),
+      children: <Text size="sm">Are you sure you want to delete {channelName || 'this channel'}? This action cannot be undone.</Text>,
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
-          const response = await fetch(`/api/channels/${channelId}`, {
-            method: 'DELETE'
-          });
-
-          if (response.ok) {
-            showSuccess('Channel deleted successfully!');
-            await fetchChannels();
-          } else {
-            showError('Failed to delete channel');
-          }
-        } catch (error) {
-          logger.error('Error deleting channel:', error);
+          const res = await fetch(`/api/channels/${channelId}`, { method: 'DELETE' });
+          if (res.ok) { showSuccess('Channel deleted!'); await fetchChannels(); }
+          else showError('Failed to delete channel');
+        } catch (err) {
+          logger.error('Error deleting channel:', err);
           showError('An error occurred while deleting the channel');
         }
       },
     });
   };
 
-  const handleCreateNext = () => {
-    if (currentStep === 0) {
-      const validation = createForm.validate();
-      if (validation.hasErrors) return;
-    }
+  const textChannels = channels.filter((ch) => ch.channel_type === 'text');
 
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep(currentStep + 1);
-    }
+  const notifCoverage = [
+    textChannels.some((ch) => ch.send_announcements),
+    textChannels.some((ch) => ch.send_reminders),
+    textChannels.some((ch) => ch.send_match_start),
+    textChannels.some((ch) => ch.send_signup_updates),
+    textChannels.some((ch) => ch.send_health_alerts),
+  ].filter(Boolean).length;
+
+  const statTileStyle: React.CSSProperties = {
+    padding: '14px 18px',
+    borderRadius: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    background: 'var(--mantine-color-default)',
+    border: '1px solid var(--mantine-color-default-border)',
   };
 
-  const handleCreatePrevious = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
+  const statValueStyle = (tone: 'violet' | 'green'): React.CSSProperties => ({
+    fontFamily: 'var(--font-outfit, sans-serif)',
+    fontSize: 28,
+    fontWeight: 800,
+    letterSpacing: '-0.02em',
+    color: tone === 'green' ? '#4ade80' : 'var(--mantine-color-violet-4, #c084fc)',
+  });
+
+  const statLabelStyle: React.CSSProperties = {
+    fontSize: 11.5,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: 'var(--mantine-color-dimmed)',
+    fontWeight: 700,
   };
 
-  const renderCreateStepContent = () => {
-    switch (currentStep) {
-      case 0:
-        return (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              Enter the Discord channel ID. You can get this by right-clicking the channel in Discord and selecting &quot;Copy ID&quot;.
-            </Text>
-            <TextInput
-              label="Discord Channel ID"
-              placeholder="123456789012345678"
-              description="Right-click the channel in Discord and select &apos;Copy ID&apos;"
-              {...createForm.getInputProps('discord_channel_id')}
-              required
-            />
-            <Alert color="blue" variant="light">
-              <Text size="sm">
-                <strong>How to get a channel ID:</strong><br />
-                1. Enable Developer Mode in Discord (Settings → Advanced → Developer Mode)<br />
-                2. Right-click the channel you want to add<br />
-                3. Select &quot;Copy ID&quot;
-              </Text>
-            </Alert>
-          </Stack>
-        );
-
-      case 1:
-        return (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              Configure which notifications should be sent to this text channel.
-            </Text>
-            <Stack gap="sm">
-              <Checkbox
-                label="Match Announcements"
-                description="Send new match announcements to this channel"
-                {...createForm.getInputProps('send_announcements', { type: 'checkbox' })}
-              />
-              <Checkbox
-                label="Match Reminders"
-                description="Send match start reminders to this channel"
-                {...createForm.getInputProps('send_reminders', { type: 'checkbox' })}
-              />
-              <Checkbox
-                label="Live Updates"
-                description="Send live updates about matches starting and their scores"
-                {...createForm.getInputProps('send_match_start', { type: 'checkbox' })}
-              />
-              <Checkbox
-                label="Signup Updates"
-                description="Send updates when players sign up or leave matches"
-                {...createForm.getInputProps('send_signup_updates', { type: 'checkbox' })}
-              />
-              <Checkbox
-                label="Health Alerts"
-                description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
-                {...createForm.getInputProps('send_health_alerts', { type: 'checkbox' })}
-              />
-            </Stack>
-          </Stack>
-        );
-
-      case 2:
-        return renderCreateReviewStep();
-
-      default:
-        return null;
-    }
-  };
-
-  const renderCreateReviewStep = () => (
-    <Stack gap="md">
-      <Text size="sm" c="dimmed">
-        Review the channel configuration before creating it.
-      </Text>
-      <Card p="md" withBorder>
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text size="sm" fw={500}>Channel ID:</Text>
-            <Text size="sm" ff="monospace">{createForm.values.discord_channel_id}</Text>
-          </Group>
-          <Text size="sm" fw={500} mt="sm">Notifications:</Text>
-          <Stack gap="xs" pl="md">
-            {createForm.values.send_announcements && <Text size="sm">✓ Match Announcements</Text>}
-            {createForm.values.send_reminders && <Text size="sm">✓ Match Reminders</Text>}
-            {createForm.values.send_match_start && <Text size="sm">✓ Live Updates</Text>}
-            {createForm.values.send_signup_updates && <Text size="sm">✓ Signup Updates</Text>}
-            {createForm.values.send_health_alerts && <Text size="sm">✓ Health Alerts</Text>}
-            {!createForm.values.send_announcements &&
-             !createForm.values.send_reminders &&
-             !createForm.values.send_match_start &&
-             !createForm.values.send_signup_updates &&
-             !createForm.values.send_health_alerts && (
-              <Text size="sm" c="dimmed">No notifications enabled</Text>
-            )}
-          </Stack>
-        </Stack>
-      </Card>
-    </Stack>
-  );
-
-  const textChannels = channels.filter(ch => ch.channel_type === 'text');
-
-  // Calculate notification status
-  const notificationStatus = {
-    announcements: textChannels.some(ch => ch.send_announcements),
-    reminders: textChannels.some(ch => ch.send_reminders),
-    live_updates: textChannels.some(ch => ch.send_match_start),
-    signup_updates: textChannels.some(ch => ch.send_signup_updates),
-    health_alerts: textChannels.some(ch => ch.send_health_alerts)
+  const FLAG_LABELS: Record<string, string> = {
+    send_announcements: 'Announcements',
+    send_reminders: 'Reminders',
+    send_match_start: 'Live Updates',
+    send_signup_updates: 'Signups',
+    send_health_alerts: 'Health',
   };
 
   return (
-    <Stack gap="lg">
-      <div>
-        <Title order={1} ta="center" mb="xs">
-          Setup Discord Channels 📢
-        </Title>
-        <Text ta="center" c="dimmed">
-          Add text channels for match notifications and configure voice channel settings
-        </Text>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Step hero */}
+      <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+        <div style={{
+          fontFamily: 'var(--font-outfit, sans-serif)',
+          fontSize: 56, fontWeight: 800, lineHeight: 0.85,
+          background: 'linear-gradient(135deg, #c084fc, #7c3aed)',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          letterSpacing: '-0.04em', flexShrink: 0, userSelect: 'none',
+        }}>
+          03
+        </div>
+        <div>
+          <div style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: '#f7cc02', fontFamily: 'var(--font-geist-mono, monospace)',
+          }}>
+            Channels
+          </div>
+          <h2 style={{
+            fontFamily: 'var(--font-outfit, sans-serif)',
+            fontSize: 'clamp(26px, 4vw, 36px)', fontWeight: 800,
+            margin: '4px 0 2px', letterSpacing: '-0.025em', lineHeight: 1,
+            color: 'var(--mantine-color-text)',
+          }}>
+            Where do matches go?
+          </h2>
+          <p style={{ color: 'var(--mantine-color-dimmed)', fontSize: 14, margin: '4px 0 0' }}>
+            Pick the channels for announcements, scores, and alerts. Voice channels are created on the fly.
+          </p>
+        </div>
       </div>
 
-      <Text>
-        Add Discord text channels to receive match notifications and announcements.
-        Voice channels for matches are created automatically. You can always add more channels later from the main channels page.
-      </Text>
+      {/* Stat row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <div style={statTileStyle}>
+          <div style={statValueStyle('violet')}>{textChannels.length}</div>
+          <div style={statLabelStyle}>Channels added</div>
+        </div>
+        <div style={statTileStyle}>
+          <div style={statValueStyle('violet')}>{notifCoverage}</div>
+          <div style={statLabelStyle}>Categories</div>
+        </div>
+        <div style={statTileStyle}>
+          <div style={statValueStyle('green')}>{voiceCategoryId ? 'Set' : 'None'}</div>
+          <div style={statLabelStyle}>Voice category</div>
+        </div>
+      </div>
 
-      {/* Notification Status Indicators */}
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Text size="md" fw={600} mb="xs" ta="center">Notification Status</Text>
-        <Text size="sm" c="dimmed" mb="md" ta="center">Green indicates at least one channel is configured for this notification type</Text>
-        <Group gap="xl" justify="center" wrap="wrap">
-          <Stack gap="xs" align="center">
-            <Text size="sm" fw={500}>Announcements</Text>
-            <IconCircle
-              size="1rem"
-              style={{ color: notificationStatus.announcements ? '#51cf66' : '#ff6b6b' }}
-              fill="currentColor"
-            />
-          </Stack>
-          <Stack gap="xs" align="center">
-            <Text size="sm" fw={500}>Reminders</Text>
-            <IconCircle
-              size="1rem"
-              style={{ color: notificationStatus.reminders ? '#51cf66' : '#ff6b6b' }}
-              fill="currentColor"
-            />
-          </Stack>
-          <Stack gap="xs" align="center">
-            <Text size="sm" fw={500}>Live Updates</Text>
-            <IconCircle
-              size="1rem"
-              style={{ color: notificationStatus.live_updates ? '#51cf66' : '#ff6b6b' }}
-              fill="currentColor"
-            />
-          </Stack>
-          <Stack gap="xs" align="center">
-            <Text size="sm" fw={500}>Signup Updates</Text>
-            <IconCircle
-              size="1rem"
-              style={{ color: notificationStatus.signup_updates ? '#51cf66' : '#ff6b6b' }}
-              fill="currentColor"
-            />
-          </Stack>
-          <Stack gap="xs" align="center">
-            <Text size="sm" fw={500}>Health Alerts</Text>
-            <IconCircle
-              size="1rem"
-              style={{ color: notificationStatus.health_alerts ? '#51cf66' : '#ff6b6b' }}
-              fill="currentColor"
-            />
-          </Stack>
-        </Group>
-      </Card>
-
-      {/* Create Channel Form */}
-      {showCreateForm ? (
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Stack gap="lg">
-            {/* Progress Bar */}
-            <div>
-              <Group justify="space-between" mb="xs">
-                <Text size="sm" fw={500}>
-                  Step {currentStep + 1} of {totalSteps}: {steps[currentStep].title}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {Math.round(progressValue)}%
-                </Text>
-              </Group>
-              <Progress value={progressValue} size="sm" mb="sm" />
-              <Text size="xs" c="dimmed">
-                {steps[currentStep].description}
-              </Text>
-            </div>
-
-            {/* Step Content */}
-            <div>
-              {renderCreateStepContent()}
-            </div>
-
-            {/* Navigation Buttons */}
-            <Group justify="space-between" mt="lg">
-              <Button
-                variant="outline"
-                onClick={handleCreatePrevious}
-                disabled={currentStep === 0}
-              >
-                Previous
-              </Button>
-
-              {currentStep === totalSteps - 1 ? (
-                <Button
-                  onClick={handleCreateChannel}
-                  loading={createLoading}
-                  leftSection={<IconCheck size="1rem" />}
-                >
-                  Create Channel
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleCreateNext}
-                  rightSection={<IconArrowRight size="1rem" />}
-                >
-                  Next
-                </Button>
-              )}
-            </Group>
-
-            {/* Cancel Button */}
-            <Group justify="center">
-              <Button variant="subtle" onClick={closeCreateForm}>
-                Cancel
-              </Button>
-            </Group>
-          </Stack>
-        </Card>
-      ) : (
-        <div>
-          <Group justify="space-between" mb="md">
-            <Group>
-              <IconMessage size="1.2rem" />
-              <Text size="lg" fw={600}>Channels</Text>
-              <Badge color="blue" variant="light">{textChannels.length}</Badge>
-            </Group>
+      {/* Channels section */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            fontFamily: 'var(--font-outfit, sans-serif)', fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em',
+          }}>
+            <IconHash size={16} /> Text channels
+          </div>
+          {!showCreateForm && (
             <Button
-              leftSection={<IconPlus size="1rem" />}
-              onClick={handleOpenCreateForm}
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              onClick={() => { setShowCreateForm(true); createForm.reset(); }}
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', border: 'none' }}
             >
               Add Channel
             </Button>
-          </Group>
-
-          <Stack gap="md">
-            {textChannels.length === 0 ? (
-              <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Text c="dimmed" ta="center" py="xl">No channels added yet</Text>
-              </Card>
-            ) : (
-              textChannels.map((channel) => (
-                <Card
-                  key={channel.id}
-                  shadow={colorScheme === 'light' ? 'lg' : 'sm'}
-                  padding="lg"
-                  radius="md"
-                  withBorder
-                  bg={colorScheme === 'light' ? 'white' : undefined}
-                  style={{
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    borderColor: colorScheme === 'light' ? 'var(--mantine-color-gray-3)' : undefined,
-                    height: '100%'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = colorScheme === 'light'
-                      ? '0 8px 16px rgba(0,0,0,0.15)'
-                      : '0 4px 12px rgba(0,0,0,0.3)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '';
-                  }}
-                >
-                  <Stack gap="md" h="100%">
-                    <div>
-                      <Text fw={600} size="md" mb="xs">
-                        {channel.channel_name || `Channel ${channel.discord_channel_id}`}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        ID: {channel.discord_channel_id}
-                      </Text>
-                    </div>
-
-                    <Group gap="xs" wrap="wrap">
-                      {channel.send_announcements && <Badge size="xs" color="green">Announcements</Badge>}
-                      {channel.send_reminders && <Badge size="xs" color="blue">Reminders</Badge>}
-                      {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
-                      {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
-                      {channel.send_health_alerts && <Badge size="xs" color="red">Health Alerts</Badge>}
-                      {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && !channel.send_health_alerts && (
-                        <Badge size="xs" color="gray" variant="light">No notifications</Badge>
-                      )}
-                    </Group>
-
-                    <Group gap="xs" mt="auto" justify="flex-end">
-                      <ActionIcon
-                        variant="outline"
-                        size="lg"
-                        onClick={() => handleEditChannel(channel)}
-                      >
-                        <IconSettings size="1rem" />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="outline"
-                        color="red"
-                        size="lg"
-                        onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}
-                      >
-                        <IconTrash size="1rem" />
-                      </ActionIcon>
-                    </Group>
-                  </Stack>
-                </Card>
-              ))
-            )}
-          </Stack>
+          )}
         </div>
-      )}
 
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group mb="md">
-          <IconMicrophone size="1.2rem" />
-          <Text size="lg" fw={600}>Voice Channel Category</Text>
-        </Group>
+        {/* Create form */}
+        {showCreateForm && (
+          <div style={{
+            background: 'var(--mantine-color-default)',
+            border: '1px solid rgba(124,58,237,0.3)',
+            borderRadius: 14,
+            padding: '16px 18px 18px',
+          }}>
+            <Stack gap="md">
+              <TextInput
+                label="Discord Channel ID"
+                placeholder="123456789012345678"
+                description='Right-click the channel in Discord → "Copy ID"'
+                {...createForm.getInputProps('discord_channel_id')}
+              />
+              <div>
+                <Text size="sm" fw={600} mb="xs">Notifications</Text>
+                <Stack gap="xs">
+                  <Checkbox label="Match Announcements" {...createForm.getInputProps('send_announcements', { type: 'checkbox' })} />
+                  <Checkbox label="Match Reminders" {...createForm.getInputProps('send_reminders', { type: 'checkbox' })} />
+                  <Checkbox label="Live Updates" {...createForm.getInputProps('send_match_start', { type: 'checkbox' })} />
+                  <Checkbox label="Signup Updates" {...createForm.getInputProps('send_signup_updates', { type: 'checkbox' })} />
+                  <Checkbox label="Health Alerts" {...createForm.getInputProps('send_health_alerts', { type: 'checkbox' })} />
+                </Stack>
+              </div>
+              <Group justify="space-between">
+                <Button variant="subtle" size="sm" onClick={() => setShowCreateForm(false)} style={{ color: 'var(--mantine-color-dimmed)' }}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  loading={createLoading}
+                  onClick={handleCreateChannel}
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', border: 'none' }}
+                >
+                  Add Channel
+                </Button>
+              </Group>
+            </Stack>
+          </div>
+        )}
 
-        <Text size="sm" c="dimmed" mb="md">
-          Voice channels will be automatically created in this category when matches start.
-          Right-click a Discord category and select &quot;Copy ID&quot; to get the category ID.
-        </Text>
+        {/* Channel list */}
+        {textChannels.length === 0 && !showCreateForm ? (
+          <div style={{
+            background: 'var(--mantine-color-default)',
+            border: '1px dashed var(--mantine-color-default-border)',
+            borderRadius: 14,
+            padding: '28px 18px',
+            textAlign: 'center',
+            color: 'var(--mantine-color-dimmed)',
+            fontSize: 14,
+          }}>
+            No channels added yet. Add a text channel to receive match notifications.
+          </div>
+        ) : (
+          textChannels.map((channel) => {
+            const flags = (Object.keys(FLAG_LABELS) as (keyof typeof FLAG_LABELS)[]).filter(
+              (k) => channel[k as keyof DiscordChannel]
+            );
+            return (
+              <div
+                key={channel.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '4px 1fr',
+                  borderRadius: 14,
+                  background: 'var(--mantine-color-default)',
+                  border: '1px solid var(--mantine-color-default-border)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ background: 'linear-gradient(180deg, #9333ea, #4c1d95)' }} />
+                <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{
+                      width: 36, height: 36,
+                      borderRadius: 10,
+                      display: 'grid', placeItems: 'center',
+                      background: 'rgba(124,58,237,0.18)',
+                      color: 'var(--mantine-color-violet-4, #c084fc)',
+                      fontFamily: 'var(--font-outfit, sans-serif)',
+                      fontWeight: 800,
+                      fontSize: 18,
+                      border: '1px solid rgba(124,58,237,0.35)',
+                    }}>
+                      #
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>
+                        {channel.channel_name || `Channel ${channel.discord_channel_id}`}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: 11, color: 'var(--mantine-color-dimmed)', marginTop: 1 }}>
+                        ID · {channel.discord_channel_id}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <ActionIcon variant="subtle" size="sm" onClick={() => handleEditChannel(channel)}>
+                        <IconSettings size={15} />
+                      </ActionIcon>
+                      <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleDeleteChannel(channel.id, channel.channel_name)}>
+                        <IconTrash size={15} />
+                      </ActionIcon>
+                    </div>
+                  </div>
+                  {flags.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {flags.map((f) => (
+                        <span key={f} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '3px 9px',
+                          borderRadius: 999,
+                          fontSize: 11.5, fontWeight: 600,
+                          background: 'rgba(124,58,237,0.15)',
+                          color: 'var(--mantine-color-violet-4, #c084fc)',
+                          border: '1px solid rgba(124,58,237,0.3)',
+                        }}>
+                          {FLAG_LABELS[f]}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
 
-        <TextInput
-          label="Discord Category ID"
-          placeholder="123456789012345678"
-          description="Category where match voice channels will be auto-created"
-          value={voiceCategoryId}
-          onChange={(e) => setVoiceCategoryId(e.target.value)}
-          error={voiceCategoryId && !/^\d{17,19}$/.test(voiceCategoryId) ? 'Invalid Discord category ID format' : null}
-        />
+      {/* Voice category divider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontFamily: 'var(--font-outfit, sans-serif)', fontWeight: 700, fontSize: 16,
+          letterSpacing: '-0.01em', flexShrink: 0,
+        }}>
+          <IconMicrophone size={16} /> Voice category
+        </div>
+        <div style={{ flex: 1, height: 1, background: 'var(--mantine-color-default-border)' }} />
+      </div>
 
-        <Group justify="flex-end" mt="md">
+      {/* Voice category */}
+      <div style={{
+        padding: 18,
+        background: 'var(--mantine-color-default)',
+        border: '1px solid var(--mantine-color-default-border)',
+        borderRadius: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <Badge variant="light" color="gray" size="sm" style={{ fontWeight: 600 }}>Optional</Badge>
+        </div>
+        <div style={{ color: 'var(--mantine-color-dimmed)', fontSize: 13, marginBottom: 12 }}>
+          Match voice channels are auto-created inside this category.
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <TextInput
+            placeholder="Discord category ID"
+            value={voiceCategoryId}
+            onChange={(e) => setVoiceCategoryId(e.target.value)}
+            error={voiceCategoryId && !/^\d{17,19}$/.test(voiceCategoryId) ? 'Invalid format' : null}
+            style={{ flex: 1 }}
+          />
           <Button
+            variant="outline"
             onClick={saveVoiceCategoryId}
             loading={savingCategory}
             disabled={!voiceCategoryId || !/^\d{17,19}$/.test(voiceCategoryId)}
+            style={{ borderColor: 'rgba(124,58,237,0.4)', color: 'var(--mantine-color-violet-4, #c084fc)' }}
           >
-            Save Category
+            Save
           </Button>
-        </Group>
-      </Card>
+        </div>
+      </div>
 
-      <Group justify="space-between" mt="xl">
-        <Button 
-          variant="subtle" 
-          onClick={handleFinish}
+      {/* CTA bar */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr auto',
+        alignItems: 'center',
+        gap: 16,
+        padding: '14px 18px',
+        background: 'var(--mantine-color-body)',
+        border: '1px solid var(--mantine-color-default-border)',
+        borderRadius: 14,
+        position: 'sticky',
+        bottom: 12,
+        backdropFilter: 'blur(8px)',
+      }}>
+        <Button
+          variant="subtle"
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={() => window.history.back()}
+          style={{ color: 'var(--mantine-color-dimmed)' }}
         >
-          Skip for now
+          Back
         </Button>
-        <Button 
-          rightSection={<IconArrowRight size={16} />}
+        <div />
+        <Button
+          size="lg"
+          leftSection={<IconSparkles size={16} />}
           onClick={handleFinish}
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed, #4c1d95)',
+            border: 'none',
+            boxShadow: '0 4px 16px rgba(124,58,237,0.4)',
+          }}
         >
-          Finish Setup
+          Launch MatchExec
         </Button>
-      </Group>
+      </div>
 
-      {/* Edit Notifications Modal */}
+      {/* Edit modal */}
       <Modal
         opened={editModalOpened}
-        onClose={closeEditModal}
-        title="Channel Notification Settings"
+        onClose={() => { setEditModalOpened(false); setSelectedChannel(null); }}
+        title={`Edit ${selectedChannel?.channel_name || 'channel'} notifications`}
         size="md"
         zIndex={1001}
       >
         <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Configure which notifications to send to {selectedChannel?.channel_name || 'this channel'}
-          </Text>
-
           <Stack gap="sm">
-            <Checkbox
-              label="Match Announcements"
-              description="Send new match announcements to this channel"
-              checked={editData.send_announcements}
-              onChange={(e) => setEditData(prev => ({ ...prev, send_announcements: e.target.checked }))}
-            />
-            
-            <Checkbox
-              label="Match Reminders"
-              description="Send match start reminders to this channel"
-              checked={editData.send_reminders}
-              onChange={(e) => setEditData(prev => ({ ...prev, send_reminders: e.target.checked }))}
-            />
-
-            <Checkbox
-              label="Live Updates"
-              description="Send live updates about matches starting and their scores"
-              checked={editData.send_match_start}
-              onChange={(e) => setEditData(prev => ({ ...prev, send_match_start: e.target.checked }))}
-            />
-
-            <Checkbox
-              label="Signup Updates"
-              description="Send updates when players sign up or leave"
-              checked={editData.send_signup_updates}
-              onChange={(e) => setEditData(prev => ({ ...prev, send_signup_updates: e.target.checked }))}
-            />
-
-            <Checkbox
-              label="Health Alerts"
-              description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
-              checked={editData.send_health_alerts}
-              onChange={(e) => setEditData(prev => ({ ...prev, send_health_alerts: e.target.checked }))}
-            />
+            <Checkbox label="Match Announcements" description="New match announcements" checked={editData.send_announcements} onChange={(e) => setEditData((d) => ({ ...d, send_announcements: e.target.checked }))} />
+            <Checkbox label="Match Reminders" description="Match start reminders" checked={editData.send_reminders} onChange={(e) => setEditData((d) => ({ ...d, send_reminders: e.target.checked }))} />
+            <Checkbox label="Live Updates" description="Live match scores and updates" checked={editData.send_match_start} onChange={(e) => setEditData((d) => ({ ...d, send_match_start: e.target.checked }))} />
+            <Checkbox label="Signup Updates" description="Player sign-up and leave events" checked={editData.send_signup_updates} onChange={(e) => setEditData((d) => ({ ...d, send_signup_updates: e.target.checked }))} />
+            <Checkbox label="Health Alerts" description="System health and error alerts" checked={editData.send_health_alerts} onChange={(e) => setEditData((d) => ({ ...d, send_health_alerts: e.target.checked }))} />
           </Stack>
-
-          <Group justify="flex-end" mt="md">
-            <Button variant="outline" onClick={closeEditModal}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveNotifications}>
-              Save Settings
-            </Button>
+          <Group justify="flex-end" mt="sm">
+            <Button variant="subtle" onClick={() => { setEditModalOpened(false); setSelectedChannel(null); }}>Cancel</Button>
+            <Button onClick={handleSaveNotifications}>Save Settings</Button>
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+    </div>
   );
 }
