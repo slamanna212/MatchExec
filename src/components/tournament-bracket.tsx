@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Stack,
@@ -63,7 +64,7 @@ export function TournamentBracket({
   onGenerateMatches,
   isAssignMode = false,
   onBracketAssignment
-}: TournamentBracketProps) {
+}: TournamentBracketProps): JSX.Element {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('list');
   const [bracketAssignments, setBracketAssignments] = useState<BracketAssignment[]>([]);

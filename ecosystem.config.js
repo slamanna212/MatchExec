@@ -25,6 +25,7 @@ module.exports = {
         NODE_ENV: isDev ? 'development' : 'production',
         PORT: 3000,
         ...(! isDev && { HOSTNAME: '0.0.0.0' }),
+        ...(isDev && { ENABLE_DEBUG_ROUTES: 'true' }),
         TZ: 'UTC'
       }
     },

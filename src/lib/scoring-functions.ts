@@ -44,7 +44,16 @@ export async function calculatePositionPoints(
       }, {} as Record<string, number>);
     }
 
-    const config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+    let config: PositionScoringConfig;
+    try {
+      config = JSON.parse(gameRow.scoring_config) as PositionScoringConfig;
+    } catch {
+      logger.error('Malformed scoring_config for game, defaulting to 0 points for all positions');
+      return Object.keys(positionResults).reduce((acc, participantId) => {
+        acc[participantId] = 0;
+        return acc;
+      }, {} as Record<string, number>);
+    }
 
     // Calculate points for each participant
     const pointsAwarded: Record<string, number> = {};
@@ -96,7 +105,13 @@ export async function initializeMatchGames(matchId: string): Promise<void> {
       return;
     }
 
-    const maps = JSON.parse(matchRow.maps);
+    let maps: string[];
+    try {
+      maps = JSON.parse(matchRow.maps);
+    } catch {
+      logger.error(`Malformed maps JSON for match ${matchId}, skipping game initialization`);
+      return;
+    }
     logger.debug(`initializeMatchGames - Found ${maps.length} maps:`, maps);
 
     // Create a match_games entry for each map
@@ -306,6 +321,109 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
   }
 }
 
+async function saveScoringModeResult(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchGameId: string,
+  result: MatchResult
+): Promise<void> {
+  if (result.isPositionMode && result.positionResults) {
+    const pointsAwarded = await calculatePositionPoints(result.positionResults, matchGameId);
+    await db.run(
+      `UPDATE match_games
+       SET position_results = ?, points_awarded = ?, status = 'completed',
+           completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [JSON.stringify(result.positionResults), JSON.stringify(pointsAwarded), matchGameId]
+    );
+    logger.debug(`Saved Position match result for game ${matchGameId}:`, pointsAwarded);
+  } else if (result.isFfaMode && result.participantWinnerId) {
+    await db.run(
+      `UPDATE match_games
+       SET participant_winner_id = ?, is_ffa_mode = 1, status = 'completed',
+           completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [result.participantWinnerId, matchGameId]
+    );
+    logger.debug(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
+  } else {
+    await db.run(
+      `UPDATE match_games
+       SET winner_id = ?, is_ffa_mode = 0, status = 'completed',
+           completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [result.winner, matchGameId]
+    );
+    logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
+  }
+}
+
+async function logMapScoredFeedEvent(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchGameId: string,
+  matchId: string
+): Promise<void> {
+  try {
+    const gameInfo = await db.get<{ name: string; round: number }>(
+      `SELECT m.name, mg.round FROM match_games mg JOIN matches m ON mg.match_id = m.id WHERE mg.id = ?`,
+      [matchGameId]
+    );
+    await logFeedEvent({
+      eventType: 'map_scored',
+      priority: 3,
+      title: 'Map Scored',
+      description: `Map ${gameInfo?.round ?? ''} of "${gameInfo?.name ?? matchGameId}" completed`,
+      matchId,
+      metadata: { matchGameId, round: gameInfo?.round },
+    });
+  } catch (feedError) {
+    logger.error('Error logging map scored feed event:', feedError);
+  }
+}
+
+async function handlePostSaveNotifications(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchGameId: string,
+  result: MatchResult
+): Promise<boolean> {
+  const matchSettings = await db.get<{ stats_enabled: number }>(
+    'SELECT stats_enabled FROM matches WHERE id = ?', [result.matchId]
+  );
+  if (matchSettings?.stats_enabled) {
+    logger.debug(`Stats-enabled match — holding Discord map notification for game ${matchGameId}`);
+  } else {
+    await queueScoreNotification(matchGameId, result);
+    await db.run('UPDATE match_games SET discord_notified = 1 WHERE id = ?', [matchGameId]);
+  }
+
+  try {
+    await db.run(
+      `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
+      [result.matchId]
+    );
+  } catch (feedError) {
+    logger.error('Error removing map scoring notification:', feedError);
+  }
+
+  const nextMap = await setNextMapToOngoing(result.matchId);
+  if (nextMap) {
+    try {
+      const matchRow = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [result.matchId]);
+      await logFeedEvent({
+        eventType: 'match_scoring_required',
+        priority: 3,
+        title: 'Map Scoring Required',
+        description: `"${matchRow?.name ?? result.matchId}" — Map ${nextMap.round}: ${nextMap.mapName ?? 'Unknown Map'}`,
+        matchId: result.matchId,
+        metadata: { matchGameId: nextMap.id, round: nextMap.round, mapName: nextMap.mapName },
+      });
+    } catch (feedError) {
+      logger.error('Error creating next map scoring notification:', feedError);
+    }
+  }
+
+  return nextMap !== null;
+}
+
 /**
  * Save match result - handles team-based, FFA, and Position scoring
  */
@@ -319,120 +437,12 @@ export async function saveMatchResult(
   const db = await getDbInstance();
 
   try {
-    // First, ensure the match_games entry exists
     await ensureMatchGameExists(matchGameId, result.matchId);
-
-    // Handle Position vs FFA vs Normal scoring
-    if (result.isPositionMode && result.positionResults) {
-      // Position Mode: Save position results and calculate points
-      const pointsAwarded = await calculatePositionPoints(result.positionResults, matchGameId);
-
-      const query = `UPDATE match_games
-                     SET position_results = ?,
-                         points_awarded = ?,
-                         status = 'completed',
-                         completed_at = CURRENT_TIMESTAMP,
-                         updated_at = CURRENT_TIMESTAMP
-                     WHERE id = ?`;
-
-      await db.run(query, [
-        JSON.stringify(result.positionResults),
-        JSON.stringify(pointsAwarded),
-        matchGameId
-      ]);
-      logger.debug(`Saved Position match result for game ${matchGameId}:`, pointsAwarded);
-    } else if (result.isFfaMode && result.participantWinnerId) {
-      // FFA Mode: Save individual participant winner, don't count toward team wins
-      const query = `UPDATE match_games
-                     SET participant_winner_id = ?,
-                         is_ffa_mode = 1,
-                         status = 'completed',
-                         completed_at = CURRENT_TIMESTAMP,
-                         updated_at = CURRENT_TIMESTAMP
-                     WHERE id = ?`;
-
-      await db.run(query, [result.participantWinnerId, matchGameId]);
-      logger.debug(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
-    } else {
-      // Normal Mode: Save team winner
-      const query = `UPDATE match_games
-                     SET winner_id = ?,
-                         is_ffa_mode = 0,
-                         status = 'completed',
-                         completed_at = CURRENT_TIMESTAMP,
-                         updated_at = CURRENT_TIMESTAMP
-                     WHERE id = ?`;
-
-      await db.run(query, [result.winner, matchGameId]);
-      logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
-    }
-
-    // Log map scored feed event
-    try {
-      const gameInfo = await db.get<{ name: string; round: number }>(
-        `SELECT m.name, mg.round FROM match_games mg JOIN matches m ON mg.match_id = m.id WHERE mg.id = ?`,
-        [matchGameId]
-      );
-      await logFeedEvent({
-        eventType: 'map_scored',
-        priority: 3,
-        title: 'Map Scored',
-        description: `Map ${gameInfo?.round ?? ''} of "${gameInfo?.name ?? matchGameId}" completed`,
-        matchId: result.matchId,
-        metadata: { matchGameId, round: gameInfo?.round },
-      });
-    } catch (feedError) {
-      logger.error('Error logging map scored feed event:', feedError);
-    }
-
-    // Queue Discord score notification (held for stats-enabled matches until stats are assigned)
-    const matchSettings = await db.get<{ stats_enabled: number }>(
-      'SELECT stats_enabled FROM matches WHERE id = ?', [result.matchId]
-    );
-    if (matchSettings?.stats_enabled) {
-      logger.debug(`Stats-enabled match — holding Discord map notification for game ${matchGameId}`);
-    } else {
-      await queueScoreNotification(matchGameId, result);
-      await db.run('UPDATE match_games SET discord_notified = 1 WHERE id = ?', [matchGameId]);
-    }
-
-    // Remove the scored map's scoring notification
-    try {
-      await db.run(
-        `DELETE FROM activity_feed WHERE event_type = 'match_scoring_required' AND match_id = ?`,
-        [result.matchId]
-      );
-    } catch (feedError) {
-      logger.error('Error removing map scoring notification:', feedError);
-    }
-
-    // Set the next pending map to 'ongoing' if it exists
-    const nextMap = await setNextMapToOngoing(result.matchId);
-    const hasNextMap = nextMap !== null;
-
-    // If there's a next map, create a new scoring notification for it
-    if (nextMap) {
-      try {
-        const matchRow = await db.get<{ name: string }>('SELECT name FROM matches WHERE id = ?', [result.matchId]);
-        await logFeedEvent({
-          eventType: 'match_scoring_required',
-          priority: 3,
-          title: 'Map Scoring Required',
-          description: `"${matchRow?.name ?? result.matchId}" — Map ${nextMap.round}: ${nextMap.mapName ?? 'Unknown Map'}`,
-          matchId: result.matchId,
-          metadata: { matchGameId: nextMap.id, round: nextMap.round, mapName: nextMap.mapName },
-        });
-      } catch (feedError) {
-        logger.error('Error creating next map scoring notification:', feedError);
-      }
-    }
-
-    // Update match status to complete if all games are done
+    await saveScoringModeResult(db, matchGameId, result);
+    await logMapScoredFeedEvent(db, matchGameId, result.matchId);
+    const hasNextMap = await handlePostSaveNotifications(db, matchGameId, result);
     const isMatchComplete = await updateMatchStatusIfComplete(matchGameId);
-
-    // Queue voice announcements based on match state
     await queueVoiceAnnouncementForScore(result.matchId, hasNextMap, isMatchComplete);
-
   } catch (error) {
     logger.error('Error in saveMatchResult:', error);
     throw error;
@@ -774,7 +784,7 @@ async function getMatchTeamId(
 /**
  * Determine the winner of a match based on game wins
  */
-async function determineMatchWinner(
+export async function determineMatchWinner(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string
 ): Promise<string | null> {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Stack,
@@ -95,7 +96,7 @@ export function TournamentContentPanel({
   onBracketAssignment,
   onStartMatch,
   onStartAllMatches
-}: TournamentContentPanelProps) {
+}: TournamentContentPanelProps): JSX.Element {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>(() => {
     if (typeof window === 'undefined') return 'teams';

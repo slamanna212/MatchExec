@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, TextInput, Textarea, Group, Select, Checkbox, Button, Divider } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import type { MatchFormData } from './useMatchForm';
@@ -29,7 +30,7 @@ export function EventInfoStep({
   uploadingImage,
   hasStatDefs,
   aiProvidersConfigured,
-}: EventInfoStepProps) {
+}: EventInfoStepProps): JSX.Element {
   return (
     <Stack gap="xl">
 

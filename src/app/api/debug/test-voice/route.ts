@@ -1,9 +1,14 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordBotService } from '../../../../../lib/discord-bot-service';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
-export async function POST() {
+export async function POST(): Promise<NextResponse> {
+  if (process.env.ENABLE_DEBUG_ROUTES !== 'true') {
+    return apiError('Not found', 404);
+  }
+
   try {
     const db = await getDbInstance();
     const botService = new DiscordBotService(db);

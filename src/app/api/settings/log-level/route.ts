@@ -1,10 +1,11 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
 const VALID_LOG_LEVELS = ['debug', 'info', 'warning', 'error', 'critical'];
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
 
@@ -22,7 +23,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: Request): Promise<NextResponse> {
   try {
     const body = await request.json();
     const { log_level } = body;

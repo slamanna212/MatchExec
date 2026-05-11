@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
+import type { JSX } from 'react';
 import { Text, Badge, Alert, Loader, Group, Stack, Select, Button } from '@mantine/core';
 import { IconFlag, IconCheck, IconTrophy } from '@tabler/icons-react';
 import type { MatchResult } from '@/shared/types';
@@ -275,7 +276,7 @@ export function PositionScoring({
   gameType,
   onResultSubmit,
   submitting
-}: PositionScoringProps) {
+}: PositionScoringProps): JSX.Element {
   const [matchGames, setMatchGames] = useState<MatchGame[]>([]);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);

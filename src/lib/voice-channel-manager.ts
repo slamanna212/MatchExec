@@ -122,14 +122,22 @@ async function waitForVoiceChannelCreation(
 
     if (request?.status === 'completed') {
       if (request.result) {
-        const result = JSON.parse(request.result);
-        logger.debug(`Voice channels created successfully for match ${matchId}`);
-        return result;
+        try {
+          const result = JSON.parse(request.result);
+          logger.debug(`Voice channels created successfully for match ${matchId}`);
+          return result;
+        } catch {
+          logger.error(`Malformed result JSON for voice channel request ${requestId}`);
+          return { success: false, message: 'Malformed response from bot' };
+        }
       }
     }
 
     if (request?.status === 'failed') {
-      const result = request.result ? JSON.parse(request.result) : {};
+      let result: { message?: string } = {};
+      if (request.result) {
+        try { result = JSON.parse(request.result); } catch { /* result stays {} */ }
+      }
       logger.error(`Voice channel creation failed: ${result.message || 'Unknown error'}`);
       return { success: false, message: result.message || 'Failed to create voice channels' };
     }

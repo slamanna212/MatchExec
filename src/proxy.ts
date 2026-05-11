@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const WELCOME_COOKIE = 'welcome_flow_completed';
@@ -15,7 +15,7 @@ export async function proxy(request: NextRequest) {
   if (cookie === 'true' || cookie === 'false') {
     isComplete = cookie === 'true';
   } else {
-    // No cookie — check DB via internal API
+    // No cookie — check DB via internal API (only fires on first visit / cleared cookies)
     try {
       const res = await fetch(new URL('/api/welcome-flow', request.url), { cache: 'no-store' });
       const data = await res.json();
@@ -41,7 +41,7 @@ export async function proxy(request: NextRequest) {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
     });
   }
 
@@ -49,5 +49,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon\\.ico|manifest\\.json|[^/]*\\.[^/]*$).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon\\.ico|manifest\\.json|.*\\.svg|.*\\.png|.*\\.ico|.*\\.webp|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
 };

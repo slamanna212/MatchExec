@@ -313,7 +313,7 @@ export default function MatchPage({
   }, [match, refreshInterval, fetchMatch, fetchParticipants, fetchReminders, refetchMatchGames]);
 
   // Handle status transition
-  const handleStatusTransition = useCallback(async (newStatus: string) => {
+  const handleStatusTransition = useCallback(async (newStatus: string, force = false) => {
     if (!match) return;
 
     const notificationId = `match-transition-${match.id}`;
@@ -341,7 +341,7 @@ export default function MatchPage({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ newStatus }),
+        body: JSON.stringify({ newStatus, force }),
       });
 
       if (response.ok) {
@@ -377,9 +377,10 @@ export default function MatchPage({
     modals.openConfirmModal({
       title: 'Delete Match',
       children: (
-        <Text size="sm">
-          Are you sure you want to delete this match? This action cannot be undone.
-        </Text>
+        <Stack gap="sm">
+          <Text size="sm">Are you sure you want to delete this match? This action cannot be undone.</Text>
+          <Text size="sm" c="dimmed">Deleting removes the match from history entirely. Use &quot;End Match&quot; instead to preserve the match record.</Text>
+        </Stack>
       ),
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },

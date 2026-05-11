@@ -2,6 +2,7 @@ import type { Client, Message } from 'discord.js';
 import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import fs from 'fs';
 import path from 'path';
 import type { Database } from '../../../lib/database/connection';
@@ -12,6 +13,7 @@ import type { EventHandler } from './event-handler';
 import type { VoiceHandler } from './voice-handler';
 import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
+import { capTitle } from './utils';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -278,10 +280,31 @@ async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): 
 /**
  * Registry of request type handlers
  */
+async function handleCommanderDM(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const { matchId, discordUserId, team } = JSON.parse(request.data);
+
+  const match = await processor['db'].get<{ name: string; game_name: string; game_color?: string }>(
+    `SELECT m.name, g.name as game_name, g.color as game_color
+     FROM matches m LEFT JOIN games g ON m.game_id = g.id WHERE m.id = ?`,
+    [matchId]
+  );
+
+  if (match) {
+    const embed = buildCommanderAssignedEmbed(match.name, match.game_name, match.game_color, team);
+    await sendDM(processor['client'], discordUserId, embed);
+  }
+
+  await processor['db'].run(
+    `UPDATE discord_bot_requests SET status = 'completed', updated_at = datetime('now') WHERE id = ?`,
+    [request.id]
+  );
+}
+
 const REQUEST_HANDLERS: Record<string, RequestHandler> = {
   'voice_channel_create': handleVoiceChannelCreate,
   'voice_channel_delete': handleVoiceChannelDelete,
-  'voice_test': handleVoiceTest
+  'voice_test': handleVoiceTest,
+  'commander_dm': handleCommanderDM,
 };
 
 interface TournamentMessageData {
@@ -1494,7 +1517,7 @@ export class QueueProcessor {
 
       const existingEmbed = EmbedBuilder.from(message.embeds[0]);
 
-      existingEmbed.setTitle(matchData.name);
+      existingEmbed.setTitle(capTitle(matchData.name));
       if (matchData.description) {
         existingEmbed.setDescription(matchData.description);
       }

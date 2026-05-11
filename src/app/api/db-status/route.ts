@@ -3,7 +3,7 @@ import { readDbStatus } from '../../../../lib/database/status';
 import { logger } from '@/lib/logger';
 import { apiOk } from '@/lib/api-response';
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const status = readDbStatus();
     return apiOk(status);

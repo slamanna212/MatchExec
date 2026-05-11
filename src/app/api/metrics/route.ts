@@ -10,7 +10,7 @@ function prometheusLine(name: string, help: string, type: string, value: number,
   return `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name}${labelStr} ${value}\n`;
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const lines: string[] = [];
 
   // Process uptime

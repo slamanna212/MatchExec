@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Card, Image, Stack, Text, Badge, Group } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import responsiveTextClasses from '../responsive-text.module.css';
@@ -32,7 +33,7 @@ export function MapCard({
   formatMapName,
   winner,
   children
-}: MapCardProps) {
+}: MapCardProps): JSX.Element {
   return (
     <Card shadow="sm" padding={0} radius="md" withBorder className={classes.card}>
       <div className={classes.outerGroup}>

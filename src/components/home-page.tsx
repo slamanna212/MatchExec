@@ -3,6 +3,7 @@
 import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar, Skeleton } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
+import type { JSX } from 'react';
 import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight, IconLayoutDashboard } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 import { AnimatedCounter } from './AnimatedCounter';
@@ -214,7 +215,7 @@ function buildMissionControlRows(matches: MatchItem[], tournaments: TournamentIt
   return rows;
 }
 
-export function HomePage() {
+export function HomePage(): JSX.Element {
   const router = useRouter();
   const { colorScheme } = useMantineColorScheme();
   const [stats, setStats] = useState<Stats>({ totalMatches: 0, totalTournaments: 0, totalSignups: 0 });

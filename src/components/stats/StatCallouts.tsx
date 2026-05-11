@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { SimpleGrid, Card, Text, Group } from '@mantine/core';
 import type { GameStatDefinition } from '@/shared/types';
 
@@ -27,7 +28,7 @@ interface Props {
   statDefs: GameStatDefinition[];
 }
 
-export function StatCallouts({ players, statDefs }: Props) {
+export function StatCallouts({ players, statDefs }: Props): JSX.Element | null {
   const primaryDefs = statDefs.filter(d => d.is_primary);
   if (!players.length || !primaryDefs.length) return null;
 

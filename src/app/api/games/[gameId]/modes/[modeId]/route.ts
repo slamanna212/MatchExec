@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { promises as fs } from 'fs';
 import { apiError, apiOk } from '@/lib/api-response';
 import path from 'path';
@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ gameId: string; modeId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { gameId, modeId } = await params;
 

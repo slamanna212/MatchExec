@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { ScorecardSubmission, ScorecardPlayerStat } from '@/shared/types';
@@ -6,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ matchId: string; submissionId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId, submissionId } = await params;
     const db = await getDbInstance();
@@ -35,7 +36,7 @@ export async function GET(
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ matchId: string; submissionId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId, submissionId } = await params;
     const db = await getDbInstance();

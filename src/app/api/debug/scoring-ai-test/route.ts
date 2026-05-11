@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { apiError, apiOk } from '@/lib/api-response';
 import { AIExtractor } from '../../../../../processes/stats-processor/modules/ai-extractor';
@@ -7,8 +7,8 @@ import type { GameStatDefinition } from '../../../../../shared/types';
 import { logger } from '@/lib/logger';
 import { resolveModelId } from '@/lib/ai-model-resolver';
 
-export async function GET() {
-  if (process.env.NODE_ENV === 'production') {
+export async function GET(): Promise<NextResponse> {
+  if (process.env.ENABLE_DEBUG_ROUTES !== 'true') {
     return apiError('Not found', 404);
   }
 
@@ -27,8 +27,8 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (process.env.ENABLE_DEBUG_ROUTES !== 'true') {
     return apiError('Not found', 404);
   }
 

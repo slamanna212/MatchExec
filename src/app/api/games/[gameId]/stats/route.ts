@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { GameStatDefinition } from '@/shared/types';
@@ -6,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { gameId } = await params;
     const db = await getDbInstance();

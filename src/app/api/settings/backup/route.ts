@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError } from '@/lib/api-response';
+import { checkRateLimit, clientKey } from '@/lib/rate-limit';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -13,7 +14,10 @@ const MAGIC = Buffer.from('MEXECBAK');
 const PBKDF2_ITERATIONS = 100_000;
 const KEY_LEN = 32;
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const limited = checkRateLimit(clientKey(request, 'backup'), 10, 10 * 60 * 1000);
+  if (limited) return limited;
+
   let tmpFile: string | null = null;
 
   try {

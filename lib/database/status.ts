@@ -7,7 +7,13 @@ export interface DatabaseStatus {
   timestamp: number;
 }
 
-const STATUS_FILE_PATH = path.join(process.cwd(), 'app_data', 'data', '.db-status.json');
+const STATUS_FILE_PATH = (() => {
+  const dbPath = process.env.DATABASE_PATH;
+  if (dbPath) {
+    return path.join(path.dirname(dbPath), '.db-status.json');
+  }
+  return path.join(process.cwd(), 'app_data', 'data', '.db-status.json');
+})();
 
 /**
  * Ensure the status file directory exists

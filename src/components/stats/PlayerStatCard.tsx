@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Card, Text, Badge, Group, Select, Stack, Divider } from '@mantine/core';
 import type { ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';
 
@@ -33,7 +34,7 @@ function formatStatValue(value: number, format?: string): string {
   return String(Math.round(value));
 }
 
-export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }: PlayerStatCardProps) {
+export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }: PlayerStatCardProps): JSX.Element {
   let statsObj: Record<string, number> = {};
   try {
     statsObj = JSON.parse(stat.stats_json) as Record<string, number>;

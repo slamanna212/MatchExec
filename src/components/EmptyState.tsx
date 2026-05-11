@@ -1,5 +1,6 @@
 import { Stack, ThemeIcon, Text } from '@mantine/core';
 import type React from 'react';
+import type { JSX } from 'react';
 
 interface EmptyStateProps {
   icon: React.ComponentType<{ size: number }>;
@@ -12,7 +13,7 @@ interface EmptyStateProps {
 /**
  * Consistent empty-state placeholder used when a list has no items.
  */
-export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps): JSX.Element {
   return (
     <Stack align="center" py="xl" gap="sm">
       <ThemeIcon size={56} radius="xl" variant="light" color="gray">

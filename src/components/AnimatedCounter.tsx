@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import { useMotionValue, useTransform, animate } from 'framer-motion';
 
 interface AnimatedCounterProps {
@@ -8,7 +9,7 @@ interface AnimatedCounterProps {
   duration?: number;
 }
 
-export function AnimatedCounter({ value, duration = 1.5 }: AnimatedCounterProps) {
+export function AnimatedCounter({ value, duration = 1.5 }: AnimatedCounterProps): JSX.Element {
   const count = useMotionValue(0);
   const rounded = useTransform(count, (latest) => Math.round(latest));
   const [displayValue, setDisplayValue] = useState(0);

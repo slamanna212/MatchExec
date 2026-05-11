@@ -1,6 +1,7 @@
-import type { NextRequest } from 'next/server';
+import type {NextResponse,  NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { checkRateLimit, clientKey } from '@/lib/rate-limit';
 import { resetDbSingleton } from '@/lib/database-init';
 import { resetConnectionSingleton } from '@/lib/database/connection';
 import * as crypto from 'crypto';
@@ -14,7 +15,10 @@ const PBKDF2_ITERATIONS = 100_000;
 const KEY_LEN = 32;
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const limited = checkRateLimit(clientKey(request, 'restore'), 5, 10 * 60 * 1000);
+  if (limited) return limited;
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -37,13 +41,21 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        if (buffer.length < 69) {
+          return apiError('Backup file is too short or corrupted.', 400);
+        }
+
         const salt = buffer.subarray(8, 40);
         const iv = buffer.subarray(40, 52);
         const authTag = buffer.subarray(52, 68);
         const ciphertext = buffer.subarray(68);
 
+        if (authTag.length !== 16) {
+          return apiError('Backup file has invalid authentication tag.', 400);
+        }
+
         const key = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LEN, 'sha256');
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
         decipher.setAuthTag(authTag);
         buffer = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       } catch {
@@ -85,23 +97,24 @@ export async function POST(request: NextRequest) {
 }
 
 function restartProcesses(): void {
-  import('child_process').then(({ exec }) => {
+  import('child_process').then(({ execFile }) => {
     const isDev = process.env.NODE_ENV === 'development';
 
     if (isDev) {
-      exec('npx pm2 restart discord-bot-dev scheduler-dev', (error: Error | null) => {
+      execFile('npx', ['pm2', 'restart', 'discord-bot-dev', 'scheduler-dev'], (error: Error | null) => {
         if (error) logger.error('Error restarting processes after restore:', error.message);
         else logger.debug('Restarted discord-bot-dev and scheduler-dev after restore');
       });
     } else {
-      // s6-overlay will auto-restart after the kill signal
-      exec(
-        'pkill -TERM -f "node dist/discord-bot.js"; pkill -TERM -f "node dist/scheduler.js"',
-        (error: Error | null) => {
-          if (error) logger.error('Error restarting processes after restore:', error.message);
-          else logger.debug('Restart signals sent to discord-bot and scheduler after restore');
-        }
-      );
+      // s6-overlay will auto-restart after the kill signal — run two separate execFile calls
+      execFile('pkill', ['-TERM', '-f', 'node dist/discord-bot.js'], (error: Error | null) => {
+        if (error) logger.error('Error signaling discord-bot after restore:', error.message);
+        else logger.debug('Restart signal sent to discord-bot after restore');
+      });
+      execFile('pkill', ['-TERM', '-f', 'node dist/scheduler.js'], (error: Error | null) => {
+        if (error) logger.error('Error signaling scheduler after restore:', error.message);
+        else logger.debug('Restart signal sent to scheduler after restore');
+      });
     }
   }).catch((error) => {
     logger.error('Failed to import child_process for restart:', error);

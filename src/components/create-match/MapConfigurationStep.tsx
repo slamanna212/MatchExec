@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, Button, Group, Checkbox } from '@mantine/core';
 import type { SelectedMapCard, GameMode, GameMapWithMode } from './useMatchForm';
 import { SelectedMapsList } from './SelectedMapsList';
@@ -47,7 +48,7 @@ export function MapConfigurationStep({
   onBack,
   onCreate,
   setStartSignups
-}: MapConfigurationStepProps) {
+}: MapConfigurationStepProps): JSX.Element {
   return (
     <Stack>
       <Text mb="md">Maps Configuration:</Text>

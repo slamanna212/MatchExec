@@ -48,7 +48,7 @@ function isValidImageType(buffer: Buffer): boolean {
   return false;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const formData = await request.formData();
     const file = formData.get('image') as File;
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
     const imageUrl = searchParams.get('imageUrl');

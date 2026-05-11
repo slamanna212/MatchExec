@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Badge } from '@mantine/core';
 import { IconFlame, IconSwords } from '@tabler/icons-react';
 import type { MatchFormat } from '@/shared/types';
@@ -9,7 +10,7 @@ interface FormatBadgeProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 }
 
-export function FormatBadge({ format, size = 'sm' }: FormatBadgeProps) {
+export function FormatBadge({ format, size = 'sm' }: FormatBadgeProps): JSX.Element {
   const isCompetitive = format === 'competitive';
   
   return (

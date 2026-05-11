@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, Group, NumberInput, Select, Skeleton } from '@mantine/core';
+import { Card, Text, Stack, Group, NumberInput, Select, Skeleton, Switch, Button, Alert, Anchor } from '@mantine/core';
 import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
@@ -23,6 +23,11 @@ export default function ApplicationSettingsPage() {
   const [playerReminderValue, setPlayerReminderValue] = useState(2);
   const [playerReminderUnit, setPlayerReminderUnit] = useState('hours');
   const [feedRetentionDays, setFeedRetentionDays] = useState<number>(180);
+  const [updateCheckEnabled, setUpdateCheckEnabled] = useState(true);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [latestVersion, setLatestVersion] = useState('');
+  const [updateCheckLastRun, setUpdateCheckLastRun] = useState('');
+  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
 
   const minutesToValueUnit = (minutes: number) => {
     if (minutes >= 1440 && minutes % 1440 === 0) {
@@ -56,10 +61,11 @@ export default function ApplicationSettingsPage() {
     async function fetchSettings() {
       setLoading(true);
       try {
-        const [settingsResponse, logLevelResponse, feedRetentionResponse] = await Promise.all([
+        const [settingsResponse, logLevelResponse, feedRetentionResponse, updateCheckResponse] = await Promise.all([
           fetch('/api/settings'),
           fetch('/api/settings/log-level'),
           fetch('/api/settings/feed-retention'),
+          fetch('/api/settings/update-check'),
         ]);
 
         if (settingsResponse.ok) {
@@ -86,6 +92,14 @@ export default function ApplicationSettingsPage() {
             const feedData = await feedRetentionResponse.json();
             setFeedRetentionDays(feedData.feed_retention_days ?? 180);
           }
+
+          if (updateCheckResponse.ok) {
+            const ucData = await updateCheckResponse.json();
+            setUpdateCheckEnabled(ucData.update_check_enabled ?? true);
+            setUpdateAvailable(ucData.update_available ?? false);
+            setLatestVersion(ucData.latest_version ?? '');
+            setUpdateCheckLastRun(ucData.update_check_last_run ?? '');
+          }
         }
       } catch (error) {
         logger.error('Error fetching settings:', error);
@@ -102,7 +116,7 @@ export default function ApplicationSettingsPage() {
 
     try {
       const playerReminderMinutes = valueUnitToMinutes(playerReminderValue, playerReminderUnit);
-      const [discordResponse, logLevelResponse, feedRetentionResponse] = await Promise.all([
+      const [discordResponse, logLevelResponse, feedRetentionResponse, updateCheckSaveResponse] = await Promise.all([
         fetch('/api/settings/discord', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -122,9 +136,14 @@ export default function ApplicationSettingsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ feed_retention_days: feedRetentionDays }),
         }),
+        fetch('/api/settings/update-check', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ update_check_enabled: updateCheckEnabled }),
+        }),
       ]);
 
-      if (discordResponse.ok && logLevelResponse.ok && feedRetentionResponse.ok) {
+      if (discordResponse.ok && logLevelResponse.ok && feedRetentionResponse.ok && updateCheckSaveResponse.ok) {
         notificationHelper.success({
           title: 'Settings Saved',
           message: 'Application settings saved successfully!'
@@ -143,6 +162,35 @@ export default function ApplicationSettingsPage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheckNow = async () => {
+    setCheckingForUpdate(true);
+    try {
+      const res = await fetch('/api/settings/update-check', { method: 'POST' });
+      if (res.status === 429) {
+        notificationHelper.warning({ title: 'Rate Limited', message: 'Wait a moment before checking again.' });
+        return;
+      }
+      if (!res.ok) {
+        notificationHelper.error({ title: 'Check Failed', message: 'Could not reach GitHub to check for updates.' });
+        return;
+      }
+      const ucData = await (await fetch('/api/settings/update-check')).json();
+      setUpdateAvailable(ucData.update_available ?? false);
+      setLatestVersion(ucData.latest_version ?? '');
+      setUpdateCheckLastRun(ucData.update_check_last_run ?? '');
+      if (ucData.update_available) {
+        notificationHelper.info({ title: 'Update Available', message: `Version ${ucData.latest_version} is available.` });
+      } else {
+        notificationHelper.success({ title: 'Up to Date', message: 'MatchExec is up to date.' });
+      }
+    } catch (error) {
+      logger.error('Error checking for update:', error);
+      notificationHelper.error({ title: 'Check Failed', message: 'An error occurred.' });
+    } finally {
+      setCheckingForUpdate(false);
     }
   };
 
@@ -247,6 +295,51 @@ export default function ApplicationSettingsPage() {
                   value={feedRetentionDays}
                   onChange={(value) => setFeedRetentionDays(Number(value) || 180)}
                 />
+              </Stack>
+            )}
+          </Card>
+
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            {loading ? (
+              <Stack gap="md">
+                <Stack gap={4}><Skeleton height={14} width={120} /><Skeleton height={36} /></Stack>
+              </Stack>
+            ) : (
+              <Stack gap="md">
+                <div>
+                  <Text size="md" fw={600} mb="xs">Update Checks</Text>
+                  <Text size="sm" c="dimmed">Automatically check GitHub for new MatchExec releases</Text>
+                </div>
+
+                {updateAvailable && latestVersion && (
+                  <Alert color="orange" title={`Version ${latestVersion} is available`}>
+                    <Anchor href="/feed" size="sm">View update details on the feed →</Anchor>
+                  </Alert>
+                )}
+
+                <Switch
+                  label="Enable automatic update checks"
+                  description="The scheduler checks once daily at 9am UTC"
+                  checked={updateCheckEnabled}
+                  onChange={(e) => setUpdateCheckEnabled(e.currentTarget.checked)}
+                />
+
+                <Group gap="sm" align="center">
+                  <Button
+                    variant="outline"
+                    color="orange"
+                    size="sm"
+                    loading={checkingForUpdate}
+                    onClick={handleCheckNow}
+                  >
+                    Check Now
+                  </Button>
+                  {updateCheckLastRun && (
+                    <Text size="xs" c="dimmed">
+                      Last checked: {new Date(updateCheckLastRun).toLocaleString()}
+                    </Text>
+                  )}
+                </Group>
               </Stack>
             )}
           </Card>

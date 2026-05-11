@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Box, Text, Card, Group, ActionIcon, Image, FileButton, Stack } from '@mantine/core';
 import { IconUpload, IconTrash } from '@tabler/icons-react';
 
@@ -15,7 +16,7 @@ export function EventImageUpload({
   uploadingImage,
   onImageUpload,
   onRemoveImage
-}: EventImageUploadProps) {
+}: EventImageUploadProps): JSX.Element {
   return (
     <Box>
       <Text size="sm" fw={500} mb="xs">Event Image (Optional)</Text>

@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback } from 'react';
+import type { JSX } from 'react';
 import {
   Modal,
   Text,
@@ -54,7 +55,7 @@ interface AssignPlayersModalProps {
   matchName: string;
 }
 
-export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: AssignPlayersModalProps) {
+export function AssignPlayersModal({ isOpen, onClose, matchId, matchName }: AssignPlayersModalProps): JSX.Element {
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

@@ -5,6 +5,9 @@ export interface VersionInfo {
   branch: string;
   commitHash: string;
   isDev: boolean;
+  updateAvailable: boolean;
+  latestVersion: string;
+  platform: string | null;
 }
 
 export async function getVersionInfo(): Promise<VersionInfo> {
@@ -20,7 +23,10 @@ export async function getVersionInfo(): Promise<VersionInfo> {
       version: 'unknown',
       branch: 'unknown',
       commitHash: 'unknown',
-      isDev: false
+      isDev: false,
+      updateAvailable: false,
+      latestVersion: '',
+      platform: null,
     };
   }
 }

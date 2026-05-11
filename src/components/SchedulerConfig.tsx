@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import type { JSX } from 'react';
 import { Card, Group, Text, Select, NumberInput, Stack, Alert } from '@mantine/core';
 import { IconClock } from '@tabler/icons-react';
 
@@ -288,7 +289,7 @@ export default function SchedulerConfig({
   onChange,
   loading = false,
   message
-}: SchedulerConfigProps) {
+}: SchedulerConfigProps): JSX.Element {
 
   const handleFieldChange = useCallback((field: keyof SchedulerSettings, newValue: string) => {
     const updated = { ...value, [field]: newValue };

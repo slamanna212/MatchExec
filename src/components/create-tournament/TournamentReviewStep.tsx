@@ -2,6 +2,7 @@
 
 import { Text, Stack, Card, Group, Badge, Button } from '@mantine/core';
 import { useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import type { GameWithIcon, TournamentFormData } from './useTournamentForm';
 
 interface GameMode {
@@ -25,7 +26,7 @@ export function TournamentReviewStep({
   onBack,
   onCreate,
   canProceed
-}: TournamentReviewStepProps) {
+}: TournamentReviewStepProps): JSX.Element {
   const [gameMode, setGameMode] = useState<GameMode | null>(null);
 
   // Fetch game mode details

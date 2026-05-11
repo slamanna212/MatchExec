@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Container, Stack, ActionIcon, Stepper } from '@mantine/core';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap, IconSwords } from '@tabler/icons-react';
@@ -16,7 +17,7 @@ import { EventInfoStep } from './create-match/EventInfoStep';
 import { AnnouncementsStep } from './create-match/AnnouncementsStep';
 import { MapConfigurationStep } from './create-match/MapConfigurationStep';
 
-export function CreateMatchPage() {
+export function CreateMatchPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentStep = parseInt(searchParams.get('step') || '1');

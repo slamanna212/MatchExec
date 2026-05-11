@@ -20,6 +20,7 @@ import {
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import { capTitle } from './utils';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
@@ -32,6 +33,7 @@ import {
   getParticipantCount,
   buildConfirmationMessage
 } from './interaction-helpers';
+import { sendDM, buildSignupWelcomeEmbed } from './dm-builder';
 
 interface EventData {
   max_signups: number;
@@ -514,6 +516,45 @@ export class InteractionHandler {
         participantCount: participantCount
       });
 
+      // Send welcome DM to the player if enabled
+      if (this.settings?.signup_dm_enabled) {
+        const eventRow = await this.db.get<{
+          name: string;
+          game_name: string;
+          game_color?: string;
+          start_date?: string;
+        }>(
+          parsedId.isTournament
+            ? `SELECT t.name, g.name as game_name, g.color as game_color, t.start_date
+               FROM tournaments t LEFT JOIN games g ON t.game_id = g.id WHERE t.id = ?`
+            : `SELECT m.name, g.name as game_name, g.color as game_color, m.start_date
+               FROM matches m LEFT JOIN games g ON m.game_id = g.id WHERE m.id = ?`,
+          [parsedId.eventId]
+        );
+        if (eventRow) {
+          let announcementUrl: string | null = null;
+          if (interaction.guildId) {
+            const msgRow = await this.db.get<{ message_id: string; channel_id: string }>(
+              `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+              [parsedId.eventId]
+            );
+            if (msgRow) {
+              announcementUrl = `https://discord.com/channels/${interaction.guildId}/${msgRow.channel_id}/${msgRow.message_id}`;
+            }
+          }
+          const embed = buildSignupWelcomeEmbed(
+            eventRow.name,
+            eventRow.game_name,
+            eventRow.game_color,
+            eventRow.start_date,
+            parsedId.isTournament,
+            this.settings.player_reminder_minutes,
+            announcementUrl
+          );
+          await sendDM(this.client, interaction.user.id, embed);
+        }
+      }
+
     } catch (error) {
       logger.error('❌ Error processing signup:', error);
 
@@ -584,7 +625,7 @@ export class InteractionHandler {
         this.pendingTeamSelections.set(interaction.user.id, { eventId, teamId: selectedTeamId });
         const modal = new ModalBuilder()
           .setCustomId(`signup_form_${eventId}`)
-          .setTitle(`Sign Up - ${team.team_name}`);
+          .setTitle(capTitle(`Sign Up - ${team.team_name}`, 45));
 
         const rows: ActionRowBuilder<TextInputBuilder>[] = [];
 

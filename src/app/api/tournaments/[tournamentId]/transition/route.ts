@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type {NextResponse,  NextRequest } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { Tournament } from '@/shared/types';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -59,7 +59,7 @@ async function executeTournamentStatusActions(db: Database, tournamentId: string
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { tournamentId } = await params;
     if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {

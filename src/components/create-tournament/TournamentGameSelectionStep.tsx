@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, Grid, Card, Avatar, Group, Badge, Button } from '@mantine/core';
 import type { GameWithIcon } from './useTournamentForm';
 
@@ -15,7 +16,7 @@ export function TournamentGameSelectionStep({
   onGameSelect,
   onNext,
   canProceed
-}: TournamentGameSelectionStepProps) {
+}: TournamentGameSelectionStepProps): JSX.Element {
   return (
     <Stack>
       <Text mb="md">Select the game for your tournament:</Text>

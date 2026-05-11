@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Container, Stack, Button, Stepper } from '@mantine/core';
 import { PageHeader } from './PageHeader';
@@ -16,7 +17,7 @@ import { TournamentFormatStep } from './create-tournament/TournamentFormatStep';
 import { TournamentTeamSettingsStep } from './create-tournament/TournamentTeamSettingsStep';
 import { TournamentReviewStep } from './create-tournament/TournamentReviewStep';
 
-export function CreateTournamentPage() {
+export function CreateTournamentPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentStep = parseInt(searchParams.get('step') || '1');
