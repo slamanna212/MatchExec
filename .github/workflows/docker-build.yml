@@ -45,8 +45,8 @@ jobs:
         platforms: linux/${{ matrix.platform }}
         push: true
         tags: ghcr.io/${{ github.actor }}/matchexec:dev-${{ matrix.platform }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type=gha,scope=${{ matrix.platform }}
+        cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
         
   merge:
     runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
