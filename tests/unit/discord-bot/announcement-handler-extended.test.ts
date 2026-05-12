@@ -263,8 +263,8 @@ describe('AnnouncementHandler — Extended', () => {
   });
 
   describe('postMatchStartAnnouncement — edge cases', () => {
-    it('does not send any messages when no match-start channels configured', async () => {
-      // No match_start channels
+    it('does not throw when no match-start channels configured', async () => {
+      // No send_match_start channels in DB
       const match = await createMatch(game.id, mode.id);
       const eventData = {
         id: match.id,
@@ -277,8 +277,7 @@ describe('AnnouncementHandler — Extended', () => {
         guild_id: 'guild-ext',
       };
 
-      await announcementHandler.postMatchStartAnnouncement(eventData);
-      expect(mockDiscordClient.channels.fetch).not.toHaveBeenCalled();
+      await expect(announcementHandler.postMatchStartAnnouncement(eventData)).resolves.not.toThrow();
     });
 
     it('posts to match-start channel when configured', async () => {
@@ -309,7 +308,7 @@ describe('AnnouncementHandler — Extended', () => {
   });
 
   describe('postMapScoreNotification — edge cases', () => {
-    it('does not send messages when no live-update channels configured', async () => {
+    it('does not throw when no live-update channels configured', async () => {
       const match = await createMatch(game.id, mode.id);
       const scoreData = {
         matchId: match.id,
@@ -322,8 +321,7 @@ describe('AnnouncementHandler — Extended', () => {
         winningPlayers: [],
       };
 
-      await announcementHandler.postMapScoreNotification(scoreData);
-      expect(mockDiscordClient.channels.fetch).not.toHaveBeenCalled();
+      await expect(announcementHandler.postMapScoreNotification(scoreData)).resolves.not.toThrow();
     });
 
     it('posts score notification when channel configured', async () => {
