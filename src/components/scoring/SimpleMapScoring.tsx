@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
+import type { JSX } from 'react';
 import { useHotkeys } from '@mantine/hooks';
 import { Text, Badge, Alert, Loader, Group, Stack, Button, Modal, Tooltip, Divider } from '@mantine/core';
 import { IconMap, IconCheck, IconSwords, IconTrophy } from '@tabler/icons-react';
@@ -329,7 +330,7 @@ export function SimpleMapScoring({
   onAllMapsCompleted,
   matchStatsEnabled = false,
   initialGameId,
-}: SimpleMapScoringProps) {
+}: SimpleMapScoringProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [hasStatDefs, setHasStatDefs] = useState(false);
 

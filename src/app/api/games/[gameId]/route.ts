@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -5,7 +6,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ gameId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     const { gameId } = await params;

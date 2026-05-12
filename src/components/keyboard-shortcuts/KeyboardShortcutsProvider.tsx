@@ -4,6 +4,7 @@ import { useHotkeys, useDisclosure } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
 import { Modal, Table, Kbd, Text, Stack } from '@mantine/core';
 import type { ReactNode } from 'react';
+import type { JSX } from 'react';
 
 interface KeyboardShortcutsProviderProps {
   children: ReactNode;
@@ -35,7 +36,7 @@ const sections = [
   },
 ];
 
-export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProviderProps) {
+export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProviderProps): JSX.Element {
   const router = useRouter();
   const [opened, { open, close }] = useDisclosure(false);
 

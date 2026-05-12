@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Stack,
@@ -18,6 +19,10 @@ import {
   Popover,
   Tooltip,
   Indicator,
+  Tabs,
+  Anchor,
+  Code,
+  Box,
 } from '@mantine/core';
 import { DatePicker } from '@mantine/dates';
 import {
@@ -37,6 +42,7 @@ import {
   IconActivity,
   IconCalendar,
   IconUsersGroup,
+  IconDownload,
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
@@ -72,6 +78,7 @@ const EVENT_ICONS: Record<string, { icon: React.ComponentType<{ size: number }>,
   tournament_cancelled:     { icon: IconX,          color: 'red'     },
   ai_error:                 { icon: IconBrain,      color: 'orange'  },
   health_alert:             { icon: IconHeartbeat,  color: 'red'     },
+  update_available:         { icon: IconDownload,   color: 'orange'  },
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -208,15 +215,119 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
   );
 }
 
+// ─── UpdateAvailableCard ──────────────────────────────────────────────────────
+
+const UPDATE_COMMANDS: { value: string; label: string; command: string; prose?: boolean }[] = [
+  { value: 'docker',         label: 'Docker',         command: 'docker pull ghcr.io/slamanna212/matchexec:latest' },
+  { value: 'docker-compose', label: 'Docker Compose', command: 'docker compose pull && docker compose down && docker compose up -d' },
+  { value: 'kubernetes',     label: 'Kubernetes',     command: 'kubectl rollout restart deployment/matchexec' },
+  { value: 'unraid',         label: 'Unraid',         command: 'Open the Docker tab in the Unraid UI, then click Update next to the MatchExec container.', prose: true },
+  { value: 'proxmox',        label: 'Proxmox',        command: 'update' },
+];
+
+const PLATFORM_TABS: Record<string, string[]> = {
+  kubernetes:       ['kubernetes'],
+  proxmox:          ['proxmox'],
+  'docker':         ['docker', 'docker-compose', 'unraid'],
+  'docker-compose': ['docker', 'docker-compose', 'unraid'],
+};
+
+function UpdateAvailableCard({ event, platform }: { event: FeedEvent; platform: string | null }) {
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
+  const meta = (event.metadata ?? {}) as Record<string, unknown>;
+  const currentVersion = (meta.currentVersion as string) ?? '';
+  const latestVersion  = (meta.latestVersion  as string) ?? '';
+  const releaseUrl     = (meta.releaseUrl     as string) ?? '';
+  const visibleCommands = platform && PLATFORM_TABS[platform]
+    ? UPDATE_COMMANDS.filter(c => PLATFORM_TABS[platform].includes(c.value))
+    : UPDATE_COMMANDS;
+  const defaultTab = visibleCommands[0]?.value ?? 'docker';
+
+  return (
+    <Card
+      withBorder
+      padding="md"
+      radius="md"
+      style={{
+        borderLeftWidth: 3,
+        borderLeftColor: 'var(--mantine-color-orange-6)',
+        borderTopColor:    isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        borderRightColor:  isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'var(--mantine-color-gray-3)',
+        background: isDark ? 'rgba(234,88,12,0.07)' : 'rgba(234,88,12,0.04)',
+      }}
+    >
+      <Stack gap="sm">
+        {/* Header row */}
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap">
+            <ThemeIcon size={32} radius="md" color="orange" variant="light" style={{ flexShrink: 0 }}>
+              <IconDownload size={15} />
+            </ThemeIcon>
+            <Stack gap={2}>
+              <Text size="sm" fw={600}>{event.title}</Text>
+              <Group gap={6}>
+                <Badge size="xs" color="gray" variant="outline">{currentVersion}</Badge>
+                <Text size="xs" c="dimmed">→</Text>
+                <Badge size="xs" color="orange" variant="filled">{latestVersion}</Badge>
+              </Group>
+            </Stack>
+          </Group>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Badge color="orange" variant="light" size="xs" style={{ whiteSpace: 'nowrap' }}>
+              {formatRelativeTime(event.created_at)}
+            </Badge>
+            {releaseUrl && (
+              <Anchor href={releaseUrl} target="_blank" rel="noopener noreferrer" size="xs">
+                Release Notes
+              </Anchor>
+            )}
+          </Group>
+        </Group>
+
+        {/* Platform update commands */}
+        <Tabs defaultValue={defaultTab} variant="pills" radius="sm">
+          <Tabs.List>
+            {visibleCommands.map(p => (
+              <Tabs.Tab key={p.value} value={p.value} style={{ fontSize: '12px', paddingBlock: '4px' }}>
+                {p.label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          {visibleCommands.map(p => (
+            <Tabs.Panel key={p.value} value={p.value} pt="xs">
+              {p.prose ? (
+                <Box
+                  p="xs"
+                  style={{
+                    background: isDark ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-0)',
+                    borderRadius: 'var(--mantine-radius-sm)',
+                  }}
+                >
+                  <Text size="xs">{p.command}</Text>
+                </Box>
+              ) : (
+                <Code block style={{ fontSize: '12px', userSelect: 'all' }}>{p.command}</Code>
+              )}
+            </Tabs.Panel>
+          ))}
+        </Tabs>
+      </Stack>
+    </Card>
+  );
+}
+
 // ─── FeedDashboard ────────────────────────────────────────────────────────────
 
-export function FeedDashboard() {
+export function FeedDashboard(): JSX.Element {
   const [events, setEvents]     = useState<FeedEvent[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
   const [displayLimit, setDisplayLimit] = useState(10);
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
   const etagRef = useRef<string | null>(null);
   const seenHealthAlertIds = useRef<Set<string>>(new Set());
 
@@ -281,6 +392,13 @@ export function FeedDashboard() {
     return () => clearInterval(id);
   }, [fetchEvents]);
 
+  useEffect(() => {
+    fetch('/api/version')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.platform) setDetectedPlatform(data.platform); })
+      .catch(() => {});
+  }, []);
+
   const filtered = useMemo(() => {
     switch (filter) {
       case 'high':        return events.filter(e => e.priority <= 2);
@@ -292,7 +410,8 @@ export function FeedDashboard() {
 
   const critical              = useMemo(() => filtered.filter(e => e.priority === 1), [filtered]);
   const playerMatchingRequired = useMemo(() => filtered.filter(e => e.event_type === 'scorecard_player_matching_required'), [filtered]);
-  const regular               = useMemo(() => filtered.filter(e => e.priority > 1 && e.event_type !== 'scorecard_player_matching_required'), [filtered]);
+  const updateEvents          = useMemo(() => filtered.filter(e => e.event_type === 'update_available'), [filtered]);
+  const regular               = useMemo(() => filtered.filter(e => e.priority > 1 && e.event_type !== 'scorecard_player_matching_required' && e.event_type !== 'update_available'), [filtered]);
 
   return (
     <>
@@ -457,6 +576,20 @@ export function FeedDashboard() {
                   </Text>
                 </Group>
                 {playerMatchingRequired.map(e => <FeedEventCard key={e.id} event={e} />)}
+                {(regular.length > 0 || updateEvents.length > 0) && <Divider my={4} />}
+              </>
+            )}
+
+            {/* Update available section */}
+            {updateEvents.length > 0 && (
+              <>
+                <Group gap={6}>
+                  <IconDownload size={13} color="var(--mantine-color-orange-6)" />
+                  <Text size="xs" fw={700} c="orange" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+                    Update Available
+                  </Text>
+                </Group>
+                {updateEvents.map(e => <UpdateAvailableCard key={e.id} event={e} platform={detectedPlatform} />)}
                 {regular.length > 0 && <Divider my={4} />}
               </>
             )}

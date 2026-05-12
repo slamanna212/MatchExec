@@ -6,6 +6,7 @@ import { AttachmentBuilder } from 'discord.js';
 import { logger } from '../../../src/lib/logger/server';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
 import type { Database } from '../../../lib/database/connection';
+import { safePublicPath } from './utils';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -217,7 +218,11 @@ export async function attachEventImage(imageUrl: string): Promise<AttachmentBuil
   }
 
   try {
-    const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+    const imagePath = safePublicPath(imageUrl);
+    if (!imagePath) {
+      logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
+      return undefined;
+    }
 
     if (fs.existsSync(imagePath)) {
       const imageBuffer = await fs.promises.readFile(imagePath);

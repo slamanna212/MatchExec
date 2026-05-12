@@ -47,7 +47,9 @@ export function useTournamentForm() {
             parsed.dateTime = new Date(parsed.dateTime);
           }
           return parsed;
-        } catch { /* ignore */ }
+        } catch {
+          sessionStorage.removeItem('tournamentFormData');
+        }
       }
     }
     return {
@@ -67,7 +69,9 @@ export function useTournamentForm() {
       if (saved) {
         try {
           return JSON.parse(saved).eventImageUrl ?? null;
-        } catch { /* ignore */ }
+        } catch {
+          return null;
+        }
       }
     }
     return null;

@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiOk } from '@/lib/api-response';
@@ -31,7 +32,7 @@ async function getHeartbeat(db: DbInstance, key: string): Promise<string | undef
   return row?.setting_value;
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const services: Record<string, ServiceStatus> = {
     database: { status: 'down' },
     web: { status: 'up' },

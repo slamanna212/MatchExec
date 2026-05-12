@@ -1,4 +1,5 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
+import type { Database } from '@/lib/database/connection';
 import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -18,7 +19,7 @@ export interface DiscordChannel {
   updated_at: string;
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     
@@ -57,7 +58,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     const body = await request.json();
@@ -92,15 +93,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function extractChannelData(body: any) {
+function extractChannelData(body: Record<string, unknown>) {
   return {
-    discord_channel_id: body.discord_channel_id,
-    channel_type: body.channel_type,
-    send_announcements: body.send_announcements ?? false,
-    send_reminders: body.send_reminders ?? false,
-    send_match_start: body.send_match_start ?? false,
-    send_signup_updates: body.send_signup_updates ?? false,
-    send_health_alerts: body.send_health_alerts ?? false
+    discord_channel_id: body.discord_channel_id as string,
+    channel_type: body.channel_type as string,
+    send_announcements: Boolean(body.send_announcements ?? false),
+    send_reminders: Boolean(body.send_reminders ?? false),
+    send_match_start: Boolean(body.send_match_start ?? false),
+    send_signup_updates: Boolean(body.send_signup_updates ?? false),
+    send_health_alerts: Boolean(body.send_health_alerts ?? false)
   };
 }
 
@@ -120,7 +121,7 @@ function validateChannelInput(data: ReturnType<typeof extractChannelData>) {
   return null;
 }
 
-async function checkChannelExistence(db: any, discordChannelId: string) {
+async function checkChannelExistence(db: Database, discordChannelId: string) {
   const existing = await db.get(
     'SELECT id FROM discord_channels WHERE discord_channel_id = ?',
     [discordChannelId]
@@ -133,13 +134,13 @@ async function checkChannelExistence(db: any, discordChannelId: string) {
   return null;
 }
 
-async function fetchGuildId(db: any): Promise<string | null> {
+async function fetchGuildId(db: Database): Promise<string | null> {
   const discordSettings = await db.get('SELECT guild_id FROM discord_settings LIMIT 1') as { guild_id?: string } | undefined;
   return discordSettings?.guild_id || null;
 }
 
 async function createDiscordChannel(
-  db: any,
+  db: Database,
   data: ReturnType<typeof extractChannelData>,
   guildId: string
 ): Promise<string> {

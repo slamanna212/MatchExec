@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Grid, Breadcrumbs, Anchor, Text } from '@mantine/core';
 import Link from 'next/link';
 import { MatchInfoPanel } from './match-details/MatchInfoPanel';
@@ -115,7 +116,7 @@ export function MatchPageLayout({
   participantsLoading = false,
   remindersLoading = false,
   showBreadcrumbs = false
-}: MatchPageLayoutProps) {
+}: MatchPageLayoutProps): JSX.Element {
   const parentSection = isHistory ? 'Match History' : 'Matches';
   const parentHref = isHistory ? '/matches/history' : '/matches';
 

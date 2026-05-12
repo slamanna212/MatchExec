@@ -3,7 +3,7 @@ import { getDbInstance } from '../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError } from '@/lib/api-response';
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     

@@ -15,7 +15,7 @@ import {
 import { apiError, apiOk } from '@/lib/api-response';
 
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
     const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
-      return new Response(null, { status: 304, headers: { ETag: etag } });
+      return new NextResponse(null, { status: 304, headers: { ETag: etag } });
     }
 
     return NextResponse.json(parsedMatches, { headers: { ETag: etag } });
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body: MatchRequestBody = await request.json();
 

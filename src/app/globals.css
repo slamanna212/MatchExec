@@ -94,6 +94,13 @@ html {
   position: relative;
 }
 
+/* Welcome flow: body must be transparent so iOS Safari reads it as the fallback
+   tint color for the bottom toolbar and renders it as glass (no tint).
+   Same specificity as the rule above, placed after it so it wins by source order. */
+[data-mantine-color-scheme] body.welcome-flow {
+  background-color: transparent !important;
+}
+
 [data-mantine-color-scheme='dark'] body::before {
   content: '';
   position: fixed;

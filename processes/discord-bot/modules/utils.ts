@@ -1,6 +1,23 @@
+import * as path from 'path';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+
+/** Truncate a string to fit Discord's title limit (embed: 256, modal: 45). */
+export function capTitle(s: string, max = 256): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)  }…`;
+}
+
+/**
+ * Resolve an imageUrl to a path inside public/, or return null if the resolved
+ * path would escape that directory (path traversal guard).
+ */
+export function safePublicPath(imageUrl: string): string | null {
+  const base = path.resolve(process.cwd(), 'public');
+  const resolved = path.resolve(base, imageUrl.replace(/^\//, ''));
+  if (!resolved.startsWith(base + path.sep)) return null;
+  return resolved;
+}
 
 export class Utils {
   constructor(private db: Database) {}

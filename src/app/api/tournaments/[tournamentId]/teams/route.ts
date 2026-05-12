@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -7,7 +7,7 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     const { tournamentId } = await params;
@@ -83,7 +83,7 @@ export async function GET(
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const body = await request.json();
     const { teamName } = body;
@@ -140,7 +140,7 @@ export async function POST(
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const body = await request.json();
     const { teams } = body; // Array of { teamId, members: [{ userId, username, isCaptain }] }
@@ -215,7 +215,7 @@ export async function PUT(
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
     const teamId = searchParams.get('teamId');

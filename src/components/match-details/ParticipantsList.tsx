@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid, ActionIcon } from '@mantine/core';
 import { IconMapRoute, IconBrandDiscord } from '@tabler/icons-react';
 
@@ -39,7 +40,7 @@ export function ParticipantsList({
   matchStatus,
   signupConfig,
   parseDbTimestamp
-}: ParticipantsListProps) {
+}: ParticipantsListProps): JSX.Element {
   // Utility function for team card styling
   const getTeamCardStyles = (team: 'blue' | 'red' | 'reserve' | null) => {
     switch(team) {

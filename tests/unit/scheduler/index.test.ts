@@ -22,10 +22,20 @@ vi.mock('node-cron', () => ({
 }));
 
 vi.mock('../../../processes/scheduler/jobs/update-avatars', () => ({
-  AvatarUpdateJob: vi.fn().mockImplementation(() => ({
-    updateAvatars: vi.fn().mockResolvedValue(undefined),
-    cleanup: vi.fn().mockResolvedValue(undefined),
-  })),
+  AvatarUpdateJob: vi.fn().mockImplementation(function() {
+    return {
+      updateAvatars: vi.fn().mockResolvedValue(undefined),
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
+}));
+
+vi.mock('../../../processes/scheduler/jobs/check-for-update', () => ({
+  UpdateCheckJob: vi.fn().mockImplementation(function() {
+    return {
+      checkForUpdate: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('../../../src/lib/feed-helpers', () => ({
@@ -162,9 +172,9 @@ describe('MatchExecScheduler', () => {
     it('reads cron settings from the database when available', async () => {
       await db.run(`
         INSERT INTO scheduler_settings (
-          id, match_check_cron, cleanup_check_cron, channel_refresh_cron,
+          id, match_check_cron, channel_refresh_cron,
           created_at, updated_at
-        ) VALUES (1, '*/30 * * * * *', '0 0 3 * * *', '0 0 1 * * *',
+        ) VALUES (1, '*/30 * * * * *', '0 0 1 * * *',
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
@@ -282,6 +292,20 @@ describe('MatchExecScheduler', () => {
       (scheduler as any).startCronJob('Bad Job', 'not-a-cron', vi.fn());
 
       expect((scheduler as any).cronJobs.length).toBe(initialCount);
+    });
+  });
+
+  // ─── loadSchedulerSettings — update check job ─────────────────────────────
+
+  describe('loadSchedulerSettings — update check job', () => {
+    it('instantiates UpdateCheckJob when loading scheduler settings', async () => {
+      const { UpdateCheckJob } = await import('../../../processes/scheduler/jobs/check-for-update');
+      const mockUpdateCheckJob = UpdateCheckJob as ReturnType<typeof vi.fn>;
+      mockUpdateCheckJob.mockClear();
+
+      await (scheduler as any).loadSchedulerSettings();
+
+      expect(mockUpdateCheckJob).toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import type { JSX } from 'react';
 import { Button, Group } from '@mantine/core';
 
 interface SettingsSaveButtonProps {
@@ -18,7 +19,7 @@ export function SettingsSaveButton({
   type = 'submit',
   onClick,
   mt,
-}: SettingsSaveButtonProps) {
+}: SettingsSaveButtonProps): JSX.Element {
   return (
     <Group justify="flex-end" mt={mt}>
       <Button type={type} onClick={onClick} loading={loading} disabled={disabled}>

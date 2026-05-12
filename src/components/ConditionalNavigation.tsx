@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Navigation } from '@/components/navigation';
 import type { ReactNode } from 'react';
+import type { JSX } from 'react';
 
 interface ConditionalNavigationProps {
   children: ReactNode;
@@ -12,7 +13,7 @@ interface ConditionalNavigationProps {
  * Wrapper that conditionally shows Navigation based on current path
  * Hides navigation on welcome flow pages
  */
-export function ConditionalNavigation({ children }: ConditionalNavigationProps) {
+export function ConditionalNavigation({ children }: ConditionalNavigationProps): JSX.Element {
   const pathname = usePathname();
   const isWelcomePage = pathname.startsWith('/welcome');
 

@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Text, Stack, NumberInput, Card, Group, TextInput, Button } from '@mantine/core';
 import type { TournamentFormData } from './useTournamentForm';
 import { TeamList } from './TeamList';
@@ -24,7 +25,7 @@ export function TournamentTeamSettingsStep({
   onBack,
   onNext,
   setNewTeamName
-}: TournamentTeamSettingsStepProps) {
+}: TournamentTeamSettingsStepProps): JSX.Element {
   const handleAddTeamClick = () => {
     if (newTeamName.trim()) {
       onAddTeam(newTeamName);

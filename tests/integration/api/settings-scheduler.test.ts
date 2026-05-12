@@ -17,14 +17,13 @@ describe('Settings Scheduler API', () => {
 
       expect(status).toBe(200);
       expect(data.match_check_cron).toBeDefined();
-      expect(data.cleanup_check_cron).toBeDefined();
       expect(data.channel_refresh_cron).toBeDefined();
     });
 
     it('returns stored settings when row exists', async () => {
       await db.run(`
-        INSERT INTO scheduler_settings (id, match_check_cron, cleanup_check_cron, channel_refresh_cron, match_cleanup_cron, reminder_check_cron, queue_processing_cron)
-        VALUES (1, '0 */5 * * * *', '0 0 2 * * *', '0 0 0 * * *', '0 0 2 * * *', '0 */5 * * * *', '*/30 * * * * *')
+        INSERT INTO scheduler_settings (id, match_check_cron, channel_refresh_cron, match_cleanup_cron, reminder_check_cron, queue_processing_cron)
+        VALUES (1, '0 */5 * * * *', '0 0 0 * * *', '0 0 2 * * *', '0 */5 * * * *', '*/30 * * * * *')
       `);
 
       const response = await GET();
@@ -44,7 +43,6 @@ describe('Settings Scheduler API', () => {
 
       const request = createMockRequest('PUT', '/api/settings/scheduler', {
         match_check_cron: '*/5 * * *', // only 4 parts, needs 6
-        cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *',
       });
       const response = await PUT(request);
@@ -60,7 +58,6 @@ describe('Settings Scheduler API', () => {
 
       const request = createMockRequest('PUT', '/api/settings/scheduler', {
         match_check_cron: '0 */1 * * * 8', // dayOfWeek 8 is out of range (0-7)
-        cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *',
       });
       const response = await PUT(request);
@@ -76,7 +73,6 @@ describe('Settings Scheduler API', () => {
 
       const request = createMockRequest('PUT', '/api/settings/scheduler', {
         match_check_cron: '0 */2 * * * *',
-        cleanup_check_cron: '0 0 3 * * *',
         channel_refresh_cron: '0 0 1 * * *',
       });
       const response = await PUT(request);
@@ -94,7 +90,6 @@ describe('Settings Scheduler API', () => {
 
       const request = createMockRequest('PUT', '/api/settings/scheduler', {
         match_check_cron: '*/30 * * * * *',
-        cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *',
       });
       const response = await PUT(request);

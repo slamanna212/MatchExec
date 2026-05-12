@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Card, Text, Stack } from '@mantine/core';
 import type { GameStatDefinition } from '@/shared/types';
 import type { PlayerStatEntry } from './StatCallouts';
@@ -18,7 +19,7 @@ interface Props {
   statDefs: GameStatDefinition[];
 }
 
-export function TeamDonutCharts({ players, statDefs }: Props) {
+export function TeamDonutCharts({ players, statDefs }: Props): JSX.Element | null {
   const bluePlayers = players.filter(p => p.team === 'blue');
   const redPlayers = players.filter(p => p.team === 'red');
 

@@ -113,4 +113,24 @@ describe('logFeedEvent', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].id).not.toBe(rows[1].id);
   });
+
+  it('stores update_available event with metadata', async () => {
+    await logFeedEvent({
+      eventType: 'update_available',
+      priority: 2,
+      title: 'MatchExec v9.9.9 is available',
+      metadata: { currentVersion: 'v0.8.0', latestVersion: 'v9.9.9' },
+    });
+
+    const row = await db.get(
+      `SELECT * FROM activity_feed WHERE event_type = 'update_available'`
+    );
+
+    expect(row).toBeDefined();
+    expect(row.event_type).toBe('update_available');
+    expect(row.priority).toBe(2);
+    const meta = JSON.parse(row.metadata);
+    expect(meta.latestVersion).toBe('v9.9.9');
+    expect(meta.currentVersion).toBe('v0.8.0');
+  });
 });

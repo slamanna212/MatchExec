@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import { Card, Group, Image, Stack, Text, Badge, Button } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import classes from './map-stat-card.module.css';
@@ -20,7 +21,7 @@ const STATUS_CONFIG = {
   pending:   { color: 'gray',  label: 'Pending'   },
 } as const;
 
-export function MapStatCard({ round, mapName, mapImageUrl, status, blueSubmitted, redSubmitted, onView }: MapStatCardProps) {
+export function MapStatCard({ round, mapName, mapImageUrl, status, blueSubmitted, redSubmitted, onView }: MapStatCardProps): JSX.Element {
   const cfg = STATUS_CONFIG[status];
   const displayName = mapName ?? `Map ${round}`;
 

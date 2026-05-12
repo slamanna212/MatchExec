@@ -1,22 +1,22 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { handleStatusTransition } from '@/lib/transition-handlers';
-import { areAllGamesCompleted } from '@/lib/scoring-functions';
+import { areAllGamesCompleted, determineMatchWinner } from '@/lib/scoring-functions';
 import { apiError, apiOk } from '@/lib/api-response';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
       return apiError('Invalid ID', 400);
     }
-    const { newStatus } = await request.json();
+    const { newStatus, force } = await request.json();
 
     // Validate new status
     if (!newStatus || !MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS]) {
@@ -41,18 +41,23 @@ export async function POST(
     }
 
     if (newStatus === 'complete') {
-      const allScored = await areAllGamesCompleted(db, matchId);
-      if (!allScored) {
-        return apiError('Cannot complete match: not all maps have been scored', 400);
+      if (!force) {
+        const allScored = await areAllGamesCompleted(db, matchId);
+        if (!allScored) {
+          return apiError('Cannot complete match: not all maps have been scored', 400);
+        }
       }
+      const winnerTeam = await determineMatchWinner(db, matchId);
+      await db.run(
+        `UPDATE matches SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [winnerTeam, matchId]
+      );
+    } else {
+      await db.run(
+        `UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [newStatus, matchId]
+      );
     }
-
-    // Update match status in database
-    await db.run(`
-      UPDATE matches
-      SET status = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [newStatus, matchId]);
 
     logger.debug(`🔄 Match ${matchId} transitioned from ${currentMatch.status} to ${newStatus}`);
 

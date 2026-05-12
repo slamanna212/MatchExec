@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { MatchDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -40,7 +40,7 @@ async function queueDiscordMatchEdit(db: Database, matchId: string): Promise<voi
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
@@ -89,7 +89,7 @@ export async function GET(
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
@@ -195,7 +195,7 @@ export async function PUT(
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     if (!matchId || typeof matchId !== 'string' || matchId.length > 100) {
@@ -215,7 +215,8 @@ export async function DELETE(
 
     // Queue Discord message deletion before deleting the match
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+ // NOSONAR: non-security internal ID generation
       await db.run(`
         INSERT INTO discord_deletion_queue (id, match_id, status)
         VALUES (?, ?, 'pending')

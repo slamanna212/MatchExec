@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, NumberInput, Skeleton } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, Skeleton, Switch } from '@mantine/core';
 import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
@@ -17,7 +17,8 @@ interface DiscordSettings {
   announcement_role_id?: string;
   mention_everyone?: boolean;
   voice_channel_category_id?: string;
-  voice_channel_cleanup_delay_minutes?: number;
+  signup_dm_enabled?: boolean;
+  commander_dm_enabled?: boolean;
 }
 
 export default function DiscordSettingsPage() {
@@ -32,7 +33,8 @@ export default function DiscordSettingsPage() {
       announcement_role_id: '',
       mention_everyone: false,
       voice_channel_category_id: '',
-      voice_channel_cleanup_delay_minutes: 10,
+      signup_dm_enabled: true,
+      commander_dm_enabled: true,
     },
   });
 
@@ -52,7 +54,8 @@ export default function DiscordSettingsPage() {
             announcement_role_id: data.discord.announcement_role_id || '',
             mention_everyone: data.discord.mention_everyone || false,
             voice_channel_category_id: data.discord.voice_channel_category_id || '',
-            voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes || 10,
+            signup_dm_enabled: data.discord.signup_dm_enabled !== undefined ? data.discord.signup_dm_enabled : true,
+            commander_dm_enabled: data.discord.commander_dm_enabled !== undefined ? data.discord.commander_dm_enabled : true,
           });
         }
       } catch (error) {
@@ -69,7 +72,14 @@ export default function DiscordSettingsPage() {
     setSaving(true);
 
     try {
-      const payload = { ...values };
+      const payload = {
+        ...values,
+        ...(values.bot_token && values.bot_token !== '••••••••' ? { bot_token: values.bot_token.trim() } : {}),
+        ...(values.application_id ? { application_id: values.application_id.trim() } : {}),
+        ...(values.guild_id ? { guild_id: values.guild_id.trim() } : {}),
+        ...(values.announcement_role_id ? { announcement_role_id: values.announcement_role_id.trim() } : {}),
+        ...(values.voice_channel_category_id ? { voice_channel_category_id: values.voice_channel_category_id.trim() } : {}),
+      };
       if (values.bot_token === '••••••••') {
         delete payload.bot_token;
       }
@@ -95,7 +105,8 @@ export default function DiscordSettingsPage() {
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
-            voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes || 10,
+            signup_dm_enabled: refreshedData.signup_dm_enabled !== undefined ? refreshedData.signup_dm_enabled : true,
+            commander_dm_enabled: refreshedData.commander_dm_enabled !== undefined ? refreshedData.commander_dm_enabled : true,
           });
         }
       } else {
@@ -269,21 +280,26 @@ export default function DiscordSettingsPage() {
             </Stack>
           </Card>
 
-          {/* Voice Channels */}
+          {/* Player DM Notifications */}
           <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Stack gap="md">
-              <Text fw={600} size="lg">Voice Channels</Text>
+              <Text fw={600} size="lg">Player DM Notifications</Text>
 
-              {loading ? skeletonRows(1) : (
-                <NumberInput
-                  label="Voice Channel Cleanup Delay (minutes)"
-                  placeholder="10"
-                  description="How long to wait after a match ends before deleting auto-created voice channels"
-                  {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
-                  disabled={loading}
-                  min={0}
-                  max={1440}
-                />
+              {loading ? skeletonRows(2) : (
+                <>
+                  <Switch
+                    label="Welcome DMs on Signup"
+                    description="Send players a DM when they register for an event, with confirmation, slash commands, and what to expect."
+                    checked={form.values.signup_dm_enabled}
+                    onChange={(e) => form.setFieldValue('signup_dm_enabled', e.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Commander Assignment DMs"
+                    description="Send a DM when a player is designated as team commander, explaining their role and responsibilities."
+                    checked={form.values.commander_dm_enabled}
+                    onChange={(e) => form.setFieldValue('commander_dm_enabled', e.currentTarget.checked)}
+                  />
+                </>
               )}
             </Stack>
           </Card>

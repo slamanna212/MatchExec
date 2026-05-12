@@ -141,8 +141,9 @@ export interface DiscordSettingsDbRow {
   announcer_voice?: string;
   voice_announcements_enabled?: number; // SQLite stores booleans as integers
   voice_channel_category_id?: string;
-  voice_channel_cleanup_delay_minutes?: number;
   winner_vote_enabled?: number; // SQLite stores booleans as integers
+  signup_dm_enabled?: number;    // SQLite stores booleans as integers
+  commander_dm_enabled?: number; // SQLite stores booleans as integers
   [key: string]: unknown;
 }
 
@@ -171,6 +172,8 @@ export interface DiscordSettings {
   player_reminder_minutes?: number;
   announcer_voice?: string;
   voice_announcements_enabled?: boolean;
+  signup_dm_enabled?: boolean;
+  commander_dm_enabled?: boolean;
 }
 
 // Match progress constants
@@ -506,7 +509,8 @@ export type FeedEventType =
   | 'match_cancelled'
   | 'tournament_cancelled'
   | 'ai_error'
-  | 'health_alert';
+  | 'health_alert'
+  | 'update_available';
 
 export type FeedPriority = 1 | 2 | 3 | 4;
 

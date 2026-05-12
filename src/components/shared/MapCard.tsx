@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 /**
  * Reusable MapCard component for displaying map information
  */
@@ -98,7 +99,7 @@ export function MapCard({
   imageUrl,
   winner,
   showWinner = false
-}: MapCardProps) {
+}: MapCardProps): JSX.Element {
   const finalImageUrl = imageUrl || getMapImageUrl(gameType, mapId);
   const statusColor = getStatusColor(status);
   const cardStyle = getCardStyle(disabled, onClick, selected, statusColor, finalImageUrl);

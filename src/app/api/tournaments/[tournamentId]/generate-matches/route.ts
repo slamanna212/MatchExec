@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { apiError, apiOk } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
@@ -91,7 +91,7 @@ interface Team {
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { tournamentId } = await params;
     const body = await request.json().catch(() => ({}));

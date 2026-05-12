@@ -4,6 +4,7 @@ import * as cron from 'node-cron';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
+import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
 
 interface AnnouncementItem {
@@ -17,6 +18,7 @@ class MatchExecScheduler {
   private _db: Database | null = null;
   private cronJobs: cron.ScheduledTask[] = [];
   private avatarUpdateJob: AvatarUpdateJob | null = null;
+  private updateCheckJob: UpdateCheckJob | null = null;
 
   /** Returns the database connection, throwing if it has not been initialised yet. */
   private get db(): Database {
@@ -78,16 +80,19 @@ class MatchExecScheduler {
         // Use default settings if none exist
         const defaultSettings = {
           match_check_cron: '0 */1 * * * *',
-          cleanup_check_cron: '0 0 2 * * *',
           channel_refresh_cron: '0 0 0 * * *'
         };
-        
+
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));
-        this.startCronJob('Data Cleanup', defaultSettings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
+        this.startCronJob('Feed Cleanup', '0 0 2 * * *', this.runFeedCleanup.bind(this));
 
         // Initialize and run avatar update job every 2 hours
         this.avatarUpdateJob = new AvatarUpdateJob(this.db);
         this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
+
+        // Check for updates daily at 9am UTC
+        this.updateCheckJob = new UpdateCheckJob(this.db);
+        this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
@@ -99,7 +104,7 @@ class MatchExecScheduler {
 
       // Start new cron jobs based on settings
       this.startCronJob('Match Check & Reminders', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
-      this.startCronJob('Data Cleanup', settings.cleanup_check_cron, this.cleanupOldMatches.bind(this));
+      this.startCronJob('Feed Cleanup', '0 0 2 * * *', this.runFeedCleanup.bind(this));
       if (settings.channel_refresh_cron) {
         this.startCronJob('Channel Refresh', settings.channel_refresh_cron, this.refreshChannelNames.bind(this));
       }
@@ -107,6 +112,10 @@ class MatchExecScheduler {
       // Initialize and run avatar update job every 2 hours
       this.avatarUpdateJob = new AvatarUpdateJob(this.db);
       this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
+
+      // Check for updates daily at 9am UTC
+      this.updateCheckJob = new UpdateCheckJob(this.db);
+      this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
@@ -498,22 +507,7 @@ class MatchExecScheduler {
     }
   }
 
-  private async cleanupOldMatches() {
-    // Clean up matches completed more than 30 days ago
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const result = await this.db.run(
-      `DELETE FROM matches
-       WHERE status = 'complete'
-       AND updated_at < ?`,
-      [thirtyDaysAgo.toISOString()]
-    );
-
-    if ((result.changes ?? 0) > 0) {
-      logger.debug(`🗑️ Cleaned up ${result.changes} old matches`);
-    }
-
+  private async runFeedCleanup() {
     await this.cleanupStaleScoringNotifications();
     await this.cleanupFeedEvents();
   }
@@ -693,7 +687,8 @@ class MatchExecScheduler {
       logger.debug('🔄 Starting scheduled channel name refresh...');
       
       // Call the channel refresh API
-      const response = await fetch('http://localhost:3000/api/channels/refresh-names', {
+      const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+      const response = await fetch(`${baseUrl}/api/channels/refresh-names`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

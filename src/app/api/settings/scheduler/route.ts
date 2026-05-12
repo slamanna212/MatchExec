@@ -1,4 +1,4 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { SchedulerSettings } from '@/shared/types';
 import { logger } from '@/lib/logger';
@@ -54,7 +54,7 @@ function validateCronExpression(cronExpression: string, fieldName: string): { va
  * Validates all cron fields in the request body
  */
 function validateCronFields(body: Record<string, unknown>): { valid: boolean; error?: string } {
-  const cronFields = ['match_check_cron', 'cleanup_check_cron', 'channel_refresh_cron'];
+  const cronFields = ['match_check_cron', 'channel_refresh_cron'];
 
   for (const field of cronFields) {
     if (body[field] && typeof body[field] === 'string') {
@@ -68,7 +68,7 @@ function validateCronFields(body: Record<string, unknown>): { valid: boolean; er
   return { valid: true };
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
 
@@ -79,7 +79,6 @@ export async function GET() {
     if (!settings) {
       return apiOk({
         match_check_cron: '0 */1 * * * *',
-        cleanup_check_cron: '0 0 2 * * *',
         channel_refresh_cron: '0 0 0 * * *'
       });
     }
@@ -91,7 +90,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
 
@@ -106,13 +105,11 @@ export async function PUT(request: NextRequest) {
     await db.run(
       `UPDATE scheduler_settings
        SET match_check_cron = ?,
-           cleanup_check_cron = ?,
            channel_refresh_cron = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = 1`,
       [
         body.match_check_cron,
-        body.cleanup_check_cron,
         body.channel_refresh_cron
       ]
     );

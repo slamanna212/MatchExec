@@ -1,15 +1,15 @@
-import type { NextRequest} from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { DiscordSettingsDbRow } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { validateNumberRange } from '@/lib/utils/validation';
 import { apiError, apiOk } from '@/lib/api-response';
+import { checkRateLimit, clientKey } from '@/lib/rate-limit';
 
 const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> = [
   { key: 'event_duration_minutes', min: 5, max: 720 },
   { key: 'match_reminder_minutes', min: 1, max: 1440 },
   { key: 'player_reminder_minutes', min: 1, max: 10080 },
-  { key: 'voice_channel_cleanup_delay_minutes', min: 0, max: 1440 },
 ];
 
 /**
@@ -26,8 +26,9 @@ const DISCORD_SETTINGS_FIELDS = [
   { key: 'announcer_voice', default: 'wrestling-announcer' },
   { key: 'voice_announcements_enabled', default: false, transform: (v: boolean) => v ? 1 : 0 },
   { key: 'voice_channel_category_id', default: '' },
-  { key: 'voice_channel_cleanup_delay_minutes', default: 10 },
   { key: 'winner_vote_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
+  { key: 'signup_dm_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
+  { key: 'commander_dm_enabled', default: true, transform: (v: boolean) => v ? 1 : 0 },
 ] as const;
 
 /**
@@ -42,14 +43,20 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
     if (body[field.key] !== undefined) {
       updateFields.push(`${field.key} = ?`);
       const value = body[field.key] || field.default;
-      updateValues.push('transform' in field ? field.transform(value as boolean) : value);
+      if ('transform' in field) {
+        updateValues.push(field.transform(value as boolean));
+      } else if (typeof field.default === 'string') {
+        updateValues.push((value as string).trim());
+      } else {
+        updateValues.push(value);
+      }
     }
   }
 
   // Handle bot token separately (don't update if it's the masked value)
   if (body.bot_token && body.bot_token !== '••••••••') {
     updateFields.push('bot_token = ?');
-    updateValues.push(body.bot_token);
+    updateValues.push((body.bot_token as string).trim());
   }
 
   // Always update the timestamp
@@ -65,7 +72,7 @@ function buildDiscordSettingsUpdate(body: Record<string, unknown>): { updateFiel
  */
 async function restartDiscordBot(): Promise<void> {
   try {
-    const { exec } = await import('child_process');
+    const { execFile } = await import('child_process');
     const isDev = process.env.NODE_ENV === 'development';
 
     if (isDev) {
@@ -73,11 +80,11 @@ async function restartDiscordBot(): Promise<void> {
       const processName = 'discord-bot-dev';
 
       // Check if process exists first
-      exec(`npx pm2 describe ${processName}`, (error) => {
+      execFile('npx', ['pm2', 'describe', processName], (error) => {
         if (error) {
           // Process doesn't exist, start it
           logger.debug(`🚀 Starting ${processName} process (not currently running)`);
-          exec(`npx pm2 start ecosystem.config.js --only ${processName}`, (startError) => {
+          execFile('npx', ['pm2', 'start', 'ecosystem.config.js', '--only', processName], (startError) => {
             if (startError) {
               logger.error(`❌ Error starting ${processName}:`, startError.message);
             } else {
@@ -87,7 +94,7 @@ async function restartDiscordBot(): Promise<void> {
         } else {
           // Process exists, restart it
           logger.debug(`🔄 Restarting ${processName} process due to Discord settings change`);
-          exec(`npx pm2 restart ${processName}`, (restartError) => {
+          execFile('npx', ['pm2', 'restart', processName], (restartError) => {
             if (restartError) {
               logger.error(`❌ Error restarting ${processName}:`, restartError.message);
             } else {
@@ -99,7 +106,7 @@ async function restartDiscordBot(): Promise<void> {
     } else {
       // Production: Kill the process, s6-overlay will restart it automatically
       logger.debug('🔄 Restarting Discord bot process due to Discord settings change');
-      exec('pkill -TERM -f "node dist/discord-bot.js"', (error) => {
+      execFile('pkill', ['-TERM', '-f', 'node dist/discord-bot.js'], (error) => {
         if (error) {
           logger.error('❌ Error restarting Discord bot:', error.message);
         } else {
@@ -112,7 +119,7 @@ async function restartDiscordBot(): Promise<void> {
   }
 }
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
     const db = await getDbInstance();
     
@@ -129,8 +136,9 @@ export async function GET() {
         announcer_voice,
         voice_announcements_enabled,
         voice_channel_category_id,
-        voice_channel_cleanup_delay_minutes,
-        winner_vote_enabled
+        winner_vote_enabled,
+        signup_dm_enabled,
+        commander_dm_enabled
       FROM discord_settings
       WHERE id = 1
     `);
@@ -149,8 +157,9 @@ export async function GET() {
       announcer_voice: settings.announcer_voice || 'wrestling-announcer',
       voice_announcements_enabled: Boolean(settings.voice_announcements_enabled),
       voice_channel_category_id: settings.voice_channel_category_id || '',
-      voice_channel_cleanup_delay_minutes: settings.voice_channel_cleanup_delay_minutes || 10,
       winner_vote_enabled: settings.winner_vote_enabled !== undefined ? Boolean(settings.winner_vote_enabled) : true,
+      signup_dm_enabled: settings.signup_dm_enabled !== undefined ? Boolean(settings.signup_dm_enabled) : true,
+      commander_dm_enabled: settings.commander_dm_enabled !== undefined ? Boolean(settings.commander_dm_enabled) : true,
     } : {
       application_id: '',
       bot_token: '',
@@ -163,8 +172,9 @@ export async function GET() {
       announcer_voice: 'wrestling-announcer',
       voice_announcements_enabled: false,
       voice_channel_category_id: '',
-      voice_channel_cleanup_delay_minutes: 10,
       winner_vote_enabled: true,
+      signup_dm_enabled: true,
+      commander_dm_enabled: true,
     };
 
     return apiOk(safeSettings);
@@ -174,7 +184,10 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest): Promise<NextResponse> {
+  const limited = checkRateLimit(clientKey(request, 'discord-settings'), 20, 10 * 60 * 1000);
+  if (limited) return limited;
+
   try {
     const db = await getDbInstance();
     const body = await request.json();

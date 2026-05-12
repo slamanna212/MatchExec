@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react';
 import {
   Stack,
   Group,
@@ -11,6 +12,7 @@ import {
   Image,
   Divider,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { useRouter } from 'next/navigation';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
@@ -35,7 +37,7 @@ interface MatchInfoPanelProps {
   onAssignPlayers?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
-  onStatusTransition?: (newStatus: string) => void;
+  onStatusTransition?: (newStatus: string, force?: boolean) => void;
 }
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = {
@@ -153,11 +155,31 @@ function MatchActionsCard({
   onAssignPlayers?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
-  onStatusTransition?: (newStatus: string) => void;
+  onStatusTransition?: (newStatus: string, force?: boolean) => void;
 }) {
   const router = useRouter();
   const matchInBattle = match.status === 'battle';
   const ongoingGame = matchGames?.find(g => g.status === 'ongoing');
+  const allGamesScored = Boolean(matchGames?.length) && matchGames!.every(g => g.status === 'completed');
+
+  const handleEndMatch = () => {
+    modals.openConfirmModal({
+      title: 'End Match',
+      children: (
+        <Stack gap="sm">
+          <Text size="sm">Are you sure you want to end this match?</Text>
+          {!allGamesScored && (
+            <Text size="sm" c="orange">
+              Not all maps have been scored. The winner will be determined from maps scored so far.
+            </Text>
+          )}
+        </Stack>
+      ),
+      labels: { confirm: 'End Match', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => onStatusTransition?.('complete', !allGamesScored),
+    });
+  };
   const showAssignPlayers = ASSIGN_STATUSES.has(match.status) && Boolean(onAssignPlayers);
   const showEdit = !isHistory && Boolean(onEdit) && !NON_EDIT_STATUSES.has(match.status) && match.tournament_allow_match_editing !== false;
 
@@ -175,7 +197,9 @@ function MatchActionsCard({
             Score Next Map
           </Button>
         )}
-        {getStatusTransitionButton(match, isHistory, onStatusTransition)}
+        {match.status === 'battle' && !isHistory && onStatusTransition
+          ? <Button variant="light" color="red" fullWidth onClick={handleEndMatch}>End Match</Button>
+          : getStatusTransitionButton(match, isHistory, onStatusTransition)}
         {(showAssignPlayers || showEdit) && (
           <Group grow gap="xs">
             {showAssignPlayers && (
@@ -217,7 +241,7 @@ export function MatchInfoPanel({
   onDelete,
   onEdit,
   onStatusTransition,
-}: MatchInfoPanelProps) {
+}: MatchInfoPanelProps): JSX.Element {
   return (
     <div style={{ position: 'sticky', top: 20 }}>
       <Stack gap="md">

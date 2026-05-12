@@ -24,6 +24,7 @@ import {
   attachEventImage,
   getImageAttachmentName
 } from './announcement-helpers';
+import { safePublicPath, capTitle } from './utils';
 
 export class AnnouncementHandler {
   constructor(
@@ -281,7 +282,7 @@ export class AnnouncementHandler {
       : 'MatchExec • Sign up to participate!';
 
     const embed = new EmbedBuilder()
-      .setTitle(name)
+      .setTitle(capTitle(name))
       .setDescription(description)
       .setColor(gameColor)
       .setTimestamp()
@@ -510,7 +511,7 @@ export class AnnouncementHandler {
     const title = mapNumber ? `Map ${mapNumber}: ${mapIdentifier}` : `🗺️ ${mapIdentifier}`;
     return {
       embed: new EmbedBuilder()
-        .setTitle(title)
+        .setTitle(capTitle(title))
         .setDescription('Map details not available')
         .setColor(0x95a5a6)
     };
@@ -560,7 +561,7 @@ export class AnnouncementHandler {
   ): EmbedBuilder {
     const title = mapNumber ? `Map ${mapNumber}: ${mapData.name}` : `🗺️ ${mapData.name}`;
     const embed = new EmbedBuilder()
-      .setTitle(title)
+      .setTitle(capTitle(title))
       .setColor(gameColor)
       .addFields({ name: '🎮 Mode', value: modeName, inline: true });
 
@@ -583,7 +584,11 @@ export class AnnouncementHandler {
     mapName: string
   ): Promise<{ attachment: AttachmentBuilder; attachmentName: string } | null> {
     try {
-      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+      const imagePath = safePublicPath(imageUrl);
+      if (!imagePath) {
+        logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
+        return null;
+      }
 
       if (fs.existsSync(imagePath)) {
         const attachmentName = `${mapName.replace(/[^a-zA-Z0-9]/g, '_')}.${path.extname(imagePath).slice(1)}`;
@@ -851,7 +856,11 @@ export class AnnouncementHandler {
     if (!imageUrl || !imageUrl.trim()) return undefined;
 
     try {
-      const imagePath = path.join(process.cwd(), 'public', imageUrl.replace(/^\//, ''));
+      const imagePath = safePublicPath(imageUrl);
+      if (!imagePath) {
+        logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
+        return undefined;
+      }
 
       if (fs.existsSync(imagePath)) {
         const imageBuffer = await fs.promises.readFile(imagePath);
@@ -886,7 +895,7 @@ export class AnnouncementHandler {
     const timeAwayText = this.formatTimeAwayText(eventData._timingInfo);
 
     const embed = new EmbedBuilder()
-      .setTitle(`🔔 ${eventData.name}`)
+      .setTitle(capTitle(`🔔 ${eventData.name}`))
       .setDescription(`Match starting in **${timeAwayText}**!`)
       .setColor(gameColor)
       .setTimestamp()
@@ -1023,7 +1032,7 @@ export class AnnouncementHandler {
 
   private createBaseMatchStartEmbed(eventData: any, matchData: any): EmbedBuilder {
     return new EmbedBuilder()
-      .setTitle(`🚀 ${eventData.name} - MATCH STARTING NOW!`)
+      .setTitle(capTitle(`🚀 ${eventData.name} - MATCH STARTING NOW!`))
       .setDescription(eventData.description || `The ${eventData.name} match is beginning!`)
       .setColor(matchData.gameColor)
       .addFields([
@@ -1342,7 +1351,7 @@ export class AnnouncementHandler {
     // Build embed
     const mapProgress = metadata.totalMaps > 0 ? `${scoreData.gameNumber}/${metadata.totalMaps}` : scoreData.gameNumber.toString();
     const embed = new EmbedBuilder()
-      .setTitle(`🏆 ${winningTeamDisplay} Wins Map ${scoreData.gameNumber}!`)
+      .setTitle(capTitle(`🏆 ${winningTeamDisplay} Wins Map ${scoreData.gameNumber}!`))
       .setDescription(`**${scoreData.matchName}** - ${metadata.mapName}`)
       .setColor(metadata.gameColor)
       .addFields([
@@ -1587,7 +1596,7 @@ export class AnnouncementHandler {
 
     // Build embed
     const embed = new EmbedBuilder()
-      .setTitle(title)
+      .setTitle(capTitle(title))
       .setDescription(description)
       .setColor(embedColor)
       .addFields([
@@ -1786,7 +1795,7 @@ export class AnnouncementHandler {
 
       const embed = new EmbedBuilder()
         .setColor(color)
-        .setTitle(`${icon} ${alertData.title}`)
+        .setTitle(capTitle(`${icon} ${alertData.title}`))
         .setDescription(alertData.description)
         .setTimestamp()
         .setFooter({ text: `Severity: ${alertData.severity.toUpperCase()}` });

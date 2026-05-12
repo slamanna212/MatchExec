@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type {NextResponse,  NextRequest } from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -7,7 +7,7 @@ import { aggregateMatchStats } from '@/lib/stats-aggregation';
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string; submissionId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId, submissionId } = await params;
     const body = await request.json();

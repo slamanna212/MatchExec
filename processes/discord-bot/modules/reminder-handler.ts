@@ -6,6 +6,7 @@ import {
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import { capTitle } from './utils';
 
 interface EventData {
   id: string;
@@ -216,7 +217,6 @@ export class ReminderHandler {
       `, [matchId]);
 
       let successCount = 0;
-      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant
       for (const participant of participants) {
@@ -437,7 +437,7 @@ export class ReminderHandler {
     const gameColor = this.parseGameColor(matchData.game_color);
 
     const embed = new EmbedBuilder()
-      .setTitle(`🎮 Match Reminder: ${matchData.name}`)
+      .setTitle(capTitle(`🎮 Match Reminder: ${matchData.name}`))
       .setDescription(matchData.description || 'Your match is starting soon!')
       .setColor(gameColor)
       .setTimestamp()
@@ -504,7 +504,6 @@ export class ReminderHandler {
       }
 
       let successCount = 0;
-      // let _failureCount = 0; // Commented out unused variable
 
       // Send DM to each participant who should receive map codes
       for (const participant of participants) {
@@ -564,7 +563,7 @@ export class ReminderHandler {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`🗺️ Map Code: ${mapName}`)
+      .setTitle(capTitle(`🗺️ Map Code: ${mapName}`))
       .setDescription(`Here's your map code for **${matchData.name}**`)
       .setColor(gameColor)
       .addFields(

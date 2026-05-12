@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -42,7 +42,7 @@ function isValidImageType(buffer: Buffer): boolean {
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const formData = await request.formData();
@@ -109,7 +109,7 @@ export async function POST(
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ matchId: string }> }
-) {
+): Promise<NextResponse> {
   try {
     const { matchId } = await params;
     const { searchParams } = new URL(request.url);

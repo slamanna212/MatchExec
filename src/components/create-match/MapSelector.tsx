@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import type { JSX } from 'react';
 import { Card, Text, Select, Grid, Group, Button } from '@mantine/core';
 import type { GameMode, GameMapWithMode } from './useMatchForm';
 import { MapCard } from './MapCard';
@@ -30,7 +31,7 @@ export function MapSelector({
   onMapSelect,
   onFlexibleMapSelect,
   onCancel
-}: MapSelectorProps) {
+}: MapSelectorProps): JSX.Element {
   const [flexibleModeSelects, setFlexibleModeSelects] = useState<Record<string, string>>({});
 
   const handleFlexibleModeChange = (mapId: string, modeId: string | null) => {

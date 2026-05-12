@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { JSX } from 'react';
 import { DatabaseLoadingScreen } from './DatabaseLoadingScreen';
 import { logger } from '@/lib/logger/client';
 
@@ -14,7 +15,7 @@ interface DatabaseStatusWrapperProps {
   children: React.ReactNode;
 }
 
-export function DatabaseStatusWrapper({ children }: DatabaseStatusWrapperProps) {
+export function DatabaseStatusWrapper({ children }: DatabaseStatusWrapperProps): JSX.Element {
   const [status, setStatus] = useState<DatabaseStatus | null>(null);
   const [isChecking, setIsChecking] = useState(true);
 

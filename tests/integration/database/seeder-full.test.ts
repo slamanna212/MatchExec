@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'fs';
 import { DatabaseSeeder } from '../../../lib/database/seeder';
 import { getTestDb } from '../../utils/test-db';
 import * as path from 'path';
@@ -119,6 +120,97 @@ describe('DatabaseSeeder (full integration)', () => {
 
       const games = await db.all('SELECT id FROM games');
       expect(games.length).toBe(0);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should not throw when game.json contains invalid JSON', async () => {
+      const tempDir = path.join(process.cwd(), 'app_data', 'data', `seeder-error-test-${process.env.VITEST_POOL_ID || '0'}`);
+      const badGameDir = path.join(tempDir, 'bad-game');
+      fs.mkdirSync(badGameDir, { recursive: true });
+      fs.writeFileSync(path.join(badGameDir, 'game.json'), '{ this is not valid json }');
+
+      try {
+        const seeder = new DatabaseSeeder(db as any, tempDir);
+        await expect(seeder.seedDatabase()).resolves.not.toThrow();
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should skip invalid game directories without affecting valid ones', async () => {
+      const tempDir = path.join(process.cwd(), 'app_data', 'data', `seeder-mixed-test-${process.env.VITEST_POOL_ID || '0'}`);
+      const validGameDir = path.join(tempDir, 'valid-test-game');
+      const badGameDir = path.join(tempDir, 'bad-game');
+      fs.mkdirSync(validGameDir, { recursive: true });
+      fs.mkdirSync(badGameDir, { recursive: true });
+
+      fs.writeFileSync(path.join(validGameDir, 'game.json'), JSON.stringify({
+        id: 'valid-test-game',
+        name: 'Valid Test Game',
+        genre: 'FPS',
+        developer: 'Test Dev',
+        releaseDate: '2024-01-01',
+        patch: '1.0.0',
+        description: 'A test game',
+        minPlayers: 2,
+        maxPlayers: 10,
+        dataVersion: '1.0.0',
+        assets: { iconUrl: '/test.png' },
+      }));
+      fs.writeFileSync(path.join(badGameDir, 'game.json'), '{ invalid json }');
+
+      try {
+        const seeder = new DatabaseSeeder(db as any, tempDir);
+        await expect(seeder.seedDatabase()).resolves.not.toThrow();
+
+        const game = await db.get('SELECT id FROM games WHERE id = ?', ['valid-test-game']);
+        expect(game).toBeDefined();
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should roll back mode inserts when a duplicate mode id causes an error mid-seed', async () => {
+      const tempDir = path.join(process.cwd(), 'app_data', 'data', `seeder-rollback-test-${process.env.VITEST_POOL_ID || '0'}`);
+      const gameDir = path.join(tempDir, 'rollback-test-game');
+      fs.mkdirSync(gameDir, { recursive: true });
+
+      fs.writeFileSync(path.join(gameDir, 'game.json'), JSON.stringify({
+        id: 'rollback-test-game',
+        name: 'Rollback Test Game',
+        genre: 'FPS',
+        developer: 'Test Dev',
+        releaseDate: '2024-01-01',
+        patch: '1.0.0',
+        description: 'A test game for rollback verification',
+        minPlayers: 2,
+        maxPlayers: 10,
+        dataVersion: '1.0.0',
+        assets: { iconUrl: '/test.png' },
+      }));
+
+      // Duplicate mode IDs cause a PRIMARY KEY violation on the second INSERT,
+      // which should trigger ROLLBACK of the entire modes transaction
+      fs.writeFileSync(path.join(gameDir, 'modes.json'), JSON.stringify([
+        { id: 'dup-mode', name: 'Mode One', description: 'First mode' },
+        { id: 'dup-mode', name: 'Mode Two', description: 'Duplicate ID — causes failure' },
+      ]));
+
+      try {
+        const seeder = new DatabaseSeeder(db as any, tempDir);
+        await expect(seeder.seedDatabase()).rejects.toThrow();
+
+        // Transaction rolled back — no modes should be committed for this game
+        const modes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', ['rollback-test-game']);
+        expect(modes.length).toBe(0);
+
+        // Version should not have been recorded since seeding never completed
+        const version = await db.get('SELECT * FROM data_versions WHERE game_id = ?', ['rollback-test-game']);
+        expect(version).toBeUndefined();
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });

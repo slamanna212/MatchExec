@@ -101,6 +101,15 @@ const eslintConfig = [
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off" // No return types required
     }
+  },
+  {
+    // Exception: Relaxed rules for test files — any types and implicit returns are legitimate in test utilities
+    files: ["tests/**/*.ts", "tests/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/naming-convention": "off"
+    }
   }
 ];
 
