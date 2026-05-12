@@ -55,7 +55,7 @@
     "discord.js": "14.26.3",
     "express": "5.2.1",
     "framer-motion": "12.38.0",
-    "lucide-react": "1.11.0",
+    "lucide-react": "1.14.0",
     "next": "16.2.4",
     "node-cron": "4.2.1",
     "node-fetch": "3.3.2",
