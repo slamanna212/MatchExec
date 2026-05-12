@@ -77,7 +77,9 @@ export async function GET(): Promise<NextResponse> {
     const anyDown = Object.values(services).some(s => s.status === 'down');
     const overallStatus = allUp ? 'healthy' : anyDown ? 'unhealthy' : 'degraded';
 
-    const statusCode = overallStatus === 'unhealthy' ? 503 : 200;
+    // Only gate readiness on database connectivity — background services being
+    // unconfigured or still starting should not block the pod from serving traffic.
+    const statusCode = services.database.status === 'down' ? 503 : 200;
 
     return apiOk(
       {
