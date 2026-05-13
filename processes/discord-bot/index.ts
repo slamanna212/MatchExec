@@ -461,18 +461,31 @@ class MatchExecBot {
       initialized = await this.initialize();
     }
 
-    if (!this.settings?.bot_token) {
-      logger.error('❌ No bot token available, cannot start bot');
-      logger.info('💡 Configure Discord settings in the web interface');
-      process.exit(0);
-    }
+    // Keep trying to log in — handles invalid/expired tokens without crash-looping
+    while (true) {
+      if (!this.settings?.bot_token) {
+        logger.error('❌ No bot token available, cannot start bot');
+        logger.info('💡 Configure Discord settings in the web interface');
+        process.exit(0);
+      }
 
-    try {
-      await this.client.login(this.settings.bot_token);
-      logger.info('✅ Discord bot successfully connected');
-    } catch (error) {
-      logger.error('❌ Failed to login to Discord:', error);
-      process.exit(1);
+      try {
+        await this.client.login(this.settings.bot_token);
+        logger.info('✅ Discord bot successfully connected');
+        break;
+      } catch (error) {
+        const isTokenInvalid = (error as { code?: string }).code === 'TokenInvalid';
+
+        if (isTokenInvalid) {
+          logger.error('❌ Invalid Discord bot token - please update your bot token in the web settings');
+          logger.info('💡 The bot will retry in 30 seconds');
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          this.settings = await this.settingsManager!.loadSettings();
+        } else {
+          logger.error('❌ Failed to login to Discord:', error);
+          process.exit(1);
+        }
+      }
     }
   }
 }

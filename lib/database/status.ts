@@ -7,7 +7,7 @@ export interface DatabaseStatus {
   timestamp: number;
 }
 
-const STATUS_FILE_PATH = (() => {
+export const STATUS_FILE_PATH = (() => {
   const dbPath = process.env.DATABASE_PATH;
   if (dbPath) {
     return path.join(path.dirname(dbPath), '.db-status.json');
