@@ -5,6 +5,7 @@ import { GET as getDiscordSettings, PUT as updateDiscordSettings } from '@/app/a
 import { GET as getAnnouncerSettings, PUT as updateAnnouncerSettings } from '@/app/api/settings/announcer/route';
 import { GET as getUISettings, PUT as updateUISettings } from '@/app/api/settings/ui/route';
 import { GET as getLogLevel, PUT as updateLogLevel } from '@/app/api/settings/log-level/route';
+import { GET as getStatsSettings, PUT as updateStatsSettings } from '@/app/api/settings/stats/route';
 
 describe('Settings API', () => {
   describe('Discord Settings', () => {
@@ -149,6 +150,47 @@ describe('Settings API', () => {
       const { status } = await parseResponse(response);
 
       expect(status).toBe(400);
+    });
+  });
+
+  describe('Stats Settings', () => {
+    it('should return stats_report_dm_enabled in GET response', async () => {
+      const response = await getStatsSettings();
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data).toHaveProperty('stats_report_dm_enabled');
+      expect(typeof data.stats_report_dm_enabled).toBe('boolean');
+    });
+
+    it('should persist stats_report_dm_enabled via PUT', async () => {
+      const request = createMockRequest('PUT', '/api/settings/stats', {
+        stats_report_dm_enabled: true,
+      });
+
+      const response = await updateStatsSettings(request);
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data).toHaveProperty('success', true);
+
+      const getResponse = await getStatsSettings();
+      const { data: savedData } = await parseResponse(getResponse);
+      expect(savedData.stats_report_dm_enabled).toBe(true);
+    });
+
+    it('should persist stats_report_dm_enabled=false via PUT', async () => {
+      const request = createMockRequest('PUT', '/api/settings/stats', {
+        stats_report_dm_enabled: false,
+      });
+
+      const putResponse = await updateStatsSettings(request);
+      const { status } = await parseResponse(putResponse);
+      expect(status).toBe(200);
+
+      const getResponse = await getStatsSettings();
+      const { data } = await parseResponse(getResponse);
+      expect(data.stats_report_dm_enabled).toBe(false);
     });
   });
 });

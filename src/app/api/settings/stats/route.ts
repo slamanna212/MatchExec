@@ -13,6 +13,7 @@ interface StatsSettingsRow {
   openrouter_api_key: string | null;
   both_sides_required: number;
   auto_advance_on_match: number;
+  stats_report_dm_enabled: number;
 }
 
 interface ProviderInstanceConfig {
@@ -75,7 +76,7 @@ export async function GET(): Promise<NextResponse> {
 
     const [settings, discordSettings] = await Promise.all([
       db.get<StatsSettingsRow>(
-        'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match FROM stats_settings WHERE id = 1'
+        'SELECT enabled, ai_provider, ai_api_key, ai_model, ai_providers_config, google_api_key, openrouter_api_key, both_sides_required, auto_advance_on_match, stats_report_dm_enabled FROM stats_settings WHERE id = 1'
       ),
       db.get<{ winner_vote_enabled: number }>(
         'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
@@ -111,6 +112,7 @@ export async function GET(): Promise<NextResponse> {
       both_sides_required: Boolean(settings.both_sides_required),
       auto_advance_on_match: Boolean(settings.auto_advance_on_match),
       winner_vote_enabled: Boolean(discordSettings?.winner_vote_enabled ?? true),
+      stats_report_dm_enabled: Boolean(settings.stats_report_dm_enabled),
     });
   } catch (error) {
     logger.error('Error fetching stats settings:', error);
@@ -172,6 +174,18 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
         updateFields.push('ai_model = ?');
         updateValues.push(firstProvider.model);
       }
+    }
+
+    if (updateFields.length > 0) {
+      await db.run(
+        `UPDATE stats_settings SET ${updateFields.join(', ')} WHERE id = 1`,
+        updateValues
+      );
+    }
+
+    if (body.stats_report_dm_enabled !== undefined) {
+      updateFields.push('stats_report_dm_enabled = ?');
+      updateValues.push(body.stats_report_dm_enabled ? 1 : 0);
     }
 
     if (updateFields.length > 0) {

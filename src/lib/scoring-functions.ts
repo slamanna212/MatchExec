@@ -884,6 +884,13 @@ async function updateMatchStatusIfComplete(matchGameId: string): Promise<boolean
       logger.error('Error queuing stats aggregation:', statsError);
     }
 
+    // Queue stats report DMs if all submissions are already in a final state
+    try {
+      await queueStatsReportDMs(matchId);
+    } catch (statsReportError) {
+      logger.error('Error queuing stats report DMs:', statsReportError);
+    }
+
     // Clean up voice channels
     await deleteMatchVoiceChannels(matchId);
 
@@ -1323,6 +1330,25 @@ async function queueStatsAggregation(matchId: string): Promise<void> {
   } catch (error) {
     logger.error('Error queuing stats aggregation:', error);
   }
+}
+
+async function queueStatsReportDMs(matchId: string): Promise<void> {
+  const db = await getDbInstance();
+  const pending = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM scorecard_submissions
+     WHERE match_id = ? AND review_status NOT IN ('approved', 'rejected', 'auto_approved', 'failed')`,
+    [matchId]
+  );
+  if (pending && pending.cnt > 0) {
+    logger.debug(`📊 Stats report DMs deferred for match ${matchId} — ${pending.cnt} submission(s) still pending review`);
+    return;
+  }
+  const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+  await db.run(
+    `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
+    [queueId, matchId]
+  );
+  logger.debug(`📊 Stats report DMs queued for completed match ${matchId}`);
 }
 
 export async function queueDiscordDeletion(matchId: string): Promise<void> {

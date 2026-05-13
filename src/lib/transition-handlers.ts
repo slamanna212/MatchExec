@@ -347,6 +347,25 @@ export async function handleCompleteTransition(matchId: string): Promise<void> {
   } catch (error) {
     logger.error('❌ Error logging complete feed event:', error);
   }
+
+  // Queue stats report DMs if all submissions are in a final state
+  try {
+    const db = await getDbInstance();
+    const pending = await db.get<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt FROM scorecard_submissions
+       WHERE match_id = ? AND review_status NOT IN ('approved', 'rejected', 'auto_approved', 'failed')`,
+      [matchId]
+    );
+    if (!pending || pending.cnt === 0) {
+      const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+      await db.run(
+        `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
+        [queueId, matchId]
+      );
+    }
+  } catch (error) {
+    logger.error('❌ Error queuing stats report DMs for completed match:', error);
+  }
 }
 
 /**

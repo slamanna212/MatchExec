@@ -18,6 +18,7 @@ import { InteractionHandler } from './modules/interaction-handler';
 import { HealthMonitor } from './modules/health-monitor';
 import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
+import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 
 class MatchExecBot {
@@ -37,6 +38,7 @@ class MatchExecBot {
   private healthMonitor: HealthMonitor | null = null;
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
+  private statsReportHandler: StatsReportHandler | null = null;
   private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
   private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -236,6 +238,8 @@ class MatchExecBot {
       this.winnerVoteHandler = new WinnerVoteHandler(this.client, this.db);
       this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
+      this.statsReportHandler = new StatsReportHandler(this.db, this.client);
+      this.queueProcessor.setStatsReportHandler(this.statsReportHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
       this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client, this.db);
 
