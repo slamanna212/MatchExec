@@ -1,7 +1,7 @@
 import { Database, getDatabase } from './connection';
 import { createMigrationRunner } from './migrations';
 import { DatabaseSeeder } from './seeder';
-import { readDbStatus } from './status';
+import { readDbStatus, STATUS_FILE_PATH } from './status';
 
 export async function initializeDatabase(): Promise<Database> {
   const db = getDatabase();
@@ -37,7 +37,7 @@ export async function waitForDatabaseReady(maxWaitMs = 120000, intervalMs = 500)
   }
 
   if (!ready) {
-    throw new Error(`Database not ready after ${maxWaitMs}ms timeout`);
+    throw new Error(`Database not ready after ${maxWaitMs}ms timeout (checked: ${STATUS_FILE_PATH})`);
   }
 
   // Now safe to connect — migrations and seeding are complete

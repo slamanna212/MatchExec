@@ -108,12 +108,18 @@ function restartProcesses(): void {
     } else {
       // s6-overlay will auto-restart after the kill signal — run two separate execFile calls
       execFile('pkill', ['-TERM', '-f', 'node dist/discord-bot.js'], (error: Error | null) => {
-        if (error) logger.error('Error signaling discord-bot after restore:', error.message);
-        else logger.debug('Restart signal sent to discord-bot after restore');
+        if (error) {
+          const exitCode = (error as NodeJS.ErrnoException & { code?: number }).code;
+          if (exitCode === 1) logger.debug('ℹ️ discord-bot was not running when restore restart triggered');
+          else logger.error('Error signaling discord-bot after restore:', error.message);
+        } else logger.debug('Restart signal sent to discord-bot after restore');
       });
       execFile('pkill', ['-TERM', '-f', 'node dist/scheduler.js'], (error: Error | null) => {
-        if (error) logger.error('Error signaling scheduler after restore:', error.message);
-        else logger.debug('Restart signal sent to scheduler after restore');
+        if (error) {
+          const exitCode = (error as NodeJS.ErrnoException & { code?: number }).code;
+          if (exitCode === 1) logger.debug('ℹ️ scheduler was not running when restore restart triggered');
+          else logger.error('Error signaling scheduler after restore:', error.message);
+        } else logger.debug('Restart signal sent to scheduler after restore');
       });
     }
   }).catch((error) => {
