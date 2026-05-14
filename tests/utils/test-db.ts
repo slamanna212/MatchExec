@@ -237,6 +237,7 @@ export async function resetTestDatabase(): Promise<void> {
   for (const table of tables) {
     await wrappedDb.exec(`DELETE FROM ${table.name}`);
   }
+
 }
 
 export async function teardownTestDatabase(): Promise<void> {

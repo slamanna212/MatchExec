@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockRequest, parseResponse } from '../../utils/api-helpers';
 import { getTestDb } from '../../utils/test-db';
 import { GET as getDiscordSettings, PUT as updateDiscordSettings } from '@/app/api/settings/discord/route';
@@ -154,6 +154,11 @@ describe('Settings API', () => {
   });
 
   describe('Stats Settings', () => {
+    beforeEach(async () => {
+      const db = getTestDb();
+      await db.run('INSERT OR IGNORE INTO stats_settings (id) VALUES (1)');
+    });
+
     it('should return stats_report_dm_enabled in GET response', async () => {
       const response = await getStatsSettings();
       const { status, data } = await parseResponse(response);
