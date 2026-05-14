@@ -63,8 +63,8 @@ describe('Database Migrations — idempotency extended', () => {
     }
   });
 
-  it('records exactly 16 migration files', async () => {
-    const ctx = await openFreshDb('count-16');
+  it('records exactly 17 migration files', async () => {
+    const ctx = await openFreshDb('count-17');
     openedDbs.push(ctx);
     const { db } = ctx;
 
@@ -74,7 +74,7 @@ describe('Database Migrations — idempotency extended', () => {
     const count = await db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM migrations`
     );
-    expect(count!.cnt).toBe(16);
+    expect(count!.cnt).toBe(17);
   });
 
   it('does not alter seeded game rows when migrations run a second time', async () => {
