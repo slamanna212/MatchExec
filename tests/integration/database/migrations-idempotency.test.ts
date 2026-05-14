@@ -74,7 +74,7 @@ describe('Database Migrations — idempotency extended', () => {
     const count = await db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM migrations`
     );
-    expect(count!.cnt).toBe(17);
+    expect(count!.cnt).toBe(18);
   });
 
   it('does not alter seeded game rows when migrations run a second time', async () => {

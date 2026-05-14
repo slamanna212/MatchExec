@@ -2,10 +2,7 @@
  * FK Constraint Tests
  *
  * SQLite foreign key enforcement is OFF by default (PRAGMA foreign_keys=OFF).
- * These tests document the current FK state and identify broken constraints.
- *
- * Known issue: `matches` table has a malformed FK reference to `game_maps`
- * that prevents enabling FK constraints globally. See BUGS_FOUND.md.
+ * These tests document the current FK state and verify constraint correctness.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -93,10 +90,7 @@ describe('Database Foreign Keys', () => {
       ).resolves.not.toThrow();
     });
 
-    // KNOWN BUG: `matches` table has a malformed FK to `game_maps`, so any INSERT
-    // into `matches` with FK=ON triggers "foreign key mismatch". match_participants
-    // cannot be tested with FK=ON until the matches FK is fixed. See BUGS_FOUND.md.
-    it.skip('inserts a valid match_participant that references an existing match (blocked by matches FK bug)', async () => {
+    it('inserts a valid match_participant that references an existing match', async () => {
       const { game, mode } = await seedBasicTestData();
       await db.run(
         `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, player_notifications)
@@ -138,18 +132,15 @@ describe('Database Foreign Keys', () => {
       ).rejects.toThrow();
     });
 
-    // KNOWN BUG: `matches` table has a malformed FK to `game_maps`.
-    // Enabling FK=ON globally causes seeded match inserts to fail.
-    // See BUGS_FOUND.md for details.
-    it.skip('match insert fails with FK=ON due to malformed game_maps FK (known bug — see BUGS_FOUND.md)', async () => {
+    it('match insert succeeds with FK=ON after fixing malformed game_maps FK', async () => {
       const { game, mode } = await seedBasicTestData();
       await expect(
         db.run(
           `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, player_notifications)
-           VALUES ('bug-match', ?, ?, 'Bug Match', '2025-01-01', '18:00', 'created', 'competitive', 3, 1)`,
+           VALUES ('fix-match', ?, ?, 'Fix Match', '2025-01-01', '18:00', 'created', 'competitive', 3, 1)`,
           [game.id, mode.id]
         )
-      ).rejects.toThrow();
+      ).resolves.not.toThrow();
     });
   });
 });
