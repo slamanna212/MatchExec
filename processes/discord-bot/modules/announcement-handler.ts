@@ -19,6 +19,7 @@ import {
   fetchMatchStartData,
   buildMapListField,
   fetchTeamAssignments,
+  fetchMatchTeamRows,
   buildTeamFieldValue,
   getMatchLink,
   attachEventImage,
@@ -1055,8 +1056,32 @@ export class AnnouncementHandler {
   private async addTeamFieldsIfNeeded(embed: EmbedBuilder, eventData: any, matchData: any): Promise<void> {
     if (!this.db) return;
 
-    const teams = await fetchTeamAssignments(this.db, eventData.id);
+    // Try new match_teams-based rendering first
+    const teamRows = await fetchMatchTeamRows(this.db, eventData.id);
 
+    if (teamRows.length > 0) {
+      const active = teamRows.filter(t => !t.is_reserve);
+      const reserve = teamRows.find(t => t.is_reserve);
+
+      for (const team of active) {
+        if (team.participants.length === 0) continue;
+        const emoji = team.team_order === 0 ? '🔵' : team.team_order === 1 ? '🔴' : '🟢';
+        const header = `${emoji} ${team.team_name}`;
+        const value = buildTeamFieldValue(team.participants, team.voice_channel_id || null);
+        embed.addFields([{ name: header, value, inline: true }]);
+      }
+
+      if (reserve && reserve.participants.length > 0) {
+        const reserveList = reserve.participants
+          .map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)
+          .join('\n');
+        embed.addFields([{ name: '🟡 Reserves', value: reserveList, inline: true }]);
+      }
+      return;
+    }
+
+    // Legacy fallback
+    const teams = await fetchTeamAssignments(this.db, eventData.id);
     this.addBlueTeamField(embed, teams.blueTeam, matchData);
     this.addRedTeamField(embed, teams.redTeam, matchData);
     this.addReservesField(embed, teams.reserves);

@@ -22,7 +22,9 @@ export function buildMatchPayload(formData: Partial<MatchFormData>) {
     playerNotifications: formData.playerNotifications ?? true,
     statsEnabled: formData.statsEnabled ?? false,
     announcementVoiceChannel: formData.announcementVoiceChannel || null,
-    announcements: formData.announcements || []
+    announcements: formData.announcements || [],
+    teamCount: formData.teamCount ?? undefined,
+    positionScoringOverride: formData.positionScoringOverride ?? null,
   };
 }
 

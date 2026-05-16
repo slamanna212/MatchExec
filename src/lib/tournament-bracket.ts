@@ -21,6 +21,7 @@ interface TeamRecord {
 
 interface TournamentRecord {
   id: string;
+  name?: string;
   game_id: string;
   game_mode_id: string;
   rounds_per_match: number;
@@ -624,6 +625,94 @@ export async function generateDoubleEliminationMatches(
     roundsPerMatch,
     _startTime
   );
+}
+
+/**
+ * Generate a single group match for a cumulative-points tournament.
+ * All tournament participants compete together; position/FFA results accumulate over events.
+ */
+export async function generateCumulativeMatches(
+  tournamentId: string,
+  gameId: string,
+  roundsPerMatch: number,
+  startTime?: Date
+): Promise<{ matches: GeneratedMatch[]; tournamentMatches: TournamentMatchInfo[] }> {
+  const db = await getDbInstance();
+
+  const tournament = await db.get<TournamentRecord>('SELECT * FROM tournaments WHERE id = ?', [tournamentId]);
+  if (!tournament) throw new Error('Tournament not found');
+
+  const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl, tournamentAnnouncements, tournamentPlayerNotifications } = await fetchTournamentInfo(db, tournamentId);
+  const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
+
+  const tournamentMaps = filterTournamentMaps(gameMaps);
+  if (tournamentMaps.length === 0) throw new Error('No tournament-eligible maps found');
+
+  const mode = gameModes.find(m => m.id === tournament.game_mode_id) ?? gameModes[0];
+  const selectedMap = tournamentMaps[0];
+  const mapList = tournamentMaps.slice(0, roundsPerMatch).map(m => m.id);
+
+  const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const farFuture = new Date('2099-12-31T23:59:59.999Z');
+
+  const generatedMatch: GeneratedMatch = {
+    id: matchId,
+    name: tournament.name ?? 'Cumulative Match',
+    description: tournamentDescription ?? undefined,
+    game_id: gameId,
+    game_mode_id: mode.id,
+    map_id: selectedMap.id,
+    maps: mapList,
+    rounds_per_match: roundsPerMatch,
+    max_participants: 999,
+    status: 'gather',
+    match_type: 'tournament',
+    tournament_id: tournamentId,
+    tournament_round: 1,
+    tournament_bracket_type: 'winners',
+    rules: tournamentRuleset,
+    scheduled_time: startTime ?? farFuture,
+    event_image_url: tournamentEventImageUrl,
+    announcements: tournamentAnnouncements,
+    player_notifications: tournamentPlayerNotifications,
+  };
+
+  const tournamentMatchInfo: TournamentMatchInfo = {
+    id: matchId,
+    tournament_id: tournamentId,
+    round: 1,
+    bracket_type: 'winners',
+    match_order: 1,
+  };
+
+  return { matches: [generatedMatch], tournamentMatches: [tournamentMatchInfo] };
+}
+
+/**
+ * Add all tournament team members as participants to a cumulative match.
+ */
+export async function addAllTeamsToMatch(tournamentId: string, matchId: string): Promise<void> {
+  const db = await getDbInstance();
+
+  const teams = await db.all<{ id: string; team_name: string }>(`
+    SELECT id, team_name FROM tournament_teams WHERE tournament_id = ? ORDER BY created_at
+  `, [tournamentId]);
+
+  for (const team of teams) {
+    const members = await db.all<{ user_id: string; discord_user_id: string | null; username: string; is_captain: number }>(`
+      SELECT user_id, discord_user_id, username, is_captain
+      FROM tournament_team_members WHERE team_id = ?
+    `, [team.id]);
+
+    for (const member of members) {
+      const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      await db.run(`
+        INSERT OR IGNORE INTO match_participants
+          (id, match_id, user_id, discord_user_id, username, receives_map_codes, joined_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, member.is_captain ? 1 : 0]);
+    }
+  }
 }
 
 /**

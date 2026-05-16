@@ -20,6 +20,8 @@ export interface MatchRequestBody {
   playerNotifications?: boolean;
   announcements?: Array<{ type: string; time: number }>;
   statsEnabled?: boolean;
+  teamCount?: number;
+  positionScoringOverride?: Record<string, number> | null;
 }
 
 export interface PreparedMatchData {
@@ -92,8 +94,8 @@ export async function insertMatchToDatabase(
     INSERT INTO matches (
       id, name, description, game_id, guild_id, channel_id, max_participants, status, start_date, start_time,
       rules, rounds, maps, livestream_link, event_image_url, player_notifications, announcements, match_format,
-      stats_enabled
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      stats_enabled, team_count, position_scoring_override
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     preparedData.matchId,
     body.name,
@@ -113,7 +115,9 @@ export async function insertMatchToDatabase(
     body.playerNotifications ?? true,
     body.announcements && body.announcements.length > 0 ? JSON.stringify(body.announcements) : null,
     body.rules || 'casual',
-    body.statsEnabled ? 1 : 0
+    body.statsEnabled ? 1 : 0,
+    body.teamCount ?? null,
+    body.positionScoringOverride ? JSON.stringify(body.positionScoringOverride) : null,
   ]);
 }
 

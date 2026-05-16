@@ -484,10 +484,13 @@ export interface ScorecardDmMessage {
 export interface AIExtractionResult {
   players: Array<{
     playerName: string;
-    teamSide: 'blue' | 'red' | 'unknown';
+    teamSide?: 'blue' | 'red' | 'unknown';
+    position?: number;
     stats: Record<string, number>;
     confidence: number;
   }>;
+  /** Populated by the extractor for FFA/Position modes; maps playerName → position */
+  playerPositions?: Record<string, number>;
   mapName?: string;
   gameResult?: {
     team1Score?: number;

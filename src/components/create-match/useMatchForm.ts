@@ -31,6 +31,8 @@ export interface MatchFormData {
   statsEnabled?: boolean;
   announcementVoiceChannel?: string;
   announcements?: AnnouncementTime[];
+  teamCount?: number;
+  positionScoringOverride?: Record<string, number>;
 }
 
 export interface AnnouncementTime {
