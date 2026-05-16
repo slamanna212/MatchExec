@@ -200,7 +200,7 @@ export const TOURNAMENT_FLOW_STEPS = {
 } as const;
 
 // Tournament format types
-export type TournamentFormat = 'single-elimination' | 'double-elimination';
+export type TournamentFormat = 'single-elimination' | 'double-elimination' | 'cumulative-points';
 
 // Tournament status types  
 export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';

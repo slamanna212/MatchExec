@@ -42,6 +42,7 @@ import {
   IconDatabaseExport,
   IconChartBar,
   IconRss,
+  IconTimeline,
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -68,6 +69,7 @@ function isNavSectionActive(itemHref: string, pathname: string | null): boolean 
   if (itemHref === '/settings') return Boolean(pathname?.startsWith('/settings'));
   if (itemHref === '/tournaments') return Boolean(pathname?.startsWith('/tournaments'));
   if (itemHref === '/matches') return Boolean(pathname?.startsWith('/matches'));
+  if (itemHref === '/series') return Boolean(pathname?.startsWith('/series'));
   return false;
 }
 
@@ -154,6 +156,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: string }>> = {
   swords: IconSwords,
   history: IconHistory,
   trophy: IconTrophy,
+  series: IconTimeline,
   gamepad: IconDeviceGamepad2,
   hash: IconHash,
   settings: IconSettings,
@@ -187,6 +190,12 @@ const STATIC_NAV_ITEMS: NavItemData[] = [
     href: '/tournaments',
     iconName: 'trophy',
     links: [{ label: 'History', href: '/tournaments/history', iconName: 'history' }],
+  },
+  {
+    label: 'Series',
+    href: '/series',
+    iconName: 'series',
+    links: [{ label: 'History', href: '/series/history', iconName: 'history' }],
   },
   { label: 'Games',    href: '/games',    iconName: 'gamepad' },
   { label: 'Channels', href: '/channels', iconName: 'hash' },

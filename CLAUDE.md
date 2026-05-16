@@ -166,7 +166,7 @@ docker run --rm -p 3000:3000 --env-file .env matchexec:test
 │   │   ├── index.ts              # Main bot implementation
 │   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
 │   └── scheduler/                # Cron scheduler process
-├── migrations/                   # Database migrations (5 files)
+├── migrations/                   # Database migrations (22 files; 019-022 added for scoring rewrite)
 ├── data/games/                   # Game data (6 games with modes/maps)
 ├── s6-overlay/                   # Docker init system config
 └── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
@@ -184,8 +184,10 @@ The project uses SQLite for data persistence with automated migrations and seedi
 Core tables include:
 
 - **Matches**: `matches`, `match_participants`, `match_games` (with results/scoring)
+- **Teams/Results** (new): `match_teams` (N-team rows per match), `match_game_placements` (unified results)
 - **Tournaments**: `tournaments`, `tournament_participants`, `tournament_teams`, `tournament_matches`, `tournament_bracket_nodes`
-- **Games**: `games`, `game_modes`, `game_maps` (6 supported games with modes/maps)
+- **Series** (new): `series`, `series_events`
+- **Games**: `games`, `game_modes` (with `scoring_type` and `setup_components`), `game_maps`
 - **Discord**: `discord_queues`, `discord_voice_channels`, `channels` (text/voice management)
 - **Settings**: `settings`, `announcer_settings`, `ui_settings` (configuration)
 - **System**: `migrations`, `data_versions` (tracking)
@@ -257,19 +259,42 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 
 ## Key Features
 
+### Scoring Type System
+
+`game_modes.scoring_type` is the canonical discriminator that drives the entire match lifecycle:
+- **`Normal`** — team-based (2+ teams, blue/red default). Uses bracket formats in tournaments.
+- **`FFA`** — free-for-all. No team assignment; each participant is their own entry.
+- **`Position`** — race/ranking order. Points awarded by finishing position via a spread.
+
+Key tables:
+- **`match_teams`** — N-team rows per match (replaces hardcoded blue/red). FFA/Position modes get one row per participant at assign-phase.
+- **`match_game_placements`** — unified result table. `entity_type` ∈ `('team', 'participant')`. Replaces legacy `winner_id`, `position_results` etc. on `match_games` (dual-write during transition; legacy columns remain until Phase 8 cleanup).
+- **`matches.position_scoring_override`** — optional per-match points spread (JSON).
+- **`game_modes.setup_components`** — JSON array of assign-phase UI components. Defaults: Normal→`["teams"]`, FFA→`["confirm_participants"]`, Position→`["grid_order"]`. Racing modes override to `["qualifying","grid_order"]`.
+
+Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispatcher), `confirm-participants.tsx`, `grid-order.tsx`, `qualifying.tsx`, `classes.tsx`.
+
 ### Match System
 - Match creation with customizable rounds, rulesets (casual/competitive), and team assignment
-- Real-time scoring system with per-map and overall match scores
+- `scoring_type`-aware scoring: Normal (team), FFA (participant winner), Position (ranked spread)
 - Match state management (created → gather → assign → battle → complete/cancelled)
 - Player participant tracking and reminders
-- Voice channel integration and announcements
+- Voice channel integration and announcements (per `match_teams.voice_channel_id`)
 
 ### Tournament System
-- Single and double elimination bracket formats
+- **Single elimination** and **double elimination** bracket formats (Normal/team modes)
+- **Cumulative points** format for FFA/Position tournaments — leaderboard-based, no bracket
 - Automated bracket generation and progression
 - Team-based tournament management
 - Tournament-specific match scheduling
 - Bracket visualization and navigation
+
+### Series System
+- Top-level entity for multi-event championships and seasons
+- Series owns an event schedule: each `series_event` links to a `match` or `tournament` with a `points_multiplier`
+- Standings computed on demand by summing `match_game_placements.points_awarded` across all series events
+- API: `src/app/api/series/` (CRUD + events + standings)
+- UI: `/series`, `/series/create`, `/series/[seriesId]`, `/series/[seriesId]/edit`, `/series/history`
 
 ### Discord Integration
 - Modular bot architecture (`processes/discord-bot/modules/`):
@@ -430,6 +455,7 @@ tests/
 ### Known Issues
 - **DB isolation**: ~48 integration API tests fail because `getTestDb()` and `getDbInstance()` use separate database connections. Tests that insert data directly via `getTestDb()` and then query via API route handlers (which use `getDbInstance()`) will get 404s. Unit tests and queue/schema tests are unaffected.
 - **FK schema mismatch**: Enabling `PRAGMA foreign_keys=ON` in tests reveals that the `matches` table has a malformed FK reference to `game_maps`. This must be fixed in migrations before FK constraints can be enabled in tests.
+- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `023_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
 
 ### Writing Tests
 - Use `getTestDb()` for direct DB operations in tests

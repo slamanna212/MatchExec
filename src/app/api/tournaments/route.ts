@@ -34,8 +34,8 @@ function validateTournamentBody(body: Partial<TournamentBody>): string | null {
   if (!body.name || !body.gameId || !body.gameModeId || !body.format || !body.roundsPerMatch) {
     return 'Missing required fields: name, gameId, gameModeId, format, and roundsPerMatch';
   }
-  if (!['single-elimination', 'double-elimination'].includes(body.format)) {
-    return 'Invalid format. Must be single-elimination or double-elimination';
+  if (!['single-elimination', 'double-elimination', 'cumulative-points'].includes(body.format)) {
+    return 'Invalid format. Must be single-elimination, double-elimination, or cumulative-points';
   }
 
   for (const check of [
