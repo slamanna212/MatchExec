@@ -121,6 +121,23 @@ describe('Tournaments API', () => {
 
       expect(status).toBe(400);
     });
+
+    it('should create tournament with cumulative-points format', async () => {
+      const request = createMockRequest('POST', '/api/tournaments', {
+        name: 'FFA Championship',
+        gameId: game.id,
+        gameModeId: mode.id,
+        format: 'cumulative-points',
+        roundsPerMatch: 1,
+      });
+
+      const response = await POST(request);
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(201);
+      expect(data.id).toBeDefined();
+      expect(data.format).toBe('cumulative-points');
+    });
   });
 
   describe('GET /api/tournaments/[tournamentId]', () => {

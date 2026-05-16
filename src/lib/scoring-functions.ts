@@ -391,16 +391,18 @@ async function savePlacementsForNormal(
   winner: 'team1' | 'team2' | undefined
 ): Promise<void> {
   try {
-    const blueId = `mt_blue_${matchId}`;
-    const redId = `mt_red_${matchId}`;
-    const winnerTeamId = winner === 'team1' ? blueId : redId;
-    const loserTeamId = winner === 'team1' ? redId : blueId;
-
-    // Check that the team rows actually exist before inserting placements
-    const teamsExist = await db.get<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM match_teams WHERE id IN (?, ?)`, [blueId, redId]
+    // Look up team IDs by order — cannot use hardcoded IDs because new matches
+    // created via createMatchTeams() use genId(), not the backfill migration convention.
+    const blueRow = await db.get<{ id: string }>(
+      `SELECT id FROM match_teams WHERE match_id = ? AND team_order = 0 AND is_reserve = 0 LIMIT 1`, [matchId]
     );
-    if (!teamsExist || teamsExist.cnt < 2) return;
+    const redRow = await db.get<{ id: string }>(
+      `SELECT id FROM match_teams WHERE match_id = ? AND team_order = 1 AND is_reserve = 0 LIMIT 1`, [matchId]
+    );
+    if (!blueRow || !redRow) return;
+
+    const winnerTeamId = winner === 'team1' ? blueRow.id : redRow.id;
+    const loserTeamId = winner === 'team1' ? redRow.id : blueRow.id;
 
     const scores = await db.get<{ score_a?: number; score_b?: number }>(
       `SELECT score_a, score_b FROM match_games WHERE id = ?`, [matchGameId]

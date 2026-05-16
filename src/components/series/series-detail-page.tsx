@@ -67,7 +67,7 @@ interface SeriesEventRow {
 interface StandingRow {
   rank: number;
   username: string;
-  participant_id: string;
+  user_id: string;
   total_points: number;
   events_played: number;
 }
@@ -358,7 +358,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                 </Table.Thead>
                 <Table.Tbody>
                   {standings.map((row) => (
-                    <Table.Tr key={row.participant_id}>
+                    <Table.Tr key={row.user_id}>
                       <Table.Td>
                         <Group gap="xs">
                           {row.rank === 1 && <IconTrophy size={16} color="gold" />}

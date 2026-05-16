@@ -179,20 +179,20 @@ export async function removeSeriesEvent(eventId: string): Promise<void> {
 export async function getSeriesStandings(seriesId: string): Promise<Array<{
   rank: number;
   username: string;
-  participant_id: string;
+  user_id: string;
   total_points: number;
   events_played: number;
 }>> {
   const db = await getDbInstance();
 
   const rows = await db.all<{
-    participant_id: string;
+    user_id: string;
     username: string;
     total_points: number;
     events_played: number;
   }>(`
     SELECT
-      mp.id as participant_id,
+      mp.user_id,
       mp.username,
       COALESCE(SUM(mgp.points_awarded * se.points_multiplier), 0) as total_points,
       COUNT(DISTINCT se.id) as events_played
@@ -203,10 +203,10 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
       ON mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
     LEFT JOIN match_games mg ON mg.id = mgp.match_game_id AND mg.match_id = m.id
     WHERE se.series_id = ?
-    GROUP BY mp.id, mp.username
+    GROUP BY mp.user_id, mp.username
     UNION ALL
     SELECT
-      mp.id as participant_id,
+      mp.user_id,
       mp.username,
       COALESCE(SUM(mgp.points_awarded * se.points_multiplier), 0) as total_points,
       COUNT(DISTINCT se.id) as events_played
@@ -217,23 +217,23 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
       ON mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
     LEFT JOIN match_games mg ON mg.id = mgp.match_game_id AND mg.match_id = m.id
     WHERE se.series_id = ?
-    GROUP BY mp.id, mp.username
+    GROUP BY mp.user_id, mp.username
   `, [seriesId, seriesId]);
 
-  // Aggregate across the UNION (same participant may appear from both branches)
+  // Aggregate across the UNION (same player may appear from both match and tournament branches)
   const aggregated = new Map<string, { username: string; total_points: number; events_played: number }>();
   for (const row of rows) {
-    const existing = aggregated.get(row.participant_id);
+    const existing = aggregated.get(row.user_id);
     if (existing) {
       existing.total_points += row.total_points;
       existing.events_played += row.events_played;
     } else {
-      aggregated.set(row.participant_id, { username: row.username, total_points: row.total_points, events_played: row.events_played });
+      aggregated.set(row.user_id, { username: row.username, total_points: row.total_points, events_played: row.events_played });
     }
   }
 
   return Array.from(aggregated.entries())
-    .map(([id, data]) => ({ participant_id: id, ...data }))
+    .map(([id, data]) => ({ user_id: id, ...data }))
     .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username))
     .map((entry, idx) => ({ rank: idx + 1, ...entry }));
 }
