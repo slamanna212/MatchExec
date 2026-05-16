@@ -24,6 +24,7 @@ interface TournamentInfoPanelProps {
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   onAssignTeams: () => void;
   onDelete: () => void;
+  onEdit: () => void;
   onStatusTransition: (newStatus: string) => void;
   onGenerateBracket: () => Promise<void>;
   onProgressTournament: () => Promise<void>;
@@ -35,6 +36,7 @@ export function TournamentInfoPanel({
   parseDbTimestamp,
   onAssignTeams,
   onDelete,
+  onEdit,
   onStatusTransition,
   onGenerateBracket,
   onProgressTournament
@@ -53,6 +55,13 @@ export function TournamentInfoPanel({
               onClick={() => onStatusTransition('gather')}
             >
               Open Signups
+            </Button>
+            <Button
+              variant="light"
+              fullWidth
+              onClick={onEdit}
+            >
+              Edit Tournament
             </Button>
             <Button
               color="red"
@@ -96,6 +105,13 @@ export function TournamentInfoPanel({
               Close Signups
             </Button>
             <Button
+              variant="light"
+              fullWidth
+              onClick={onEdit}
+            >
+              Edit Tournament
+            </Button>
+            <Button
               color="red"
               variant="light"
               fullWidth
@@ -136,6 +152,13 @@ export function TournamentInfoPanel({
               </Button>
             )}
             <Button
+              variant="light"
+              fullWidth
+              onClick={onEdit}
+            >
+              Edit Tournament
+            </Button>
+            <Button
               color="red"
               variant="light"
               fullWidth
@@ -167,6 +190,13 @@ export function TournamentInfoPanel({
               }}
             >
               Next Round
+            </Button>
+            <Button
+              variant="light"
+              fullWidth
+              onClick={onEdit}
+            >
+              Edit Tournament
             </Button>
             <Button
               variant="light"

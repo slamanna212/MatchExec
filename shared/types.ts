@@ -73,6 +73,9 @@ export interface Tournament {
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
   stats_enabled?: number;
+  announcements?: string;
+  player_notifications?: number;
+  livestream_link?: string;
   created_at: Date;
   updated_at: Date;
 }

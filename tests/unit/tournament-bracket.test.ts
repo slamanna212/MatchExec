@@ -216,6 +216,37 @@ describe('Tournament Bracket', () => {
       expect(matches[0].team1_id).toBeDefined();
       expect(matches[0].team2_id).toBeDefined();
     });
+
+    it('should propagate player_notifications from tournament to generated matches', async () => {
+      const db = getTestDb();
+      const tournamentId = `tournament_pn_${Date.now()}`;
+
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, game_mode_id, format, status, rounds_per_match, ruleset, player_notifications)
+           VALUES (?, 'PN Test', ?, ?, 'single-elimination', 'created', 1, 'casual', 0)`,
+          [tournamentId, game.id, mode.id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      const teams = ['pn-team-1', 'pn-team-2'];
+      for (const teamId of teams) {
+        await new Promise<void>((resolve, reject) => {
+          db.run(
+            `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
+            [teamId, tournamentId, teamId],
+            (err) => err ? reject(err) : resolve()
+          );
+        });
+      }
+
+      const bracketAssignments = teams.map((teamId, index) => ({ position: index + 1, teamId }));
+      const matches = await generateSingleEliminationMatches(tournamentId, bracketAssignments, game.id, 1);
+
+      expect(matches).toHaveLength(1);
+      expect(matches[0].player_notifications).toBe(0);
+    });
   });
 
   describe('generateNextRoundMatches', () => {

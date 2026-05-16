@@ -25,6 +25,9 @@ interface TournamentBody {
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
+  announcements?: Array<{ id: string; value: number; unit: 'minutes' | 'hours' | 'days' }>;
+  playerNotifications?: boolean;
+  livestreamLink?: string;
 }
 
 function validateTournamentBody(body: Partial<TournamentBody>): string | null {
@@ -77,7 +80,10 @@ function buildTournamentInsertValues(body: TournamentBody, tournamentId: string,
     body.eventImageUrl || null,
     body.allowPlayerTeamSelection ? 1 : 0,
     body.allowMatchEditing === false ? 0 : 1,
-    body.statsEnabled ? 1 : 0
+    body.statsEnabled ? 1 : 0,
+    body.announcements ? JSON.stringify(body.announcements) : null,
+    body.playerNotifications === false ? 0 : 1,
+    body.livestreamLink || null,
   ];
 }
 
@@ -183,8 +189,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       INSERT INTO tournaments (
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
-        allow_player_team_selection, allow_match_editing, stats_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allow_player_team_selection, allow_match_editing, stats_enabled,
+        announcements, player_notifications, livestream_link
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, buildTournamentInsertValues(body, tournamentId, startDateTime, startTimeOnly));
     
     const tournament = await db.get<TournamentDbRow>(`

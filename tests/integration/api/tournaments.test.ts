@@ -6,6 +6,7 @@ import { GET, POST } from '@/app/api/tournaments/route';
 import { GET as getTournament, DELETE as deleteTournament } from '@/app/api/tournaments/[tournamentId]/route';
 import { GET as getTeams, POST as createTeam, DELETE as deleteTeam } from '@/app/api/tournaments/[tournamentId]/teams/route';
 import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentId]/transition/route';
+import { PUT as updateTournament } from '@/app/api/tournaments/[tournamentId]/route';
 
 describe('Tournaments API', () => {
   let game: any;
@@ -72,6 +73,28 @@ describe('Tournaments API', () => {
       expect(data.format).toBe('single-elimination');
     });
 
+    it('should persist announcements, playerNotifications, and livestreamLink', async () => {
+      const announcements = [{ id: 'a1', value: 1, unit: 'hours' }];
+      const request = createMockRequest('POST', '/api/tournaments', {
+        name: 'Announced Tournament',
+        gameId: game.id,
+        gameModeId: mode.id,
+        format: 'single-elimination',
+        roundsPerMatch: 3,
+        announcements,
+        playerNotifications: false,
+        livestreamLink: 'https://twitch.tv/test',
+      });
+
+      const response = await POST(request);
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(201);
+      expect(data.livestream_link).toBe('https://twitch.tv/test');
+      expect(data.player_notifications).toBe(0);
+      expect(JSON.parse(data.announcements)).toEqual(announcements);
+    });
+
     it('should reject missing required fields', async () => {
       const request = createMockRequest('POST', '/api/tournaments', {
         name: 'Test Tournament',
@@ -106,8 +129,8 @@ describe('Tournaments API', () => {
 
       await new Promise<void>((resolve, reject) => {
         db.run(
-          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
-           VALUES ('t1', 'Test Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset, livestream_link, player_notifications)
+           VALUES ('t1', 'Test Tournament', ?, 'created', 'single-elimination', 1, 'casual', 'https://twitch.tv/test', 0)`,
           [game.id],
           (err) => (err ? reject(err) : resolve())
         );
@@ -120,6 +143,8 @@ describe('Tournaments API', () => {
       expect(status).toBe(200);
       expect(data.id).toBe('t1');
       expect(data.name).toBe('Test Tournament');
+      expect(data.livestream_link).toBe('https://twitch.tv/test');
+      expect(data.player_notifications).toBe(0);
     });
 
     it('should return 404 for non-existent tournament', async () => {
@@ -248,6 +273,79 @@ describe('Tournaments API', () => {
         );
       });
       expect(deleted).toBeUndefined();
+    });
+  });
+
+  describe('PUT /api/tournaments/[tournamentId]', () => {
+    it('should update editable fields', async () => {
+      const db = getTestDb();
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-edit', 'Original Name', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const request = createMockRequest('PUT', '/api/tournaments/t-edit', {
+        name: 'Updated Name',
+        livestreamLink: 'https://twitch.tv/updated',
+        playerNotifications: false,
+      });
+      const response = await updateTournament(request, createRouteParams({ tournamentId: 't-edit' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.name).toBe('Updated Name');
+      expect(data.livestream_link).toBe('https://twitch.tv/updated');
+      expect(data.player_notifications).toBe(0);
+    });
+
+    it('should persist announcements on update', async () => {
+      const db = getTestDb();
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-edit-ann', 'Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+
+      const announcements = [{ id: 'x1', value: 30, unit: 'minutes' }];
+      const request = createMockRequest('PUT', '/api/tournaments/t-edit-ann', {
+        name: 'Tournament',
+        announcements,
+      });
+      const response = await updateTournament(request, createRouteParams({ tournamentId: 't-edit-ann' }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(JSON.parse(data.announcements)).toEqual(announcements);
+    });
+
+    it('should return 404 for non-existent tournament', async () => {
+      const request = createMockRequest('PUT', '/api/tournaments/nonexistent', { name: 'X' });
+      const response = await updateTournament(request, createRouteParams({ tournamentId: 'nonexistent' }));
+      const { status } = await parseResponse(response);
+      expect(status).toBe(404);
+    });
+
+    it('should return 400 when no valid fields provided', async () => {
+      const db = getTestDb();
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO tournaments (id, name, game_id, status, format, rounds_per_match, ruleset)
+           VALUES ('t-edit-empty', 'Tournament', ?, 'created', 'single-elimination', 1, 'casual')`,
+          [game.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+      const request = createMockRequest('PUT', '/api/tournaments/t-edit-empty', {});
+      const response = await updateTournament(request, createRouteParams({ tournamentId: 't-edit-empty' }));
+      const { status } = await parseResponse(response);
+      expect(status).toBe(400);
     });
   });
 

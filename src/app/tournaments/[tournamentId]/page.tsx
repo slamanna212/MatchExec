@@ -561,6 +561,7 @@ export default function TournamentPage({
               parseDbTimestamp={parseDbTimestamp}
               onAssignTeams={() => router.push(`/tournaments/${tournamentId}/assign`)}
               onDelete={handleDelete}
+              onEdit={() => router.push(`/tournaments/${tournamentId}/edit`)}
               onStatusTransition={handleStatusTransition}
               onGenerateBracket={handleGenerateBracket}
               onProgressTournament={handleProgressTournament}

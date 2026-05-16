@@ -74,3 +74,8 @@ CREATE INDEX IF NOT EXISTS idx_matches_tournament_bracket_type ON matches(tourna
 CREATE INDEX IF NOT EXISTS idx_matches_winner_team ON matches(winner_team);
 CREATE INDEX IF NOT EXISTS idx_matches_map_id ON matches(map_id);
 CREATE INDEX IF NOT EXISTS idx_matches_status_updated ON matches(status, updated_at DESC);
+
+-- Add missing tournament fields for match parity
+ALTER TABLE tournaments ADD COLUMN announcements TEXT;
+ALTER TABLE tournaments ADD COLUMN player_notifications INTEGER DEFAULT 1;
+ALTER TABLE tournaments ADD COLUMN livestream_link TEXT;
