@@ -24,6 +24,7 @@ import { capTitle } from './utils';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
+import { version } from '../../../package.json';
 
 // Import helper functions
 import { parseModalCustomId } from '../utils/id-parsers';
@@ -262,14 +263,25 @@ export class InteractionHandler {
   private async handleStatusCommand(interaction: ChatInputCommandInteraction) {
     const uptime = process.uptime();
     const uptimeString = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
-    
+
+    const queueRow = await this.db.get<{ count: number }>(`
+      SELECT SUM(cnt) as count FROM (
+        SELECT COUNT(*) as cnt FROM discord_announcement_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_reminder_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_match_start_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_player_reminder_queue WHERE status='failed'
+      )
+    `);
+    const queueDepth = queueRow?.count ?? 0;
+
     const status = [
       `🤖 **MatchExec Bot Status**`,
       `✅ Bot Online`,
+      `🔖 Version: v${version}`,
       `⏱️ Uptime: ${uptimeString}`,
-      `🏠 Guild: ${interaction.guildId}`,
       `📡 Ping: ${this.client.ws.ping}ms`,
-      `🗄️ Database: ${this.db ? '✅ Connected' : '❌ Disconnected'}`
+      `🗄️ Database: ${this.db ? '✅ Connected' : '❌ Disconnected'}`,
+      `📬 Queue: ${queueDepth === 0 ? '✅ No failures' : `⚠️ ${queueDepth} failed`}`
     ].join('\n');
 
     await interaction.reply({
