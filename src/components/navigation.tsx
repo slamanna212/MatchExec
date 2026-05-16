@@ -422,7 +422,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
                 </Tooltip>
               ) : (
                 <div
-                  title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+                  title={versionInfo.isDev ? `Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}` : `Branch: ${versionInfo.branch} | Env: ${versionInfo.platform ?? 'unknown'}`}
                   style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}
                 >
                   {versionInfo.version}
@@ -535,7 +535,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
                       </div>
                     </Tooltip>
                   ) : (
-                    <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
+                    <Tooltip label={versionInfo.isDev ? `Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}` : `Branch: ${versionInfo.branch} | Env: ${versionInfo.platform ?? 'unknown'}`} position="top" withArrow>
                       <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}>
                         {versionInfo.version}
                       </div>
