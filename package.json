@@ -64,7 +64,7 @@
     "react-dom": "19.2.5",
     "recharts": "^3.8.1",
     "sqlite3": "6.0.1",
-    "umzug": "3.8.2",
+    "umzug": "3.8.3",
     "uuid": "14.0.0"
   },
   "devDependencies": {
@@ -75,10 +75,10 @@
     "@types/node-cron": "3.0.11",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.1",
-    "@vitest/coverage-v8": "4.1.5",
-    "@vitest/ui": "4.1.5",
-    "esbuild": "0.28.0",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/ui": "4.1.9",
+    "esbuild": "0.28.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.4",
     "happy-dom": "20.9.0",
@@ -87,6 +87,6 @@
     "tailwindcss": "4.2.4",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
-    "vitest": "4.1.5"
+    "vitest": "4.1.9"
   }
 }
