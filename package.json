@@ -49,7 +49,7 @@
     "@mantine/modals": "9.1.1",
     "@mantine/notifications": "9.1.1",
     "@napi-rs/canvas": "0.1.99",
-    "@snazzah/davey": "0.1.11",
+    "@snazzah/davey": "0.1.12",
     "@tabler/icons-react": "3.44.0",
     "bufferutil": "4.1.0",
     "discord.js": "14.26.3",
@@ -64,8 +64,8 @@
     "react-dom": "19.2.5",
     "recharts": "^3.8.1",
     "sqlite3": "6.0.1",
-    "umzug": "3.8.2",
-    "uuid": "14.0.0"
+    "umzug": "3.8.3",
+    "uuid": "14.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.5",
@@ -75,10 +75,10 @@
     "@types/node-cron": "3.0.11",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.1",
-    "@vitest/coverage-v8": "4.1.5",
-    "@vitest/ui": "4.1.5",
-    "esbuild": "0.28.0",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/ui": "4.1.9",
+    "esbuild": "0.28.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.4",
     "happy-dom": "20.9.0",
@@ -87,6 +87,6 @@
     "tailwindcss": "4.2.4",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
-    "vitest": "4.1.5"
+    "vitest": "4.1.9"
   }
 }
