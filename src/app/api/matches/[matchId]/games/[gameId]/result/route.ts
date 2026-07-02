@@ -1,5 +1,5 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { saveMatchResult, getMatchResult, getGameResult } from '../../../../../../../lib/scoring-functions';
+import { saveMatchResult, getMatchResult, getGameResult, getTeamName } from '../../../../../../../lib/scoring-functions';
 import type { MatchResult } from '@/shared/types';
 import type { SaveResultBody } from '@/lib/types/scoring';
 import { logger } from '@/lib/logger';
@@ -46,10 +46,16 @@ export async function POST(
         const winner = typed.winner ?? 'team1';
         const legacyResult: MatchResult = {
           matchId, gameId, winner,
+          winnerTeamId: typed.winnerTeamId,
+          loserTeamId: typed.loserTeamId,
+          winnerScore: typed.winnerScore,
+          loserScore: typed.loserScore,
           isFfaMode: false, completedAt: new Date()
         };
         await saveMatchResult(gameId, legacyResult);
-        return apiOk({ success: true, message: `${winner === 'team1' ? 'Blue Team' : 'Red Team'} wins!` });
+        const teamName = typed.winnerTeamId ? await getTeamName(typed.winnerTeamId) : null;
+        const label = teamName ?? (winner === 'team1' ? 'Blue Team' : 'Red Team');
+        return apiOk({ success: true, message: `${label} wins!` });
       }
 
       if (typed.type === 'FFA') {

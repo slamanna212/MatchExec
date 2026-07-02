@@ -17,6 +17,15 @@ function genId(prefix: string): string {
 /**
  * Create match_teams rows for a match based on its game mode's scoring_type.
  * Idempotent — skips if rows already exist.
+ *
+ * Team count resolution (Normal mode): explicit `teamCount` argument > the
+ * match's own `matches.team_count` (if set at creation) > the mode's
+ * `game_modes.max_teams` default > 2.
+ *
+ * Position mode: if the mode's `team_size` is >1, participants are grouped
+ * into `max_teams` team-endurance teams (team_size members each, distributed
+ * round-robin in join order). Otherwise every participant gets their own
+ * one-person team, same as FFA.
  */
 export async function createMatchTeams(matchId: string, teamCount?: number): Promise<void> {
   const db = await getDbInstance();
@@ -30,8 +39,8 @@ export async function createMatchTeams(matchId: string, teamCount?: number): Pro
     return;
   }
 
-  const modeRow = await db.get<{ scoring_type?: string; mode_id?: string }>(
-    `SELECT gm.scoring_type, m.mode_id
+  const modeRow = await db.get<{ scoring_type?: string; mode_id?: string; max_teams?: number; team_size?: number | null; match_team_count?: number | null }>(
+    `SELECT gm.scoring_type, m.mode_id, gm.max_teams, gm.team_size, m.team_count as match_team_count
      FROM matches m
      LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
      WHERE m.id = ?`,
@@ -40,9 +49,13 @@ export async function createMatchTeams(matchId: string, teamCount?: number): Pro
   const scoringType = modeRow?.scoring_type ?? 'Normal';
 
   if (scoringType === 'Normal') {
-    await createNormalTeams(db, matchId, teamCount ?? 2);
+    const resolvedTeamCount = teamCount ?? modeRow?.match_team_count ?? modeRow?.max_teams ?? 2;
+    await createNormalTeams(db, matchId, resolvedTeamCount > 0 ? resolvedTeamCount : 2);
+  } else if (scoringType === 'Position' && (modeRow?.team_size ?? 1) > 1) {
+    // Team-endurance: group participants into max_teams teams of team_size each.
+    await createTeamEnduranceTeams(db, matchId, modeRow?.max_teams ?? 2, modeRow!.team_size!);
   } else {
-    // FFA and Position: one team per participant (auto-created)
+    // FFA and Position (individual): one team per participant (auto-created)
     await createPerParticipantTeams(db, matchId);
   }
 
@@ -80,6 +93,55 @@ async function createNormalTeams(
      VALUES (?, ?, 'Reserve', NULL, 99, 1)`,
     [genId('mt'), matchId]
   );
+}
+
+/**
+ * Team-endurance Position matches: create `teamCount` teams and distribute
+ * participants round-robin (in join order) so each team ends up with roughly
+ * teamSize members. A reserve slot is created for any overflow beyond
+ * teamCount * teamSize.
+ */
+async function createTeamEnduranceTeams(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string,
+  teamCount: number,
+  teamSize: number
+): Promise<void> {
+  const participants = await db.all<{ id: string; username: string }>(
+    `SELECT id, username FROM match_participants WHERE match_id = ? ORDER BY joined_at ASC`,
+    [matchId]
+  );
+
+  const teamIds: string[] = [];
+  for (let i = 0; i < teamCount; i++) {
+    const id = genId('mt');
+    teamIds.push(id);
+    await db.run(
+      `INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_color, team_order, is_reserve)
+       VALUES (?, ?, ?, NULL, ?, 0)`,
+      [id, matchId, `Team ${i + 1}`, i]
+    );
+  }
+
+  await db.run(
+    `INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_color, team_order, is_reserve)
+     VALUES (?, ?, 'Reserve', NULL, 99, 1)`,
+    [genId('mt'), matchId]
+  );
+
+  const capacity = teamCount * teamSize;
+  for (let i = 0; i < participants.length; i++) {
+    const p = participants[i];
+    if (i < capacity) {
+      const teamId = teamIds[i % teamCount];
+      await db.run(`UPDATE match_participants SET team_id = ? WHERE id = ?`, [teamId, p.id]);
+    } else {
+      const reserveRow = await db.get<{ id: string }>(
+        `SELECT id FROM match_teams WHERE match_id = ? AND is_reserve = 1 LIMIT 1`, [matchId]
+      );
+      await db.run(`UPDATE match_participants SET team_id = ? WHERE id = ?`, [reserveRow?.id ?? null, p.id]);
+    }
+  }
 }
 
 async function createPerParticipantTeams(

@@ -18,6 +18,15 @@ export function getPointsForPosition(position: number, config: PositionScoringCo
 }
 
 /**
+ * Look up a match_teams.team_name by ID.
+ */
+export async function getTeamName(teamId: string): Promise<string | null> {
+  const db = await getDbInstance();
+  const row = await db.get<{ team_name: string }>(`SELECT team_name FROM match_teams WHERE id = ?`, [teamId]);
+  return row?.team_name ?? null;
+}
+
+/**
  * Resolve position points for a match, honouring per-match override before game default
  */
 export async function getPointsForPositionByMatchId(position: number, matchId: string): Promise<number> {
@@ -352,8 +361,10 @@ async function saveScoringModeResult(
        WHERE id = ?`,
       [JSON.stringify(result.positionResults), JSON.stringify(pointsAwarded), matchGameId]
     );
-    // Dual-write: match_game_placements
-    await savePlacementsForPosition(db, matchGameId, result.positionResults, pointsAwarded);
+    // Dual-write: match_game_placements. Team-endurance Position matches (participants
+    // grouped into match_teams) get team-level placements too; individual Position
+    // matches only get participant-level rows (resolveTeamIdsForParticipants returns {}).
+    await savePlacementsForPosition(db, matchGameId, result.matchId, result.positionResults, pointsAwarded);
     logger.debug(`Saved Position match result for game ${matchGameId}:`, pointsAwarded);
   } else if (result.isFfaMode && result.participantWinnerId) {
     // Legacy write
@@ -368,61 +379,104 @@ async function saveScoringModeResult(
     await savePlacementsForFfa(db, matchGameId, result.participantWinnerId);
     logger.debug(`Saved FFA match result for game ${matchGameId}: participant ${result.participantWinnerId} wins`);
   } else {
-    // Legacy write
+    // N-team-aware: prefer an explicit winnerTeamId (match_teams.id); fall back to
+    // resolving the legacy 'team1'/'team2' shorthand against team_order 0/1.
+    const winnerTeamId = await resolveWinnerTeamId(db, result.matchId, result);
+    const legacyWinner = result.winnerTeamId
+      ? await deriveLegacyWinnerLabel(db, winnerTeamId)
+      : (result.winner ?? null);
+
+    // Legacy write — only meaningful for the first two teams (team_order 0/1);
+    // for a 3rd+ team winner this is left NULL since 'team1'/'team2' can't represent it.
     await db.run(
       `UPDATE match_games
        SET winner_id = ?, is_ffa_mode = 0, status = 'completed',
            completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [result.winner, matchGameId]
+      [legacyWinner, matchGameId]
     );
-    // Dual-write: match_game_placements
-    await savePlacementsForNormal(db, matchGameId, result.matchId, result.winner);
-    logger.debug(`Saved team match result for game ${matchGameId}: ${result.winner} wins`);
+    // Dual-write: match_game_placements — writes a row for every non-reserve team.
+    await savePlacementsForNormal(db, matchGameId, result.matchId, winnerTeamId, result.winnerScore, result.loserTeamId, result.loserScore);
+    logger.debug(`Saved team match result for game ${matchGameId}: winner team ${winnerTeamId ?? 'unresolved'}`);
   }
+}
+
+/**
+ * Resolve the winning match_teams.id for a Normal-mode result.
+ * Prefers the explicit winnerTeamId (N-team-aware); falls back to mapping the
+ * legacy 'team1'/'team2' shorthand onto team_order 0/1.
+ */
+async function resolveWinnerTeamId(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string,
+  result: Pick<MatchResult, 'winner' | 'winnerTeamId'>
+): Promise<string | null> {
+  if (result.winnerTeamId) return result.winnerTeamId;
+  if (!result.winner) return null;
+  const order = result.winner === 'team1' ? 0 : 1;
+  const row = await db.get<{ id: string }>(
+    `SELECT id FROM match_teams WHERE match_id = ? AND team_order = ? AND is_reserve = 0 LIMIT 1`,
+    [matchId, order]
+  );
+  return row?.id ?? null;
+}
+
+/**
+ * Map a match_teams.id back to the legacy 'team1'/'team2' label via team_order,
+ * for writing the legacy match_games.winner_id column. Returns null for any
+ * team beyond order 1 (3rd+ team), since the legacy column can't represent it.
+ */
+async function deriveLegacyWinnerLabel(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  winnerTeamId: string | null
+): Promise<'team1' | 'team2' | null> {
+  if (!winnerTeamId) return null;
+  const row = await db.get<{ team_order: number }>(
+    `SELECT team_order FROM match_teams WHERE id = ?`, [winnerTeamId]
+  );
+  if (row == null) return null;
+  if (row.team_order === 0) return 'team1';
+  if (row.team_order === 1) return 'team2';
+  return null;
 }
 
 // ── Placement writers (dual-write helpers) ─────────────────────────────────
 
+/**
+ * Write match_game_placements for a Normal-mode result — one row per non-reserve
+ * match_teams row (supports N teams, not just Blue/Red). The winning team gets
+ * position=1/is_winner=1; every other team gets position=2/is_winner=0, since a
+ * single game only ever declares one winner.
+ */
 async function savePlacementsForNormal(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchGameId: string,
   matchId: string,
-  winner: 'team1' | 'team2' | undefined
+  winnerTeamId: string | null,
+  winnerScore?: number | null,
+  loserTeamId?: string | null,
+  loserScore?: number | null
 ): Promise<void> {
   try {
-    // Look up team IDs by order — cannot use hardcoded IDs because new matches
-    // created via createMatchTeams() use genId(), not the backfill migration convention.
-    const blueRow = await db.get<{ id: string }>(
-      `SELECT id FROM match_teams WHERE match_id = ? AND team_order = 0 AND is_reserve = 0 LIMIT 1`, [matchId]
+    const teams = await db.all<{ id: string }>(
+      `SELECT id FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC`,
+      [matchId]
     );
-    const redRow = await db.get<{ id: string }>(
-      `SELECT id FROM match_teams WHERE match_id = ? AND team_order = 1 AND is_reserve = 0 LIMIT 1`, [matchId]
-    );
-    if (!blueRow || !redRow) return;
-
-    const winnerTeamId = winner === 'team1' ? blueRow.id : redRow.id;
-    const loserTeamId = winner === 'team1' ? redRow.id : blueRow.id;
-
-    const scores = await db.get<{ score_a?: number; score_b?: number }>(
-      `SELECT score_a, score_b FROM match_games WHERE id = ?`, [matchGameId]
-    );
-    const winnerScore = winner === 'team1' ? (scores?.score_a ?? null) : (scores?.score_b ?? null);
-    const loserScore = winner === 'team1' ? (scores?.score_b ?? null) : (scores?.score_a ?? null);
+    if (teams.length === 0) return;
 
     const genId = () => `mgp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // NOSONAR
-    await db.run(
-      `INSERT OR REPLACE INTO match_game_placements
-       (id, match_game_id, entity_type, entity_id, position, score, is_winner)
-       VALUES (?, ?, 'team', ?, 1, ?, 1)`,
-      [genId(), matchGameId, winnerTeamId, winnerScore]
-    );
-    await db.run(
-      `INSERT OR REPLACE INTO match_game_placements
-       (id, match_game_id, entity_type, entity_id, position, score, is_winner)
-       VALUES (?, ?, 'team', ?, 2, ?, 0)`,
-      [genId(), matchGameId, loserTeamId, loserScore]
-    );
+    for (const team of teams) {
+      const isWinner = team.id === winnerTeamId;
+      const score = isWinner
+        ? (winnerScore ?? null)
+        : (loserTeamId && team.id === loserTeamId ? (loserScore ?? null) : null);
+      await db.run(
+        `INSERT OR REPLACE INTO match_game_placements
+         (id, match_game_id, entity_type, entity_id, position, score, is_winner)
+         VALUES (?, ?, 'team', ?, ?, ?, ?)`,
+        [genId(), matchGameId, team.id, isWinner ? 1 : 2, score, isWinner ? 1 : 0]
+      );
+    }
   } catch (err) {
     logger.error('Error writing normal placements:', err);
   }
@@ -449,6 +503,7 @@ async function savePlacementsForFfa(
 async function savePlacementsForPosition(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchGameId: string,
+  matchId: string,
   positionResults: Record<string, number>,
   pointsAwarded: Record<string, number>
 ): Promise<void> {
@@ -462,8 +517,63 @@ async function savePlacementsForPosition(
         [genId(), matchGameId, participantId, position, pointsAwarded[participantId] ?? 0, position === 1 ? 1 : 0]
       );
     }
+
+    await savePlacementsForPositionTeams(db, matchGameId, matchId, positionResults, pointsAwarded);
   } catch (err) {
     logger.error('Error writing position placements:', err);
+  }
+}
+
+/**
+ * Team-endurance Position matches (participants grouped into match_teams with 2+
+ * members) additionally get team-level placement rows, derived by summing each
+ * team's members' points_awarded for this game and ranking teams by total. This
+ * is a no-op for individual Position matches (one participant per team, or no
+ * team_id at all), so it's safe to call unconditionally.
+ */
+async function savePlacementsForPositionTeams(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchGameId: string,
+  matchId: string,
+  positionResults: Record<string, number>,
+  pointsAwarded: Record<string, number>
+): Promise<void> {
+  const participantIds = Object.keys(positionResults);
+  if (participantIds.length === 0) return;
+
+  const teamRows = await db.all<{ id: string; team_id: string | null }>(
+    `SELECT id, team_id FROM match_participants WHERE match_id = ? AND id IN (${participantIds.map(() => '?').join(',')})`,
+    [matchId, ...participantIds]
+  );
+  const teamOfParticipant = new Map(teamRows.map(r => [r.id, r.team_id]));
+
+  const countByTeam = new Map<string, number>();
+  for (const pid of participantIds) {
+    const teamId = teamOfParticipant.get(pid);
+    if (!teamId) continue;
+    countByTeam.set(teamId, (countByTeam.get(teamId) ?? 0) + 1);
+  }
+  const isTeamEndurance = [...countByTeam.values()].some(c => c >= 2);
+  if (!isTeamEndurance) return;
+
+  const teamPoints = new Map<string, number>();
+  for (const pid of participantIds) {
+    const teamId = teamOfParticipant.get(pid);
+    if (!teamId) continue;
+    teamPoints.set(teamId, (teamPoints.get(teamId) ?? 0) + (pointsAwarded[pid] ?? 0));
+  }
+  if (teamPoints.size === 0) return;
+
+  const ranked = [...teamPoints.entries()].sort((a, b) => b[1] - a[1]);
+  const genId = () => `mgp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // NOSONAR
+  for (let i = 0; i < ranked.length; i++) {
+    const [teamId, points] = ranked[i];
+    await db.run(
+      `INSERT OR REPLACE INTO match_game_placements
+       (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
+       VALUES (?, ?, 'team', ?, ?, ?, ?)`,
+      [genId(), matchGameId, teamId, i + 1, points, i === 0 ? 1 : 0]
+    );
   }
 }
 
@@ -596,6 +706,8 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
 
       if (winner.entity_type === 'team') {
         // Normal — map team row ID back to 'team1'/'team2' via match_teams order
+        // (for the first two teams) while also surfacing the real winnerTeamId
+        // so N-team-aware callers can identify a 3rd+ team winner directly.
         const teamRow = await db.get<{ team_order: number }>(
           `SELECT team_order FROM match_teams WHERE id = ?`, [winner.entity_id]
         );
@@ -604,6 +716,7 @@ export async function getMatchResult(matchGameId: string): Promise<MatchResult |
           matchId: game.match_id!,
           gameId: matchGameId,
           winner: winnerSide as 'team1' | 'team2',
+          winnerTeamId: winner.entity_id,
           isFfaMode: false,
           completedAt: new Date(game.completed_at!)
         };
@@ -970,19 +1083,35 @@ export async function queueScoreNotification(matchGameId: string, result: MatchR
         winningPlayers = ['Unknown Player'];
       }
     } else {
-      // Team Mode: Get winning team players
-      winningTeamName = result.winner === 'team1' ? 'Blue Team' : 'Red Team';
-      const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
-      
-      const playersQuery = `
-        SELECT username, discord_user_id
-        FROM match_participants
-        WHERE match_id = ? AND team_assignment = ?
-        ORDER BY username ASC
-      `;
+      // Team Mode: resolve the winning team via match_teams/team_id when available
+      // (N-team aware), falling back to the legacy blue/red team_assignment lookup.
+      const winnerTeamId = result.winnerTeamId
+        ?? (result.winner
+          ? (await db.get<{ id: string }>(
+              `SELECT id FROM match_teams WHERE match_id = ? AND team_order = ? AND is_reserve = 0 LIMIT 1`,
+              [gameData.match_id, result.winner === 'team1' ? 0 : 1]
+            ))?.id
+          : undefined);
 
-      const players = await db.all<{ username: string; discord_user_id?: string | null }>(playersQuery, [gameData.match_id, teamAssignment]);
-      winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
+      if (winnerTeamId) {
+        const teamRow = await db.get<{ team_name: string }>(
+          `SELECT team_name FROM match_teams WHERE id = ?`, [winnerTeamId]
+        );
+        winningTeamName = teamRow?.team_name ?? (result.winner === 'team1' ? 'Blue Team' : 'Red Team');
+        const players = await db.all<{ username: string; discord_user_id?: string | null }>(
+          `SELECT username, discord_user_id FROM match_participants WHERE match_id = ? AND team_id = ? ORDER BY username ASC`,
+          [gameData.match_id, winnerTeamId]
+        );
+        winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
+      } else {
+        winningTeamName = result.winner === 'team1' ? 'Blue Team' : 'Red Team';
+        const teamAssignment = result.winner === 'team1' ? 'blue' : 'red';
+        const players = await db.all<{ username: string; discord_user_id?: string | null }>(
+          `SELECT username, discord_user_id FROM match_participants WHERE match_id = ? AND team_assignment = ? ORDER BY username ASC`,
+          [gameData.match_id, teamAssignment]
+        );
+        winningPlayers = players.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
+      }
     }
 
     // Generate unique notification ID
@@ -1070,26 +1199,63 @@ export async function determineMatchWinner(
     return result?.entity_id ?? null;
   }
 
-  // Normal — try placements first
-  const placResult = await db.get<{ team1_wins: number; team2_wins: number; total: number }>(
-    `SELECT
-       SUM(CASE WHEN mt.team_order = 0 AND mgp.is_winner = 1 THEN 1 ELSE 0 END) as team1_wins,
-       SUM(CASE WHEN mt.team_order = 1 AND mgp.is_winner = 1 THEN 1 ELSE 0 END) as team2_wins,
-       COUNT(DISTINCT mgp.match_game_id) as total
-     FROM match_games mg
-     JOIN match_game_placements mgp ON mgp.match_game_id = mg.id
-     JOIN match_teams mt ON mt.id = mgp.entity_id
+  // Tournament matches: winner_team MUST resolve to a tournament_teams.id (via
+  // getMatchTeamId), since bracket progression (tournament-bracket.ts,
+  // standings/route.ts, progress/route.ts) compares winner_team against
+  // tournament_teams.id / tournament_matches.team1_id/team2_id — a completely
+  // different ID space from match_teams.id. Tournament matches are always 1v1,
+  // so the original team_order 0/1 win-count comparison is still correct here.
+  const tournamentRow = await db.get<{ tournament_id: string | null }>(
+    `SELECT tournament_id FROM matches WHERE id = ?`, [matchId]
+  );
+  if (tournamentRow?.tournament_id) {
+    const winResult = await db.get<{ team1_wins: number; team2_wins: number; total_normal_games: number }>(
+      `SELECT COUNT(*) as total_normal_games,
+              SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
+              SUM(CASE WHEN mg.winner_id = 'team2' THEN 1 ELSE 0 END) as team2_wins
+       FROM match_games mg
+       WHERE mg.match_id = ? AND mg.status = 'completed'
+         AND (mg.is_ffa_mode = 0 OR mg.is_ffa_mode IS NULL) AND mg.winner_id IS NOT NULL`,
+      [matchId]
+    );
+    if (!winResult || winResult.total_normal_games === 0) return null;
+    if (winResult.team1_wins > winResult.team2_wins) return await getMatchTeamId(db, matchId, 1);
+    if (winResult.team2_wins > winResult.team1_wins) return await getMatchTeamId(db, matchId, 2);
+    return null;
+  }
+
+  // Standalone matches — N-team aware: ranks every non-reserve match_teams row
+  // by win count and returns the real match_teams.id of the winner directly.
+  // Scoped to games that actually produced team placements (mirrors
+  // getOverallMatchScore), so FFA-flagged legacy rows are naturally excluded.
+  const placementsTotalRow = await db.get<{ total: number }>(
+    `SELECT COUNT(DISTINCT mgp.match_game_id) as total
+     FROM match_game_placements mgp
+     JOIN match_games mg ON mg.id = mgp.match_game_id
      WHERE mg.match_id = ? AND mg.status = 'completed' AND mgp.entity_type = 'team'`,
     [matchId]
   );
 
-  if (placResult && placResult.total > 0) {
-    if (placResult.team1_wins > placResult.team2_wins) return await getMatchTeamId(db, matchId, 1);
-    if (placResult.team2_wins > placResult.team1_wins) return await getMatchTeamId(db, matchId, 2);
-    return null;
+  const teamWins = await db.all<{ team_id: string; wins: number }>(
+    `SELECT mt.id as team_id,
+            SUM(CASE WHEN mgp.is_winner = 1 THEN 1 ELSE 0 END) as wins
+     FROM match_teams mt
+     LEFT JOIN match_game_placements mgp
+       ON mgp.entity_id = mt.id AND mgp.entity_type = 'team'
+       AND mgp.match_game_id IN (SELECT id FROM match_games WHERE match_id = ? AND status = 'completed')
+     WHERE mt.match_id = ? AND mt.is_reserve = 0
+     GROUP BY mt.id`,
+    [matchId, matchId]
+  );
+
+  if (teamWins.length > 0 && (placementsTotalRow?.total ?? 0) > 0) {
+    const sorted = [...teamWins].sort((a, b) => b.wins - a.wins);
+    const isTie = sorted.length > 1 && sorted[0].wins === sorted[1].wins;
+    if (isTie || sorted[0].wins === 0) return null;
+    return sorted[0].team_id;
   }
 
-  // Legacy fallback
+  // Legacy fallback (matches with no match_teams rows yet)
   const winResult = await db.get<{ team1_wins: number; team2_wins: number; total_normal_games: number }>(
     `SELECT COUNT(*) as total_normal_games,
             SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
@@ -1337,7 +1503,8 @@ export async function getOverallPositionScore(matchId: string): Promise<{
 
 /**
  * Get overall match score — branches on scoring_type.
- * Normal: returns team win counts.
+ * Normal: returns per-team win counts (N-team aware via teamScores; team1Wins/team2Wins
+ * mirror the first two teams by team_order for backward compatibility).
  * FFA/Position: returns null overallWinner (use getOverallPositionScore for those).
  */
 export async function getOverallMatchScore(matchId: string): Promise<{
@@ -1345,7 +1512,9 @@ export async function getOverallMatchScore(matchId: string): Promise<{
   team2Wins: number;
   totalNormalGames: number;
   overallWinner: 'team1' | 'team2' | 'tie' | null;
+  overallWinnerTeamId: string | null;
   scoringType: string;
+  teamScores: Array<{ teamId: string; teamName: string; teamOrder: number; wins: number }>;
 }> {
   const db = await getDbInstance();
 
@@ -1359,34 +1528,61 @@ export async function getOverallMatchScore(matchId: string): Promise<{
     const scoringType = modeRow?.scoring_type ?? 'Normal';
 
     if (scoringType !== 'Normal') {
-      return { team1Wins: 0, team2Wins: 0, totalNormalGames: 0, overallWinner: null, scoringType };
+      return { team1Wins: 0, team2Wins: 0, totalNormalGames: 0, overallWinner: null, overallWinnerTeamId: null, scoringType, teamScores: [] };
     }
 
-    // Try new placements table first
-    const placementResult = await db.get<{ team1_wins: number; team2_wins: number; total: number }>(
-      `SELECT
-         SUM(CASE WHEN mt.team_order = 0 AND mgp.is_winner = 1 THEN 1 ELSE 0 END) as team1_wins,
-         SUM(CASE WHEN mt.team_order = 1 AND mgp.is_winner = 1 THEN 1 ELSE 0 END) as team2_wins,
-         COUNT(DISTINCT mgp.match_game_id) as total
-       FROM match_games mg
-       JOIN match_game_placements mgp ON mgp.match_game_id = mg.id
-       JOIN match_teams mt ON mt.id = mgp.entity_id
+    // Try new placements table first — one row per non-reserve team, N-team aware.
+    // Scoped to games that actually produced team placements, so FFA-flagged
+    // legacy rows (which never get entity_type='team' placements) are excluded
+    // without needing an explicit is_ffa_mode filter here.
+    const teamRows = await db.all<{ team_id: string; team_name: string; team_order: number; wins: number }>(
+      `SELECT mt.id as team_id, mt.team_name, mt.team_order,
+              SUM(CASE WHEN mgp.is_winner = 1 THEN 1 ELSE 0 END) as wins
+       FROM match_teams mt
+       LEFT JOIN match_game_placements mgp
+         ON mgp.entity_id = mt.id AND mgp.entity_type = 'team'
+         AND mgp.match_game_id IN (SELECT id FROM match_games WHERE match_id = ? AND status = 'completed')
+       WHERE mt.match_id = ? AND mt.is_reserve = 0
+       GROUP BY mt.id, mt.team_name, mt.team_order
+       ORDER BY mt.team_order ASC`,
+      [matchId, matchId]
+    );
+    const placementsTotalRow = await db.get<{ total: number }>(
+      `SELECT COUNT(DISTINCT mgp.match_game_id) as total
+       FROM match_game_placements mgp
+       JOIN match_games mg ON mg.id = mgp.match_game_id
        WHERE mg.match_id = ? AND mg.status = 'completed' AND mgp.entity_type = 'team'`,
       [matchId]
     );
+    const totalFromPlacements = placementsTotalRow?.total ?? 0;
 
-    if (placementResult && placementResult.total > 0) {
-      const team1Wins = placementResult.team1_wins || 0;
-      const team2Wins = placementResult.team2_wins || 0;
-      const totalNormalGames = placementResult.total || 0;
+    if (teamRows.length > 0 && totalFromPlacements > 0) {
+      const teamScores = teamRows.map(r => ({ teamId: r.team_id, teamName: r.team_name, teamOrder: r.team_order, wins: r.wins ?? 0 }));
+      const sorted = [...teamScores].sort((a, b) => b.wins - a.wins);
+      const isTie = sorted.length > 1 && sorted[0].wins === sorted[1].wins;
+      const overallWinnerTeamId = !isTie && sorted[0]?.wins > 0 ? sorted[0].teamId : null;
+
+      const team1 = teamScores.find(t => t.teamOrder === 0);
+      const team2 = teamScores.find(t => t.teamOrder === 1);
       const overallWinner: 'team1' | 'team2' | 'tie' | null =
-        totalNormalGames === 0 ? null :
-        team1Wins > team2Wins ? 'team1' :
-        team2Wins > team1Wins ? 'team2' : 'tie';
-      return { team1Wins, team2Wins, totalNormalGames, overallWinner, scoringType };
+        isTie ? 'tie' :
+        overallWinnerTeamId && team1?.teamId === overallWinnerTeamId ? 'team1' :
+        overallWinnerTeamId && team2?.teamId === overallWinnerTeamId ? 'team2' :
+        overallWinnerTeamId ? null : // 3rd+ team won — can't represent in legacy label
+        'tie';
+
+      return {
+        team1Wins: team1?.wins ?? 0,
+        team2Wins: team2?.wins ?? 0,
+        totalNormalGames: totalFromPlacements,
+        overallWinner,
+        overallWinnerTeamId,
+        scoringType,
+        teamScores,
+      };
     }
 
-    // Fallback: legacy columns
+    // Fallback: legacy columns (matches with no match_teams/placements rows yet)
     const result = await db.get<{ total_normal_games: number; team1_wins: number; team2_wins: number }>(
       `SELECT COUNT(*) as total_normal_games,
               SUM(CASE WHEN mg.winner_id = 'team1' THEN 1 ELSE 0 END) as team1_wins,
@@ -1406,10 +1602,10 @@ export async function getOverallMatchScore(matchId: string): Promise<{
       team1Wins > team2Wins ? 'team1' :
       team2Wins > team1Wins ? 'team2' : 'tie';
 
-    return { team1Wins, team2Wins, totalNormalGames, overallWinner, scoringType };
+    return { team1Wins, team2Wins, totalNormalGames, overallWinner, overallWinnerTeamId: null, scoringType, teamScores: [] };
   } catch (error) {
     logger.error('Error getting overall match score:', error);
-    return { team1Wins: 0, team2Wins: 0, totalNormalGames: 0, overallWinner: null, scoringType: 'Normal' };
+    return { team1Wins: 0, team2Wins: 0, totalNormalGames: 0, overallWinner: null, overallWinnerTeamId: null, scoringType: 'Normal', teamScores: [] };
   }
 }
 

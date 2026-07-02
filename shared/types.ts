@@ -340,6 +340,10 @@ export interface MatchResult {
   matchId: string;
   gameId: string; // match_games.id
   winner: 'team1' | 'team2';
+  winnerTeamId?: string; // match_teams.id — preferred, N-team-aware winner reference
+  loserTeamId?: string; // match_teams.id — optional explicit non-winner reference (for scores)
+  winnerScore?: number;
+  loserScore?: number;
   participantWinnerId?: string; // For FFA modes
   isFfaMode?: boolean;
   positionResults?: Record<string, number>; // For Position modes: {participantId: position}

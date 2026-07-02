@@ -27,9 +27,18 @@ export interface MatchParticipant {
   team_assignment?: string;
 }
 
+export interface MatchTeam {
+  id: string;
+  team_name: string;
+  team_color?: string;
+  team_order: number;
+}
+
 export interface UseMatchGamesDataResult {
   matchGames: MatchGame[];
   participants: MatchParticipant[];
+  /** N-team aware: all non-reserve match_teams, ordered by team_order. */
+  teams: MatchTeam[];
   team1Name: string | null;
   team2Name: string | null;
   loading: boolean;
@@ -40,6 +49,7 @@ export interface UseMatchGamesDataResult {
 export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
   const [matchGames, setMatchGames] = useState<MatchGame[]>([]);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
+  const [teams, setTeams] = useState<MatchTeam[]>([]);
   const [team1Name, setTeam1Name] = useState<string | null>(null);
   const [team2Name, setTeam2Name] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +162,17 @@ export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
     };
   };
 
+  const fetchTeams = async (): Promise<MatchTeam[]> => {
+    const teamsResponse = await fetch(`/api/matches/${matchId}/teams`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!teamsResponse.ok) return [];
+    const data = await teamsResponse.json();
+    return (data.teams || []).filter((t: { is_reserve?: boolean }) => !t.is_reserve);
+  };
+
   const fetchMatchData = async () => {
     if (!matchId || matchId.trim() === '') {
       logger.debug('useMatchGamesData: Waiting for valid matchId');
@@ -170,9 +191,10 @@ export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
       const participants = await fetchParticipantsData();
       setParticipants(participants);
 
-      const { team1, team2 } = await fetchTeamNames();
+      const [{ team1, team2 }, teams] = await Promise.all([fetchTeamNames(), fetchTeams()]);
       setTeam1Name(team1);
       setTeam2Name(team2);
+      setTeams(teams);
     } catch (err) {
       logger.error('useMatchGamesData: Error fetching match data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load match data');
@@ -188,6 +210,7 @@ export function useMatchGamesData(matchId: string): UseMatchGamesDataResult {
   return {
     matchGames,
     participants,
+    teams,
     team1Name,
     team2Name,
     loading,

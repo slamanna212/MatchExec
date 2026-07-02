@@ -1,6 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { createMatchVoiceChannels, trackVoiceChannels } from './voice-channel-manager';
+import { getMatchTeams, setTeamVoiceChannel } from './match-setup';
 
 type VoiceAnnouncementType = 'welcome' | 'nextround' | 'finish';
 
@@ -21,18 +22,28 @@ export class VoiceChannelService {
       }
 
       const db = await getDbInstance();
+      const channelIds = voiceChannelResult.channelIds
+        ?? [voiceChannelResult.blueChannelId, voiceChannelResult.redChannelId].filter((id): id is string => Boolean(id));
 
-      // Update the match with the created voice channel IDs
+      // Update the match with the created voice channel IDs (legacy, first two only)
       await db.run(`
         UPDATE matches
         SET blue_team_voice_channel = ?, red_team_voice_channel = ?
         WHERE id = ?
-      `, [voiceChannelResult.blueChannelId, voiceChannelResult.redChannelId || null, matchId]);
+      `, [channelIds[0] ?? null, channelIds[1] ?? null, matchId]);
+
+      // N-team aware: assign each match_teams row (in team_order) its own real
+      // channel ID directly, instead of relying on a separate post-hoc sync step.
+      const teams = await getMatchTeams(matchId);
+      const activeTeams = teams.filter(t => !t.is_reserve);
+      for (let i = 0; i < activeTeams.length && i < channelIds.length; i++) {
+        await setTeamVoiceChannel(activeTeams[i].id, channelIds[i]);
+      }
 
       // Track the channels for cleanup later
-      await trackVoiceChannels(matchId, voiceChannelResult.blueChannelId, voiceChannelResult.redChannelId);
+      await trackVoiceChannels(matchId, channelIds[0], channelIds[1], channelIds.slice(2));
 
-      logger.debug(`🎤 Voice channels created for match ${matchId}: Blue=${voiceChannelResult.blueChannelId}, Red=${voiceChannelResult.redChannelId || 'N/A'}`);
+      logger.debug(`🎤 ${channelIds.length} voice channel(s) created for match ${matchId}: ${channelIds.join(', ')}`);
       return true;
 
     } catch (error) {

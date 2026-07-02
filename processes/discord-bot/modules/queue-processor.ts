@@ -128,8 +128,14 @@ type RequestHandler = (processor: QueueProcessor, request: BotRequest) => Promis
 async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const requestData = JSON.parse(request.data);
   const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
+  // N-team aware: channelNames is the preferred payload shape (one name per
+  // team). Falls back to the legacy blueChannelName/redChannelName pair for
+  // requests queued by an older version of the caller.
+  const channelNames: string[] = Array.isArray(requestData.channelNames) && requestData.channelNames.length > 0
+    ? requestData.channelNames
+    : [blueChannelName, ...(!isSingleTeam && redChannelName ? [redChannelName] : [])];
 
-  logger.debug(`Creating voice channel${isSingleTeam ? '' : 's'} for match ${matchId} in category ${categoryId}`);
+  logger.debug(`Creating ${channelNames.length} voice channel(s) for match ${matchId} in category ${categoryId}`);
 
   // Mark as processing
   const updateResult = await processor['db'].run(`
@@ -151,30 +157,24 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
 
     const guild = await processor['client'].guilds.fetch(settings.guild_id);
 
-    const blueChannel = await guild.channels.create({
-      name: blueChannelName,
-      type: 2,
-      parent: categoryId,
-    });
-
-    let redChannel;
-    if (!isSingleTeam && redChannelName) {
-      redChannel = await guild.channels.create({
-        name: redChannelName,
+    const channelIds: string[] = [];
+    for (const name of channelNames) {
+      const channel = await guild.channels.create({
+        name,
         type: 2,
         parent: categoryId,
       });
-      logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
-    } else {
-      logger.debug(`✅ Voice channel created: ${blueChannel.id}`);
+      channelIds.push(channel.id);
     }
+
+    logger.debug(`✅ Voice channel(s) created: ${channelIds.join(', ')}`);
 
     await processor['db'].run(`
       UPDATE discord_bot_requests
       SET status = 'completed', result = ?, updated_at = datetime('now')
       WHERE id = ?
     `, [
-      JSON.stringify({ success: true, blueChannelId: blueChannel.id, redChannelId: redChannel?.id }),
+      JSON.stringify({ success: true, channelIds, blueChannelId: channelIds[0], redChannelId: channelIds[1] }),
       request.id
     ]);
   } catch (error) {

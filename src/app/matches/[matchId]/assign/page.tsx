@@ -1,7 +1,7 @@
 'use client'
 
 import { logger } from '@/lib/logger/client';
-import { use, useState, useEffect, useCallback } from 'react';
+import { use, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Container,
@@ -23,6 +23,7 @@ import {
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle, IconMapRoute, IconGripVertical } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
+import { SetupPhase } from '@/components/setup/setup-phase';
 
 interface SignupField {
   id: string;
@@ -48,8 +49,16 @@ interface MatchParticipant {
   avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
-  team_assignment?: 'reserve' | 'blue' | 'red';
+  team_id?: string | null;
   receives_map_codes?: boolean;
+}
+
+interface MatchTeam {
+  id: string;
+  team_name: string;
+  team_color?: string;
+  team_order: number;
+  is_reserve: boolean;
 }
 
 interface MatchData {
@@ -57,7 +66,11 @@ interface MatchData {
   name: string;
   status: string;
   map_codes_supported?: boolean;
+  scoring_type?: 'Normal' | 'FFA' | 'Position';
+  setup_components?: string[] | null;
 }
+
+const TEAM_COLORS = ['blue', 'red', 'green', 'orange', 'grape', 'cyan', 'yellow', 'pink'];
 
 export default function AssignPage({
   params
@@ -69,14 +82,16 @@ export default function AssignPage({
 
   const [match, setMatch] = useState<MatchData | null>(null);
   const [participants, setParticipants] = useState<MatchParticipant[]>([]);
+  const [teams, setTeams] = useState<MatchTeam[]>([]);
   const [signupConfig, setSignupConfig] = useState<SignupConfig | null>(null);
   const [mapCodesSupported, setMapCodesSupported] = useState(false);
-  const [scoringType, setScoringType] = useState<'Normal' | 'FFA' | 'Position'>('Normal');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  const scoringType = match?.scoring_type ?? 'Normal';
 
   useEffect(() => {
     const checkMobile = () => {
@@ -94,37 +109,38 @@ export default function AssignPage({
       try {
         setLoading(true);
 
-        const [participantsRes, matchRes, gamesRes] = await Promise.all([
-          fetch(`/api/matches/${matchId}/participants`),
-          fetch(`/api/matches/${matchId}`),
-          fetch(`/api/matches/${matchId}/games`)
-        ]);
-
+        const matchRes = await fetch(`/api/matches/${matchId}`);
         if (!matchRes.ok) {
           setError(matchRes.status === 404 ? 'Match not found' : 'Failed to load match');
           return;
         }
-
         const matchData: MatchData = await matchRes.json();
         setMatch(matchData);
         setMapCodesSupported(matchData.map_codes_supported || false);
 
-        if (participantsRes.ok) {
-          const data = await participantsRes.json();
-          setParticipants(data.participants.map((p: MatchParticipant) => ({
-            ...p,
-            team_assignment: p.team_assignment || 'reserve',
-            receives_map_codes: p.receives_map_codes || false
-          })));
-          if (data.signupConfig) {
-            setSignupConfig(data.signupConfig);
-          }
-        }
+        // Normal mode needs participants + match_teams to render the
+        // team-assignment board. FFA/Position render via SetupPhase, which
+        // fetches its own participant list.
+        if ((matchData.scoring_type ?? 'Normal') === 'Normal') {
+          const [participantsRes, teamsRes] = await Promise.all([
+            fetch(`/api/matches/${matchId}/participants`),
+            fetch(`/api/matches/${matchId}/teams`),
+          ]);
 
-        if (gamesRes.ok) {
-          const gamesData = await gamesRes.json();
-          if (gamesData.games?.length > 0) {
-            setScoringType(gamesData.games[0].mode_scoring_type || 'Normal');
+          if (participantsRes.ok) {
+            const data = await participantsRes.json();
+            setParticipants(data.participants.map((p: MatchParticipant) => ({
+              ...p,
+              receives_map_codes: p.receives_map_codes || false
+            })));
+            if (data.signupConfig) {
+              setSignupConfig(data.signupConfig);
+            }
+          }
+
+          if (teamsRes.ok) {
+            const teamsData = await teamsRes.json();
+            setTeams(teamsData.teams ?? []);
           }
         }
       } catch (err) {
@@ -138,11 +154,14 @@ export default function AssignPage({
     fetchData();
   }, [matchId]);
 
-  const handleTeamChange = useCallback((participantId: string, newTeam: 'reserve' | 'blue' | 'red') => {
+  const activeTeams = useMemo(() => teams.filter(t => !t.is_reserve).sort((a, b) => a.team_order - b.team_order), [teams]);
+  const reserveTeam = useMemo(() => teams.find(t => t.is_reserve), [teams]);
+
+  const handleTeamChange = useCallback((participantId: string, newTeamId: string) => {
     setParticipants(prev =>
       prev.map(p =>
         p.id === participantId
-          ? { ...p, team_assignment: newTeam }
+          ? { ...p, team_id: newTeamId }
           : p
       )
     );
@@ -169,11 +188,11 @@ export default function AssignPage({
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent, targetTeam: 'reserve' | 'blue' | 'red') => {
+  const handleDrop = (e: React.DragEvent, targetTeamId: string) => {
     e.preventDefault();
     const participantId = e.dataTransfer.getData('text/plain');
     if (participantId) {
-      handleTeamChange(participantId, targetTeam);
+      handleTeamChange(participantId, targetTeamId);
     }
     setDraggedParticipant(null);
   };
@@ -187,7 +206,7 @@ export default function AssignPage({
     try {
       const teamAssignments = participants.map(p => ({
         participantId: p.id,
-        team: p.team_assignment,
+        teamId: p.team_id ?? reserveTeam?.id,
         receives_map_codes: p.receives_map_codes || false
       }));
 
@@ -209,44 +228,20 @@ export default function AssignPage({
     }
   };
 
-  const getTeamParticipants = (team: 'reserve' | 'blue' | 'red') => {
-    return participants.filter(p => p.team_assignment === team);
+  const getTeamParticipants = (teamId: string | undefined) => {
+    return participants.filter(p => (p.team_id ?? reserveTeam?.id) === teamId);
   };
 
-  const getPlayerCardStyles = (team: 'reserve' | 'blue' | 'red') => {
-    switch (team) {
-      case 'blue':
-        return {
-          backgroundColor: 'var(--mantine-color-blue-2)',
-          borderColor: 'var(--mantine-color-blue-4)'
-        };
-      case 'red':
-        return {
-          backgroundColor: 'var(--mantine-color-red-2)',
-          borderColor: 'var(--mantine-color-red-4)'
-        };
-      case 'reserve':
-        return {
-          backgroundColor: '#FFD54F',
-          borderColor: '#FFC107'
-        };
-      default:
-        return {};
-    }
-  };
-
-  const getBadgeColor = (team: 'reserve' | 'blue' | 'red') => {
-    switch (team) {
-      case 'blue': return 'orange';
-      case 'red': return 'cyan';
-      case 'reserve': return 'violet';
-      default: return 'dark';
-    }
+  const getTeamColor = (teamId: string | null | undefined) => {
+    if (!teamId || teamId === reserveTeam?.id) return 'gray';
+    const idx = activeTeams.findIndex(t => t.id === teamId);
+    return idx >= 0 ? TEAM_COLORS[idx % TEAM_COLORS.length] : 'gray';
   };
 
   const renderParticipantCard = (participant: MatchParticipant, index: number) => {
     const isDragging = draggedParticipant === participant.id;
     const isDragDisabled = isMobile;
+    const color = getTeamColor(participant.team_id);
 
     return (
       <Card
@@ -259,7 +254,7 @@ export default function AssignPage({
         style={{
           ...(isDragging
             ? { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)', opacity: 0.6 }
-            : getPlayerCardStyles(participant.team_assignment || 'reserve')
+            : { backgroundColor: `var(--mantine-color-${color}-2)`, borderColor: `var(--mantine-color-${color}-4)` }
           ),
           cursor: isDragDisabled ? 'default' : 'grab'
         }}
@@ -270,7 +265,7 @@ export default function AssignPage({
         <Group justify="space-between" align="center" mb="xs">
           <Group align="center">
             {!isDragDisabled && <IconGripVertical size={16} color="var(--mantine-color-gray-5)" />}
-            <Avatar size="sm" color={getBadgeColor(participant.team_assignment || 'reserve')} variant="filled" src={participant.avatar_url || undefined}>
+            <Avatar size="sm" color={color} variant="filled" src={participant.avatar_url || undefined}>
               {index + 1}
             </Avatar>
             <div>
@@ -295,7 +290,7 @@ export default function AssignPage({
                 height: 'auto',
                 backgroundColor: 'transparent',
                 color: participant.receives_map_codes
-                  ? `var(--mantine-color-${getBadgeColor(participant.team_assignment || 'reserve')}-6)`
+                  ? `var(--mantine-color-${color}-6)`
                   : 'var(--mantine-color-gray-5)'
               }}
               styles={{
@@ -313,21 +308,13 @@ export default function AssignPage({
 
         <Select
           size="xs"
-          value={participant.team_assignment}
-          onChange={(value) => handleTeamChange(participant.id, value as 'reserve' | 'blue' | 'red')}
-          data={
-            scoringType === 'Position'
-              ? [
-                  { value: 'reserve', label: 'Reserve' },
-                  { value: 'blue', label: 'Blue Team' }
-                ]
-              : [
-                  { value: 'reserve', label: 'Reserve' },
-                  { value: 'blue', label: 'Blue Team' },
-                  { value: 'red', label: 'Red Team' }
-                ]
-          }
-          w={120}
+          value={participant.team_id ?? reserveTeam?.id}
+          onChange={(value) => value && handleTeamChange(participant.id, value)}
+          data={[
+            ...(reserveTeam ? [{ value: reserveTeam.id, label: 'Reserve' }] : []),
+            ...activeTeams.map(t => ({ value: t.id, label: t.team_name }))
+          ]}
+          w={140}
           mb="xs"
           styles={{
             input: {
@@ -346,7 +333,7 @@ export default function AssignPage({
               const displayLabel = field?.label || key.replace(/([A-Z])/g, ' $1').trim();
 
               return (
-                <Badge key={key} size="xs" variant="filled" color={getBadgeColor(participant.team_assignment || 'reserve')}>
+                <Badge key={key} size="xs" variant="filled" color={color}>
                   {displayLabel}: {String(value)}
                 </Badge>
               );
@@ -357,8 +344,8 @@ export default function AssignPage({
     );
   };
 
-  const renderTeamSection = (team: 'reserve' | 'blue' | 'red', title: string, color: string) => {
-    const teamParticipants = getTeamParticipants(team);
+  const renderTeamSection = (teamId: string | undefined, title: string, color: string) => {
+    const teamParticipants = getTeamParticipants(teamId);
 
     return (
       <Card
@@ -367,7 +354,7 @@ export default function AssignPage({
         radius="md"
         withBorder
         onDragOver={isMobile ? undefined : handleDragOver}
-        onDrop={isMobile ? undefined : (e) => handleDrop(e, team)}
+        onDrop={isMobile || !teamId ? undefined : (e) => handleDrop(e, teamId)}
         style={{ minHeight: '200px' }}
       >
         <Group justify="space-between" mb="md">
@@ -420,6 +407,35 @@ export default function AssignPage({
     );
   }
 
+  // FFA / Position: no team assignment needed — dispatch to the scoring_type-aware
+  // setup components (confirm participants, grid order, qualifying, etc).
+  if (scoringType !== 'Normal') {
+    return (
+      <Container size="lg" py="xl">
+        <Stack gap="lg">
+          <PageHeader
+            icon={IconUsers}
+            title={match.name}
+            subtitle={scoringType === 'FFA' ? 'Confirm participants' : 'Race setup'}
+            breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+          />
+
+          <SetupPhase matchId={matchId} setupComponents={match.setup_components ?? undefined} />
+
+          <Divider />
+
+          <Group justify="flex-end">
+            <Button onClick={() => router.push(`/matches/${matchId}`)}>
+              Continue
+            </Button>
+          </Group>
+        </Stack>
+      </Container>
+    );
+  }
+
+  const columnSpan = activeTeams.length > 0 ? Math.floor(12 / (activeTeams.length + 1)) : 4;
+
   return (
     <Container size="xl" py="xl">
       <Stack gap="lg">
@@ -431,32 +447,32 @@ export default function AssignPage({
         />
 
         <Text size="sm" c="dimmed">
-          Use the dropdown or drag players between columns to assign them to Reserve, Blue Team, or Red Team.
+          Use the dropdown or drag players between columns to assign them to a team or Reserve.
         </Text>
 
         {/* Desktop Layout */}
         <div className="hidden md:block">
           <Grid>
-            <Grid.Col span={scoringType === 'Position' ? 6 : 4}>
-              {renderTeamSection('reserve', 'Reserve', 'gray')}
+            <Grid.Col span={columnSpan}>
+              {renderTeamSection(reserveTeam?.id, 'Reserve', 'gray')}
             </Grid.Col>
-            <Grid.Col span={scoringType === 'Position' ? 6 : 4}>
-              {renderTeamSection('blue', 'Blue Team', 'blue')}
-            </Grid.Col>
-            {scoringType !== 'Position' && (
-              <Grid.Col span={4}>
-                {renderTeamSection('red', 'Red Team', 'red')}
+            {activeTeams.map((team, idx) => (
+              <Grid.Col span={columnSpan} key={team.id}>
+                {renderTeamSection(team.id, team.team_name, TEAM_COLORS[idx % TEAM_COLORS.length])}
               </Grid.Col>
-            )}
+            ))}
           </Grid>
         </div>
 
         {/* Mobile Layout */}
         <div className="block md:hidden">
           <Stack gap="lg">
-            {renderTeamSection('reserve', 'Reserve', 'gray')}
-            {renderTeamSection('blue', 'Blue Team', 'blue')}
-            {scoringType !== 'Position' && renderTeamSection('red', 'Red Team', 'red')}
+            {renderTeamSection(reserveTeam?.id, 'Reserve', 'gray')}
+            {activeTeams.map((team, idx) => (
+              <div key={team.id}>
+                {renderTeamSection(team.id, team.team_name, TEAM_COLORS[idx % TEAM_COLORS.length])}
+              </div>
+            ))}
           </Stack>
         </div>
 
