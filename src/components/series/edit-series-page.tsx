@@ -22,6 +22,8 @@ import { DatePickerInput } from '@mantine/dates';
 import { IconTimeline, IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { showError, showSuccess } from '@/lib/notifications';
+import { ScoringConfigEditor } from './scoring-config-editor';
+import type { SeriesScoringConfig } from '@/lib/series';
 
 interface SeriesRow {
   id: string;
@@ -33,6 +35,7 @@ interface SeriesRow {
   livestream_link?: string;
   announcements: boolean;
   player_notifications: boolean;
+  scoring_config?: string;
 }
 
 export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element {
@@ -48,6 +51,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
   const [livestreamLink, setLivestreamLink] = useState('');
   const [announcements, setAnnouncements] = useState(true);
   const [playerNotifications, setPlayerNotifications] = useState(true);
+  const [scoringConfig, setScoringConfig] = useState<SeriesScoringConfig>({});
 
   useEffect(() => {
     const load = async () => {
@@ -62,6 +66,9 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
         setLivestreamLink(s.livestream_link ?? '');
         setAnnouncements(s.announcements);
         setPlayerNotifications(s.player_notifications);
+        if (s.scoring_config) {
+          try { setScoringConfig(JSON.parse(s.scoring_config)); } catch { /* leave default */ }
+        }
       } catch (err) {
         logger.error('Error loading series:', err);
         setError('Failed to load series');
@@ -87,6 +94,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
           livestream_link: livestreamLink.trim() || undefined,
           announcements,
           player_notifications: playerNotifications,
+          scoring_config: scoringConfig,
         }),
       });
       if (!res.ok) { showError('Failed to update series'); return; }
@@ -177,6 +185,10 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
           checked={playerNotifications}
           onChange={(e) => setPlayerNotifications(e.currentTarget.checked)}
         />
+
+        <Divider />
+
+        <ScoringConfigEditor value={scoringConfig} onChange={setScoringConfig} />
 
         <Divider />
 
