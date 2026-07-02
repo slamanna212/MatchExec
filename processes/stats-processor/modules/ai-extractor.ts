@@ -42,12 +42,16 @@ export class AIExtractor {
       );
       if (!submission) throw new Error(`Submission ${submissionId} not found`);
 
-      // Load match to get game_id
+      // Load match to get game_id and scoring_type
       const match = await this.db.get(
-        'SELECT id, game_id FROM matches WHERE id = ?',
+        `SELECT m.id, m.game_id, COALESCE(gm.scoring_type, 'Normal') as scoring_type
+         FROM matches m
+         LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+         WHERE m.id = ?`,
         [submission.match_id]
       );
       if (!match) throw new Error(`Match ${submission.match_id} not found`);
+      const scoringType: string = match.scoring_type ?? 'Normal';
 
       // Load stat definitions
       const statDefs = await this.db.all(
@@ -90,7 +94,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, scoringType);
       let rawResponse: string | null = null;
       let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;
@@ -163,6 +167,16 @@ export class AIExtractor {
             JSON.stringify(player.stats),
             player.confidence,
           ]
+        );
+      }
+
+      // Write match_game_placements for FFA/Position modes using extracted positions
+      if (scoringType !== 'Normal' && extractionResult.playerPositions) {
+        await this.writePlacementsFromPositions(
+          submission.match_id,
+          submission.match_game_id,
+          extractionResult.playerPositions,
+          scoringType
         );
       }
 
@@ -272,16 +286,30 @@ export class AIExtractor {
     }
   }
 
-  buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string): string {
+  buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string, scoringType = 'Normal'): string {
     const statList = statDefs.map(s => `- ${s.name}: ${s.display_name} (${s.stat_type})`).join('\n');
     const gameSpecificSection = aiNotes
       ? `\nGAME-SPECIFIC NOTES:\n${aiNotes}${teamSide ? `\nThe submitter is on the ${teamSide} team.` : ''}\n`
       : '';
+
+    const isPositionBased = scoringType === 'Position' || scoringType === 'FFA';
+    const positionInstruction = isPositionBased
+      ? `- position: the player's finishing position/rank (1 = first place). Include this for ALL players.`
+      : `- teamSide: "blue", "red", or "unknown" based on team colors or positioning`;
+
+    const positionSchema = isPositionBased
+      ? `      "position": number,`
+      : `      "teamSide": "blue" | "red" | "unknown",`;
+
+    const positionNote = isPositionBased
+      ? `- This is a ${scoringType} mode — extract finishing positions/ranks for ALL players\n- position 1 = winner/first place`
+      : ``;
+
     return `You are analyzing a ${gameName} end-of-match scorecard screenshot.
 
 Extract ALL player statistics visible in the image. For each player, provide:
 - playerName: the in-game username exactly as shown
-- teamSide: "blue", "red", or "unknown" based on team colors or positioning
+${positionInstruction}
 - stats: an object with the following fields (use 0 if not visible):
 ${statList}
 - confidence: a number from 0 to 1 indicating how confident you are in the extraction
@@ -295,13 +323,14 @@ IMPORTANT RULES:
 - Normalize numbers: "12.5K" → 12500, "1.2M" → 1200000
 - For decimal stats (like KDA), keep as decimal number
 - If a stat is not visible for a player, use 0
+${positionNote}
 
 Return JSON matching this exact structure:
 {
   "players": [
     {
       "playerName": "string",
-      "teamSide": "blue" | "red" | "unknown",
+${positionSchema}
       "stats": { ${statDefs.map(s => `"${s.name}": number`).join(', ')} },
       "confidence": number
     }
@@ -355,12 +384,70 @@ Return JSON matching this exact structure:
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {
-    // Strip markdown fences if present
     let cleaned = rawResponse.trim();
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     }
-    return JSON.parse(cleaned) as AIExtractionResult;
+    const result = JSON.parse(cleaned) as AIExtractionResult;
+
+    // Populate playerPositions index from per-player position field
+    const hasPositions = result.players.some(p => typeof p.position === 'number');
+    if (hasPositions) {
+      result.playerPositions = {};
+      for (const player of result.players) {
+        if (typeof player.position === 'number') {
+          result.playerPositions[player.playerName] = player.position;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private async writePlacementsFromPositions(
+    matchId: string,
+    matchGameId: string,
+    playerPositions: Record<string, number>,
+    scoringType: string
+  ): Promise<void> {
+    const participants = await this.db.all<{ id: string; username: string }>(
+      'SELECT id, username FROM match_participants WHERE match_id = ?',
+      [matchId]
+    );
+    if (!participants || participants.length === 0) return;
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const positionResults: Record<string, number> = {};
+
+    for (const [playerName, position] of Object.entries(playerPositions)) {
+      const normalizedName = normalize(playerName);
+      const participant = participants.find(p => normalize(p.username) === normalizedName);
+      if (participant) {
+        positionResults[participant.id] = position;
+      }
+    }
+
+    if (Object.keys(positionResults).length === 0) return;
+
+    try {
+      const { saveScoringModeResult } = await import('../../../src/lib/scoring-functions');
+      const { MatchResult } = await import('../../../shared/types') as { MatchResult: unknown };
+      void MatchResult;
+
+      await saveScoringModeResult(matchGameId, {
+        matchId,
+        gameId: matchGameId,
+        winner: 'team1',
+        isFfaMode: scoringType === 'FFA',
+        isPositionMode: scoringType === 'Position',
+        positionResults,
+        completedAt: new Date(),
+      });
+
+      logger.debug(`✅ Placements written from AI positions for game ${matchGameId} (${scoringType})`);
+    } catch (err) {
+      logger.error('Error writing placements from AI positions:', err);
+    }
   }
 
   async autoAssignParticipants(

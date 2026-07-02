@@ -5,6 +5,7 @@ import { MapCodeService } from './map-code-service';
 import { queueDiscordDeletion } from './scoring-functions';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
+import { createMatchTeams, getMatchTeams, setTeamVoiceChannel, MAX_VOICE_CHANNELS_PER_MATCH } from './match-setup';
 
 async function getMatchName(matchId: string): Promise<string> {
   try {
@@ -161,9 +162,35 @@ export async function handleAssignTransition(matchId: string): Promise<void> {
     // Don't throw - just log the error
   }
 
+  // Create match_teams rows for this match (idempotent)
+  try {
+    await createMatchTeams(matchId);
+    logger.debug(`✅ Match teams created for match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error creating match teams:', error);
+  }
+
   // Create voice channels so they're ready when match starts
   try {
     await VoiceChannelService.setupMatchVoiceChannels(matchId);
+
+    // Dual-write: sync voice channel IDs to match_teams rows
+    const db = await getDbInstance();
+    const matchVc = await db.get<{
+      blue_team_voice_channel?: string;
+      red_team_voice_channel?: string;
+    }>('SELECT blue_team_voice_channel, red_team_voice_channel FROM matches WHERE id = ?', [matchId]);
+
+    if (matchVc?.blue_team_voice_channel || matchVc?.red_team_voice_channel) {
+      const teams = await getMatchTeams(matchId);
+      const active = teams.filter(t => !t.is_reserve).slice(0, MAX_VOICE_CHANNELS_PER_MATCH);
+      for (const team of active) {
+        const channelId = team.team_order === 0
+          ? matchVc.blue_team_voice_channel
+          : matchVc.red_team_voice_channel;
+        if (channelId) await setTeamVoiceChannel(team.id, channelId);
+      }
+    }
   } catch (error) {
     logger.error('❌ Error setting up voice channels:', error);
   }
@@ -346,6 +373,25 @@ export async function handleCompleteTransition(matchId: string): Promise<void> {
     });
   } catch (error) {
     logger.error('❌ Error logging complete feed event:', error);
+  }
+
+  // Queue stats report DMs if all submissions are in a final state
+  try {
+    const db = await getDbInstance();
+    const pending = await db.get<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt FROM scorecard_submissions
+       WHERE match_id = ? AND review_status NOT IN ('approved', 'rejected', 'auto_approved', 'failed')`,
+      [matchId]
+    );
+    if (!pending || pending.cnt === 0) {
+      const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+      await db.run(
+        `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
+        [queueId, matchId]
+      );
+    }
+  } catch (error) {
+    logger.error('❌ Error queuing stats report DMs for completed match:', error);
   }
 }
 

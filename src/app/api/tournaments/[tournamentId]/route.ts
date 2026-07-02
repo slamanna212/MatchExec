@@ -1,8 +1,10 @@
-import type { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest} from 'next/server';
+import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { validateMaxLength } from '@/lib/utils/validation';
 
 interface TournamentWithDetails extends Tournament {
   game_name?: string;
@@ -119,6 +121,63 @@ export async function GET(
   } catch (error) {
     logger.error('Error fetching tournament:', error);
     return apiError('Failed to fetch tournament');
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ tournamentId: string }> }
+): Promise<NextResponse> {
+  try {
+    const { tournamentId } = await params;
+    if (!tournamentId || typeof tournamentId !== 'string' || tournamentId.length > 100) {
+      return apiError('Invalid ID', 400);
+    }
+
+    const db = await getDbInstance();
+    const existing = await db.get<{ id: string; status: string }>('SELECT id, status FROM tournaments WHERE id = ?', [tournamentId]);
+    if (!existing) return apiError('Tournament not found', 404);
+
+    const body = await request.json();
+
+    for (const check of [
+      validateMaxLength(body.name, 255, 'name'),
+      validateMaxLength(body.description, 1000, 'description'),
+      validateMaxLength(body.livestreamLink, 500, 'livestreamLink'),
+    ]) {
+      if (!check.valid) return apiError(check.error, 400);
+    }
+
+    const updates: string[] = [];
+    const values: unknown[] = [];
+
+    if (body.name !== undefined) { updates.push('name = ?'); values.push(body.name); }
+    if (body.description !== undefined) { updates.push('description = ?'); values.push(body.description || null); }
+    if (body.startDate !== undefined) { updates.push('start_date = ?'); values.push(body.startDate ? new Date(body.startDate).toISOString() : null); }
+    if (body.startTime !== undefined) { updates.push('start_time = ?'); values.push(body.startTime ? new Date(body.startTime).toISOString() : null); }
+    if (body.eventImageUrl !== undefined) { updates.push('event_image_url = ?'); values.push(body.eventImageUrl || null); }
+    if (body.livestreamLink !== undefined) { updates.push('livestream_link = ?'); values.push(body.livestreamLink || null); }
+    if (body.announcements !== undefined) { updates.push('announcements = ?'); values.push(body.announcements ? JSON.stringify(body.announcements) : null); }
+    if (body.playerNotifications !== undefined) { updates.push('player_notifications = ?'); values.push(body.playerNotifications === false ? 0 : 1); }
+    if (body.allowMatchEditing !== undefined) { updates.push('allow_match_editing = ?'); values.push(body.allowMatchEditing === false ? 0 : 1); }
+
+    if (updates.length === 0) return apiError('No valid fields to update', 400);
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(tournamentId);
+
+    await db.run(`UPDATE tournaments SET ${updates.join(', ')} WHERE id = ?`, values);
+
+    const updated = await db.get<Tournament & { game_name?: string; game_icon?: string; game_color?: string }>(
+      `SELECT t.*, g.name as game_name, g.icon_url as game_icon, g.color as game_color
+       FROM tournaments t LEFT JOIN games g ON t.game_id = g.id WHERE t.id = ?`,
+      [tournamentId]
+    );
+
+    return apiOk(updated);
+  } catch (error) {
+    logger.error('Error updating tournament:', error);
+    return apiError('Failed to update tournament');
   }
 }
 

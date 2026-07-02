@@ -73,6 +73,9 @@ export interface Tournament {
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
   stats_enabled?: number;
+  announcements?: string;
+  player_notifications?: number;
+  livestream_link?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -197,7 +200,7 @@ export const TOURNAMENT_FLOW_STEPS = {
 } as const;
 
 // Tournament format types
-export type TournamentFormat = 'single-elimination' | 'double-elimination';
+export type TournamentFormat = 'single-elimination' | 'double-elimination' | 'cumulative-points';
 
 // Tournament status types  
 export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
@@ -481,10 +484,13 @@ export interface ScorecardDmMessage {
 export interface AIExtractionResult {
   players: Array<{
     playerName: string;
-    teamSide: 'blue' | 'red' | 'unknown';
+    teamSide?: 'blue' | 'red' | 'unknown';
+    position?: number;
     stats: Record<string, number>;
     confidence: number;
   }>;
+  /** Populated by the extractor for FFA/Position modes; maps playerName → position */
+  playerPositions?: Record<string, number>;
   mapName?: string;
   gameResult?: {
     team1Score?: number;

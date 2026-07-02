@@ -113,11 +113,12 @@ export function TournamentFormatStep({
 
       <Select
         label="Tournament Format"
-        description="Choose between single elimination or double elimination bracket"
+        description="Bracket formats are for team-based modes. Cumulative Points is for FFA or Position-scored modes."
         required
         data={[
           { value: 'single-elimination', label: 'Single Elimination' },
-          { value: 'double-elimination', label: 'Double Elimination' }
+          { value: 'double-elimination', label: 'Double Elimination' },
+          { value: 'cumulative-points', label: 'Cumulative Points (FFA / Position)' },
         ]}
         value={formData.format || 'single-elimination'}
         onChange={(value) => updateFormData('format', (value as TournamentFormat) || 'single-elimination')}

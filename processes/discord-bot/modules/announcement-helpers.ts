@@ -31,6 +31,16 @@ export interface TeamFields {
   reserves: Participant[];
 }
 
+export interface MatchTeamRow {
+  id: string;
+  team_name: string;
+  team_color?: string;
+  team_order: number;
+  voice_channel_id?: string;
+  is_reserve: boolean;
+  participants: Participant[];
+}
+
 export interface MessageLinkData {
   message_id: string;
   channel_id: string;
@@ -70,13 +80,29 @@ export async function fetchMatchStartData(
     `, [matchId]);
 
     if (matchData) {
+      // Try to read team names and voice channels from match_teams (new system)
+      const teams = await db.all<{
+        team_name: string;
+        team_order: number;
+        voice_channel_id?: string;
+      }>(`
+        SELECT team_name, team_order, voice_channel_id
+        FROM match_teams WHERE match_id = ? AND is_reserve = 0
+        ORDER BY team_order ASC
+      `, [matchId]);
+
+      const blueTeam = teams.find(t => t.team_order === 0);
+      const redTeam = teams.find(t => t.team_order === 1);
+
       return {
         gameName: matchData.game_name,
         gameColor: matchData.game_color ? parseInt(matchData.game_color.replace('#', ''), 16) : defaultData.gameColor,
-        blueTeamVoiceChannel: matchData.blue_team_voice_channel || null,
-        redTeamVoiceChannel: matchData.red_team_voice_channel || null,
-        team1Name: matchData.team1_name,
-        team2Name: matchData.team2_name
+        // New system takes priority for voice channels
+        blueTeamVoiceChannel: blueTeam?.voice_channel_id || matchData.blue_team_voice_channel || null,
+        redTeamVoiceChannel: redTeam?.voice_channel_id || matchData.red_team_voice_channel || null,
+        // New system takes priority for team names
+        team1Name: blueTeam?.team_name || matchData.team1_name,
+        team2Name: redTeam?.team_name || matchData.team2_name
       };
     }
   } catch (error) {
@@ -129,7 +155,8 @@ export async function buildMapListField(
 }
 
 /**
- * Fetch team assignments from database
+ * Fetch team assignments from database.
+ * Reads from match_teams + team_id first; falls back to legacy team_assignment.
  */
 export async function fetchTeamAssignments(
   db: Database,
@@ -142,14 +169,27 @@ export async function fetchTeamAssignments(
   };
 
   try {
-    const participants = await db.all<Participant>(`
-      SELECT username, team_assignment, discord_user_id
-      FROM match_participants
-      WHERE match_id = ?
-      ORDER BY team_assignment ASC, username ASC
+    const participants = await db.all<Participant & { team_order?: number; is_reserve?: number }>(`
+      SELECT mp.username, mp.team_assignment, mp.discord_user_id,
+             mt.team_order, mt.is_reserve
+      FROM match_participants mp
+      LEFT JOIN match_teams mt ON mt.id = mp.team_id AND mt.match_id = mp.match_id
+      WHERE mp.match_id = ?
+      ORDER BY mt.team_order ASC, mp.username ASC
     `, [matchId]);
 
     if (participants && participants.length > 0) {
+      const hasTeamId = participants.some(p => p.team_order !== undefined && p.team_order !== null);
+
+      if (hasTeamId) {
+        return {
+          blueTeam: participants.filter(p => p.team_order === 0 && !p.is_reserve),
+          redTeam: participants.filter(p => p.team_order === 1 && !p.is_reserve),
+          reserves: participants.filter(p => p.is_reserve || (p.team_order === undefined || p.team_order === null))
+        };
+      }
+
+      // Legacy fallback
       return {
         blueTeam: participants.filter(p => p.team_assignment === 'blue'),
         redTeam: participants.filter(p => p.team_assignment === 'red'),
@@ -161,6 +201,51 @@ export async function fetchTeamAssignments(
   }
 
   return defaultTeams;
+}
+
+/**
+ * Fetch all match_teams rows with their participants for N-team support.
+ */
+export async function fetchMatchTeamRows(
+  db: Database,
+  matchId: string
+): Promise<MatchTeamRow[]> {
+  try {
+    const teams = await db.all<{
+      id: string; team_name: string; team_color?: string;
+      team_order: number; voice_channel_id?: string; is_reserve: number;
+    }>(`
+      SELECT id, team_name, team_color, team_order, voice_channel_id, is_reserve
+      FROM match_teams WHERE match_id = ? ORDER BY is_reserve ASC, team_order ASC
+    `, [matchId]);
+
+    if (!teams || teams.length === 0) return [];
+
+    const result: MatchTeamRow[] = [];
+    for (const team of teams) {
+      const participants = await db.all<Participant>(`
+        SELECT mp.username, mp.team_assignment, mp.discord_user_id
+        FROM match_participants mp
+        WHERE mp.match_id = ? AND mp.team_id = ?
+        ORDER BY mp.username ASC
+      `, [matchId, team.id]);
+
+      result.push({
+        id: team.id,
+        team_name: team.team_name,
+        team_color: team.team_color,
+        team_order: team.team_order,
+        voice_channel_id: team.voice_channel_id,
+        is_reserve: Boolean(team.is_reserve),
+        participants
+      });
+    }
+
+    return result;
+  } catch (error) {
+    logger.error('Error fetching match team rows:', error);
+    return [];
+  }
 }
 
 /**

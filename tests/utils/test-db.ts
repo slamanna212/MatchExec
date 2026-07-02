@@ -204,10 +204,8 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
   // Enable WAL mode for better concurrency
   await wrappedDb.exec('PRAGMA journal_mode=WAL');
   await wrappedDb.exec('PRAGMA synchronous=NORMAL');
-  // Note: Foreign key constraints are intentionally left off (SQLite default).
-  // Enabling PRAGMA foreign_keys=ON reveals a pre-existing schema issue where
-  // the "matches" table has a malformed FK reference to "game_maps". This should
-  // be fixed in the migration schema, then FK constraints can be enabled here.
+  // Note: Foreign key constraints are left off (SQLite default).
+  // The schema issue with matches.map_id referencing game_maps was fixed in migration 018.
 
   // Run migrations
   const migrationsDir = path.join(process.cwd(), 'migrations');
@@ -237,6 +235,7 @@ export async function resetTestDatabase(): Promise<void> {
   for (const table of tables) {
     await wrappedDb.exec(`DELETE FROM ${table.name}`);
   }
+
 }
 
 export async function teardownTestDatabase(): Promise<void> {

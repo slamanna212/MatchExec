@@ -11,7 +11,17 @@ export async function GET(
     const { tournamentId } = await params;
     const db = await getDbInstance();
 
-    // Get all teams with their match statistics
+    const tournament = await db.get<{ format: string }>(
+      'SELECT format FROM tournaments WHERE id = ?',
+      [tournamentId]
+    );
+    if (!tournament) return apiError('Tournament not found', 404);
+
+    if (tournament.format === 'cumulative-points') {
+      return apiOk({ standings: await getCumulativeStandings(tournamentId) });
+    }
+
+    // Bracket (single/double-elimination) standings
     const standings = await db.all<{
       team_id: string;
       team_name: string;
@@ -41,4 +51,39 @@ export async function GET(
     logger.error('Error fetching tournament standings:', error);
     return apiError('Failed to fetch tournament standings');
   }
+}
+
+async function getCumulativeStandings(tournamentId: string) {
+  const db = await getDbInstance();
+
+  // Sum points_awarded from match_game_placements for all matches in this tournament
+  const rows = await db.all<{
+    participant_id: string;
+    username: string;
+    total_points: number;
+    matches_played: number;
+    best_position: number | null;
+  }>(`
+    SELECT
+      mp.id as participant_id,
+      mp.username,
+      COALESCE(SUM(mgp.points_awarded), 0) as total_points,
+      COUNT(DISTINCT mg.match_id) as matches_played,
+      MIN(mgp.position) as best_position
+    FROM match_participants mp
+    JOIN matches m ON mp.match_id = m.id AND m.tournament_id = ?
+    LEFT JOIN match_game_placements mgp ON mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
+    LEFT JOIN match_games mg ON mg.id = mgp.match_game_id AND mg.match_id = m.id
+    GROUP BY mp.id, mp.username
+    ORDER BY total_points DESC, best_position ASC, mp.username ASC
+  `, [tournamentId]);
+
+  return rows.map((r, idx) => ({
+    rank: idx + 1,
+    participant_id: r.participant_id,
+    username: r.username,
+    total_points: r.total_points,
+    matches_played: r.matches_played,
+    best_position: r.best_position,
+  }));
 }

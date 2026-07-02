@@ -1,6 +1,7 @@
 import type { Client, Message } from 'discord.js';
 import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
+import type { StatsReportHandler } from './stats-report-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import fs from 'fs';
@@ -382,6 +383,7 @@ export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
+  private statsReportHandler: StatsReportHandler | null = null;
 
   constructor(
     private client: Client,
@@ -400,6 +402,10 @@ export class QueueProcessor {
 
   setWinnerVoteHandler(handler: WinnerVoteHandler) {
     this.winnerVoteHandler = handler;
+  }
+
+  setStatsReportHandler(handler: StatsReportHandler) {
+    this.statsReportHandler = handler;
   }
 
   async processAnnouncementQueue() {
@@ -1647,11 +1653,44 @@ export class QueueProcessor {
       this.processDiscordBotRequests(),
       this.processMatchEditQueue(),
       this.processHealthAlertQueue(),
+      this.processStatsReportQueue(),
       // Must run in order: map code → winner vote → scorecard
       this.processMapCodeQueue()
         .then(() => this.processWinnerVoteQueue())
         .then(() => this.processScorecardPromptQueue()),
     ]);
+  }
+
+  async processStatsReportQueue() {
+    if (!this.client.isReady() || !this.db || !this.statsReportHandler) return;
+
+    try {
+      const pending = await this.db.all<{ id: string; match_id: string }>(
+        `SELECT id, match_id FROM discord_stats_report_queue WHERE status = 'pending' LIMIT 3`
+      );
+
+      for (const item of (pending || [])) {
+        try {
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'processing', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+          await this.statsReportHandler.processMatch(item.match_id);
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'completed', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+        } catch (err) {
+          logger.error(`Error processing stats report queue item ${item.id}:`, err);
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'failed', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [err instanceof Error ? err.message : 'Unknown error', item.id]
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing stats report queue:', error);
+    }
   }
 
   async processHealthAlertQueue() {

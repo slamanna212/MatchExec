@@ -21,11 +21,15 @@ interface TeamRecord {
 
 interface TournamentRecord {
   id: string;
+  name?: string;
   game_id: string;
   game_mode_id: string;
   rounds_per_match: number;
   ruleset: string;
   event_image_url?: string | null;
+  announcements?: string | null;
+  player_notifications?: number;
+  stats_enabled?: number;
 }
 
 interface MatchResult {
@@ -94,6 +98,8 @@ export interface GeneratedMatch {
   team2_id?: string; // Tournament team ID for blue team
   event_image_url?: string | null;
   stats_enabled?: number;
+  announcements?: string | null;
+  player_notifications?: number;
 }
 
 /**
@@ -153,7 +159,7 @@ export async function generateSingleEliminationMatches(
     throw new Error('Tournament not found');
   }
 
-  const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl } = await fetchTournamentInfo(db, tournamentId);
+  const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl, tournamentAnnouncements, tournamentPlayerNotifications } = await fetchTournamentInfo(db, tournamentId);
   const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
 
   const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
@@ -170,16 +176,20 @@ export async function generateSingleEliminationMatches(
     tournamentEventImageUrl,
     gameModes,
     tournamentMaps,
-    startTime
+    startTime,
+    tournamentAnnouncements,
+    tournamentPlayerNotifications
   );
 }
 
 async function fetchTournamentInfo(db: Database, tournamentId: string) {
-  const tournament = await db.get('SELECT ruleset, description, event_image_url FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null; event_image_url: string | null } | undefined;
+  const tournament = await db.get('SELECT ruleset, description, event_image_url, announcements, player_notifications FROM tournaments WHERE id = ?', [tournamentId]) as { ruleset: string; description: string | null; event_image_url: string | null; announcements: string | null; player_notifications: number | null } | undefined;
   return {
     tournamentRuleset: tournament?.ruleset || 'casual',
     tournamentDescription: tournament?.description || null,
     tournamentEventImageUrl: tournament?.event_image_url || null,
+    tournamentAnnouncements: tournament?.announcements ?? null,
+    tournamentPlayerNotifications: tournament?.player_notifications ?? 1,
   };
 }
 
@@ -273,7 +283,9 @@ async function generateMatchesFromPairings(
   tournamentEventImageUrl: string | null,
   gameModes: GameMode[],
   tournamentMaps: GameMap[],
-  startTime?: Date
+  startTime?: Date,
+  tournamentAnnouncements?: string | null,
+  tournamentPlayerNotifications?: number
 ): Promise<GeneratedMatch[]> {
   const matches: GeneratedMatch[] = [];
 
@@ -307,7 +319,9 @@ async function generateMatchesFromPairings(
       primaryMode!,
       team1Assignment,
       team2Assignment,
-      startTime
+      startTime,
+      tournamentAnnouncements,
+      tournamentPlayerNotifications
     );
 
     matches.push(generatedMatch);
@@ -386,7 +400,9 @@ function createMatchRecord(
   primaryMode: GameMode,
   team1Assignment: BracketAssignment,
   team2Assignment: BracketAssignment,
-  startTime?: Date
+  startTime?: Date,
+  tournamentAnnouncements?: string | null,
+  tournamentPlayerNotifications?: number
 ): GeneratedMatch {
   return {
     id: matchId,
@@ -410,6 +426,8 @@ function createMatchRecord(
     team1_id: team1Assignment.teamId,
     team2_id: team2Assignment.teamId,
     event_image_url: tournamentEventImageUrl || undefined,
+    announcements: tournamentAnnouncements ?? null,
+    player_notifications: tournamentPlayerNotifications ?? 1,
   };
 }
 
@@ -577,6 +595,8 @@ async function generateNextRoundMatchesFromWinners(
       team1_id: winner1TeamId,
       team2_id: winner2TeamId,
       event_image_url: tournament.event_image_url || undefined,
+      announcements: tournament.announcements ?? null,
+      player_notifications: tournament.player_notifications ?? 1,
     };
 
     matches.push(generatedMatch);
@@ -605,6 +625,94 @@ export async function generateDoubleEliminationMatches(
     roundsPerMatch,
     _startTime
   );
+}
+
+/**
+ * Generate a single group match for a cumulative-points tournament.
+ * All tournament participants compete together; position/FFA results accumulate over events.
+ */
+export async function generateCumulativeMatches(
+  tournamentId: string,
+  gameId: string,
+  roundsPerMatch: number,
+  startTime?: Date
+): Promise<{ matches: GeneratedMatch[]; tournamentMatches: TournamentMatchInfo[] }> {
+  const db = await getDbInstance();
+
+  const tournament = await db.get<TournamentRecord>('SELECT * FROM tournaments WHERE id = ?', [tournamentId]);
+  if (!tournament) throw new Error('Tournament not found');
+
+  const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl, tournamentAnnouncements, tournamentPlayerNotifications } = await fetchTournamentInfo(db, tournamentId);
+  const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
+
+  const tournamentMaps = filterTournamentMaps(gameMaps);
+  if (tournamentMaps.length === 0) throw new Error('No tournament-eligible maps found');
+
+  const mode = gameModes.find(m => m.id === tournament.game_mode_id) ?? gameModes[0];
+  const selectedMap = tournamentMaps[0];
+  const mapList = tournamentMaps.slice(0, roundsPerMatch).map(m => m.id);
+
+  const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const farFuture = new Date('2099-12-31T23:59:59.999Z');
+
+  const generatedMatch: GeneratedMatch = {
+    id: matchId,
+    name: tournament.name ?? 'Cumulative Match',
+    description: tournamentDescription ?? undefined,
+    game_id: gameId,
+    game_mode_id: mode.id,
+    map_id: selectedMap.id,
+    maps: mapList,
+    rounds_per_match: roundsPerMatch,
+    max_participants: 999,
+    status: 'gather',
+    match_type: 'tournament',
+    tournament_id: tournamentId,
+    tournament_round: 1,
+    tournament_bracket_type: 'winners',
+    rules: tournamentRuleset,
+    scheduled_time: startTime ?? farFuture,
+    event_image_url: tournamentEventImageUrl,
+    announcements: tournamentAnnouncements,
+    player_notifications: tournamentPlayerNotifications,
+  };
+
+  const tournamentMatchInfo: TournamentMatchInfo = {
+    id: matchId,
+    tournament_id: tournamentId,
+    round: 1,
+    bracket_type: 'winners',
+    match_order: 1,
+  };
+
+  return { matches: [generatedMatch], tournamentMatches: [tournamentMatchInfo] };
+}
+
+/**
+ * Add all tournament team members as participants to a cumulative match.
+ */
+export async function addAllTeamsToMatch(tournamentId: string, matchId: string): Promise<void> {
+  const db = await getDbInstance();
+
+  const teams = await db.all<{ id: string; team_name: string }>(`
+    SELECT id, team_name FROM tournament_teams WHERE tournament_id = ? ORDER BY created_at
+  `, [tournamentId]);
+
+  for (const team of teams) {
+    const members = await db.all<{ user_id: string; discord_user_id: string | null; username: string; is_captain: number }>(`
+      SELECT user_id, discord_user_id, username, is_captain
+      FROM tournament_team_members WHERE team_id = ?
+    `, [team.id]);
+
+    for (const member of members) {
+      const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      await db.run(`
+        INSERT OR IGNORE INTO match_participants
+          (id, match_id, user_id, discord_user_id, username, receives_map_codes, joined_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, member.is_captain ? 1 : 0]);
+    }
+  }
 }
 
 /**
@@ -718,6 +826,8 @@ async function generateLosersBracketMatchesFromTeams(
       team1_id: team1Id,
       team2_id: team2Id,
       event_image_url: tournament.event_image_url || undefined,
+      announcements: tournament.announcements ?? null,
+      player_notifications: tournament.player_notifications ?? 1,
     };
 
     matches.push(generatedMatch);
@@ -793,6 +903,8 @@ export async function generateGrandFinalsMatch(
     team1_id: winnersBracketWinnerId,
     team2_id: losersBracketWinnerId,
     event_image_url: tournament.event_image_url || undefined,
+    announcements: tournament.announcements ?? null,
+    player_notifications: tournament.player_notifications ?? 1,
   };
 
   return [grandFinalsMatch];
@@ -815,17 +927,17 @@ async function insertMatch(
       max_participants, status, tournament_id,
       tournament_round, tournament_bracket_type, start_date, start_time,
       team1_name, team2_name, red_team_id, blue_team_id, announcements, rules,
-      event_image_url, stats_enabled, created_at, updated_at
+      event_image_url, stats_enabled, player_notifications, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     match.id, match.name, match.description || null, match.game_id, match.game_mode_id, match.map_id,
     match.maps ? JSON.stringify(match.maps) : null, match.rounds_per_match,
     match.max_participants, match.status, match.tournament_id,
     match.tournament_round, match.tournament_bracket_type, scheduledDate,
     scheduledDateTime, match.team1_name, match.team2_name,
-    match.team2_id, match.team1_id, 1, match.rules || 'casual',
-    match.event_image_url || null, match.stats_enabled ?? 0
+    match.team2_id, match.team1_id, match.announcements ?? null, match.rules || 'casual',
+    match.event_image_url || null, match.stats_enabled ?? 0, match.player_notifications ?? 1
   ]);
 }
 

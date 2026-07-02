@@ -104,6 +104,14 @@ describe('Database Migrations', () => {
       expect(tableNames).toContain('discord_match_edit_queue');
       expect(tableNames).toContain('tournament_round_byes');
 
+      // Migration 019 tables (scoring rewrite — match_teams + match_game_placements)
+      expect(tableNames).toContain('match_teams');
+      expect(tableNames).toContain('match_game_placements');
+
+      // Migration 022 tables (series)
+      expect(tableNames).toContain('series');
+      expect(tableNames).toContain('series_events');
+
       // Verify key columns from ALTER TABLE migrations (catches partial migration bugs)
       const discordSettingsCols = await db.all<{ name: string }>('PRAGMA table_info(discord_settings)');
       const discordColNames = discordSettingsCols.map((c: any) => c.name);
@@ -112,12 +120,23 @@ describe('Database Migrations', () => {
 
       const tournamentCols = await db.all<{ name: string }>('PRAGMA table_info(tournaments)');
       const tournamentColNames = tournamentCols.map((c: any) => c.name);
-      expect(tournamentColNames).toContain('game_mode_id');         // migration 007
-      expect(tournamentColNames).toContain('allow_match_editing');  // migration 008
+      expect(tournamentColNames).toContain('game_mode_id');              // migration 007
+      expect(tournamentColNames).toContain('allow_match_editing');       // migration 008
+      expect(tournamentColNames).toContain('position_scoring_override'); // migration 019
 
       const participantCols = await db.all<{ name: string }>('PRAGMA table_info(match_participants)');
       const participantColNames = participantCols.map((c: any) => c.name);
       expect(participantColNames).toContain('avatar_url'); // migration 008
+      expect(participantColNames).toContain('team_id');    // migration 019
+
+      const matchCols = await db.all<{ name: string }>('PRAGMA table_info(matches)');
+      const matchColNames = matchCols.map((c: any) => c.name);
+      expect(matchColNames).toContain('team_count');                  // migration 019
+      expect(matchColNames).toContain('position_scoring_override');   // migration 019
+
+      const gameModeCols = await db.all<{ name: string }>('PRAGMA table_info(game_modes)');
+      const gameModeColNames = gameModeCols.map((c: any) => c.name);
+      expect(gameModeColNames).toContain('setup_components'); // migration 019
     } finally {
       await db.close();
     }

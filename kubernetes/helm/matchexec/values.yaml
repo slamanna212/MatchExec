@@ -5,7 +5,7 @@ fullnameOverride: ""
 
 image:
   # -- Container image repository
-  repository: matchexec
+  repository: ghcr.io/slamanna212/matchexec
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Image tag (defaults to Chart.appVersion)
@@ -37,10 +37,22 @@ logging:
   json: true
 
 service:
-  # -- Service type
+  # -- Service type (ClusterIP, LoadBalancer, NodePort)
   type: ClusterIP
   # -- Service port
   port: 80
+  # -- Annotations to add to the Service (e.g. for MetalLB)
+  # Example (MetalLB annotation-based IP assignment):
+  #   metallb.universe.tf/loadBalancerIPs: 192.168.1.100
+  #   metallb.universe.tf/address-pool: default
+  annotations: {}
+  # -- Static IP to request from the load balancer (MetalLB spec-based assignment).
+  # Use annotations above for MetalLB >= 0.13; this field is for older versions.
+  loadBalancerIP: ""
+  # -- LoadBalancer class (e.g. "metallb" when multiple LB controllers exist)
+  loadBalancerClass: ""
+  # -- External traffic policy (Cluster or Local). Local preserves client source IP.
+  externalTrafficPolicy: ""
 
 ingress:
   # -- Enable ingress
