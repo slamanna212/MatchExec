@@ -160,6 +160,7 @@ export async function PUT(
     if (body.announcements !== undefined) { updates.push('announcements = ?'); values.push(body.announcements ? JSON.stringify(body.announcements) : null); }
     if (body.playerNotifications !== undefined) { updates.push('player_notifications = ?'); values.push(body.playerNotifications === false ? 0 : 1); }
     if (body.allowMatchEditing !== undefined) { updates.push('allow_match_editing = ?'); values.push(body.allowMatchEditing === false ? 0 : 1); }
+    if (body.positionScoringOverride !== undefined) { updates.push('position_scoring_override = ?'); values.push(body.positionScoringOverride || null); }
 
     if (updates.length === 0) return apiError('No valid fields to update', 400);
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockRequest, parseResponse, createRouteParams } from '../../utils/api-helpers';
-import { seedBasicTestData, createTournament } from '../../utils/fixtures';
+import { seedBasicTestData, createTournament, createGameMode, createMatch, createMatchParticipant } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 
 import { GET as getHealth } from '@/app/api/health/route';
@@ -242,6 +242,50 @@ describe('Misc Routes', () => {
       expect(status).toBe(200);
       expect(data.standings.length).toBeGreaterThan(0);
       expect(data.standings[0].team_name).toBe('Alpha');
+    });
+
+    it('returns per-participant leaderboard for cumulative-points tournaments, only counting completed games', async () => {
+      const ffaMode = await createGameMode(game.id, { scoring_type: 'FFA' });
+      const tournament = await createTournament(game.id, { game_mode_id: ffaMode.id, format: 'cumulative-points' });
+      const match = await createMatch(game.id, ffaMode.id, { status: 'battle' });
+      await db.run(`UPDATE matches SET tournament_id = ? WHERE id = ?`, [tournament.id, match.id]);
+
+      const p1 = await createMatchParticipant(match.id, 'd1', 'Alice');
+      const p2 = await createMatchParticipant(match.id, 'd2', 'Bob');
+
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, status) VALUES ('mg-complete', ?, 1, 'completed')`,
+        [match.id]
+      );
+      await db.run(
+        `INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
+         VALUES ('pl1', 'mg-complete', 'participant', ?, 1, 25, 1), ('pl2', 'mg-complete', 'participant', ?, 2, 18, 0)`,
+        [p1.id, p2.id]
+      );
+
+      // A pending (not completed) game's placements must not count toward the total.
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, status) VALUES ('mg-pending', ?, 2, 'pending')`,
+        [match.id]
+      );
+      await db.run(
+        `INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
+         VALUES ('pl3', 'mg-pending', 'participant', ?, 1, 999, 1)`,
+        [p1.id]
+      );
+
+      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/standings`);
+      const response = await getTournamentStandings(request, createRouteParams({ tournamentId: tournament.id }));
+      const { status, data } = await parseResponse(response);
+
+      expect(status).toBe(200);
+      expect(data.standings).toHaveLength(2);
+      const alice = data.standings.find((s: { username: string }) => s.username === 'Alice');
+      const bob = data.standings.find((s: { username: string }) => s.username === 'Bob');
+      expect(alice).toMatchObject({ total_points: 25, matches_played: 1, best_position: 1 });
+      expect(bob).toMatchObject({ total_points: 18, matches_played: 1, best_position: 2 });
+      expect(data.standings[0].rank).toBe(1);
+      expect(data.standings[0].username).toBe('Alice');
     });
   });
 

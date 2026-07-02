@@ -19,6 +19,7 @@ import { modals } from '@mantine/modals';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentInfoPanel } from '@/components/tournament-details/TournamentInfoPanel';
 import { TournamentContentPanel } from '@/components/tournament-details/TournamentContentPanel';
+import type { CumulativeStanding } from '@/components/tournament/leaderboard-view';
 import { showError, notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -85,7 +86,7 @@ export default function TournamentPage({
   const [tournament, setTournament] = useState<TournamentWithGame | null>(null);
   const [teams, setTeams] = useState<TeamWithMembers[]>([]);
   const [matches, setMatches] = useState<BracketMatch[]>([]);
-  const [standings, setStandings] = useState<TeamStanding[]>([]);
+  const [standings, setStandings] = useState<(TeamStanding | CumulativeStanding)[]>([]);
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

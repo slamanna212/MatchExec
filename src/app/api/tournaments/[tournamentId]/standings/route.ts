@@ -68,12 +68,12 @@ async function getCumulativeStandings(tournamentId: string) {
       mp.id as participant_id,
       mp.username,
       COALESCE(SUM(mgp.points_awarded), 0) as total_points,
-      COUNT(DISTINCT mg.match_id) as matches_played,
+      COUNT(DISTINCT mg.id) as matches_played,
       MIN(mgp.position) as best_position
     FROM match_participants mp
     JOIN matches m ON mp.match_id = m.id AND m.tournament_id = ?
-    LEFT JOIN match_game_placements mgp ON mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
-    LEFT JOIN match_games mg ON mg.id = mgp.match_game_id AND mg.match_id = m.id
+    LEFT JOIN match_games mg ON mg.match_id = m.id AND mg.status = 'completed'
+    LEFT JOIN match_game_placements mgp ON mgp.match_game_id = mg.id AND mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
     GROUP BY mp.id, mp.username
     ORDER BY total_points DESC, best_position ASC, mp.username ASC
   `, [tournamentId]);

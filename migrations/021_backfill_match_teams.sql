@@ -2,7 +2,39 @@
 -- Runs after 019 and 020. Safe to run multiple times (INSERT OR IGNORE throughout).
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 1. Create match_teams rows for Normal matches (scoring_type = 'Normal' or NULL mode)
+-- 0. Effective scoring_type per match.
+--    Prefers the live game_modes row. When a match's mode_id no longer
+--    resolves (the mode was renamed/removed in a later data re-seed), infer
+--    the type from the shape of its own match_games data instead of
+--    defaulting to 'Normal' — defaulting would fabricate Blue/Red match_teams
+--    for what was actually an FFA/Position match AND (since the FFA/Position
+--    sections below require a real scoring_type match) permanently skip
+--    migrating its real result data. Every match gets exactly one row here,
+--    so every section below can INNER JOIN it consistently instead of mixing
+--    LEFT/INNER JOINs against game_modes directly.
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TEMP TABLE IF NOT EXISTS _backfill_scoring_type AS
+SELECT
+  m.id AS match_id,
+  COALESCE(
+    gm.scoring_type,
+    CASE
+      WHEN EXISTS (
+        SELECT 1 FROM match_games mg
+        WHERE mg.match_id = m.id AND mg.position_results IS NOT NULL AND mg.position_results != ''
+      ) THEN 'Position'
+      WHEN EXISTS (
+        SELECT 1 FROM match_games mg
+        WHERE mg.match_id = m.id AND mg.participant_winner_id IS NOT NULL
+      ) THEN 'FFA'
+      ELSE 'Normal'
+    END
+  ) AS scoring_type
+FROM matches m
+LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 1. Create match_teams rows for Normal matches
 --    Blue team (order=0, #4A90E2) and Red team (order=1, #E04A4A)
 -- ────────────────────────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_color, team_order, voice_channel_id, is_reserve)
@@ -15,8 +47,8 @@ SELECT
   m.blue_team_voice_channel,
   0
 FROM matches m
-LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL);
+JOIN _backfill_scoring_type bst ON bst.match_id = m.id
+WHERE bst.scoring_type = 'Normal';
 
 INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_color, team_order, voice_channel_id, is_reserve)
 SELECT
@@ -28,8 +60,8 @@ SELECT
   m.red_team_voice_channel,
   0
 FROM matches m
-LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL);
+JOIN _backfill_scoring_type bst ON bst.match_id = m.id
+WHERE bst.scoring_type = 'Normal';
 
 -- Reserve team for Normal matches (catches participants with team_assignment='reserve')
 -- Only created if there are reserve participants
@@ -43,8 +75,8 @@ SELECT
   NULL,
   1
 FROM matches m
-LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL)
+JOIN _backfill_scoring_type bst ON bst.match_id = m.id
+WHERE bst.scoring_type = 'Normal'
   AND EXISTS (
     SELECT 1 FROM match_participants mp
     WHERE mp.match_id = m.id AND mp.team_assignment = 'reserve'
@@ -63,9 +95,8 @@ SELECT
   NULL,
   0
 FROM match_participants mp
-JOIN matches m ON m.id = mp.match_id
-JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE gm.scoring_type = 'FFA';
+JOIN _backfill_scoring_type bst ON bst.match_id = mp.match_id
+WHERE bst.scoring_type = 'FFA';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3. Create match_teams rows for Position individual matches (one per participant)
@@ -80,9 +111,8 @@ SELECT
   NULL,
   0
 FROM match_participants mp
-JOIN matches m ON m.id = mp.match_id
-JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE gm.scoring_type = 'Position';
+JOIN _backfill_scoring_type bst ON bst.match_id = mp.match_id
+WHERE bst.scoring_type = 'Position';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 4. Backfill match_participants.team_id for Normal matches
@@ -91,33 +121,21 @@ WHERE gm.scoring_type = 'Position';
 UPDATE match_participants
 SET team_id = 'mt_blue_' || match_id
 WHERE team_assignment = 'blue'
-  AND match_id IN (
-    SELECT m.id FROM matches m
-    LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-    WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL)
-  )
+  AND match_id IN (SELECT match_id FROM _backfill_scoring_type WHERE scoring_type = 'Normal')
   AND team_id IS NULL;
 
 -- red → Red team row
 UPDATE match_participants
 SET team_id = 'mt_red_' || match_id
 WHERE team_assignment = 'red'
-  AND match_id IN (
-    SELECT m.id FROM matches m
-    LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-    WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL)
-  )
+  AND match_id IN (SELECT match_id FROM _backfill_scoring_type WHERE scoring_type = 'Normal')
   AND team_id IS NULL;
 
 -- reserve → Reserve team row
 UPDATE match_participants
 SET team_id = 'mt_reserve_' || match_id
 WHERE team_assignment = 'reserve'
-  AND match_id IN (
-    SELECT m.id FROM matches m
-    LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-    WHERE (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL)
-  )
+  AND match_id IN (SELECT match_id FROM _backfill_scoring_type WHERE scoring_type = 'Normal')
   AND team_id IS NULL;
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -125,11 +143,7 @@ WHERE team_assignment = 'reserve'
 -- ────────────────────────────────────────────────────────────────────────────
 UPDATE match_participants
 SET team_id = 'mt_ffa_' || id
-WHERE match_id IN (
-    SELECT m.id FROM matches m
-    JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-    WHERE gm.scoring_type = 'FFA'
-  )
+WHERE match_id IN (SELECT match_id FROM _backfill_scoring_type WHERE scoring_type = 'FFA')
   AND team_id IS NULL;
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -137,11 +151,7 @@ WHERE match_id IN (
 -- ────────────────────────────────────────────────────────────────────────────
 UPDATE match_participants
 SET team_id = 'mt_pos_' || id
-WHERE match_id IN (
-    SELECT m.id FROM matches m
-    JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-    WHERE gm.scoring_type = 'Position'
-  )
+WHERE match_id IN (SELECT match_id FROM _backfill_scoring_type WHERE scoring_type = 'Position')
   AND team_id IS NULL;
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -171,10 +181,9 @@ SELECT
   CASE mg.winner_id WHEN 'team1' THEN mg.score_a ELSE mg.score_b END,
   1
 FROM match_games mg
-JOIN matches m ON m.id = mg.match_id
-LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+JOIN _backfill_scoring_type bst ON bst.match_id = mg.match_id
 WHERE mg.winner_id IN ('team1', 'team2')
-  AND (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL);
+  AND bst.scoring_type = 'Normal';
 
 -- losing team
 INSERT OR IGNORE INTO match_game_placements (id, match_game_id, entity_type, entity_id, position, score, is_winner)
@@ -190,10 +199,9 @@ SELECT
   CASE mg.winner_id WHEN 'team1' THEN mg.score_b ELSE mg.score_a END,
   0
 FROM match_games mg
-JOIN matches m ON m.id = mg.match_id
-LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+JOIN _backfill_scoring_type bst ON bst.match_id = mg.match_id
 WHERE mg.winner_id IN ('team1', 'team2')
-  AND (gm.scoring_type = 'Normal' OR gm.scoring_type IS NULL OR m.mode_id IS NULL);
+  AND bst.scoring_type = 'Normal';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 9. Backfill match_game_placements for FFA matches (participant_winner_id)
@@ -207,9 +215,8 @@ SELECT
   1,
   1
 FROM match_games mg
-JOIN matches m ON m.id = mg.match_id
-JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-WHERE gm.scoring_type = 'FFA'
+JOIN _backfill_scoring_type bst ON bst.match_id = mg.match_id
+WHERE bst.scoring_type = 'FFA'
   AND mg.participant_winner_id IS NOT NULL;
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -226,9 +233,10 @@ SELECT
   CAST(json_extract(mg.points_awarded, '$.' || je.key) AS INTEGER),
   CASE WHEN CAST(je.value AS INTEGER) = 1 THEN 1 ELSE 0 END
 FROM match_games mg
-JOIN matches m ON m.id = mg.match_id
-JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+JOIN _backfill_scoring_type bst ON bst.match_id = mg.match_id
 JOIN json_each(mg.position_results) je
-WHERE gm.scoring_type = 'Position'
+WHERE bst.scoring_type = 'Position'
   AND mg.position_results IS NOT NULL
   AND mg.position_results != '';
+
+DROP TABLE IF EXISTS _backfill_scoring_type;

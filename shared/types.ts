@@ -63,7 +63,7 @@ export interface Tournament {
   id: string;
   name: string;
   description?: string;
-  format: 'single-elimination' | 'double-elimination';
+  format: 'single-elimination' | 'double-elimination' | 'cumulative-points';
   status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   game_id: string;
   rounds_per_match: number;
@@ -76,6 +76,8 @@ export interface Tournament {
   announcements?: string;
   player_notifications?: number;
   livestream_link?: string;
+  /** JSON-stringified PositionScoringConfig — per-tournament override of the game's default spread. */
+  position_scoring_override?: string;
   created_at: Date;
   updated_at: Date;
 }

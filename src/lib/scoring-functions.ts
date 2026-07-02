@@ -27,16 +27,21 @@ export async function getTeamName(teamId: string): Promise<string | null> {
 }
 
 /**
- * Resolve position points for a match, honouring per-match override before game default
+ * Resolve position points for a match, honouring the 3-level override chain:
+ * match-level override → tournament-level override (if the match belongs to
+ * a tournament) → game default.
  */
 export async function getPointsForPositionByMatchId(position: number, matchId: string): Promise<number> {
   const db = await getDbInstance();
-  const row = await db.get<{ position_scoring_override?: string; scoring_config?: string }>(
-    `SELECT m.position_scoring_override, g.scoring_config
-     FROM matches m JOIN games g ON m.game_id = g.id WHERE m.id = ?`,
+  const row = await db.get<{ position_scoring_override?: string; tournament_scoring_override?: string; scoring_config?: string }>(
+    `SELECT m.position_scoring_override, t.position_scoring_override as tournament_scoring_override, g.scoring_config
+     FROM matches m
+     JOIN games g ON m.game_id = g.id
+     LEFT JOIN tournaments t ON m.tournament_id = t.id
+     WHERE m.id = ?`,
     [matchId]
   );
-  const raw = row?.position_scoring_override ?? row?.scoring_config;
+  const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
   if (!raw) return 0;
   try {
     const config = JSON.parse(raw) as PositionScoringConfig;
@@ -48,7 +53,9 @@ export async function getPointsForPositionByMatchId(position: number, matchId: s
 
 /**
  * Calculate points awarded for position results.
- * Checks per-match position_scoring_override before falling back to game scoring_config.
+ * Checks the 3-level override chain: match-level position_scoring_override →
+ * tournament-level position_scoring_override (if the match belongs to a
+ * tournament) → game scoring_config default.
  * @param positionResults - participantId → 1-based position
  * @param matchGameId - match_games.id (used to resolve the match and its overrides)
  */
@@ -59,16 +66,17 @@ export async function calculatePositionPoints(
   const db = await getDbInstance();
 
   try {
-    const row = await db.get<{ position_scoring_override?: string; scoring_config?: string }>(
-      `SELECT m.position_scoring_override, g.scoring_config
+    const row = await db.get<{ position_scoring_override?: string; tournament_scoring_override?: string; scoring_config?: string }>(
+      `SELECT m.position_scoring_override, t.position_scoring_override as tournament_scoring_override, g.scoring_config
        FROM match_games mg
        JOIN matches m ON mg.match_id = m.id
        JOIN games g ON m.game_id = g.id
+       LEFT JOIN tournaments t ON m.tournament_id = t.id
        WHERE mg.id = ?`,
       [matchGameId]
     );
 
-    const raw = row?.position_scoring_override ?? row?.scoring_config;
+    const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
     if (!raw) {
       logger.warning('No scoring config found, defaulting to 0 points for all positions');
       return Object.keys(positionResults).reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>);
