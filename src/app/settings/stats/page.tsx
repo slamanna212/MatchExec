@@ -20,6 +20,7 @@ interface StatsSettings {
   providers: Array<{ instanceId: string; providerId: string; model: string; hasKey: boolean }>;
   winner_vote_enabled?: boolean;
   stats_report_dm_enabled?: boolean;
+  ai_processor_version?: 'legacy' | 'v2';
 }
 
 interface ProviderInstance {
@@ -207,6 +208,7 @@ export default function StatsSettingsPage() {
       enabled: false,
       winner_vote_enabled: true,
       stats_report_dm_enabled: false,
+      ai_processor_version: 'v2' as 'legacy' | 'v2',
     },
   });
 
@@ -218,6 +220,7 @@ export default function StatsSettingsPage() {
           enabled: data.enabled,
           winner_vote_enabled: data.winner_vote_enabled ?? true,
           stats_report_dm_enabled: data.stats_report_dm_enabled ?? false,
+          ai_processor_version: data.ai_processor_version ?? 'v2',
         });
 
         setProviders(
@@ -315,7 +318,7 @@ export default function StatsSettingsPage() {
     closeAdd();
   };
 
-  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean }) => {
+  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean; ai_processor_version: 'legacy' | 'v2' }) => {
     setSaving(true);
     try {
       const body = {
@@ -354,7 +357,7 @@ export default function StatsSettingsPage() {
     }
   };
 
-  const handleSave = async (formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean }) => {
+  const handleSave = async (formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean; ai_processor_version: 'legacy' | 'v2' }) => {
     await saveProviders(providers, formValues);
   };
 
@@ -529,6 +532,17 @@ export default function StatsSettingsPage() {
                 description="Send each participant a personalized DM with their match stats after the match completes and all scorecards are reviewed."
                 checked={form.values.stats_report_dm_enabled}
                 onChange={(e) => form.setFieldValue('stats_report_dm_enabled', e.currentTarget.checked)}
+              />
+
+              <Select
+                label="Extraction Prompt Version"
+                description="'Latest' uses the current mode-aware extraction prompt. Switch to 'Legacy' as a rollback if extraction quality regresses for a specific game or mode."
+                data={[
+                  { value: 'v2', label: 'Latest' },
+                  { value: 'legacy', label: 'Legacy (blue/red only, no position extraction)' },
+                ]}
+                value={form.values.ai_processor_version}
+                onChange={(value) => form.setFieldValue('ai_processor_version', (value as 'legacy' | 'v2') ?? 'v2')}
               />
             </Stack>
           </Card>

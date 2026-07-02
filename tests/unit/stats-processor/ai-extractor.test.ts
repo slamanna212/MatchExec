@@ -229,4 +229,29 @@ describe('AIExtractor', () => {
       expect(mockDb.run).not.toHaveBeenCalled();
     });
   });
+
+  describe('resolveNormalTeamIds', () => {
+    it('maps team_order 0 to blue and 1 to red', async () => {
+      const mockDb = {
+        all: vi.fn().mockResolvedValue([
+          { id: 'mt_blue', team_order: 0 },
+          { id: 'mt_red', team_order: 1 },
+        ]),
+      };
+      const ext = new AIExtractor(mockDb) as unknown as { resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> };
+
+      const result = await ext.resolveNormalTeamIds('match-1');
+
+      expect(result).toEqual({ blue: 'mt_blue', red: 'mt_red' });
+    });
+
+    it('returns an empty map when match_teams has not been created yet', async () => {
+      const mockDb = { all: vi.fn().mockResolvedValue([]) };
+      const ext = new AIExtractor(mockDb) as unknown as { resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> };
+
+      const result = await ext.resolveNormalTeamIds('match-1');
+
+      expect(result).toEqual({});
+    });
+  });
 });
