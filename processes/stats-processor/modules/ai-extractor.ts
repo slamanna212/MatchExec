@@ -68,8 +68,15 @@ export class AIExtractor {
 
       // Load settings
       const settings = await this.db.get(
-        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
+        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key, ai_processor_version FROM stats_settings WHERE id = 1'
       );
+
+      // ai_processor_version is the rollback switch for the scoring_type-aware
+      // extraction prompt: 'legacy' forces the pre-rewrite mode-blind (always
+      // blue/red, no position extraction) behavior if the new prompts turn out
+      // to produce worse extractions for some game/mode combination.
+      const processorVersion: string = settings?.ai_processor_version ?? 'v2';
+      const effectiveScoringType = processorVersion === 'legacy' ? 'Normal' : scoringType;
 
       const providersConfig = settings?.ai_providers_config
         ? JSON.parse(settings.ai_providers_config)
@@ -94,7 +101,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, scoringType);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, effectiveScoringType);
       let rawResponse: string | null = null;
       let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;
@@ -151,19 +158,29 @@ export class AIExtractor {
         [rawResponse, submissionId]
       );
 
+      // Resolve team_side ('blue'/'red') to the match's real match_teams.id
+      // (team_order 0/1) — team_id is the new authoritative FK that replaces
+      // team_side's role; team_side is kept for legacy display only.
+      const teamIdBySide = effectiveScoringType === 'Normal'
+        ? await this.resolveNormalTeamIds(submission.match_id)
+        : null;
+
       // Create scorecard_player_stats rows
       for (const player of extractionResult.players) {
         const statId = crypto.randomUUID();
+        const teamSide = player.teamSide === 'unknown' ? null : player.teamSide;
+        const teamId = teamSide && teamIdBySide ? (teamIdBySide[teamSide] ?? null) : null;
         await this.db.run(
-          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, team_side, stats_json, confidence_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, team_side, team_id, stats_json, confidence_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             statId,
             submissionId,
             submission.match_id,
             submission.match_game_id,
             player.playerName,
-            player.teamSide === 'unknown' ? null : player.teamSide,
+            teamSide,
+            teamId,
             JSON.stringify(player.stats),
             player.confidence,
           ]
@@ -171,12 +188,12 @@ export class AIExtractor {
       }
 
       // Write match_game_placements for FFA/Position modes using extracted positions
-      if (scoringType !== 'Normal' && extractionResult.playerPositions) {
+      if (effectiveScoringType !== 'Normal' && extractionResult.playerPositions) {
         await this.writePlacementsFromPositions(
           submission.match_id,
           submission.match_game_id,
           extractionResult.playerPositions,
-          scoringType
+          effectiveScoringType
         );
       }
 
@@ -284,6 +301,19 @@ export class AIExtractor {
         }
       }
     }
+  }
+
+  private async resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> {
+    const teams = await this.db.all<{ id: string; team_order: number }>(
+      `SELECT id, team_order FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC LIMIT 2`,
+      [matchId]
+    );
+    const bySide: Record<string, string> = {};
+    for (const t of teams) {
+      if (t.team_order === 0) bySide.blue = t.id;
+      else if (t.team_order === 1) bySide.red = t.id;
+    }
+    return bySide;
   }
 
   buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string, scoringType = 'Normal'): string {

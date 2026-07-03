@@ -13,6 +13,7 @@ import {
   POST as addEvent,
 } from '@/app/api/series/[seriesId]/events/route';
 import { GET as getStandings } from '@/app/api/series/[seriesId]/standings/route';
+import { POST as transitionSeries } from '@/app/api/series/[seriesId]/transition/route';
 
 describe('Series API', () => {
   describe('GET /api/series', () => {
@@ -143,7 +144,7 @@ describe('Series API', () => {
       expect(updated.series.name).toBe('After');
     });
 
-    it('updates status to active', async () => {
+    it('ignores a status field instead of applying it — status changes go through POST /transition', async () => {
       const db = getTestDb();
       await new Promise<void>((res, rej) => {
         db.run(
@@ -153,20 +154,85 @@ describe('Series API', () => {
         );
       });
 
-      const req = createMockRequest('PATCH', '/api/series/s_activate', { status: 'active' });
-      await parseResponse(await updateSeries(req, createRouteParams({ seriesId: 's_activate' })));
+      const req = createMockRequest('PATCH', '/api/series/s_activate', { status: 'complete' });
+      const { status } = await parseResponse(await updateSeries(req, createRouteParams({ seriesId: 's_activate' })));
+      expect(status).toBe(200);
 
       const getReq = createMockRequest('GET', '/api/series/s_activate');
       const { data } = await parseResponse(
         await getSeries(getReq, createRouteParams({ seriesId: 's_activate' }))
       );
-      expect(data.series.status).toBe('active');
+      // PATCH must not be able to jump straight to 'complete' — status is untouched.
+      expect(data.series.status).toBe('created');
     });
 
     it('returns 404 for unknown series', async () => {
       const req = createMockRequest('PATCH', '/api/series/nope', { name: 'x' });
       const { status } = await parseResponse(
         await updateSeries(req, createRouteParams({ seriesId: 'nope' }))
+      );
+      expect(status).toBe(404);
+    });
+  });
+
+  describe('POST /api/series/[seriesId]/transition', () => {
+    async function insertSeriesWithStatus(id: string, seriesStatus: string): Promise<void> {
+      const db = getTestDb();
+      await new Promise<void>((res, rej) => {
+        db.run(
+          `INSERT INTO series (id, name, status, announcements, player_notifications, created_at, updated_at)
+           VALUES (?, 'Transition Test', ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [id, seriesStatus],
+          (err: unknown) => err ? rej(err) : res()
+        );
+      });
+    }
+
+    it('allows created -> active', async () => {
+      await insertSeriesWithStatus('s_t1', 'created');
+      const req = createMockRequest('POST', '/api/series/s_t1/transition', { status: 'active' });
+      const { status, data } = await parseResponse(
+        await transitionSeries(req, createRouteParams({ seriesId: 's_t1' }))
+      );
+      expect(status).toBe(200);
+      expect(data.series.status).toBe('active');
+    });
+
+    it('rejects created -> complete (skips active)', async () => {
+      await insertSeriesWithStatus('s_t2', 'created');
+      const req = createMockRequest('POST', '/api/series/s_t2/transition', { status: 'complete' });
+      const { status } = await parseResponse(
+        await transitionSeries(req, createRouteParams({ seriesId: 's_t2' }))
+      );
+      expect(status).toBe(400);
+
+      const getReq = createMockRequest('GET', '/api/series/s_t2');
+      const { data } = await parseResponse(await getSeries(getReq, createRouteParams({ seriesId: 's_t2' })));
+      expect(data.series.status).toBe('created');
+    });
+
+    it('rejects transitioning out of a completed series', async () => {
+      await insertSeriesWithStatus('s_t3', 'complete');
+      const req = createMockRequest('POST', '/api/series/s_t3/transition', { status: 'active' });
+      const { status } = await parseResponse(
+        await transitionSeries(req, createRouteParams({ seriesId: 's_t3' }))
+      );
+      expect(status).toBe(400);
+    });
+
+    it('rejects an invalid status value', async () => {
+      await insertSeriesWithStatus('s_t4', 'created');
+      const req = createMockRequest('POST', '/api/series/s_t4/transition', { status: 'bogus' });
+      const { status } = await parseResponse(
+        await transitionSeries(req, createRouteParams({ seriesId: 's_t4' }))
+      );
+      expect(status).toBe(400);
+    });
+
+    it('returns 404 for unknown series', async () => {
+      const req = createMockRequest('POST', '/api/series/nope/transition', { status: 'active' });
+      const { status } = await parseResponse(
+        await transitionSeries(req, createRouteParams({ seriesId: 'nope' }))
       );
       expect(status).toBe(404);
     });

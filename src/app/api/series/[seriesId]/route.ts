@@ -27,7 +27,13 @@ export async function PATCH(
     const series = await getSeriesById(seriesId);
     if (!series) return apiError('Series not found', 404);
     const body = await request.json();
-    await updateSeries(seriesId, body);
+    // Status changes must go through POST /transition, which validates the
+    // move is legal (e.g. can't jump from 'created' straight to 'complete',
+    // can't un-complete a finished series). Silently dropping it here rather
+    // than erroring keeps this endpoint usable for updating other fields in
+    // the same request without requiring callers to strip it themselves.
+    const { status: _status, ...editableFields } = body;
+    await updateSeries(seriesId, editableFields);
     return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating series:', error);

@@ -28,6 +28,8 @@ interface TournamentBody {
   announcements?: Array<{ id: string; value: number; unit: 'minutes' | 'hours' | 'days' }>;
   playerNotifications?: boolean;
   livestreamLink?: string;
+  /** JSON-stringified PositionScoringConfig — overrides the game's default spread for FFA/Position tournaments. */
+  positionScoringOverride?: string;
 }
 
 function validateTournamentBody(body: Partial<TournamentBody>): string | null {
@@ -63,6 +65,34 @@ async function validateGameModeId(db: Database, gameId: string, gameModeId: stri
   return null;
 }
 
+/**
+ * Cross-check the chosen format against the mode's scoring_type: bracket
+ * formats only make sense for Normal (team vs team) modes; FFA/Position
+ * modes only support cumulative-points. Without this, picking e.g. an FFA
+ * mode with 'single-elimination' either throws an opaque "no game modes
+ * found" error (team_size IS NULL never matches in the bracket-generation
+ * query) or, for Position-individual modes, silently builds a real
+ * elimination bracket pairing one-person "teams".
+ */
+async function validateFormatMatchesScoringType(db: Database, gameId: string, gameModeId: string, format: string): Promise<string | null> {
+  let scoringType: string | undefined;
+  if (gameId === 'overwatch2' && gameModeId.startsWith('ow2-')) {
+    scoringType = 'Normal';
+  } else {
+    const mode = await db.get<{ scoring_type?: string }>('SELECT scoring_type FROM game_modes WHERE id = ? AND game_id = ?', [gameModeId, gameId]);
+    scoringType = mode?.scoring_type ?? 'Normal';
+  }
+
+  const isBracketFormat = format === 'single-elimination' || format === 'double-elimination';
+  if (scoringType === 'Normal' && !isBracketFormat) {
+    return 'Normal (team vs team) modes require single-elimination or double-elimination format';
+  }
+  if (scoringType !== 'Normal' && isBracketFormat) {
+    return `${scoringType} modes don't support brackets — use cumulative-points format`;
+  }
+  return null;
+}
+
 function buildTournamentInsertValues(body: TournamentBody, tournamentId: string, startDateTime: string | null, startTimeOnly: string | null) {
   return [
     tournamentId,
@@ -84,6 +114,7 @@ function buildTournamentInsertValues(body: TournamentBody, tournamentId: string,
     body.announcements ? JSON.stringify(body.announcements) : null,
     body.playerNotifications === false ? 0 : 1,
     body.livestreamLink || null,
+    body.positionScoringOverride || null,
   ];
 }
 
@@ -181,6 +212,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return apiError(gameModeError, 400);
     }
 
+    const formatError = await validateFormatMatchesScoringType(db, body.gameId, body.gameModeId, body.format);
+    if (formatError) {
+      return apiError(formatError, 400);
+    }
+
     const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     const startDateTime = body.startDate ? new Date(body.startDate).toISOString() : null;
     const startTimeOnly = body.startTime ? new Date(body.startTime).toISOString() : null;
@@ -190,8 +226,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
         allow_player_team_selection, allow_match_editing, stats_enabled,
-        announcements, player_notifications, livestream_link
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        announcements, player_notifications, livestream_link, position_scoring_override
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, buildTournamentInsertValues(body, tournamentId, startDateTime, startTimeOnly));
     
     const tournament = await db.get<TournamentDbRow>(`

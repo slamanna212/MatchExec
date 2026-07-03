@@ -81,14 +81,14 @@ export async function createGame(overrides: Partial<typeof defaults.game & { ico
   return { id, name: data.name } as GameFixture;
 }
 
-export async function createGameMode(gameId: string, overrides: Partial<typeof defaults.gameMode> = {}): Promise<GameModeFixture> {
+export async function createGameMode(gameId: string, overrides: Partial<typeof defaults.gameMode & { scoring_type: string }> = {}): Promise<GameModeFixture> {
   const db = getTestDb();
-  const data = { ...defaults.gameMode, ...overrides };
+  const data = { ...defaults.gameMode, scoring_type: 'Normal', ...overrides };
   const id = generateId('mode_');
 
   await db.run(
-    `INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams) VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, gameId, data.name, data.description, data.team_size, data.max_teams]
+    `INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, scoring_type) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, gameId, data.name, data.description, data.team_size, data.max_teams, data.scoring_type]
   );
   return { id, game_id: gameId, name: data.name } as GameModeFixture;
 }
@@ -118,7 +118,7 @@ export async function createMatchParticipant(matchId: string, discordUserId: str
   return { id, match_id: matchId, discord_user_id: discordUserId, username, team };
 }
 
-export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single-elimination' | 'double-elimination'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
+export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single-elimination' | 'double-elimination' | 'cumulative-points'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
   const db = getTestDb();
   const data = { ...defaults.tournament, ...overrides };
   const id = generateId('tournament_');

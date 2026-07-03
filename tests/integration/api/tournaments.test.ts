@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockRequest, parseResponse, createRouteParams } from '../../utils/api-helpers';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { seedBasicTestData, createGameMode } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 import { GET, POST } from '@/app/api/tournaments/route';
 import { GET as getTournament, DELETE as deleteTournament } from '@/app/api/tournaments/[tournamentId]/route';
@@ -123,10 +123,11 @@ describe('Tournaments API', () => {
     });
 
     it('should create tournament with cumulative-points format', async () => {
+      const ffaMode = await createGameMode(game.id, { scoring_type: 'FFA' });
       const request = createMockRequest('POST', '/api/tournaments', {
         name: 'FFA Championship',
         gameId: game.id,
-        gameModeId: mode.id,
+        gameModeId: ffaMode.id,
         format: 'cumulative-points',
         roundsPerMatch: 1,
       });
@@ -137,6 +138,37 @@ describe('Tournaments API', () => {
       expect(status).toBe(201);
       expect(data.id).toBeDefined();
       expect(data.format).toBe('cumulative-points');
+    });
+
+    it('should reject single-elimination format for an FFA mode', async () => {
+      const ffaMode = await createGameMode(game.id, { scoring_type: 'FFA' });
+      const request = createMockRequest('POST', '/api/tournaments', {
+        name: 'Bad FFA Bracket',
+        gameId: game.id,
+        gameModeId: ffaMode.id,
+        format: 'single-elimination',
+        roundsPerMatch: 1,
+      });
+
+      const response = await POST(request);
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
+    });
+
+    it('should reject cumulative-points format for a Normal mode', async () => {
+      const request = createMockRequest('POST', '/api/tournaments', {
+        name: 'Bad Normal Cumulative',
+        gameId: game.id,
+        gameModeId: mode.id,
+        format: 'cumulative-points',
+        roundsPerMatch: 1,
+      });
+
+      const response = await POST(request);
+      const { status } = await parseResponse(response);
+
+      expect(status).toBe(400);
     });
   });
 

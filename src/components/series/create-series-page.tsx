@@ -19,6 +19,8 @@ import { DatePickerInput } from '@mantine/dates';
 import { IconTimeline, IconArrowLeft } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { showError, showSuccess } from '@/lib/notifications';
+import { ScoringConfigEditor } from './scoring-config-editor';
+import type { SeriesScoringConfig } from '@/lib/series';
 
 interface SeriesFormData {
   name: string;
@@ -28,6 +30,7 @@ interface SeriesFormData {
   livestream_link: string;
   announcements: boolean;
   player_notifications: boolean;
+  scoring_config: SeriesScoringConfig;
 }
 
 export function CreateSeriesPage(): JSX.Element {
@@ -41,6 +44,7 @@ export function CreateSeriesPage(): JSX.Element {
     livestream_link: '',
     announcements: true,
     player_notifications: true,
+    scoring_config: {},
   });
 
   const update = <K extends keyof SeriesFormData>(key: K, value: SeriesFormData[K]) => {
@@ -66,6 +70,7 @@ export function CreateSeriesPage(): JSX.Element {
           livestream_link: form.livestream_link.trim() || undefined,
           announcements: form.announcements,
           player_notifications: form.player_notifications,
+          scoring_config: form.scoring_config,
         }),
       });
 
@@ -154,6 +159,13 @@ export function CreateSeriesPage(): JSX.Element {
           description="Send DMs to participants for series events"
           checked={form.player_notifications}
           onChange={(e) => update('player_notifications', e.currentTarget.checked)}
+        />
+
+        <Divider />
+
+        <ScoringConfigEditor
+          value={form.scoring_config}
+          onChange={(v) => update('scoring_config', v)}
         />
 
         <Divider />

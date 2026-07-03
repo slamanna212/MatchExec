@@ -1,11 +1,14 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
+import { getMatchTeams, MAX_VOICE_CHANNELS_PER_MATCH } from './match-setup';
 import type { Database } from '../../lib/database/connection';
 
 interface VoiceChannelCreationResult {
   success: boolean;
   blueChannelId?: string;
   redChannelId?: string;
+  /** N-team aware: one entry per match_teams row a channel was created for, in team_order. */
+  channelIds?: string[];
   message?: string;
 }
 
@@ -190,8 +193,23 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     const isSingleTeam = gameMode?.max_teams === 1;
     logger.debug(`Match ${matchId} is ${isSingleTeam ? 'single-team' : 'dual-team'} mode (max_teams=${gameMode?.max_teams})`);
 
-    // Determine channel names using helper function
-    const { blueChannelName, redChannelName } = await determineChannelNames(db, match, isSingleTeam);
+    // Build one channel name per non-reserve match_teams row (N-team aware),
+    // capped at MAX_VOICE_CHANNELS_PER_MATCH. Falls back to the legacy blue/red
+    // naming when there are 2 or fewer teams (or match_teams hasn't been
+    // created yet), preserving existing channel-naming conventions.
+    const teams = await getMatchTeams(matchId);
+    const activeTeams = teams.filter(t => !t.is_reserve).slice(0, MAX_VOICE_CHANNELS_PER_MATCH);
+
+    let channelNames: string[];
+    if (isSingleTeam) {
+      const { blueChannelName } = await determineChannelNames(db, match, true);
+      channelNames = [blueChannelName];
+    } else if (activeTeams.length > 2) {
+      channelNames = activeTeams.map(t => `${match.name} - ${t.team_name}`);
+    } else {
+      const { blueChannelName, redChannelName } = await determineChannelNames(db, match, false);
+      channelNames = redChannelName ? [blueChannelName, redChannelName] : [blueChannelName];
+    }
 
     // Queue a Discord bot request to create the channels
     const requestId = `voice_create_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -204,13 +222,15 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
       JSON.stringify({
         matchId,
         categoryId: settings.voice_channel_category_id,
-        blueChannelName,
-        redChannelName,
-        isSingleTeam
+        channelNames,
+        // Legacy fields kept for backward compatibility with older bot builds.
+        blueChannelName: channelNames[0],
+        redChannelName: channelNames[1],
+        isSingleTeam: channelNames.length <= 1
       })
     ]);
 
-    logger.debug(`Voice channel creation request queued: ${requestId} (${isSingleTeam ? 'single' : 'dual'} team)`);
+    logger.debug(`Voice channel creation request queued: ${requestId} (${channelNames.length} channel(s))`);
 
     // Wait for the bot to process the request
     return await waitForVoiceChannelCreation(db, requestId, matchId);
@@ -280,13 +300,15 @@ export async function deleteMatchVoiceChannels(matchId: string): Promise<boolean
 export async function trackVoiceChannels(
   matchId: string,
   blueChannelId: string,
-  redChannelId?: string
+  redChannelId?: string,
+  extraChannelIds?: string[]
 ): Promise<void> {
   try {
     const db = await getDbInstance();
 
     if (redChannelId) {
-      // Dual-team match: Track both channels
+      // Dual-team (or N-team) match: track the first two channels under their
+      // legacy names, plus any further channels (3rd+ team) generically.
       const blueId = `auto_voice_${Date.now()}_blue_${Math.random().toString(36).substring(2, 11)}`;
       const redId = `auto_voice_${Date.now()}_red_${Math.random().toString(36).substring(2, 11)}`;
 
@@ -295,7 +317,15 @@ export async function trackVoiceChannels(
         VALUES (?, ?, ?, 'blue'), (?, ?, ?, 'red')
       `, [blueId, matchId, blueChannelId, redId, matchId, redChannelId]);
 
-      logger.debug(`Voice channels tracked for match ${matchId} (dual-team)`);
+      for (let i = 0; i < (extraChannelIds?.length ?? 0); i++) {
+        const extraId = `auto_voice_${Date.now()}_team${i + 3}_${Math.random().toString(36).substring(2, 11)}`;
+        await db.run(`
+          INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
+          VALUES (?, ?, ?, ?)
+        `, [extraId, matchId, extraChannelIds![i], `team${i + 3}`]);
+      }
+
+      logger.debug(`Voice channels tracked for match ${matchId} (${2 + (extraChannelIds?.length ?? 0)} teams)`);
     } else {
       // Single-team match: Track only one channel
       const channelId = `auto_voice_${Date.now()}_all_${Math.random().toString(36).substring(2, 11)}`;

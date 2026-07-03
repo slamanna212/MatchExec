@@ -23,6 +23,7 @@ import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
 import { EmptyState } from '../EmptyState';
 import { SectionLabel } from '../SectionLabel';
+import { LeaderboardView, type CumulativeStanding } from '../tournament/leaderboard-view';
 import classes from '../gradient-segmented-control.module.css';
 
 // Use shared type as local alias
@@ -57,11 +58,15 @@ interface TeamStanding {
   losses: number;
 }
 
+function isCumulativeStanding(s: TeamStanding | CumulativeStanding): s is CumulativeStanding {
+  return 'participant_id' in s;
+}
+
 interface TournamentContentPanelProps {
   tournament: TournamentWithGame;
   teams: TeamWithMembers[];
   matches: BracketMatch[];
-  standings: TeamStanding[];
+  standings: (TeamStanding | CumulativeStanding)[];
   loading: boolean;
   onGenerateMatches: () => Promise<void>;
   onBracketAssignment: (assignments: BracketAssignment[]) => Promise<void>;
@@ -98,11 +103,20 @@ export function TournamentContentPanel({
   onStartAllMatches
 }: TournamentContentPanelProps): JSX.Element {
   const router = useRouter();
+  // Bracket tournaments (single/double-elimination) are pre-formed team vs
+  // team; cumulative-points tournaments (FFA/Position) have no bracket and
+  // no pre-formed teams — everyone plays every round — so those two tabs
+  // don't apply and are hidden.
+  const isCumulative = tournament.format === 'cumulative-points';
+  const defaultTab = isCumulative ? 'standings' : 'teams';
+
   const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>(() => {
-    if (typeof window === 'undefined') return 'teams';
+    if (typeof window === 'undefined') return defaultTab;
     const saved = localStorage.getItem(`tournament_tab_${tournament.id}`);
-    const valid = ['teams', 'bracket', 'standings', 'control'] as const;
-    return (valid as readonly string[]).includes(saved ?? '') ? (saved as typeof valid[number]) : 'teams';
+    const valid = isCumulative
+      ? (['standings', 'control'] as const)
+      : (['teams', 'bracket', 'standings', 'control'] as const);
+    return (valid as readonly string[]).includes(saved ?? '') ? (saved as typeof valid[number]) : defaultTab;
   });
 
   return (
@@ -113,15 +127,22 @@ export function TournamentContentPanel({
           <SegmentedControl
             radius="xl"
             size="sm"
-            data={[
-              {
-                label: <span>Teams<span className="hidden md:inline"> ({teams.length})</span></span>,
-                value: 'teams'
-              },
-              { label: 'Bracket', value: 'bracket' },
-              { label: 'Standings', value: 'standings' },
-              { label: 'Control', value: 'control' }
-            ]}
+            data={
+              isCumulative
+                ? [
+                    { label: 'Standings', value: 'standings' },
+                    { label: 'Control', value: 'control' }
+                  ]
+                : [
+                    {
+                      label: <span>Teams<span className="hidden md:inline"> ({teams.length})</span></span>,
+                      value: 'teams'
+                    },
+                    { label: 'Bracket', value: 'bracket' },
+                    { label: 'Standings', value: 'standings' },
+                    { label: 'Control', value: 'control' }
+                  ]
+            }
             value={activeTab}
             onChange={(value) => {
               localStorage.setItem(`tournament_tab_${tournament.id}`, value);
@@ -242,11 +263,11 @@ export function TournamentContentPanel({
         </Stack>
       )}
 
-      {/* Bracket Tab */}
+      {/* Bracket Tab — only reachable when isCumulative is false (see SegmentedControl data above) */}
       {activeTab === 'bracket' && (
         <TournamentBracket
           tournamentId={tournament.id}
-          format={tournament.format}
+          format={tournament.format as 'single-elimination' | 'double-elimination'}
           teams={teams.map(team => ({
             id: team.id,
             name: team.team_name,
@@ -282,9 +303,11 @@ export function TournamentContentPanel({
                 </Card>
               ))}
             </Stack>
+          ) : isCumulative ? (
+            <LeaderboardView standings={standings.filter(isCumulativeStanding)} />
           ) : standings.length > 0 ? (
             <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
-              {standings.map((team, index) => (
+              {(standings.filter((s): s is TeamStanding => !isCumulativeStanding(s))).map((team, index) => (
                 <Card
                   key={team.team_id}
                   withBorder
