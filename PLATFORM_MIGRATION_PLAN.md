@@ -36,8 +36,8 @@ These were open questions in the draft. Defaults are chosen so the run doesn't b
 |---|---|---|
 | D1 | Retire the legacy dual-written scoring columns? | **Yes.** The Postgres baseline contains only the target schema (no `matches.blue_team_voice_channel`/`red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`). Dual-write code is deleted rather than ported. The importer reads `match_teams` / `match_game_placements` and *verifies* they agree with the legacy columns (see 6.4); disagreement is a preflight failure, not a silent pick. |
 | D2 | Auto-backup defaults | Daily at 04:00 container TZ; keep 14 daily + 4 weekly. |
-| D3 | Restoring legacy `.db` backups | Supported through the importer for the whole 0.10.x line; revisit at 0.11. |
-| D4 | Dev process manager | Keep PM2 (`pnpm dev:all` etc. keep working). |
+| D3 | Restoring legacy `.db` backups | Supported **indefinitely** through the importer, with no planned end date. That makes the importer permanent code: it always imports into the *current* schema, so every future Drizzle schema change must update the importer's mapping, and its fixture `.db` tests (5.6) stay in the suite permanently to catch breakage. Document this in the CLAUDE.md Conventions section (8.2). |
+| D4 | Dev environment | **PM2 for the app processes + a Postgres-only `compose.dev.yml`.** `pnpm dev:all` brings up the Postgres container (waits until healthy), then starts PM2. `dev:stop` stops PM2 and the container (data kept in a named volume); `dev:restart` / `dev:logs` work as today. PM2 stays because the CLAUDE.md debugging workflow relies on its background processes and per-process log files. Everything is startable from the existing VS Code tasks (3.3). |
 | D5 | Importer atomicity | Single Postgres transaction for the whole import (6.2). Self-hosted datasets are small (MBs). If testing on a real production copy shows that's impractical, switch to a staging schema + promotion and log it. |
 | D6 | Embedded Postgres major upgrades | Ship version detection only. On a major mismatch the container refuses to start with a clear message; no automatic `pg_upgrade` (7.3). |
 | D7 | Typed Hono client (`hc<AppType>()`) | Export `AppType` and use explicit DTO types for responses. Adopting `hc` in pages is optional and only where it doesn't complicate parity. |
@@ -371,11 +371,19 @@ Order:
 
 ### 3.3 Dev, build, lint
 
-- **Dev:** PM2 runs `vite` (port 3000, HMR) and `tsx watch src/server/index.ts` (port 3001). Vite `server.proxy` forwards `/api` and `/uploads` to 3001. `server.host: true` replaces `allowedDevOrigins`. Dev needs a Postgres: document `DATABASE_URL` for a local/docker Postgres in `.env.example`, and update `ecosystem.config.js` (migrate oneshot → `lib/db/migrate.ts`).
+- **Dev:** PM2 runs `vite` (port 3000, HMR) and `tsx watch src/server/index.ts` (port 3001). Vite `server.proxy` forwards `/api` and `/uploads` to 3001. `server.host: true` replaces `allowedDevOrigins`. Update `ecosystem.config.js` (migrate oneshot → `lib/db/migrate.ts`; web → `vite` + `tsx watch` server; keep log file paths under `./app_data/data/logs/`).
+- **Dev Postgres (D4):** `compose.dev.yml` with one `postgres:18-alpine` service, port bound to `127.0.0.1:5432`, named volume, healthcheck (`pg_isready`). Scripts:
+  - `dev:db` → `docker compose -f compose.dev.yml up -d --wait`
+  - `dev:all` → `pnpm dev:db && NODE_ENV=development pm2 start ecosystem.config.js`
+  - `dev:stop` → stop PM2, then `docker compose -f compose.dev.yml stop`
+  - `dev:db:reset` → `down -v` then `up -d --wait` (fresh empty DB; next start migrates + seeds)
+  - `.env.example` gets the matching `DATABASE_URL=postgres://matchexec:matchexec@127.0.0.1:5432/matchexec`; the dev processes default to it when `NODE_ENV=development` and it's unset.
+- **VS Code tasks (`.vscode/tasks.json`):** keep every existing task and label, switching commands to pnpm (`pnpm dev:all`, `pnpm dev:restart`, `pnpm dev:stop`, `pnpm dev:logs`, `pnpm install`, `pnpm lint`, `pnpm test*`, `pnpm exec vitest run ${relativeFile}`). Add **"Reset Dev Database"** (`pnpm dev:db:reset`) and **"Typecheck"** (`pnpm typecheck`). "Start Dev Server" must work on a machine with Docker and nothing else running. Check `.vscode/launch.json` too (debug configs pointing at `next dev` → server/Vite).
+- **Dev helper scripts** that open the SQLite file directly (e.g. `scripts/add-test-match-participants.js`) are ported to `lib/db`, or deleted if obsolete (log which).
 - **Build:** `vite build` → `dist/client/`; `esbuild.server.config.mjs` → `dist/server.js`; also `dist/migrate.js` and `dist/import-sqlite.js`.
 - **Lint:** replace `eslint-config-next` with `typescript-eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`.
 
-**Checkpoint 3:** `pnpm dev:all` against a local Postgres: every page loads at its old URL, deep links and refresh work, auth on/off both work, welcome redirect works on a fresh DB.
+**Checkpoint 3:** the VS Code "Start Dev Server" task (`pnpm dev:all`) brings up Postgres and all processes from a stopped state; every page loads at its old URL, deep links and refresh work, auth on/off both work, welcome redirect works on a fresh DB.
 
 ---
 
@@ -605,7 +613,7 @@ aio:
 
 ### 8.2 Docs
 
-- CLAUDE.md: replace every `npm run`/`npx` with `pnpm`/`pnpm exec`; document the 7-day `minimumReleaseAge` and Dependabot cooldown; rewrite Architecture, Database, Migrations, Conventions (Drizzle + `Executor`/`tx`, queue-in-transaction, claim contract), Testing (PGlite, `app.request()`, updated test tree and source-to-test table), Tech Stack, Scripts, Known Issues (retire FK mismatch and Phase 8 notes), Docker deps section.
+- CLAUDE.md: add a Conventions rule that schema changes must keep the SQLite importer working (D3); replace every `npm run`/`npx` with `pnpm`/`pnpm exec`; document the 7-day `minimumReleaseAge` and Dependabot cooldown; rewrite Architecture, Database, Migrations, Conventions (Drizzle + `Executor`/`tx`, queue-in-transaction, claim contract), Testing (PGlite, `app.request()`, updated test tree and source-to-test table), Tech Stack, Scripts, Known Issues (retire FK mismatch and Phase 8 notes), Docker deps section.
 - README, `.env.example`, Unraid template: new `backups/` path, `--stop-timeout 30`, `/mnt/cache/appdata` recommendation, `MATCHEXEC_SERVICES` / `DATABASE_URL` (advanced), memory expectation (~+100–150 MB for Postgres).
 - Release notes draft (`RELEASE_NOTES_0.10.md`), including rollback instructions:
   - **Failed first boot** (import failed or rolled back): nothing changed. Re-pin to v0.8.x; the original `matchexec.db` is still in place.
@@ -622,6 +630,7 @@ aio:
 - [ ] `pnpm typecheck` and `pnpm lint` clean
 - [ ] npm fully replaced: no `package-lock.json`; `packageManager` set; `pnpm-workspace.yaml` has `minimumReleaseAge: 10080`; `grep -rnE "\bnpm (ci|run|install)|\bnpx " Dockerfile .github scripts s6-overlay ecosystem.config.js package.json README.md CLAUDE.md` is empty (except deliberate end-user docs)
 - [ ] `pnpm outdated` shows nothing older than the 7-day window (or only logged, deliberate pins); `pnpm audit` has no unaddressed high/critical
+- [ ] Dev: VS Code "Start Dev Server" / "Stop Dev Server" / "Restart Dev Server" / "View Dev Logs" / "Reset Dev Database" tasks all work; `compose.dev.yml` present
 - [ ] `.github/dependabot.yml` rewritten per 4.2: all ecosystems `target-branch: "dev"`, 7-day cooldown, new-stack groups, no Next groups
 - [ ] Full suite green on PGlite **and** on real Postgres 18; includes concurrency tests for job claiming with real PG connections
 
