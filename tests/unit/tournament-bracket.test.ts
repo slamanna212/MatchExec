@@ -22,8 +22,7 @@ import {
   generateSingleEliminationMatches,
   generateNextRoundMatches,
   generateDoubleEliminationMatches,
-  generateLosersBracketMatches,
-  generateGrandFinalsMatch,
+  generateDoubleEliminationRoundMatches,
   isRoundComplete,
   getCurrentRoundInfo,
   getBracketWinner,
@@ -418,95 +417,56 @@ describe('Tournament Bracket', () => {
     });
   });
 
-  describe('generateLosersBracketMatches', () => {
-    it('should generate losers bracket matches for eliminated teams', async () => {
-      const tournament = await createTournament(game.id, {
-        format: 'double-elimination',
-        game_mode_id: mode.id
-      });
-
+  describe('generateDoubleEliminationRoundMatches', () => {
+    async function seedTeams(tournamentId: string, count: number) {
       const db = getTestDb();
-
-      // Create 4 teams
-      const teams: string[] = [];
-      for (let i = 1; i <= 4; i++) {
-        const teamId = `team-lb-${i}`;
-        await new Promise<void>((resolve, reject) => {
-          db.run(
-            `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
-            [teamId, tournament.id, `Team ${i}`],
-            (err) => err ? reject(err) : resolve()
-          );
-        });
-        teams.push(teamId);
+      const ids: string[] = [];
+      for (let i = 1; i <= count; i++) {
+        const teamId = `team-de-${tournamentId}-${i}`;
+        await db.run(
+          `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
+          [teamId, tournamentId, `Team ${i}`]
+        );
+        ids.push(teamId);
       }
+      return ids;
+    }
 
-      // Simulate 2 teams being eliminated from winners bracket round 1
-      const eliminatedTeams = [teams[1], teams[3]]; // Teams 2 and 4 eliminated
+    it('builds a losers-bracket match for the planned pairing', async () => {
+      const tournament = await createTournament(game.id, { format: 'double-elimination', game_mode_id: mode.id });
+      const [t2, t4] = await seedTeams(tournament.id.toString(), 2);
 
-      const losersBracketMatches = await generateLosersBracketMatches(
-        tournament.id.toString(),
-        1, // eliminated from round 1
-        eliminatedTeams
-      );
+      const matches = await generateDoubleEliminationRoundMatches(tournament.id.toString(), [
+        { bracket: 'losers', round: 1, team1: t2, team2: t4 },
+      ]);
 
-      expect(losersBracketMatches).toHaveLength(1); // 2 eliminated teams = 1 match
-      expect(losersBracketMatches[0].tournament_bracket_type).toBe('losers');
+      expect(matches).toHaveLength(1);
+      expect(matches[0].tournament_bracket_type).toBe('losers');
+      expect(matches[0].tournament_round).toBe(1);
+      expect(matches[0].team1_id).toBe(t2);
+      expect(matches[0].team2_id).toBe(t4);
     });
 
-    it('should return empty array when no teams eliminated', async () => {
+    it('builds the grand final and the reset with the right names', async () => {
+      const tournament = await createTournament(game.id, { format: 'double-elimination', game_mode_id: mode.id });
+      const [wb, lb] = await seedTeams(tournament.id.toString(), 2);
+
+      const [final, reset] = await generateDoubleEliminationRoundMatches(tournament.id.toString(), [
+        { bracket: 'final', round: 1, team1: wb, team2: lb },
+        { bracket: 'final', round: 2, team1: wb, team2: lb, reset: true },
+      ]);
+
+      expect(final.tournament_bracket_type).toBe('final');
+      expect(final.team1_id).toBe(wb);
+      expect(final.team2_id).toBe(lb);
+      expect(final.name).toMatch(/^Grand Finals: /);
+      expect(reset.tournament_round).toBe(2);
+      expect(reset.name).toMatch(/^Grand Finals Reset: /);
+    });
+
+    it('returns an empty array when nothing is planned', async () => {
       const tournament = await createTournament(game.id, { game_mode_id: mode.id });
-
-      const losersBracketMatches = await generateLosersBracketMatches(
-        tournament.id.toString(),
-        1,
-        []
-      );
-
-      expect(losersBracketMatches).toEqual([]);
-    });
-  });
-
-  describe('generateGrandFinalsMatch', () => {
-    it('should create grand finals match with correct teams', async () => {
-      const tournament = await createTournament(game.id, {
-        format: 'double-elimination',
-        game_mode_id: mode.id
-      });
-
-      const db = getTestDb();
-
-      // Create 2 teams
-      const wbWinnerId = 'team-wb-winner';
-      const lbWinnerId = 'team-lb-winner';
-
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
-          [wbWinnerId, tournament.id, 'Winners Bracket Winner'],
-          (err) => err ? reject(err) : resolve()
-        );
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`,
-          [lbWinnerId, tournament.id, 'Losers Bracket Winner'],
-          (err) => err ? reject(err) : resolve()
-        );
-      });
-
-      const grandFinalsMatches = await generateGrandFinalsMatch(
-        tournament.id.toString(),
-        wbWinnerId,
-        lbWinnerId
-      );
-
-      expect(grandFinalsMatches).toHaveLength(1);
-      expect(grandFinalsMatches[0].tournament_bracket_type).toBe('final');
-      expect(grandFinalsMatches[0].team1_id).toBe(wbWinnerId);
-      expect(grandFinalsMatches[0].team2_id).toBe(lbWinnerId);
-      expect(grandFinalsMatches[0].name).toContain('Grand Finals');
+      expect(await generateDoubleEliminationRoundMatches(tournament.id.toString(), [])).toEqual([]);
     });
   });
 

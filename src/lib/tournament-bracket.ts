@@ -5,6 +5,7 @@ import { VoiceChannelService } from './voice-channel-service';
 import { logger } from './logger';
 import { withTransaction } from '@/lib/transaction';
 import { createMatchTeams, createNamedMatchTeams } from './match-setup';
+import type { PlannedMatch } from './double-elimination';
 
 interface GameMode {
   id: string;
@@ -40,12 +41,6 @@ interface MatchResult {
   team1_id: string;
   team2_id: string;
   bracket_type: string;
-  match_order: number;
-}
-
-interface TeamMatchInfo {
-  team1_id: string | null;
-  team2_id: string | null;
   match_order: number;
 }
 
@@ -297,7 +292,10 @@ async function generateMatchesFromPairings(
     const team2Assignment = sortedAssignments[i + 1];
 
     if (!team2Assignment) {
-      continue; // Odd number of teams - give bye
+      // Odd number of teams: the unpaired team sits out round 1. Record the bye so the
+      // next-round pairing picks it up (otherwise the team would never play).
+      await saveByeTeam(db, tournamentId, 1, 'winners', team1Assignment.teamId);
+      continue;
     }
 
     const matchId = uuidv4();
@@ -724,99 +722,35 @@ export async function addAllTeamsToMatch(tournamentId: string, matchId: string):
 }
 
 /**
- * Generate loser's bracket matches when teams are eliminated from winner's bracket
+ * Build the matches the double-elimination planner asked for (see lib/double-elimination.ts).
+ * Uses the same mode/map pool as every other round of the tournament.
  */
-export async function generateLosersBracketMatches(
+export async function generateDoubleEliminationRoundMatches(
   tournamentId: string,
-  eliminatedFromWinnersRound: number,
-  eliminatedTeamIds: string[]
+  planned: PlannedMatch[]
 ): Promise<GeneratedMatch[]> {
-  if (eliminatedTeamIds.length === 0) {
-    return [];
-  }
+  if (planned.length === 0) return [];
 
   const db = await getDbInstance();
-
   const tournament = await fetchTournamentForNextRound(db, tournamentId);
   const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
   const tournamentMaps = filterTournamentMaps(gameMaps);
 
-  const losersBracketRound = calculateLosersBracketRound(eliminatedFromWinnersRound);
-  const allTeamsInRound = await mergeTeamsForLosersBracket(db, tournamentId, losersBracketRound, eliminatedTeamIds);
-
-  return await generateLosersBracketMatchesFromTeams(
-    db,
-    allTeamsInRound,
-    tournament,
-    tournamentId,
-    losersBracketRound,
-    gameModes,
-    tournamentMaps
-  );
-}
-
-function calculateLosersBracketRound(eliminatedFromWinnersRound: number): number {
-  // In double elimination, teams from WB round N go to LB round (2*N-1) if N=1, or (2*N-2) if N>1
-  return eliminatedFromWinnersRound === 1 ? 1 : (eliminatedFromWinnersRound * 2) - 2;
-}
-
-async function mergeTeamsForLosersBracket(
-  db: Database,
-  tournamentId: string,
-  losersBracketRound: number,
-  eliminatedTeamIds: string[]
-): Promise<string[]> {
-  const existingTeamsInRound = await db.all(`
-    SELECT tm.team1_id, tm.team2_id, tm.match_order
-    FROM tournament_matches tm
-    JOIN matches m ON tm.match_id = m.id
-    WHERE tm.tournament_id = ? AND tm.bracket_type = 'losers' AND tm.round = ?
-    ORDER BY tm.match_order
-  `, [tournamentId, losersBracketRound]) as TeamMatchInfo[];
-
-  const allTeamsInRound = [...eliminatedTeamIds];
-  existingTeamsInRound.forEach(match => {
-    if (match.team1_id && !allTeamsInRound.includes(match.team1_id)) {
-      allTeamsInRound.push(match.team1_id);
-    }
-    if (match.team2_id && !allTeamsInRound.includes(match.team2_id)) {
-      allTeamsInRound.push(match.team2_id);
-    }
-  });
-
-  return allTeamsInRound;
-}
-
-async function generateLosersBracketMatchesFromTeams(
-  db: Database,
-  allTeamsInRound: string[],
-  tournament: TournamentRecord & { description?: string | null },
-  tournamentId: string,
-  losersBracketRound: number,
-  gameModes: GameMode[],
-  tournamentMaps: GameMap[]
-): Promise<GeneratedMatch[]> {
   const matches: GeneratedMatch[] = [];
-
-  for (let i = 0; i < allTeamsInRound.length; i += 2) {
-    const team1Id = allTeamsInRound[i];
-    const team2Id = allTeamsInRound[i + 1];
-
-    if (!team2Id) {
-      continue; // Odd number - bye
-    }
-
-    const matchId = uuidv4();
-
-    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]) as TeamRecord | undefined;
-    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]) as TeamRecord | undefined;
+  for (const p of planned) {
+    const team1 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [p.team1]) as TeamRecord | undefined;
+    const team2 = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [p.team2]) as TeamRecord | undefined;
 
     const { selectedMaps, selectedModes } = selectMapsForMatch(tournament.rounds_per_match, gameModes, tournamentMaps);
     const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
 
-    const generatedMatch: GeneratedMatch = {
-      id: matchId,
-      name: `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`,
+    const names = `${team1?.team_name || 'Team 1'} vs ${team2?.team_name || 'Team 2'}`;
+    let name = names;
+    if (p.bracket === 'final') name = `${p.reset ? 'Grand Finals Reset' : 'Grand Finals'}: ${names}`;
+
+    matches.push({
+      id: uuidv4(),
+      name,
       description: tournament.description || undefined,
       game_id: tournament.game_id,
       game_mode_id: primaryMode!.id,
@@ -827,95 +761,19 @@ async function generateLosersBracketMatchesFromTeams(
       status: 'assign',
       match_type: 'tournament',
       tournament_id: tournamentId,
-      tournament_round: losersBracketRound,
-      tournament_bracket_type: 'losers',
+      tournament_round: p.round,
+      tournament_bracket_type: p.bracket,
+      rules: tournament.ruleset,
       team1_name: team1?.team_name,
       team2_name: team2?.team_name,
-      team1_id: team1Id,
-      team2_id: team2Id,
+      team1_id: p.team1,
+      team2_id: p.team2,
       event_image_url: tournament.event_image_url || undefined,
       announcements: tournament.announcements ?? null,
       player_notifications: tournament.player_notifications ?? 1,
-    };
-
-    matches.push(generatedMatch);
+    });
   }
-
   return matches;
-}
-
-/**
- * Generate grand finals match (winner's bracket winner vs loser's bracket winner)
- */
-export async function generateGrandFinalsMatch(
-  tournamentId: string,
-  winnersBracketWinnerId: string,
-  losersBracketWinnerId: string
-): Promise<GeneratedMatch[]> {
-  const db = await getDbInstance();
-
-  // Get tournament info
-  const tournament = await db.get(`
-    SELECT t.*, g.id as game_id
-    FROM tournaments t
-    JOIN games g ON t.game_id = g.id
-    WHERE t.id = ?
-  `, [tournamentId]) as (TournamentRecord & { description?: string | null }) | undefined;
-
-  if (!tournament) {
-    throw new Error('Tournament not found');
-  }
-
-  // Get game modes and maps
-  const gameModes = await db.all('SELECT * FROM game_modes WHERE game_id = ?', [tournament.game_id]) as GameMode[];
-  const gameMaps = await db.all('SELECT * FROM game_maps WHERE game_id = ?', [tournament.game_id]) as GameMap[];
-
-  // Get team names
-  const wbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [winnersBracketWinnerId]) as TeamRecord | undefined;
-  const lbTeam = await db.get('SELECT team_name FROM tournament_teams WHERE id = ?', [losersBracketWinnerId]) as TeamRecord | undefined;
-
-  const matchId = uuidv4();
-  const tournamentMaps = filterTournamentMaps(gameMaps);
-
-  // Select maps for each round
-  const selectedMaps: string[] = [];
-  const selectedModes: string[] = [];
-
-  for (let round = 0; round < tournament.rounds_per_match; round++) {
-    const { mapId, modeId } = selectMapForRound(selectedMaps, gameModes, tournamentMaps, round);
-    selectedMaps.push(mapId);
-    selectedModes.push(modeId);
-  }
-
-  // Use the first selected mode for compatibility (legacy field)
-  const primaryMode = selectedModes[0] ? gameModes.find(m => m.id === selectedModes[0]) : gameModes[0];
-
-  // Create grand finals match
-  const grandFinalsMatch: GeneratedMatch = {
-    id: matchId,
-    name: `Grand Finals: ${wbTeam?.team_name || 'WB Winner'} vs ${lbTeam?.team_name || 'LB Winner'}`,
-    description: tournament.description || undefined,
-    game_id: tournament.game_id,
-    game_mode_id: primaryMode!.id,
-    map_id: selectedMaps[0],
-    maps: selectedMaps,
-    rounds_per_match: tournament.rounds_per_match,
-    max_participants: 12,
-    status: 'assign',
-    match_type: 'tournament',
-    tournament_id: tournamentId,
-    tournament_round: 1,
-    tournament_bracket_type: 'final',
-    team1_name: wbTeam?.team_name,
-    team2_name: lbTeam?.team_name,
-    team1_id: winnersBracketWinnerId,
-    team2_id: losersBracketWinnerId,
-    event_image_url: tournament.event_image_url || undefined,
-    announcements: tournament.announcements ?? null,
-    player_notifications: tournament.player_notifications ?? 1,
-  };
-
-  return [grandFinalsMatch];
 }
 
 /**
@@ -1141,44 +999,6 @@ export async function getCurrentRoundInfo(tournamentId: string): Promise<{
     winnersComplete: winnersInfo.total > 0 && winnersInfo.completed === winnersInfo.total,
     losersComplete: losersInfo.total > 0 && losersInfo.completed === losersInfo.total
   };
-}
-
-/**
- * Check if a bracket is ready for grand finals (only one team remaining)
- * For winners bracket: Check if the highest round has exactly 1 completed match
- * For losers bracket: Check if the highest round has exactly 1 completed match
- */
-export async function isBracketReadyForFinals(
-  tournamentId: string,
-  bracketType: 'winners' | 'losers'
-): Promise<boolean> {
-  const db = await getDbInstance();
-
-  // Get the highest round number for this bracket
-  const maxRoundInfo = await db.get(`
-    SELECT MAX(tm.round) as max_round
-    FROM tournament_matches tm
-    WHERE tm.tournament_id = ? AND tm.bracket_type = ?
-  `, [tournamentId, bracketType]) as { max_round: number | null };
-
-  if (!maxRoundInfo || maxRoundInfo.max_round === null) {
-    return false;
-  }
-
-  // Check if the highest round has exactly 1 completed match
-  const highestRoundMatches = await db.get(`
-    SELECT
-      COUNT(*) as total_matches,
-      COUNT(CASE WHEN m.status = 'complete' THEN 1 END) as completed_matches
-    FROM matches m
-    JOIN tournament_matches tm ON m.id = tm.match_id
-    WHERE tm.tournament_id = ?
-      AND tm.bracket_type = ?
-      AND tm.round = ?
-  `, [tournamentId, bracketType, maxRoundInfo.max_round]) as { total_matches: number; completed_matches: number };
-
-  // Ready for finals if there's exactly 1 match in the highest round and it's complete
-  return highestRoundMatches.total_matches === 1 && highestRoundMatches.completed_matches === 1;
 }
 
 /**

@@ -2,6 +2,7 @@ import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { apiError, apiOk } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
+import { withKeyedLock } from '@/lib/keyed-lock';
 import type {
   BracketAssignment
 } from '@/lib/tournament-bracket';
@@ -111,8 +112,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
 ): Promise<NextResponse> {
+  const { tournamentId } = await params;
+  // Serialised per tournament: the "already generated" check and the insert span several
+  // awaits, so overlapping requests would otherwise each build a full bracket.
+  return withKeyedLock(`generate-matches:${tournamentId}`, () => generateForTournament(request, tournamentId));
+}
+
+async function generateForTournament(request: NextRequest, tournamentId: string): Promise<NextResponse> {
   try {
-    const { tournamentId } = await params;
     const body = await request.json().catch(() => ({}));
     const { assignments }: { assignments?: BracketAssignment[] } = body;
 

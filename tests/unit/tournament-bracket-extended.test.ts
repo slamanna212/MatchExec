@@ -20,7 +20,6 @@ import {
   saveGeneratedMatches,
   isRoundComplete,
   getBracketWinner,
-  isBracketReadyForFinals,
   type BracketAssignment,
   type TournamentMatchInfo,
 } from '@/lib/tournament-bracket';
@@ -205,14 +204,6 @@ describe('Tournament Bracket — Extended', () => {
       // Mark match as complete
       await db.run(`UPDATE matches SET status = 'complete' WHERE id = ?`, [matches[0].id]);
       expect(await isRoundComplete(t.id, 1, 'winners')).toBe(true);
-    });
-  });
-
-  describe('isBracketReadyForFinals', () => {
-    it('returns false for tournament with no matches', async () => {
-      const t = await createTournament(game.id, { game_mode_id: mode.id });
-      const result = await isBracketReadyForFinals(t.id, 'winners');
-      expect(result).toBe(false);
     });
   });
 
