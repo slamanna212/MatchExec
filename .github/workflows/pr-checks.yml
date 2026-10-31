@@ -96,6 +96,36 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: test-results/integration.junit.xml
 
+  postgres-test:
+    name: Postgres 18 Tests
+    runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
+    needs: [helm-version-sync]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run Postgres-backed tests against postgres:18
+        run: pnpm exec vitest run tests/integration/server tests/integration/database/pg- --reporter=default --reporter=github-actions
+
   docker-test:
     name: Docker Integration Test
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
