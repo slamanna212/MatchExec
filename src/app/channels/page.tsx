@@ -6,7 +6,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { useEffect, useState } from 'react';
 import { IconHash, IconPlus, IconSettings, IconTrash, IconMessage, IconRefresh, IconCircle } from '@tabler/icons-react';
-import type { DiscordChannel } from '../api/channels/route';
+import type { DiscordChannel } from '@/shared/types';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
 import { PageLayout } from '@/components/PageLayout';

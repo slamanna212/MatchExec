@@ -4,6 +4,11 @@ import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { withTransaction } from './transaction';
 import { cleanMapId } from './utils/map-utils';
+import { db as pgDb } from '../../lib/db';
+import {
+  countStatDefinitions, findMapByIdOrName, getGameScoringConfig, getMap, getMapModeScoringType, getModeScoringType,
+  listMapsWithModeScoring,
+} from './games';
 import type {
   MatchResult,
   MatchFormat,
@@ -67,10 +72,10 @@ export async function getTeamName(teamId: string): Promise<string | null> {
 interface MapLookupRow {
   id: string;
   name: string;
-  image_url?: string;
-  mode_id?: string;
+  image_url?: string | null;
+  mode_id?: string | null;
   game_id: string;
-  mode_scoring_type?: string;
+  mode_scoring_type?: string | null;
 }
 
 /**
@@ -85,14 +90,7 @@ async function lookupMaps(
 ): Promise<Record<string, MapLookupRow>> {
   const cleanIds = [...new Set(mapIds.filter((id): id is string => !!id).map(cleanMapId))];
   if (!gameId || cleanIds.length === 0) return {};
-  const rows = await db.all<MapLookupRow>(
-    `SELECT gm.id, gm.name, gm.image_url, gm.mode_id, gm.game_id,
-            gamemode.scoring_type AS mode_scoring_type
-     FROM game_maps gm
-     LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
-     WHERE gm.game_id = ? AND gm.id IN (${cleanIds.map(() => '?').join(', ')})`,
-    [gameId, ...cleanIds]
-  );
+  const rows: MapLookupRow[] = await listMapsWithModeScoring(pgDb, gameId, cleanIds);
   return Object.fromEntries(rows.map(r => [r.id, r]));
 }
 
@@ -103,11 +101,10 @@ async function lookupMapName(
   mapId: string | null | undefined
 ): Promise<string | null> {
   if (!mapId) return null;
-  const row = await db.get<{ name: string }>(
-    `SELECT gm.name FROM game_maps gm JOIN matches m ON m.game_id = gm.game_id
-     WHERE m.id = ? AND gm.id = ?`,
-    [matchId, cleanMapId(mapId)]
-  );
+  // The match lives in the legacy database until the matches domain is ported; game data is in Postgres.
+  const match = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+  if (!match) return null;
+  const row = await getMap(pgDb, match.game_id, cleanMapId(mapId));
   return row?.name ?? null;
 }
 
@@ -120,15 +117,19 @@ export async function resolvePositionScoringConfig(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string
 ): Promise<PositionScoringConfig> {
-  const row = await db.get<{ position_scoring_override?: string; tournament_scoring_override?: string; scoring_config?: string }>(
-    `SELECT m.position_scoring_override, t.position_scoring_override as tournament_scoring_override, g.scoring_config
+  const row = await db.get<{ game_id: string; position_scoring_override?: string; tournament_scoring_override?: string }>(
+    `SELECT m.game_id, m.position_scoring_override, t.position_scoring_override as tournament_scoring_override
      FROM matches m
-     JOIN games g ON m.game_id = g.id
      LEFT JOIN tournaments t ON m.tournament_id = t.id
      WHERE m.id = ?`,
     [matchId]
   );
-  const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
+  let raw = row?.position_scoring_override ?? row?.tournament_scoring_override;
+  if (raw === undefined || raw === null) {
+    // Game default (typed jsonb in Postgres); the override parser takes the serialised form.
+    const gameConfig = row ? await getGameScoringConfig(pgDb, row.game_id) : null;
+    raw = gameConfig ? JSON.stringify(gameConfig) : undefined;
+  }
   return parsePositionScoringConfig(raw);
 }
 
@@ -413,19 +414,12 @@ export async function getScoringTypeForGame(
     v === 'Normal' || v === 'FFA' || v === 'Position';
 
   if (row.map_id) {
-    const mapMode = await db.get<{ scoring_type?: string }>(
-      `SELECT gamemode.scoring_type FROM game_maps gm
-       JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
-       WHERE gm.game_id = ? AND gm.id = ?`,
-      [row.game_id, cleanMapId(row.map_id)]
-    );
-    if (valid(mapMode?.scoring_type)) return mapMode.scoring_type;
+    const mapScoringType = await getMapModeScoringType(pgDb, row.game_id, cleanMapId(row.map_id));
+    if (valid(mapScoringType)) return mapScoringType;
   }
   if (row.mode_id) {
-    const modeRow = await db.get<{ scoring_type?: string }>(
-      `SELECT scoring_type FROM game_modes WHERE id = ? AND game_id = ?`, [row.mode_id, row.game_id]
-    );
-    if (valid(modeRow?.scoring_type)) return modeRow.scoring_type;
+    const modeScoringType = await getModeScoringType(pgDb, row.game_id, row.mode_id);
+    if (valid(modeScoringType)) return modeScoringType;
   }
   return null;
 }
@@ -1273,12 +1267,8 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string, mapInst
           const cleanMapName = mapName.replace(/-\d+$/, '');
           
           // Get actual map name from database  
-          const mapNameData = await db.get<{ name: string }>(`
-            SELECT name FROM game_maps 
-            WHERE game_id = (SELECT game_id FROM matches WHERE id = ?) 
-              AND (id = ? OR LOWER(name) LIKE LOWER(?))
-            LIMIT 1
-          `, [matchId, cleanMapName, `%${cleanMapName}%`]);
+          const matchGame = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+          const mapNameData = matchGame ? await findMapByIdOrName(pgDb, matchGame.game_id, cleanMapName) : undefined;
           
           if (mapNameData) {
             displayMapName = mapNameData.name;
@@ -2170,8 +2160,7 @@ async function queueScorecardPrompts(matchId: string, matchGameId: string, mapNa
     const match = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
     if (!match) return;
 
-    const statDefs = await db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM game_stat_definitions WHERE game_id = ?', [match.game_id]);
-    if (!statDefs || statDefs.cnt === 0) return;
+    if ((await countStatDefinitions(pgDb, match.game_id)) === 0) return;
 
     const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     await db.run(

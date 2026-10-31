@@ -9,6 +9,8 @@ import type { Database } from '../../../lib/database/connection';
 import { safePublicPath } from './utils';
 import * as path from 'path';
 import * as fs from 'fs';
+import { db as pgDb } from '../../../lib/db';
+import { findMapByIdOrName, getGameDisplay, getModeScoringType } from '../../../src/lib/games';
 
 /** Winner kinds written by the scoring engine into Discord queue rows. */
 export type WinnerKind = 'team1' | 'team2' | 'tie' | 'team' | 'participant';
@@ -118,25 +120,28 @@ export async function fetchMatchStartData(
   };
 
   try {
-    const matchData = await db.get<{
-      game_name: string;
-      game_color?: string;
-      game_icon?: string;
+    const matchRow = await db.get<{
+      game_id: string;
+      mode_id?: string | null;
       blue_team_voice_channel?: string;
       red_team_voice_channel?: string;
       team1_name?: string;
       team2_name?: string;
-      scoring_type?: string;
     }>(`
-      SELECT g.name as game_name, g.color as game_color, g.icon_url as game_icon,
-             m.blue_team_voice_channel, m.red_team_voice_channel,
-             m.team1_name, m.team2_name,
-             COALESCE(gmode.scoring_type, 'Normal') as scoring_type
+      SELECT m.game_id, m.mode_id, m.blue_team_voice_channel, m.red_team_voice_channel, m.team1_name, m.team2_name
       FROM matches m
-      JOIN games g ON m.game_id = g.id
-      LEFT JOIN game_modes gmode ON gmode.id = m.mode_id AND gmode.game_id = m.game_id
       WHERE m.id = ?
     `, [matchId]);
+    const gameRow = matchRow ? await getGameDisplay(pgDb, matchRow.game_id) : undefined;
+    const matchData = matchRow && gameRow
+      ? {
+        ...matchRow,
+        game_name: gameRow.name,
+        game_color: gameRow.color ?? undefined,
+        game_icon: gameRow.icon_url ?? undefined,
+        scoring_type: (matchRow.mode_id ? await getModeScoringType(pgDb, matchRow.game_id, matchRow.mode_id) : undefined) ?? 'Normal',
+      }
+      : undefined;
 
     if (matchData) {
       // Try to read team names and voice channels from match_teams (new system)
@@ -193,11 +198,7 @@ export async function buildMapListField(
       const cleanedMapId = cleanMapId(mapId);
 
       // Get map name from database
-      const mapData = await db.get<{ name: string }>(`
-        SELECT name FROM game_maps
-        WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
-        LIMIT 1
-      `, [gameId, cleanedMapId, `%${cleanedMapId}%`]);
+      const mapData = await findMapByIdOrName(pgDb, gameId, cleanedMapId);
 
       if (mapData) {
         mapNames.push(mapData.name);

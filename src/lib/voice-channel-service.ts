@@ -1,5 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
+import { db as pgDb } from '../../lib/db';
+import { findGlobalVoiceChannelId } from './discord-channels';
 import { createMatchVoiceChannels, trackVoiceChannels } from './voice-channel-manager';
 import { getMatchTeams, setTeamVoiceChannel } from './match-setup';
 
@@ -89,30 +91,11 @@ export class VoiceChannelService {
 
       if (!blueChannelId && !redChannelId) {
         // Try to get global voice channels from discord_channels table
-        const blueChannel = await db.get<{ discord_channel_id: string }>(`
-          SELECT discord_channel_id FROM discord_channels
-          WHERE type = 2 AND (
-            LOWER(name) LIKE '%blue%' OR
-            LOWER(channel_name) LIKE '%blue%' OR
-            LOWER(name) LIKE '%team%1%' OR
-            LOWER(channel_name) LIKE '%team%1%'
-          )
-          LIMIT 1
-        `);
+        const blueChannel = await findGlobalVoiceChannelId(pgDb, 'blue');
+        const redChannel = await findGlobalVoiceChannelId(pgDb, 'red');
 
-        const redChannel = await db.get<{ discord_channel_id: string }>(`
-          SELECT discord_channel_id FROM discord_channels
-          WHERE type = 2 AND (
-            LOWER(name) LIKE '%red%' OR
-            LOWER(channel_name) LIKE '%red%' OR
-            LOWER(name) LIKE '%team%2%' OR
-            LOWER(channel_name) LIKE '%team%2%'
-          )
-          LIMIT 1
-        `);
-
-        blueChannelId = blueChannel?.discord_channel_id;
-        redChannelId = redChannel?.discord_channel_id;
+        blueChannelId = blueChannel;
+        redChannelId = redChannel;
       }
 
       // Skip if still no voice channels are configured

@@ -3,6 +3,8 @@ import { EmbedBuilder } from 'discord.js';
 import type { Database } from '../../../lib/database/connection';
 import { sendDM } from './dm-builder';
 import { logger } from '../../../src/lib/logger/server';
+import { db as pgDb } from '../../../lib/db';
+import { getGameDisplay, listStatDefinitions } from '../../../src/lib/games';
 
 interface StatsSettingsRow {
   enabled: number;
@@ -34,7 +36,7 @@ interface GameStatDefinition {
   stat_type: string;
   category: string | null;
   sort_order: number;
-  is_primary: number;
+  is_primary: boolean;
   format: string | null;
 }
 
@@ -130,7 +132,7 @@ export function sortStatDefs(
   if (categoryPriority.length === 0) {
     // No reordering — sort by is_primary DESC, sort_order ASC
     return [...statDefs].sort((a, b) => {
-      if (b.is_primary !== a.is_primary) return b.is_primary - a.is_primary;
+      if (b.is_primary !== a.is_primary) return Number(b.is_primary) - Number(a.is_primary);
       return a.sort_order - b.sort_order;
     });
   }
@@ -146,7 +148,7 @@ export function sortStatDefs(
   // Sort within each group
   for (const [, group] of grouped) {
     group.sort((a, b) => {
-      if (b.is_primary !== a.is_primary) return b.is_primary - a.is_primary;
+      if (b.is_primary !== a.is_primary) return Number(b.is_primary) - Number(a.is_primary);
       return a.sort_order - b.sort_order;
     });
   }
@@ -237,7 +239,7 @@ export function buildStatsEmbed(
   }
 
   // Best stat: highest value primary stat from the first-priority category (or overall)
-  const primaryDefs = sortedDefs.filter(d => d.is_primary === 1);
+  const primaryDefs = sortedDefs.filter(d => d.is_primary);
   let bestStat: { name: string; value: string } | null = null;
   if (primaryDefs.length > 0) {
     let bestDef: GameStatDefinition | null = null;
@@ -303,26 +305,21 @@ export class StatsReportHandler {
     }
 
     // Get match info
-    const matchInfo = await this.db.get<MatchInfoRow>(
-      `SELECT m.id, m.name, m.game_id, g.name as game_name, g.color as game_color
-       FROM matches m
-       LEFT JOIN games g ON m.game_id = g.id
-       WHERE m.id = ?`,
+    const matchBase = await this.db.get<Pick<MatchInfoRow, 'id' | 'name' | 'game_id'>>(
+      'SELECT id, name, game_id FROM matches WHERE id = ?',
       [matchId]
     );
+    const gameInfo = matchBase ? await getGameDisplay(pgDb, matchBase.game_id) : undefined;
+    const matchInfo: MatchInfoRow | undefined = matchBase
+      ? { ...matchBase, game_name: gameInfo?.name ?? null, game_color: gameInfo?.color ?? null } as MatchInfoRow
+      : undefined;
     if (!matchInfo) {
       logger.warning(`📊 Match ${matchId} not found for stats report DMs`);
       return;
     }
 
     // Get stat definitions for the game
-    const statDefs = await this.db.all<GameStatDefinition>(
-      `SELECT id, name, display_name, stat_type, category, sort_order, is_primary, format
-       FROM game_stat_definitions
-       WHERE game_id = ?
-       ORDER BY sort_order ASC`,
-      [matchInfo.game_id]
-    );
+    const statDefs = await listStatDefinitions(pgDb, matchInfo.game_id);
     if (!statDefs || statDefs.length === 0) {
       logger.debug(`📊 No stat definitions for game ${matchInfo.game_id}, skipping stats report DMs`);
       return;

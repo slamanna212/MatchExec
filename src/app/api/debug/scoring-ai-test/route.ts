@@ -4,6 +4,8 @@ import { apiError, apiOk } from '@/lib/api-response';
 import { AIExtractor } from '../../../../../processes/stats-processor/modules/ai-extractor';
 import { AI_PROVIDER_CALLS } from '../../../../../processes/stats-processor/modules/providers';
 import type { GameStatDefinition } from '../../../../../shared/types';
+import { db as pgDb } from '../../../../../lib/db';
+import { getGame, listGamesWithStatDefinitions, listStatDefinitions } from '@/lib/games';
 import { logger } from '@/lib/logger';
 import { resolveModelId } from '@/lib/ai-model-resolver';
 
@@ -13,14 +15,7 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const db = await getDbInstance();
-    const games = await db.all<{ id: string; name: string }>(
-      `SELECT DISTINCT g.id, g.name
-       FROM games g
-       INNER JOIN game_stat_definitions gsd ON g.id = gsd.game_id
-       ORDER BY g.name`
-    );
-    return apiOk(games);
+    return apiOk(await listGamesWithStatDefinitions(pgDb));
   } catch (error) {
     logger.error('Error fetching AI test games:', error);
     return apiError('Failed to fetch games');
@@ -56,15 +51,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const db = await getDbInstance();
 
-    const statDefs = await db.all<GameStatDefinition>(
-      'SELECT * FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order',
-      [gameId]
-    );
+    const statDefs: GameStatDefinition[] = await listStatDefinitions(pgDb, gameId) as GameStatDefinition[];
     if (!statDefs || statDefs.length === 0) {
       return apiError(`No stat definitions found for game ${gameId}`, 400);
     }
 
-    const game = await db.get<{ name: string }>('SELECT name FROM games WHERE id = ?', [gameId]);
+    const game = await getGame(pgDb, gameId);
     if (!game) {
       return apiError(`Game ${gameId} not found`, 404);
     }

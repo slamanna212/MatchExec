@@ -12,6 +12,8 @@ import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { safePublicPath } from './utils';
+import { db as pgDb } from '../../../lib/db';
+import { getGameName } from '../../../src/lib/games';
 
 export class EventHandler {
   constructor(
@@ -27,10 +29,7 @@ export class EventHandler {
     if (!this.db) return gameId;
 
     try {
-      const gameData = await this.db.get<{ name: string }>(`
-        SELECT name FROM games WHERE id = ?
-      `, [gameId]);
-      return gameData ? gameData.name : gameId;
+      return (await getGameName(pgDb, gameId)) ?? gameId;
     } catch (error) {
       logger.error('Error fetching game name for Discord event:', error);
       return gameId;

@@ -4,6 +4,13 @@ vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
 }));
 
+vi.mock('../../../lib/db', () => ({ db: {} }));
+vi.mock('../../../src/lib/games', () => ({
+  findMapByIdOrName: vi.fn(),
+  getGameDisplay: vi.fn().mockResolvedValue({ name: 'Mario Kart', color: null, icon_url: null }),
+  getModeScoringType: vi.fn().mockResolvedValue('Position'),
+}));
+
 import {
   resolveWinnerDisplayName,
   isTwoSidedResult,
@@ -59,7 +66,7 @@ describe('fetchMatchStartData for FFA/Position', () => {
   it('does not expose the first two participants as team1/team2 names', async () => {
     const db = {
       get: vi.fn().mockResolvedValue({
-        game_name: 'Mario Kart', scoring_type: 'Position', team1_name: null, team2_name: null,
+        game_id: 'mk', mode_id: 'mk-mode', team1_name: null, team2_name: null,
       }),
       all: vi.fn().mockResolvedValue([
         { team_name: 'alice', team_order: 0, voice_channel_id: null },

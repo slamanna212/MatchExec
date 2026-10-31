@@ -1,4 +1,6 @@
 import { getDbInstance } from './database-init';
+import { db as pgDb } from '../../lib/db';
+import { findMapByIdOrName, gameSupportsMapCodes } from './games';
 import { logger } from './logger';
 import { cleanMapId } from './utils/map-utils';
 
@@ -39,14 +41,9 @@ export class MapCodeService {
    */
   private static async getMapName(gameId: string, mapId: string): Promise<string> {
     try {
-      const db = await getDbInstance();
-      const mapNameData = await db.get<{ name: string }>(`
-        SELECT name FROM game_maps
-        WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
-        LIMIT 1
-      `, [gameId, mapId, `%${mapId}%`]);
+      const map = await findMapByIdOrName(pgDb, gameId, mapId);
 
-      return mapNameData?.name || mapId;
+      return map?.name || mapId;
     } catch (error) {
       logger.error('Error fetching map name:', error);
       return mapId; // Fallback to ID
@@ -122,20 +119,18 @@ export class MapCodeService {
     try {
       const db = await getDbInstance();
 
-      // Get match data to check if map codes are supported
+      // Match data still lives in the legacy database until the matches domain is ported.
       const matchWithGame = await db.get<{
         game_id: string;
         maps?: string;
         map_codes?: string;
-        map_codes_supported?: number;
       }>(`
-        SELECT m.game_id, m.maps, m.map_codes, g.map_codes_supported
+        SELECT m.game_id, m.maps, m.map_codes
         FROM matches m
-        LEFT JOIN games g ON m.game_id = g.id
         WHERE m.id = ?
       `, [matchId]);
 
-      if (!matchWithGame?.map_codes_supported) {
+      if (!matchWithGame || !(await gameSupportsMapCodes(pgDb, matchWithGame.game_id))) {
         logger.debug(`ℹ️ Map codes not supported for match ${matchId}`);
         return false;
       }

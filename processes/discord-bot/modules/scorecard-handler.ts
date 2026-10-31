@@ -7,6 +7,8 @@ import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import type { WinnerVoteHandler } from './winner-vote-handler';
+import { db as pgDb } from '../../../lib/db';
+import { countStatDefinitions } from '../../../src/lib/games';
 
 interface ScorecardDmRecord {
   id: string;
@@ -142,11 +144,7 @@ export class ScorecardHandler {
       );
       if (!match) return false;
 
-      const statCount = await this.db.get<{ cnt: number }>(
-        'SELECT COUNT(*) as cnt FROM game_stat_definitions WHERE game_id = ?',
-        [match.game_id]
-      );
-      if (!statCount || statCount.cnt === 0) return false;
+      if ((await countStatDefinitions(pgDb, match.game_id)) === 0) return false;
 
       const commanders = await this.db.all<CommanderRecord>(
         `SELECT mp.id, mp.discord_user_id,

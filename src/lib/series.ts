@@ -2,6 +2,8 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { determineMatchWinner } from './scoring-functions';
 import { withTransaction } from './transaction';
+import { db as pgDb } from '../../lib/db';
+import { gameExists } from './games';
 
 type Db = Awaited<ReturnType<typeof getDbInstance>>;
 
@@ -792,9 +794,7 @@ export function validateSeriesDates(start: unknown, end: unknown): string | null
 export async function validateSeriesGameId(gameId: unknown): Promise<string | null> {
   if (gameId === undefined || gameId === null || gameId === '') return null;
   if (typeof gameId !== 'string') return 'game_id must be a string';
-  const db = await getDbInstance();
-  const game = await db.get<{ id: string }>('SELECT id FROM games WHERE id = ?', [gameId]);
-  return game ? null : 'game_id does not match an existing game';
+  return (await gameExists(pgDb, gameId)) ? null : 'game_id does not match an existing game';
 }
 
 /**

@@ -3,6 +3,8 @@ import { EmbedBuilder } from 'discord.js';
 import crypto from 'crypto';
 import type { Database } from '../../../lib/database/connection';
 import { logger } from '../../../src/lib/logger/server';
+import { db as pgDb } from '../../../lib/db';
+import { countStatDefinitions } from '../../../src/lib/games';
 
 interface CommanderRecord {
   id: string;
@@ -194,15 +196,11 @@ export class WinnerVoteHandler {
 
   /** Returns true if a scorecard is required but not yet submitted. */
   private async checkStatsGate(matchId: string, matchGameId: string): Promise<boolean> {
-    const matchRow = await this.db.get<{ stats_enabled: number; stat_def_count: number }>(
-      `SELECT m.stats_enabled, COUNT(gsd.id) as stat_def_count
-       FROM matches m
-       LEFT JOIN game_stat_definitions gsd ON gsd.game_id = m.game_id
-       WHERE m.id = ?
-       GROUP BY m.id`,
+    const matchRow = await this.db.get<{ stats_enabled: number; game_id: string }>(
+      'SELECT stats_enabled, game_id FROM matches WHERE id = ?',
       [matchId]
     );
-    if (!matchRow?.stats_enabled || !matchRow.stat_def_count) return false;
+    if (!matchRow?.stats_enabled || (await countStatDefinitions(pgDb, matchRow.game_id)) === 0) return false;
 
     const submission = await this.db.get<{ id: string }>(
       'SELECT id FROM scorecard_submissions WHERE match_game_id = ? LIMIT 1',

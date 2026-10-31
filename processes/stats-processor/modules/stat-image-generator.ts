@@ -4,6 +4,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { GameStatDefinition } from '../../../shared/types';
+import { db as pgDb } from '../../../lib/db';
+import { getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -56,18 +58,9 @@ export class StatImageGenerator {
       // Load game stat definitions + scoring_type (Normal shows a Team column;
       // FFA/Position have no meaningful team_assignment, so that column and
       // its blue/red coloring would be nonsensical for them).
-      const match = await this.db.get(
-        `SELECT m.game_id, COALESCE(gm.scoring_type, 'Normal') as scoring_type
-         FROM matches m
-         LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-         WHERE m.id = ?`,
-        [matchId]
-      );
-      const scoringType: string = match?.scoring_type ?? 'Normal';
-      const statDefs = match ? await this.db.all(
-        'SELECT * FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order',
-        [match.game_id]
-      ) as GameStatDefinition[] : [];
+      const match = await this.db.get('SELECT game_id, mode_id FROM matches WHERE id = ?', [matchId]);
+      const scoringType: string = (match?.mode_id ? await getModeScoringType(pgDb, match.game_id, match.mode_id) : undefined) ?? 'Normal';
+      const statDefs = match ? await listStatDefinitions(pgDb, match.game_id) as GameStatDefinition[] : [];
 
       // Ensure output dir exists
       const outputDir = path.join(process.cwd(), 'public', 'uploads', 'stats', matchId);

@@ -1,6 +1,7 @@
 import type { NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordBotService } from '../../../../../lib/discord-bot-service';
+import { getDiscordSettings } from '@/lib/settings';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
@@ -14,14 +15,7 @@ export async function POST(): Promise<NextResponse> {
     const botService = new DiscordBotService(db);
     
     // Get the current voice settings
-    const settings = await db.get<{
-      announcer_voice?: string;
-      voice_announcements_enabled?: number;
-    }>(`
-      SELECT announcer_voice, voice_announcements_enabled
-      FROM discord_settings 
-      WHERE id = 1
-    `);
+    const settings = await getDiscordSettings();
 
     if (!settings?.voice_announcements_enabled) {
       return apiError('Voice announcements are disabled in settings', 400);

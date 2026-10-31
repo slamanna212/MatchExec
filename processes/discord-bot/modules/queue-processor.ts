@@ -17,6 +17,8 @@ import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
+import { db as pgDb } from '../../../lib/db';
+import { getMapNameById } from '../../../src/lib/games';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -1473,10 +1475,7 @@ export class QueueProcessor {
       const mapNames: string[] = [];
       for (const mapId of maps) {
         const baseMapId = cleanMapId(mapId);
-        const mapRow = await this.db!.get<{ name: string }>(`
-          SELECT name FROM game_maps WHERE id = ?
-        `, [baseMapId]);
-        mapNames.push(mapRow?.name ?? baseMapId);
+        mapNames.push((await getMapNameById(pgDb, baseMapId)) ?? baseMapId);
       }
 
       const mapsValue = mapNames.map(n => `**${n}**`).join('\n');

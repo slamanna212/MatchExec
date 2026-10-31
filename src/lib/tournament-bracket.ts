@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDbInstance } from './database-init';
 import type { Database } from '../../lib/database/connection';
+import { db as pgDb } from '../../lib/db';
+import { getModeById, listMapsForModes, listModesByTeamSize, listNonWorkshopModes } from './games';
 import { VoiceChannelService } from './voice-channel-service';
 import { logger } from './logger';
 import { withTransaction } from '@/lib/transaction';
@@ -15,7 +17,7 @@ interface GameMode {
 interface GameMap {
   id: string;
   name: string;
-  mode_id?: string;
+  mode_id?: string | null;
 }
 
 interface TeamRecord {
@@ -157,7 +159,7 @@ export async function generateSingleEliminationMatches(
   }
 
   const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl, tournamentAnnouncements, tournamentPlayerNotifications } = await fetchTournamentInfo(db, tournamentId);
-  const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
+  const { gameModes, gameMaps } = await fetchGameData(gameId, tournament.game_mode_id);
 
   const sortedAssignments = bracketAssignments.sort((a, b) => a.position - b.position);
   const tournamentMaps = filterTournamentMaps(gameMaps);
@@ -190,31 +192,12 @@ async function fetchTournamentInfo(db: Database, tournamentId: string) {
   };
 }
 
-async function fetchGameData(db: Database, gameId: string, gameModeId: string) {
+async function fetchGameData(gameId: string, gameModeId: string) {
   // Special handling for Overwatch 2 team size options
   if (gameId === 'overwatch2' && gameModeId?.startsWith('ow2-')) {
-    // OW2 team size is determined by the mode ID (ow2-5v5 or ow2-6v6)
-    // Not used in current implementation but kept for future reference
-    const _teamSize = gameModeId === 'ow2-5v5' ? 5 : 6;
-
-    // Fetch all non-workshop modes
-    const gameModes = await db.all(
-      `SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE '%workshop%'`,
-      [gameId]
-    ) as GameMode[];
-
-    // Fetch maps from all non-workshop modes
-    const modeIds = gameModes.map(m => m.id);
-    let gameMaps: GameMap[];
-    if (modeIds.length > 0) {
-      const placeholders = modeIds.map(() => '?').join(',');
-      gameMaps = await db.all(
-        `SELECT * FROM game_maps WHERE game_id = ? AND mode_id IN (${placeholders})`,
-        [gameId, ...modeIds]
-      ) as GameMap[];
-    } else {
-      gameMaps = [];
-    }
+    // Fetch all non-workshop modes, then the maps of those modes
+    const gameModes = await listNonWorkshopModes(pgDb, gameId);
+    const gameMaps = await listMapsForModes(pgDb, gameId, gameModes.map(m => m.id));
 
     if (gameModes.length === 0 || gameMaps.length === 0) {
       throw new Error('No game modes or maps found for Overwatch 2');
@@ -225,33 +208,15 @@ async function fetchGameData(db: Database, gameId: string, gameModeId: string) {
 
   // Regular handling for other games
   // Fetch the selected game mode to get its team size
-  const selectedMode = await db.get('SELECT * FROM game_modes WHERE id = ?', [gameModeId]) as GameMode | undefined;
+  const selectedMode = await getModeById(pgDb, gameModeId);
 
   if (!selectedMode) {
     throw new Error(`Game mode ${gameModeId} not found`);
   }
 
-  // Fetch all modes with the same team size
-  const gameModes = await db.all(
-    // `IS ?` so a NULL team_size (FFA/Position modes) matches other NULL team_size modes
-    `SELECT * FROM game_modes WHERE game_id = ? AND team_size IS ? AND id NOT LIKE '%workshop%' AND id NOT LIKE '%custom%'`,
-    [gameId, selectedMode.team_size]
-  ) as GameMode[];
-
-  // Get all mode IDs for map filtering
-  const modeIds = gameModes.map(m => m.id);
-
-  // Fetch maps from all modes with the same team size
-  let gameMaps: GameMap[];
-  if (modeIds.length > 0) {
-    const placeholders = modeIds.map(() => '?').join(',');
-    gameMaps = await db.all(
-      `SELECT * FROM game_maps WHERE game_id = ? AND mode_id IN (${placeholders})`,
-      [gameId, ...modeIds]
-    ) as GameMap[];
-  } else {
-    gameMaps = [];
-  }
+  // All modes with the same team size (a NULL team size matches other NULL team size modes: FFA/Position)
+  const gameModes = await listModesByTeamSize(pgDb, gameId, selectedMode.team_size);
+  const gameMaps = await listMapsForModes(pgDb, gameId, gameModes.map(m => m.id));
 
   if (gameModes.length === 0 || gameMaps.length === 0) {
     throw new Error('No game modes or maps found for this game and team size');
@@ -454,7 +419,7 @@ export async function generateNextRoundMatches(
     return []; // Only 1 team left — tournament should end
   }
 
-  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
+  const { gameModes, gameMaps } = await fetchGameData(tournament.game_id, tournament.game_mode_id);
   const tournamentMaps = filterTournamentMaps(gameMaps);
 
   return await generateNextRoundMatchesFromWinners(
@@ -644,7 +609,7 @@ export async function generateCumulativeMatches(
   if (!tournament) throw new Error('Tournament not found');
 
   const { tournamentRuleset, tournamentDescription, tournamentEventImageUrl, tournamentAnnouncements, tournamentPlayerNotifications } = await fetchTournamentInfo(db, tournamentId);
-  const { gameModes, gameMaps } = await fetchGameData(db, gameId, tournament.game_mode_id);
+  const { gameModes, gameMaps } = await fetchGameData(gameId, tournament.game_mode_id);
 
   const tournamentMaps = filterTournamentMaps(gameMaps);
   if (tournamentMaps.length === 0) throw new Error('No tournament-eligible maps found');
@@ -733,7 +698,7 @@ export async function generateDoubleEliminationRoundMatches(
 
   const db = await getDbInstance();
   const tournament = await fetchTournamentForNextRound(db, tournamentId);
-  const { gameModes, gameMaps } = await fetchGameData(db, tournament.game_id, tournament.game_mode_id);
+  const { gameModes, gameMaps } = await fetchGameData(tournament.game_id, tournament.game_mode_id);
   const tournamentMaps = filterTournamentMaps(gameMaps);
 
   const matches: GeneratedMatch[] = [];

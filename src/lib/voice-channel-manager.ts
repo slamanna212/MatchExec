@@ -2,6 +2,9 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { getMatchTeams, MAX_VOICE_CHANNELS_PER_MATCH } from './match-setup';
 import type { Database } from '../../lib/database/connection';
+import { db as pgDb } from '../../lib/db';
+import { getModeScoringTypeAndMaxTeams } from './games';
+import { getAnyDiscordSettings } from './settings';
 
 interface VoiceChannelCreationResult {
   success: boolean;
@@ -164,9 +167,7 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     const db = await getDbInstance();
 
     // Check if voice channel category is configured
-    const settings = await db.get<{
-      voice_channel_category_id?: string;
-    }>('SELECT voice_channel_category_id FROM discord_settings LIMIT 1');
+    const settings = await getAnyDiscordSettings(pgDb);
 
     if (!settings?.voice_channel_category_id) {
       logger.debug('Voice channel category not configured, skipping auto-creation');
@@ -185,10 +186,7 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     }
 
     // Get game mode to determine team structure
-    const gameMode = await db.get<{ max_teams: number; scoring_type?: string }>(
-      'SELECT max_teams, scoring_type FROM game_modes WHERE id = ? AND game_id = ?',
-      [match.mode_id, match.game_id]
-    );
+    const gameMode = await getModeScoringTypeAndMaxTeams(pgDb, match.game_id, match.mode_id);
 
     const isSingleTeam = gameMode?.max_teams === 1;
     logger.debug(`Match ${matchId} is ${isSingleTeam ? 'single-team' : 'dual-team'} mode (max_teams=${gameMode?.max_teams})`);

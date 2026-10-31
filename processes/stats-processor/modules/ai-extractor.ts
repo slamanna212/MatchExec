@@ -7,6 +7,8 @@ import type { AIExtractionResult, GameStatDefinition } from '../../../shared/typ
 import { AI_PROVIDER_CALLS } from './providers';
 import { resolveModelId } from '../../../src/lib/ai-model-resolver';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
+import { db as pgDb } from '../../../lib/db';
+import { getGameAiNotes, getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
 
 const MAX_RETRIES = 3;
 const MAX_PLAYERS = 64;
@@ -50,27 +52,21 @@ export class AIExtractor {
 
       // Load match to get game_id and scoring_type
       const match = await this.db.get(
-        `SELECT m.id, m.game_id, COALESCE(gm.scoring_type, 'Normal') as scoring_type
-         FROM matches m
-         LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
-         WHERE m.id = ?`,
+        'SELECT id, game_id, mode_id FROM matches WHERE id = ?',
         [submission.match_id]
       );
       if (!match) throw new Error(`Match ${submission.match_id} not found`);
-      const scoringType: string = match.scoring_type ?? 'Normal';
+      const scoringType: string = (match.mode_id ? await getModeScoringType(pgDb, match.game_id, match.mode_id) : undefined) ?? 'Normal';
 
       // Load stat definitions
-      const statDefs = await this.db.all(
-        'SELECT * FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order',
-        [match.game_id]
-      ) as GameStatDefinition[];
+      const statDefs = await listStatDefinitions(pgDb, match.game_id) as GameStatDefinition[];
 
       if (!statDefs || statDefs.length === 0) {
         throw new Error(`No stat definitions found for game ${match.game_id}`);
       }
 
       // Load game name and AI notes
-      const game = await this.db.get('SELECT name, ai_screenshot_notes FROM games WHERE id = ?', [match.game_id]);
+      const game = await getGameAiNotes(pgDb, match.game_id);
 
       // Load settings
       const settings = await this.db.get(
@@ -100,7 +96,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, scoringType);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes ?? undefined, scoringType);
       let rawResponse: string | null = null;
       let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;

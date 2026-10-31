@@ -7,6 +7,8 @@ import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { createMatchTeams } from './match-setup';
 import { cleanMapId } from './utils/map-utils';
+import { db as pgDb } from '../../lib/db';
+import { getMap } from './games';
 
 async function getMatchName(matchId: string): Promise<string> {
   try {
@@ -266,11 +268,8 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
       let mapName: string | null = null;
       if (firstGame.map_id) {
         // Scope by the match's game: map IDs are only unique per game.
-        const mapRow = await db.get<{ name: string }>(
-          `SELECT gm.name FROM game_maps gm JOIN matches m ON m.game_id = gm.game_id
-           WHERE m.id = ? AND gm.id = ?`,
-          [matchId, cleanMapId(firstGame.map_id)]
-        );
+        const matchRow = await db.get<{ game_id: string }>('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+        const mapRow = matchRow ? await getMap(pgDb, matchRow.game_id, cleanMapId(firstGame.map_id)) : undefined;
         mapName = mapRow?.name ?? null;
       }
       await logFeedEvent({

@@ -33,6 +33,9 @@ import {
 import type { WinnerKind } from './announcement-helpers';
 import { safePublicPath, capTitle } from './utils';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
+import { db as pgDb } from '../../../lib/db';
+import { findMapByIdOrName, findMapByIdPattern, getGameDisplay, getMode } from '../../../src/lib/games';
+import { listChannelsForNotification } from '../../../src/lib/discord-channels';
 
 export class AnnouncementHandler {
   constructor(
@@ -315,9 +318,7 @@ export class AnnouncementHandler {
 
     if (this.db) {
       try {
-        const gameData = await this.db.get<{ name: string; color: string }>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [gameId]);
+        const gameData = await getGameDisplay(pgDb, gameId);
 
         if (gameData) {
           gameName = gameData.name;
@@ -393,11 +394,7 @@ export class AnnouncementHandler {
 
   private async fetchMapName(gameId: string, cleanMapId: string): Promise<string> {
     try {
-      const mapData = await this.db!.get<{ name: string }>(`
-        SELECT name FROM game_maps
-        WHERE game_id = ? AND (id = ? OR LOWER(name) LIKE LOWER(?))
-        LIMIT 1
-      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+      const mapData = await findMapByIdOrName(pgDb, gameId, cleanMapId);
 
       return mapData ? mapData.name : cleanMapId;
     } catch (error) {
@@ -461,19 +458,9 @@ export class AnnouncementHandler {
   private async fetchMapData(
     gameId: string,
     cleanMapId: string
-  ): Promise<{ name: string; image_url: string; location: string; mode_id: string } | null> {
+  ): Promise<{ name: string; image_url: string | null; location: string | null; mode_id: string | null } | null> {
     // Try exact match first
-    const mapData = await this.db!.get<{
-      name: string;
-      image_url: string;
-      location: string;
-      mode_id: string;
-    }>(`
-      SELECT gm.name, gm.image_url, gm.location, gm.mode_id
-      FROM game_maps gm
-      WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
-      LIMIT 1
-    `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+    const mapData = await findMapByIdOrName(pgDb, gameId, cleanMapId);
 
     if (mapData) return mapData;
 
@@ -487,24 +474,14 @@ export class AnnouncementHandler {
   private async fetchMapDataByBaseName(
     gameId: string,
     cleanMapId: string
-  ): Promise<{ name: string; image_url: string; location: string; mode_id: string } | null> {
+  ): Promise<{ name: string; image_url: string | null; location: string | null; mode_id: string | null } | null> {
     const parts = cleanMapId.split('-');
     if (parts.length < 2) return null;
 
     const baseMapName = parts[0];
     const remainingParts = parts.slice(1).join('-');
 
-    const result = await this.db!.get<{
-      name: string;
-      image_url: string;
-      location: string;
-      mode_id: string;
-    }>(`
-      SELECT gm.name, gm.image_url, gm.location, gm.mode_id
-      FROM game_maps gm
-      WHERE gm.game_id = ? AND gm.id LIKE ?
-      LIMIT 1
-    `, [gameId, `${baseMapName}%${remainingParts.split('-').pop()}`]);
+    const result = await findMapByIdPattern(pgDb, gameId, `${baseMapName}%${remainingParts.split('-').pop()}`);
 
     return result || null;
   }
@@ -530,9 +507,7 @@ export class AnnouncementHandler {
    */
   private async fetchModeName(modeId: string, gameId: string): Promise<string> {
     try {
-      const modeData = await this.db!.get<{ name: string }>(`
-        SELECT name FROM game_modes WHERE id = ? AND game_id = ?
-      `, [modeId, gameId]);
+      const modeData = await getMode(pgDb, gameId, modeId);
       return modeData ? modeData.name : modeId;
     } catch (error) {
       logger.error('Error fetching mode name:', error);
@@ -545,9 +520,7 @@ export class AnnouncementHandler {
    */
   private async fetchGameColor(gameId: string): Promise<number> {
     try {
-      const gameData = await this.db!.get<{ color: string }>(`
-        SELECT color FROM games WHERE id = ?
-      `, [gameId]);
+      const gameData = await getGameDisplay(pgDb, gameId);
       if (gameData?.color) {
         return parseInt(gameData.color.replace('#', ''), 16);
       }
@@ -561,7 +534,7 @@ export class AnnouncementHandler {
    * Build map embed with provided data
    */
   private buildMapEmbed(
-    mapData: { name: string; image_url: string; location: string; mode_id: string },
+    mapData: { name: string; image_url: string | null; location: string | null; mode_id: string | null },
     modeName: string,
     gameColor: number,
     mapNumber?: number,
@@ -627,7 +600,7 @@ export class AnnouncementHandler {
         return this.createFallbackMapEmbed(mapIdentifier, mapNumber);
       }
 
-      const modeName = await this.fetchModeName(mapData.mode_id, gameId);
+      const modeName = (mapData.mode_id ? await this.fetchModeName(mapData.mode_id, gameId) : 'Unknown');
       const gameColor = await this.fetchGameColor(gameId);
       const embed = this.buildMapEmbed(mapData, modeName, gameColor, mapNumber, mapNote);
 
@@ -648,57 +621,22 @@ export class AnnouncementHandler {
   }
 
   private async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates' | 'health_alerts'): Promise<DiscordChannel[]> {
-    if (!this.db) {
-      return [];
-    }
-
     try {
-      const columnMap = {
-        'announcements': 'send_announcements',
-        'reminders': 'send_reminders',
-        'match_start': 'send_match_start',
-        'signup_updates': 'send_signup_updates',
-        'health_alerts': 'send_health_alerts'
-      };
-
-      const column = columnMap[notificationType];
-      if (!column) {
-        logger.error(`Invalid notification type: ${notificationType}`);
-        return [];
-      }
-
-      const channels = await this.db.all<{
-        id: string;
-        discord_channel_id: string;
-        channel_name: string;
-        channel_type: string;
-        send_announcements: number;
-        send_reminders: number;
-        send_match_start: number;
-        send_signup_updates: number;
-        send_health_alerts: number;
-        created_at: string;
-        updated_at: string;
-      }>(`
-        SELECT id, discord_channel_id, channel_name, channel_type,
-               send_announcements, send_reminders, send_match_start, send_signup_updates, send_health_alerts,
-               created_at, updated_at
-        FROM discord_channels
-        WHERE ${column} = 1
-      `);
+      const channels = await listChannelsForNotification(pgDb, notificationType);
 
       return channels.map(channel => ({
         id: channel.id,
         discord_channel_id: channel.discord_channel_id,
-        channel_name: channel.channel_name,
+        channel_name: channel.channel_name ?? undefined,
         channel_type: channel.channel_type as 'text' | 'voice',
-        send_announcements: Boolean(channel.send_announcements),
-        send_reminders: Boolean(channel.send_reminders),
-        send_match_start: Boolean(channel.send_match_start),
-        send_signup_updates: Boolean(channel.send_signup_updates),
-        send_health_alerts: Boolean(channel.send_health_alerts),
-        created_at: channel.created_at,
-        updated_at: channel.updated_at
+        send_announcements: channel.send_announcements,
+        send_reminders: channel.send_reminders,
+        send_match_start: channel.send_match_start,
+        send_signup_updates: channel.send_signup_updates,
+        send_health_alerts: channel.send_health_alerts,
+        last_name_refresh: channel.last_name_refresh?.toISOString(),
+        created_at: channel.created_at.toISOString(),
+        updated_at: channel.updated_at.toISOString()
       }));
 
     } catch (error) {
@@ -791,9 +729,7 @@ export class AnnouncementHandler {
     }
 
     try {
-      const gameData = await this.db.get<{ name: string; color: string }>(`
-        SELECT name, color FROM games WHERE id = ?
-      `, [gameId]);
+      const gameData = await getGameDisplay(pgDb, gameId);
 
       if (gameData) {
         const color = gameData.color ? parseInt(gameData.color.replace('#', ''), 16) : 0x3498db;
@@ -1318,9 +1254,7 @@ export class AnnouncementHandler {
 
     try {
       // Get game data and team names
-      const gameData = await this.db.get<{name: string, color: string}>(`
-        SELECT name, color FROM games WHERE id = ?
-      `, [gameId]);
+      const gameData = await getGameDisplay(pgDb, gameId);
 
       if (gameData) {
         gameName = gameData.name;
@@ -1340,15 +1274,7 @@ export class AnnouncementHandler {
 
       // Get map data
       const baseMapId = cleanMapId(mapId);
-      const mapData = await this.db.get<{
-        name: string;
-        image_url: string;
-      }>(`
-        SELECT gm.name, gm.image_url
-        FROM game_maps gm
-        WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
-        LIMIT 1
-      `, [gameId, baseMapId, `%${baseMapId}%`]);
+      const mapData = await findMapByIdOrName(pgDb, gameId, baseMapId);
 
       if (mapData) {
         mapName = mapData.name;
@@ -1563,9 +1489,7 @@ export class AnnouncementHandler {
 
     if (this.db) {
       try {
-        const gameData = await this.db.get<{name: string, color: string}>(`
-          SELECT name, color FROM games WHERE id = ?
-        `, [gameId]);
+        const gameData = await getGameDisplay(pgDb, gameId);
 
         if (gameData) {
           gameName = gameData.name;
@@ -1810,9 +1734,7 @@ export class AnnouncementHandler {
 
     if (this.db) {
       try {
-        const gameData = await this.db.get<{name: string, color: string, icon_url: string}>(`
-          SELECT name, color, icon_url FROM games WHERE id = ?
-        `, [tournamentData.gameId]);
+        const gameData = await getGameDisplay(pgDb, tournamentData.gameId);
 
         if (gameData) {
           gameName = gameData.name;

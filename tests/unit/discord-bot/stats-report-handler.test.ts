@@ -50,7 +50,7 @@ function makeStat(
   isPrimary: boolean,
   format: string | null = null
 ) {
-  return { id: name, name, display_name: displayName, stat_type: 'number', category, sort_order: sortOrder, is_primary: isPrimary ? 1 : 0, format };
+  return { id: name, name, display_name: displayName, stat_type: 'number', category, sort_order: sortOrder, is_primary: isPrimary, format };
 }
 
 const OW2_STATS = [
@@ -161,8 +161,8 @@ describe('sortStatDefs', () => {
     const result = sortStatDefs(OW2_STATS, []);
     const names = result.map(d => d.name);
     // Primaries first, then non-primaries
-    const primaryNames = OW2_STATS.filter(s => s.is_primary === 1).sort((a, b) => a.sort_order - b.sort_order).map(s => s.name);
-    const nonPrimaryNames = OW2_STATS.filter(s => s.is_primary === 0).map(s => s.name);
+    const primaryNames = OW2_STATS.filter(s => s.is_primary).sort((a, b) => a.sort_order - b.sort_order).map(s => s.name);
+    const nonPrimaryNames = OW2_STATS.filter(s => !s.is_primary).map(s => s.name);
     expect(names).toEqual([...primaryNames, ...nonPrimaryNames]);
   });
 

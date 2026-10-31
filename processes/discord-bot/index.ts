@@ -21,6 +21,8 @@ import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
 import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
+import { db as pgDb } from '../../lib/db';
+import { listGames } from '../../src/lib/games';
 
 class MatchExecBot {
   private client: Client;
@@ -159,11 +161,9 @@ class MatchExecBot {
   }
 
   private async preloadSignupForms() {
-    if (!this.db) return;
-
     try {
       // Get all games from the database
-      const games = await this.db.all<{ id: string, name: string }>('SELECT id, name FROM games');
+      const games = await listGames(pgDb);
 
       logger.info(`📋 Pre-loading signup forms for ${games.length} games...`);
 

@@ -7,6 +7,8 @@ import { validateRequiredFields, validateMaxLength, validateNumberRange, validat
 import type { ValidationResult } from '@/lib/utils/validation';
 import type { Database } from '@/lib/database/connection';
 import { cleanMapId } from '@/lib/utils/map-utils';
+import { db as pgDb } from '../../../../lib/db';
+import { getGameMaxSignups, getMap, getModeScoringType } from '@/lib/games';
 
 export interface MatchRequestBody {
   name: string;
@@ -83,14 +85,12 @@ export async function resolveModeFromMaps(
   let scoringType: string | null = null;
   for (const mapId of maps) {
     const cleanId = cleanMapId(String(mapId));
-    const row = await db.get<{ mode_id: string; scoring_type: string | null }>(
-      `SELECT gm.mode_id, gmo.scoring_type
-       FROM game_maps gm
-       LEFT JOIN game_modes gmo ON gmo.id = gm.mode_id AND gmo.game_id = gm.game_id
-       WHERE gm.game_id = ? AND gm.id = ?`,
-      [gameId, cleanId]
-    );
-    if (!row) continue;
+    const map = await getMap(pgDb, gameId, cleanId);
+    if (!map) continue;
+    const row = {
+      mode_id: map.mode_id as string,
+      scoring_type: map.mode_id ? (await getModeScoringType(pgDb, gameId, map.mode_id)) ?? null : null,
+    };
     if (modeId === null) {
       modeId = row.mode_id;
       scoringType = row.scoring_type ?? 'Normal';
@@ -112,8 +112,7 @@ export async function prepareMatchData(
   const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
 
   // Get the game's max signups setting
-  const game = await db.get<{ max_signups?: number }>('SELECT max_signups FROM games WHERE id = ?', [body.gameId]);
-  const maxParticipants = game?.max_signups || 20;
+  const maxParticipants = (await getGameMaxSignups(pgDb, body.gameId)) || 20;
 
   // For now, use placeholder values for Discord fields until they're configured
   const guildId = 'placeholder_guild';

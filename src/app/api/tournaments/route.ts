@@ -7,6 +7,8 @@ import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { db as pgDb } from '../../../../lib/db';
+import { getMode, getModeScoringType } from '@/lib/games';
 import { TOURNAMENT_SERIES_JSON_SQL, parseSeriesRefs } from '@/lib/series';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
@@ -63,7 +65,7 @@ async function validateGameModeId(db: Database, gameId: string, gameModeId: stri
     }
     return null;
   }
-  const gameMode = await db.get<{ id: string }>('SELECT id FROM game_modes WHERE id = ? AND game_id = ?', [gameModeId, gameId]);
+  const gameMode = await getMode(pgDb, gameId, gameModeId);
   if (!gameMode) return 'Invalid game mode ID or game mode does not belong to the selected game';
   return null;
 }
@@ -82,8 +84,7 @@ async function validateFormatMatchesScoringType(db: Database, gameId: string, ga
   if (gameId === 'overwatch2' && gameModeId.startsWith('ow2-')) {
     scoringType = 'Normal';
   } else {
-    const mode = await db.get<{ scoring_type?: string }>('SELECT scoring_type FROM game_modes WHERE id = ? AND game_id = ?', [gameModeId, gameId]);
-    scoringType = mode?.scoring_type ?? 'Normal';
+    scoringType = (await getModeScoringType(pgDb, gameId, gameModeId)) ?? 'Normal';
   }
 
   const isBracketFormat = format === 'single-elimination' || format === 'double-elimination';
