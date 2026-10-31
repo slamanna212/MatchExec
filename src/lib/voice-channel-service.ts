@@ -36,8 +36,15 @@ export class VoiceChannelService {
       // channel ID directly, instead of relying on a separate post-hoc sync step.
       const teams = await getMatchTeams(matchId);
       const activeTeams = teams.filter(t => !t.is_reserve);
-      for (let i = 0; i < activeTeams.length && i < channelIds.length; i++) {
-        await setTeamVoiceChannel(activeTeams[i].id, channelIds[i]);
+      if (channelIds.length === 1 && activeTeams.length > 1) {
+        // Shared lobby (FFA/Position): every team row points at the one channel
+        for (const team of activeTeams) {
+          await setTeamVoiceChannel(team.id, channelIds[0]);
+        }
+      } else {
+        for (let i = 0; i < activeTeams.length && i < channelIds.length; i++) {
+          await setTeamVoiceChannel(activeTeams[i].id, channelIds[i]);
+        }
       }
 
       // Track the channels for cleanup later

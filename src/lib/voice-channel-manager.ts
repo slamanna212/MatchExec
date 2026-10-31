@@ -185,8 +185,8 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     }
 
     // Get game mode to determine team structure
-    const gameMode = await db.get<{ max_teams: number }>(
-      'SELECT max_teams FROM game_modes WHERE id = ? AND game_id = ?',
+    const gameMode = await db.get<{ max_teams: number; scoring_type?: string }>(
+      'SELECT max_teams, scoring_type FROM game_modes WHERE id = ? AND game_id = ?',
       [match.mode_id, match.game_id]
     );
 
@@ -200,8 +200,15 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     const teams = await getMatchTeams(matchId);
     const activeTeams = teams.filter(t => !t.is_reserve).slice(0, MAX_VOICE_CHANNELS_PER_MATCH);
 
+    // FFA/Position matches have one match_teams row per participant, so per-team
+    // channels make no sense. They get a single shared lobby channel named after
+    // the match (the service points every team row at it).
+    const isSharedLobby = gameMode?.scoring_type === 'FFA' || gameMode?.scoring_type === 'Position';
+
     let channelNames: string[];
-    if (isSingleTeam) {
+    if (isSharedLobby) {
+      channelNames = [match.name];
+    } else if (isSingleTeam) {
       const { blueChannelName } = await determineChannelNames(db, match, true);
       channelNames = [blueChannelName];
     } else if (activeTeams.length > 2) {

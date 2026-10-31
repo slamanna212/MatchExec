@@ -12,6 +12,7 @@ import {
   isBracketReadyForFinals,
   getBracketWinner
 } from '@/lib/tournament-bracket';
+import { getCumulativeStandings } from '@/lib/tournament-standings';
 
 interface Tournament {
   id: string;
@@ -64,6 +65,11 @@ export async function POST( // NOSONAR typescript:S3776
       return apiError('Tournament must be in battle phase to progress', 400);
     }
 
+    // Cumulative-points has no bracket: it completes when all of its matches are done
+    if (tournament.format === 'cumulative-points') {
+      return await handleCumulativeProgress(tournamentId);
+    }
+
     // Get current round information
     const roundInfo = await getCurrentRoundInfo(tournamentId);
 
@@ -79,6 +85,75 @@ export async function POST( // NOSONAR typescript:S3776
     logger.error('Error progressing tournament:', error);
     return apiError('Failed to progress tournament');
   }
+}
+
+/**
+ * Cumulative-points: when every tournament match is complete the tournament is
+ * complete. Winner = top of standings by points; a points tie is broken by more
+ * 1st-place finishes. If players are still level after that, there is no single
+ * winner and the tie is announced instead (winner is null in the response).
+ */
+async function handleCumulativeProgress(tournamentId: string) {
+  const db = await getDbInstance();
+
+  const counts = await db.get<{ total: number; incomplete: number }>(`
+    SELECT COUNT(*) as total,
+           SUM(CASE WHEN status = 'complete' THEN 0 ELSE 1 END) as incomplete
+    FROM matches WHERE tournament_id = ?
+  `, [tournamentId]);
+
+  if (!counts || counts.total === 0) {
+    return apiError('No matches found for this tournament', 400);
+  }
+  if ((counts.incomplete ?? 0) > 0) {
+    return apiError('Not all tournament matches are complete yet', 400);
+  }
+
+  const standings = await getCumulativeStandings(db, tournamentId);
+  const top = standings.filter(s => s.rank === 1);
+  const topFirsts = top.length > 0 ? Math.max(...top.map(s => s.first_places)) : 0;
+  const leaders = top.filter(s => s.first_places === topFirsts);
+
+  await db.run(
+    'UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['complete', tournamentId]
+  );
+
+  try {
+    const { queueTournamentWinnerNotification } = await import('../../../../../lib/tournament-notifications');
+    if (leaders.length === 1) {
+      const winner = leaders[0];
+      const soloTeam = await db.get<{ team_id: string }>(`
+        SELECT ttm.team_id FROM tournament_team_members ttm
+        JOIN tournament_teams tt ON tt.id = ttm.team_id
+        WHERE tt.tournament_id = ? AND (ttm.discord_user_id = ? OR ttm.user_id = ?)
+        LIMIT 1
+      `, [tournamentId, winner.discord_user_id ?? winner.player_key, winner.user_id ?? winner.player_key]);
+
+      await queueTournamentWinnerNotification(
+        tournamentId,
+        soloTeam?.team_id ?? winner.player_key,
+        soloTeam ? undefined : {
+          winningTeamName: winner.username,
+          winningPlayers: [winner.discord_user_id ? `<@${winner.discord_user_id}>` : winner.username],
+        }
+      );
+    } else if (leaders.length > 1) {
+      await queueTournamentWinnerNotification(tournamentId, leaders[0].player_key, {
+        winningTeamName: `Tie: ${leaders.map(l => l.username).join(', ')}`,
+        winningPlayers: leaders.map(l => l.discord_user_id ? `<@${l.discord_user_id}>` : l.username),
+      });
+    }
+  } catch (error) {
+    logger.error('Failed to queue tournament winner notification:', error);
+  }
+
+  return apiOk({
+    message: leaders.length === 1 ? 'Tournament completed!' : 'Tournament completed in a tie!',
+    winner: leaders.length === 1 ? leaders[0].username : null,
+    tied: leaders.length > 1 ? leaders.map(l => l.username) : undefined,
+    tournamentId
+  });
 }
 
 async function handleSingleEliminationProgress(tournamentId: string, roundInfo: { maxWinnersRound: number; maxLosersRound: number; winnersComplete: boolean; losersComplete: boolean }) {

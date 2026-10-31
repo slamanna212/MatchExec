@@ -44,6 +44,7 @@ describe('Match Game Result Routes', () => {
     matchId = match.id;
 
     const db = getTestDb();
+    await db.run(`UPDATE matches SET status = 'battle' WHERE id = ?`, [matchId]);
     gameId = `game-${Date.now()}`;
     await db.run(
       `INSERT INTO match_games (id, match_id, round) VALUES (?, ?, 1)`,

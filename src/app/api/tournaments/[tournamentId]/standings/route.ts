@@ -2,6 +2,7 @@ import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { getCumulativeStandings } from '@/lib/tournament-standings';
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function GET(
     if (!tournament) return apiError('Tournament not found', 404);
 
     if (tournament.format === 'cumulative-points') {
-      return apiOk({ standings: await getCumulativeStandings(tournamentId) });
+      return apiOk({ standings: await getCumulativeStandings(db, tournamentId) });
     }
 
     // Bracket (single/double-elimination) standings
@@ -51,39 +52,4 @@ export async function GET(
     logger.error('Error fetching tournament standings:', error);
     return apiError('Failed to fetch tournament standings');
   }
-}
-
-async function getCumulativeStandings(tournamentId: string) {
-  const db = await getDbInstance();
-
-  // Sum points_awarded from match_game_placements for all matches in this tournament
-  const rows = await db.all<{
-    participant_id: string;
-    username: string;
-    total_points: number;
-    matches_played: number;
-    best_position: number | null;
-  }>(`
-    SELECT
-      mp.id as participant_id,
-      mp.username,
-      COALESCE(SUM(mgp.points_awarded), 0) as total_points,
-      COUNT(DISTINCT mg.id) as matches_played,
-      MIN(mgp.position) as best_position
-    FROM match_participants mp
-    JOIN matches m ON mp.match_id = m.id AND m.tournament_id = ?
-    LEFT JOIN match_games mg ON mg.match_id = m.id AND mg.status = 'completed'
-    LEFT JOIN match_game_placements mgp ON mgp.match_game_id = mg.id AND mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
-    GROUP BY mp.id, mp.username
-    ORDER BY total_points DESC, best_position ASC, mp.username ASC
-  `, [tournamentId]);
-
-  return rows.map((r, idx) => ({
-    rank: idx + 1,
-    participant_id: r.participant_id,
-    username: r.username,
-    total_points: r.total_points,
-    matches_played: r.matches_played,
-    best_position: r.best_position,
-  }));
 }

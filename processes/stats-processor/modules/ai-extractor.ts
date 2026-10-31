@@ -1,4 +1,4 @@
-// @ts-nocheck - Database method calls have complex typing issues
+import type { StatsDb } from './db-types';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -9,10 +9,16 @@ import { resolveModelId } from '../../../src/lib/ai-model-resolver';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 const MAX_RETRIES = 3;
+const MAX_PLAYERS = 64;
+const MAX_NAME_LENGTH = 100;
 const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
 
 export class AIExtractor {
-  constructor(private db: unknown) {}
+  private db: StatsDb;
+
+  constructor(db: unknown) {
+    this.db = db as StatsDb;
+  }
 
   private async appendLog(submissionId: string, message: string): Promise<void> {
     await this.db.run(
@@ -187,13 +193,13 @@ export class AIExtractor {
         );
       }
 
-      // Write match_game_placements for FFA/Position modes using extracted positions
+      // Store extracted positions for FFA/Position modes as a suggestion only
+      // (pre-fills the Position scoring UI; an admin must confirm).
       if (effectiveScoringType !== 'Normal' && extractionResult.playerPositions) {
-        await this.writePlacementsFromPositions(
+        await this.storeSuggestedPositions(
+          submissionId,
           submission.match_id,
-          submission.match_game_id,
-          extractionResult.playerPositions,
-          effectiveScoringType
+          extractionResult.playerPositions
         );
       }
 
@@ -389,9 +395,11 @@ ${positionSchema}
 
     if (!Array.isArray(parsed.players)) return 'players is not an array';
     if (parsed.players.length === 0) return 'players array is empty';
+    if (parsed.players.length > MAX_PLAYERS) return 'too many players';
 
     for (const player of parsed.players) {
       if (!player.playerName || typeof player.playerName !== 'string') return 'player missing playerName';
+      if (player.playerName.length > MAX_NAME_LENGTH) return 'playerName too long';
       if (!player.stats || typeof player.stats !== 'object' || Array.isArray(player.stats)) return 'player missing stats object';
 
       for (const val of Object.values(player.stats)) {
@@ -425,7 +433,7 @@ ${positionSchema}
     if (hasPositions) {
       result.playerPositions = {};
       for (const player of result.players) {
-        if (typeof player.position === 'number') {
+        if (typeof player.position === 'number' && !(player.playerName in result.playerPositions)) {
           result.playerPositions[player.playerName] = player.position;
         }
       }
@@ -434,49 +442,66 @@ ${positionSchema}
     return result;
   }
 
-  private async writePlacementsFromPositions(
-    matchId: string,
-    matchGameId: string,
-    playerPositions: Record<string, number>,
-    scoringType: string
-  ): Promise<void> {
-    const participants = await this.db.all<{ id: string; username: string }>(
-      'SELECT id, username FROM match_participants WHERE match_id = ?',
-      [matchId]
-    );
-    if (!participants || participants.length === 0) return;
+  /**
+   * Validate AI-extracted finishing positions and map them to this match's
+   * participants. AI output is untrusted (a doctored screenshot can say
+   * anything), so this only ever produces a *suggestion*: strict shape checks,
+   * positive unique integers, and only participants of this match. Returns
+   * null when nothing usable remains.
+   */
+  buildSuggestedPositions(
+    playerPositions: unknown,
+    participants: Array<{ id: string; username: string }>
+  ): Record<string, number> | null {
+    if (!playerPositions || typeof playerPositions !== 'object' || Array.isArray(playerPositions)) return null;
 
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const positionResults: Record<string, number> = {};
+    const suggestion: Record<string, number> = {};
+    const usedPositions = new Set<number>();
 
-    for (const [playerName, position] of Object.entries(playerPositions)) {
-      const normalizedName = normalize(playerName);
-      const participant = participants.find(p => normalize(p.username) === normalizedName);
-      if (participant) {
-        positionResults[participant.id] = position;
-      }
+    for (const [playerName, position] of Object.entries(playerPositions as Record<string, unknown>)) {
+      if (typeof position !== 'number' || !Number.isInteger(position) || position < 1 || position > MAX_PLAYERS) return null;
+      if (usedPositions.has(position)) return null; // duplicate rank: ambiguous, discard the lot
+
+      const normalizedName = normalize(String(playerName).slice(0, MAX_NAME_LENGTH));
+      if (!normalizedName) continue;
+      const matched = participants.filter(p => normalize(p.username) === normalizedName);
+      if (matched.length !== 1) continue; // unknown or ambiguous name
+      if (suggestion[matched[0].id] !== undefined) return null; // two extracted names -> same participant
+
+      suggestion[matched[0].id] = position;
+      usedPositions.add(position);
     }
 
-    if (Object.keys(positionResults).length === 0) return;
+    return Object.keys(suggestion).length > 0 ? suggestion : null;
+  }
 
+  private async storeSuggestedPositions(
+    submissionId: string,
+    matchId: string,
+    playerPositions: Record<string, number>
+  ): Promise<void> {
     try {
-      const { saveScoringModeResult } = await import('../../../src/lib/scoring-functions');
-      const { MatchResult } = await import('../../../shared/types') as { MatchResult: unknown };
-      void MatchResult;
+      const participants = await this.db.all<{ id: string; username: string }>(
+        'SELECT id, username FROM match_participants WHERE match_id = ?',
+        [matchId]
+      );
+      if (!participants || participants.length === 0) return;
 
-      await saveScoringModeResult(matchGameId, {
-        matchId,
-        gameId: matchGameId,
-        winner: 'team1',
-        isFfaMode: scoringType === 'FFA',
-        isPositionMode: scoringType === 'Position',
-        positionResults,
-        completedAt: new Date(),
-      });
+      const suggestion = this.buildSuggestedPositions(playerPositions, participants);
+      if (!suggestion) {
+        logger.warning(`AI positions for submission ${submissionId} were unusable; no suggestion stored`);
+        return;
+      }
 
-      logger.debug(`✅ Placements written from AI positions for game ${matchGameId} (${scoringType})`);
+      // Never writes official results: an admin confirms via the Position scoring UI.
+      await this.db.run(
+        'UPDATE scorecard_submissions SET suggested_positions = ? WHERE id = ?',
+        [JSON.stringify(suggestion), submissionId]
+      );
+      logger.debug(`Stored AI position suggestion for submission ${submissionId}`);
     } catch (err) {
-      logger.error('Error writing placements from AI positions:', err);
+      logger.error('Error storing AI position suggestion:', err);
     }
   }
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { Stack, Text, Group, NumberInput, TextInput, Switch, Card } from '@mantine/core';
 import type { SeriesScoringConfig } from '@/lib/series';
@@ -24,6 +25,10 @@ function parsePositionPoints(raw: string): number[] {
  * placement-points array for tournament events (index 0 = 1st place).
  */
 export function ScoringConfigEditor({ value, onChange }: ScoringConfigEditorProps): JSX.Element {
+  // Keep the raw text locally so typing commas/spaces isn't eaten by re-parsing
+  // on every keystroke; parse into numbers on blur.
+  const [positionText, setPositionText] = useState((value.tournament_position_points ?? []).join(', '));
+
   const update = <K extends keyof SeriesScoringConfig>(key: K, val: SeriesScoringConfig[K]) => {
     onChange({ ...value, [key]: val });
   };
@@ -54,14 +59,19 @@ export function ScoringConfigEditor({ value, onChange }: ScoringConfigEditorProp
         <TextInput
           label="Tournament placement points"
           description="Comma-separated, in finishing order — e.g. 25, 18, 15, 12, 10 for 1st through 5th."
-          value={(value.tournament_position_points ?? []).join(', ')}
-          onChange={(e) => update('tournament_position_points', parsePositionPoints(e.currentTarget.value))}
+          value={positionText}
+          onChange={(e) => setPositionText(e.currentTarget.value)}
+          onBlur={() => {
+            const parsed = parsePositionPoints(positionText);
+            setPositionText(parsed.join(', '));
+            update('tournament_position_points', parsed);
+          }}
           placeholder="25, 18, 15, 12, 10"
         />
 
         <Switch
-          label="Position-based match events use their own point spread"
-          description="For FFA/Position matches, award the points earned in the match itself rather than a flat win/loss amount."
+          label="Position matches use their own point spread"
+          description="For Position (race/ranking) matches, award the points earned in the match itself rather than a flat win/loss amount. FFA matches always use win/loss points."
           checked={value.position_event_use_event_spread !== false}
           onChange={(e) => update('position_event_use_event_spread', e.currentTarget.checked)}
         />

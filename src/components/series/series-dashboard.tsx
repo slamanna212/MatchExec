@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { parseDbTimestamp } from '@/lib/utils/dates';
+import { showError, showSuccess } from '@/lib/notifications';
 
 interface SeriesRow {
   id: string;
@@ -47,10 +48,11 @@ const NEXT_STATUS: Partial<Record<SeriesRow['status'], { status: string; label: 
   active:  { status: 'complete', label: 'Complete', color: 'blue' },
 };
 
-const SeriesCard = memo(({ series, onViewDetails, onAdvance }: {
+const SeriesCard = memo(({ series, onViewDetails, onAdvance, onCancel }: {
   series: SeriesRow;
   onViewDetails: (s: SeriesRow) => void;
   onAdvance: (s: SeriesRow) => void;
+  onCancel: (s: SeriesRow) => void;
 }) => {
   const { colorScheme } = useMantineColorScheme();
 
@@ -103,6 +105,11 @@ const SeriesCard = memo(({ series, onViewDetails, onAdvance }: {
             {NEXT_STATUS[series.status]!.label}
           </Button>
         )}
+        {(series.status === 'created' || series.status === 'active') && (
+          <Button size="xs" color="red" variant="subtle" onClick={() => onCancel(series)}>
+            Cancel
+          </Button>
+        )}
         <Button size="xs" variant="outline" onClick={() => onViewDetails(series)}>
           View
         </Button>
@@ -139,19 +146,35 @@ export function SeriesDashboard(): JSX.Element {
 
   useEffect(() => { fetchSeries(); }, [fetchSeries]);
 
+  const transitionSeries = async (s: SeriesRow, status: string, successMessage: string) => {
+    try {
+      const res = await fetch(`/api/series/${s.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error ?? 'Failed to update series status');
+        return;
+      }
+      showSuccess(successMessage);
+      fetchSeries();
+    } catch (error) {
+      logger.error('Error updating series status:', error);
+      showError('An error occurred while updating the series');
+    }
+  };
+
   const handleAdvance = async (s: SeriesRow) => {
     const next = NEXT_STATUS[s.status];
     if (!next) return;
-    try {
-      await fetch(`/api/series/${s.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: next.status }),
-      });
-      fetchSeries();
-    } catch (error) {
-      logger.error('Error advancing series status:', error);
-    }
+    await transitionSeries(s, next.status, `Series ${next.status === 'active' ? 'activated' : 'completed'}`);
+  };
+
+  const handleCancel = async (s: SeriesRow) => {
+    if (!window.confirm(`Cancel series "${s.name}"? This cannot be undone.`)) return;
+    await transitionSeries(s, 'cancelled', 'Series cancelled');
   };
 
   const filtered = series.filter(s =>
@@ -209,6 +232,7 @@ export function SeriesDashboard(): JSX.Element {
                 series={s}
                 onViewDetails={(s) => router.push(`/series/${s.id}`)}
                 onAdvance={handleAdvance}
+                onCancel={handleCancel}
               />
             </Grid.Col>
           ))}

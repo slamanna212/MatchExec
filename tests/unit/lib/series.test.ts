@@ -149,7 +149,7 @@ describe('series lib', () => {
 
     it('auto-assigns event_order starting at 1', async () => {
       await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId });
-      await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 2 });
+      await addSeriesEvent(seriesId, { event_type: 'match', match_id: (await createMatch(game.id, mode.id, { name: 'M2', status: 'complete' })).id.toString(), event_order: 2 });
 
       const events = await listSeriesEvents(seriesId);
       expect(events).toHaveLength(2);
@@ -170,9 +170,10 @@ describe('series lib', () => {
     });
 
     it('returns events ordered by event_order', async () => {
+      const extra = async (n: string) => (await createMatch(game.id, mode.id, { name: n, status: 'complete' })).id.toString();
       await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 3, points_multiplier: 3 });
-      await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 1, points_multiplier: 1 });
-      await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 2, points_multiplier: 2 });
+      await addSeriesEvent(seriesId, { event_type: 'match', match_id: await extra('E1'), event_order: 1, points_multiplier: 1 });
+      await addSeriesEvent(seriesId, { event_type: 'match', match_id: await extra('E2'), event_order: 2, points_multiplier: 2 });
 
       const events = await listSeriesEvents(seriesId);
       expect(events.map(e => e.event_order)).toEqual([1, 2, 3]);
@@ -188,10 +189,12 @@ describe('series lib', () => {
       // Two concurrent calls with no explicit event_order can both read the
       // same MAX(event_order) before either INSERT commits — the retry loop
       // must resolve this instead of letting one call reject.
+      const m2 = (await createMatch(game.id, mode.id, { name: 'C2', status: 'complete' })).id.toString();
+      const m3 = (await createMatch(game.id, mode.id, { name: 'C3', status: 'complete' })).id.toString();
       const results = await Promise.all([
         addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId }),
-        addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId }),
-        addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId }),
+        addSeriesEvent(seriesId, { event_type: 'match', match_id: m2 }),
+        addSeriesEvent(seriesId, { event_type: 'match', match_id: m3 }),
       ]);
 
       expect(results).toHaveLength(3);
@@ -204,8 +207,9 @@ describe('series lib', () => {
 
     it('rejects (does not retry) a conflict on an explicitly-requested event_order', async () => {
       await addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 5 });
+      const other = (await createMatch(game.id, mode.id, { name: 'Other', status: 'complete' })).id.toString();
       await expect(
-        addSeriesEvent(seriesId, { event_type: 'match', match_id: matchId, event_order: 5 })
+        addSeriesEvent(seriesId, { event_type: 'match', match_id: other, event_order: 5 })
       ).rejects.toThrow();
     });
   });

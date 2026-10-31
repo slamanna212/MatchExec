@@ -1,6 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { determineMatchWinner } from './scoring-functions';
+import { withTransaction } from './transaction';
 
 type Db = Awaited<ReturnType<typeof getDbInstance>>;
 
@@ -112,22 +113,36 @@ export async function listSeries(status?: string): Promise<SeriesRow[]> {
   return rows.map(toSeriesRow);
 }
 
-export async function updateSeries(seriesId: string, updates: Partial<CreateSeriesInput> & { status?: string }): Promise<void> {
+export type UpdateSeriesInput = {
+  [K in keyof CreateSeriesInput]?: CreateSeriesInput[K] | null;
+} & { status?: string };
+
+const NULLABLE_TEXT_COLUMNS = [
+  'description', 'start_date', 'end_date', 'event_image_url', 'game_id',
+  'guild_id', 'channel_id', 'livestream_link',
+] as const;
+
+/**
+ * Updates a series. `undefined` leaves a field untouched; an explicit `null`
+ * clears nullable columns (description, dates, links, ids, scoring_config).
+ */
+export async function updateSeries(seriesId: string, updates: UpdateSeriesInput): Promise<void> {
   const db = await getDbInstance();
   const fields: string[] = [];
   const values: unknown[] = [];
 
-  if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
-  if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+  if (updates.name !== undefined && updates.name !== null) { fields.push('name = ?'); values.push(updates.name); }
   if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
-  if (updates.scoring_config !== undefined) { fields.push('scoring_config = ?'); values.push(JSON.stringify(updates.scoring_config)); }
-  if (updates.start_date !== undefined) { fields.push('start_date = ?'); values.push(updates.start_date); }
-  if (updates.end_date !== undefined) { fields.push('end_date = ?'); values.push(updates.end_date); }
-  if (updates.event_image_url !== undefined) { fields.push('event_image_url = ?'); values.push(updates.event_image_url); }
-  if (updates.game_id !== undefined) { fields.push('game_id = ?'); values.push(updates.game_id); }
-  if (updates.livestream_link !== undefined) { fields.push('livestream_link = ?'); values.push(updates.livestream_link); }
-  if (updates.announcements !== undefined) { fields.push('announcements = ?'); values.push(updates.announcements ? 1 : 0); }
-  if (updates.player_notifications !== undefined) { fields.push('player_notifications = ?'); values.push(updates.player_notifications ? 1 : 0); }
+  if (updates.scoring_config !== undefined) {
+    fields.push('scoring_config = ?');
+    values.push(updates.scoring_config === null ? null : JSON.stringify(updates.scoring_config));
+  }
+  for (const col of NULLABLE_TEXT_COLUMNS) {
+    const v = updates[col];
+    if (v !== undefined) { fields.push(`${col} = ?`); values.push(v); }
+  }
+  if (updates.announcements !== undefined && updates.announcements !== null) { fields.push('announcements = ?'); values.push(updates.announcements ? 1 : 0); }
+  if (updates.player_notifications !== undefined && updates.player_notifications !== null) { fields.push('player_notifications = ?'); values.push(updates.player_notifications ? 1 : 0); }
 
   if (fields.length === 0) return;
 
@@ -137,9 +152,26 @@ export async function updateSeries(seriesId: string, updates: Partial<CreateSeri
   await db.run(`UPDATE series SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
+/**
+ * Atomically moves a series from `from` to `to`. Returns false when the
+ * series was no longer in `from` (concurrent transition).
+ */
+export async function transitionSeriesStatus(seriesId: string, from: string, to: string): Promise<boolean> {
+  const db = await getDbInstance();
+  const result = await db.run(
+    'UPDATE series SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?',
+    [to, seriesId, from]
+  );
+  return (result?.changes ?? 0) > 0;
+}
+
 export async function deleteSeries(seriesId: string): Promise<void> {
   const db = await getDbInstance();
-  await db.run('DELETE FROM series WHERE id = ?', [seriesId]);
+  // Foreign keys are off app-wide, so cascade manually.
+  await withTransaction(db, async () => {
+    await db.run('DELETE FROM series_events WHERE series_id = ?', [seriesId]);
+    await db.run('DELETE FROM series WHERE id = ?', [seriesId]);
+  });
 }
 
 const SERIES_STATUS_ORDER: Record<string, number> = {
@@ -229,9 +261,77 @@ export async function listSeriesEvents(seriesId: string): Promise<SeriesEventRow
   );
 }
 
-export async function removeSeriesEvent(eventId: string): Promise<void> {
+/**
+ * Removes a series event. When seriesId is given the event must belong to
+ * that series; returns false if nothing was deleted.
+ */
+export async function removeSeriesEvent(eventId: string, seriesId?: string): Promise<boolean> {
   const db = await getDbInstance();
-  await db.run('DELETE FROM series_events WHERE id = ?', [eventId]);
+  const result = seriesId
+    ? await db.run('DELETE FROM series_events WHERE id = ? AND series_id = ?', [eventId, seriesId])
+    : await db.run('DELETE FROM series_events WHERE id = ?', [eventId]);
+  return (result?.changes ?? 0) > 0;
+}
+
+export function validatePointsMultiplier(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 10) {
+    return 'points_multiplier must be a number greater than 0 and at most 10';
+  }
+  return null;
+}
+
+export function validateEventOrder(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return 'event_order must be a positive integer';
+  }
+  return null;
+}
+
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Validates the shape of a scoring_config object. Returns an error message or null. */
+export function validateScoringConfig(config: unknown): string | null {
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    return 'scoring_config must be an object';
+  }
+  const c = config as Record<string, unknown>;
+  for (const key of ['match_win_points', 'match_loss_points']) {
+    if (c[key] !== undefined && !isFiniteNumber(c[key])) return `scoring_config.${key} must be a number`;
+  }
+  if (c.tournament_position_points !== undefined) {
+    const arr = c.tournament_position_points;
+    if (!Array.isArray(arr) || !arr.every(isFiniteNumber)) {
+      return 'scoring_config.tournament_position_points must be an array of numbers';
+    }
+  }
+  if (c.position_event_use_event_spread !== undefined && typeof c.position_event_use_event_spread !== 'boolean') {
+    return 'scoring_config.position_event_use_event_spread must be a boolean';
+  }
+  return null;
+}
+
+export type SeriesEventCheck = { error: string; status: 400 | 404 | 409 } | null;
+
+/**
+ * Validates that the target of a new event exists, is consistent with
+ * event_type, and isn't already part of the series.
+ */
+export async function checkSeriesEventTarget(seriesId: string, input: AddSeriesEventInput): Promise<SeriesEventCheck> {
+  const db = await getDbInstance();
+  if (input.event_type === 'match') {
+    if (input.tournament_id) return { error: 'tournament_id must not be set for match events', status: 400 };
+    const m = await db.get<{ id: string }>('SELECT id FROM matches WHERE id = ?', [input.match_id]);
+    if (!m) return { error: 'Match not found', status: 400 };
+    const dup = await db.get<{ id: string }>('SELECT id FROM series_events WHERE series_id = ? AND match_id = ?', [seriesId, input.match_id]);
+    if (dup) return { error: 'Match is already part of this series', status: 409 };
+  } else {
+    if (input.match_id) return { error: 'match_id must not be set for tournament events', status: 400 };
+    const t = await db.get<{ id: string }>('SELECT id FROM tournaments WHERE id = ?', [input.tournament_id]);
+    if (!t) return { error: 'Tournament not found', status: 400 };
+    const dup = await db.get<{ id: string }>('SELECT id FROM series_events WHERE series_id = ? AND tournament_id = ?', [seriesId, input.tournament_id]);
+    if (dup) return { error: 'Tournament is already part of this series', status: 409 };
+  }
+  return null;
 }
 
 export interface SeriesScoringConfig {
@@ -242,24 +342,57 @@ export interface SeriesScoringConfig {
   position_event_use_event_spread?: boolean;
 }
 
-function parseScoringConfig(raw?: string): SeriesScoringConfig {
+function parseScoringConfig(raw?: string | null): SeriesScoringConfig {
   if (!raw) return {};
   try {
-    return JSON.parse(raw) as SeriesScoringConfig;
+    const parsed: unknown = JSON.parse(raw);
+    if (validateScoringConfig(parsed) !== null) return {};
+    return parsed as SeriesScoringConfig;
   } catch {
     return {};
   }
 }
 
-type AddPoints = (userId: string, username: string, points: number, eventId: string) => void;
+type AddPoints = (playerKey: string, username: string, points: number, eventId: string) => void;
+
+/** Stable player identity across matches: Discord id when known, else user id. */
+function playerKey(p: { discord_user_id?: string | null; user_id: string }): string {
+  return p.discord_user_id ?? p.user_id;
+}
 
 /**
- * Score a 'match' series event. Position-mode matches (by default) use their
- * own points_awarded spread from match_game_placements — the same points a
- * player earned in the match itself. Normal and FFA matches (and Position
- * matches with position_event_use_event_spread=false) use a binary
- * match_win_points/match_loss_points award based on the match's overall
- * winner (ties: nobody is credited a win, everyone gets the loss points).
+ * Standard competition ranking over a descending-sorted list of totals:
+ * tied entries share the rank (index) of the first tied entry.
+ */
+function tieAwareRanks(totals: number[]): number[] {
+  const ranks: number[] = [];
+  totals.forEach((t, i) => {
+    ranks.push(i > 0 && t === totals[i - 1] ? ranks[i - 1] : i);
+  });
+  return ranks;
+}
+
+interface MatchEventInfo {
+  status: string;
+  scoring_type: string;
+  tournament_id: string | null;
+  winner_team: string | null;
+  team1_id: string | null;
+  team2_id: string | null;
+}
+
+/**
+ * Score a 'match' series event. Only completed matches contribute.
+ *
+ * - Position matches (by default) use their own points_awarded spread from
+ *   match_game_placements. This is the only mode the
+ *   position_event_use_event_spread toggle applies to.
+ * - Tournament matches resolve the winner via tournament_teams membership
+ *   (matches.winner_team is a tournament_teams.id).
+ * - Normal standalone matches compare match_teams ids; reserves and
+ *   unassigned players earn nothing.
+ * - Normal/FFA/Position-without-spread award match_win_points to the winner
+ *   and match_loss_points to the other participants. Ties award no wins.
  */
 async function scoreMatchEvent(
   db: Db,
@@ -269,24 +402,38 @@ async function scoreMatchEvent(
 ): Promise<void> {
   if (!event.match_id) return;
 
-  const match = await db.get<{ scoring_type: string }>(
-    `SELECT COALESCE(gm.scoring_type, 'Normal') as scoring_type
+  const match = await db.get<MatchEventInfo>(
+    `SELECT m.status, COALESCE(gm.scoring_type, 'Normal') as scoring_type,
+            m.tournament_id, m.winner_team,
+            COALESCE(tm.team1_id, m.blue_team_id) as team1_id,
+            COALESCE(tm.team2_id, m.red_team_id) as team2_id
      FROM matches m
      LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+     LEFT JOIN tournament_matches tm ON tm.match_id = m.id
      WHERE m.id = ?`,
     [event.match_id]
   );
-  const scoringType = match?.scoring_type ?? 'Normal';
+  if (match?.status !== 'complete') return;
+  const scoringType = match.scoring_type;
 
-  const participants = await db.all<{ id: string; user_id: string; username: string; team_id: string | null }>(
-    `SELECT id, user_id, username, team_id FROM match_participants WHERE match_id = ?`,
+  const participants = await db.all<{
+    id: string; user_id: string; discord_user_id: string | null; username: string;
+    team_id: string | null; team_assignment: string | null; is_reserve: number | null;
+  }>(
+    `SELECT mp.id, mp.user_id, mp.discord_user_id, mp.username, mp.team_id, mp.team_assignment,
+            mt.is_reserve
+     FROM match_participants mp
+     LEFT JOIN match_teams mt ON mt.id = mp.team_id
+     WHERE mp.match_id = ?`,
     [event.match_id]
   );
   if (participants.length === 0) return;
 
-  const useEventSpread = scoringType === 'Position' && config.position_event_use_event_spread !== false;
+  const mult = event.points_multiplier;
+  const winPts = config.match_win_points ?? 0;
+  const lossPts = config.match_loss_points ?? 0;
 
-  if (useEventSpread) {
+  if (scoringType === 'Position' && config.position_event_use_event_spread !== false) {
     const rows = await db.all<{ entity_id: string; total_pts: number }>(
       `SELECT mgp.entity_id, SUM(mgp.points_awarded) as total_pts
        FROM match_game_placements mgp
@@ -297,32 +444,121 @@ async function scoreMatchEvent(
     );
     const byParticipant = new Map(rows.map(r => [r.entity_id, r.total_pts]));
     for (const p of participants) {
-      const pts = (byParticipant.get(p.id) ?? 0) * event.points_multiplier;
-      addPoints(p.user_id, p.username, pts, event.id);
+      addPoints(playerKey(p), p.username, (byParticipant.get(p.id) ?? 0) * mult, event.id);
+    }
+    return;
+  }
+
+  if (scoringType === 'FFA' || scoringType === 'Position') {
+    const rows = await db.all<{ entity_id: string; total_pts: number }>(
+      `SELECT mgp.entity_id, SUM(COALESCE(mgp.points_awarded, mgp.is_winner, 0)) as total_pts
+       FROM match_game_placements mgp
+       JOIN match_games mg ON mg.id = mgp.match_game_id
+       WHERE mg.match_id = ? AND mg.status = 'completed' AND mgp.entity_type = 'participant'
+       GROUP BY mgp.entity_id`,
+      [event.match_id]
+    );
+    const best = rows.reduce((max, r) => Math.max(max, r.total_pts), -Infinity);
+    const leaders = rows.filter(r => r.total_pts === best);
+    // A tie for first means nobody is credited with the win.
+    const winnerId = leaders.length === 1 && best > 0 ? leaders[0].entity_id : null;
+    for (const p of participants) {
+      addPoints(playerKey(p), p.username, (p.id === winnerId ? winPts : lossPts) * mult, event.id);
+    }
+    return;
+  }
+
+  if (match.tournament_id) {
+    // Tournament match: winner_team is a tournament_teams.id, so credit by
+    // tournament team membership instead of match_teams.
+    const winnerTeam = match.winner_team ?? await determineMatchWinner(db, event.match_id);
+    const members = await db.all<{ team_id: string; user_id: string; discord_user_id: string | null }>(
+      `SELECT team_id, user_id, discord_user_id FROM tournament_team_members WHERE team_id IN (?, ?)`,
+      [match.team1_id, match.team2_id]
+    );
+    for (const p of participants) {
+      const member = members.find(m =>
+        m.user_id === p.user_id || (m.discord_user_id && m.discord_user_id === p.discord_user_id)
+      );
+      if (!member) continue; // not on either team
+      const isWinner = winnerTeam !== null && member.team_id === winnerTeam;
+      addPoints(playerKey(p), p.username, (isWinner ? winPts : lossPts) * mult, event.id);
     }
     return;
   }
 
   const winnerEntityId = await determineMatchWinner(db, event.match_id);
-  const winPts = config.match_win_points ?? 0;
-  const lossPts = config.match_loss_points ?? 0;
-
   for (const p of participants) {
-    const isWinner = winnerEntityId !== null && (
-      scoringType === 'Normal' ? p.team_id === winnerEntityId : p.id === winnerEntityId
-    );
-    addPoints(p.user_id, p.username, (isWinner ? winPts : lossPts) * event.points_multiplier, event.id);
+    if (p.is_reserve === 1 || p.team_assignment === 'reserve') continue;
+    if (!p.team_id && !p.team_assignment) continue; // unassigned
+    const isWinner = winnerEntityId !== null && p.team_id === winnerEntityId;
+    addPoints(playerKey(p), p.username, (isWinner ? winPts : lossPts) * mult, event.id);
   }
 }
 
+interface BracketMatch {
+  round: number;
+  bracket_type: string;
+  status: string;
+  winner_team: string | null;
+  team1_id: string | null;
+  team2_id: string | null;
+}
+
+function loserOf(m: BracketMatch): string | null {
+  if (!m.winner_team) return null;
+  if (m.team1_id === m.winner_team) return m.team2_id;
+  if (m.team2_id === m.winner_team) return m.team1_id;
+  return null;
+}
+
 /**
- * Score a 'tournament' series event via tournament_position_points.
- * cumulative-points tournaments: every participant's final rank converts
- * directly via the array. Bracket tournaments: only the champion (rank 1)
- * is unambiguous without dedicated bracket-placement logic (runner-up and
- * 3rd/4th place require walking the losers bracket / a 3rd-place match) —
- * the champion team's members get tournament_position_points[0]; everyone
- * else earns 0 for this event.
+ * Resolve bracket-tournament placings as an ordered list of team-id groups
+ * (index 0 = champion, 1 = runner-up, 2 = third place, ...). Groups with
+ * several teams are tied for that placing.
+ *
+ * Single elimination: champion = winner of the highest winners-bracket round;
+ * runner-up = its loser; semifinal losers share 3rd.
+ * Double elimination: champion = winner of the 'final' bracket match (latest
+ * round if there's a reset); runner-up = its loser; 3rd = loser of the last
+ * losers-bracket match.
+ */
+function resolveBracketPlacings(matches: BracketMatch[], format: string): string[][] {
+  const done = matches.filter(m => m.status === 'complete' && m.winner_team);
+  const maxBy = (list: BracketMatch[]) => list.reduce<BracketMatch | null>((best, m) => (!best || m.round > best.round ? m : best), null);
+
+  let finalMatch: BracketMatch | null;
+  if (format === 'double-elimination') {
+    finalMatch = maxBy(done.filter(m => m.bracket_type === 'final'));
+  } else {
+    finalMatch = maxBy(done.filter(m => m.bracket_type === 'winners' || m.bracket_type === 'final'));
+  }
+  if (!finalMatch?.winner_team) return [];
+
+  const placings: string[][] = [[finalMatch.winner_team]];
+  const runnerUp = loserOf(finalMatch);
+  if (runnerUp) placings.push([runnerUp]);
+
+  if (format === 'double-elimination') {
+    const lastLosers = maxBy(done.filter(m => m.bracket_type === 'losers'));
+    const third = lastLosers ? loserOf(lastLosers) : null;
+    if (third && third !== runnerUp) placings.push([third]);
+  } else {
+    const semis = done.filter(m => m.bracket_type === 'winners' && m.round === finalMatch.round - 1);
+    const losers = semis.map(loserOf).filter((t): t is string => !!t);
+    if (losers.length > 0) placings.push(Array.from(new Set(losers)));
+  }
+  return placings;
+}
+
+/**
+ * Score a 'tournament' series event via tournament_position_points. Only
+ * completed tournaments contribute.
+ *
+ * cumulative-points: players are ranked by total points (grouped on
+ * discord_user_id/user_id); ties share the higher placing's points.
+ * Bracket formats: see resolveBracketPlacings — champion, runner-up and
+ * third place receive tournament_position_points[0..2].
  */
 async function scoreTournamentEvent(
   db: Db,
@@ -332,46 +568,62 @@ async function scoreTournamentEvent(
 ): Promise<void> {
   if (!event.tournament_id) return;
   const positionPoints = config.tournament_position_points ?? [];
+  const mult = event.points_multiplier;
 
-  const tournament = await db.get<{ format: string }>(`SELECT format FROM tournaments WHERE id = ?`, [event.tournament_id]);
-  if (!tournament) return;
+  const tournament = await db.get<{ format: string; status: string }>(
+    `SELECT format, status FROM tournaments WHERE id = ?`, [event.tournament_id]
+  );
+  if (tournament?.status !== 'complete') return;
 
   if (tournament.format === 'cumulative-points') {
-    const rows = await db.all<{ user_id: string; username: string; total_points: number }>(
-      `SELECT mp.user_id, mp.username, COALESCE(SUM(mgp.points_awarded), 0) as total_points
+    const rows = await db.all<{ player_key: string; username: string; total_points: number }>(
+      `SELECT COALESCE(mp.discord_user_id, mp.user_id) as player_key,
+              MAX(mp.username) as username,
+              COALESCE(SUM(mgp.points_awarded), 0) as total_points
        FROM match_participants mp
        JOIN matches m ON mp.match_id = m.id AND m.tournament_id = ?
        LEFT JOIN match_games mg ON mg.match_id = m.id AND mg.status = 'completed'
        LEFT JOIN match_game_placements mgp ON mgp.match_game_id = mg.id AND mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
-       GROUP BY mp.user_id, mp.username
-       ORDER BY total_points DESC`,
+       GROUP BY COALESCE(mp.discord_user_id, mp.user_id)
+       ORDER BY total_points DESC, username ASC`,
       [event.tournament_id]
     );
+    const ranks = tieAwareRanks(rows.map(r => r.total_points));
     rows.forEach((r, idx) => {
-      addPoints(r.user_id, r.username, (positionPoints[idx] ?? 0) * event.points_multiplier, event.id);
+      addPoints(r.player_key, r.username, (positionPoints[ranks[idx]] ?? 0) * mult, event.id);
     });
     return;
   }
 
-  const finalMatch = await db.get<{ winner_team: string }>(
-    `SELECT winner_team FROM matches
-     WHERE tournament_id = ? AND tournament_bracket_type = 'final' AND status = 'complete' AND winner_team IS NOT NULL
-     ORDER BY tournament_round DESC LIMIT 1`,
+  const bracketMatches = await db.all<BracketMatch>(
+    `SELECT COALESCE(m.tournament_round, tm.round, 1) as round,
+            COALESCE(m.tournament_bracket_type, tm.bracket_type, 'winners') as bracket_type,
+            m.status, m.winner_team,
+            COALESCE(tm.team1_id, m.blue_team_id) as team1_id,
+            COALESCE(tm.team2_id, m.red_team_id) as team2_id
+     FROM matches m
+     LEFT JOIN tournament_matches tm ON tm.match_id = m.id
+     WHERE m.tournament_id = ?`,
     [event.tournament_id]
   );
-  if (!finalMatch?.winner_team) return;
+  const placings = resolveBracketPlacings(bracketMatches, tournament.format);
 
-  const champions = await db.all<{ user_id: string; username: string }>(
-    `SELECT user_id, username FROM tournament_team_members WHERE team_id = ?`,
-    [finalMatch.winner_team]
-  );
-  const champPoints = (positionPoints[0] ?? 0) * event.points_multiplier;
-  for (const c of champions) addPoints(c.user_id, c.username, champPoints, event.id);
+  for (let i = 0; i < placings.length; i++) {
+    const pts = (positionPoints[i] ?? 0) * mult;
+    for (const teamId of placings[i]) {
+      const members = await db.all<{ user_id: string; discord_user_id: string | null; username: string }>(
+        `SELECT user_id, discord_user_id, username FROM tournament_team_members WHERE team_id = ?`,
+        [teamId]
+      );
+      for (const mem of members) addPoints(playerKey(mem), mem.username, pts, event.id);
+    }
+  }
 }
 
 /**
  * Compute cumulative standings for a series by converting each event's
- * outcome to points via series.scoring_config.
+ * outcome to points via series.scoring_config. Only completed matches and
+ * tournaments contribute (and count towards events_played).
  */
 export async function getSeriesStandings(seriesId: string): Promise<Array<{
   rank: number;
@@ -387,11 +639,11 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
   const events = await listSeriesEvents(seriesId);
 
   const totals = new Map<string, { username: string; total_points: number; events_played: Set<string> }>();
-  const addPoints: AddPoints = (userId, username, points, eventId) => {
-    const entry = totals.get(userId) ?? { username, total_points: 0, events_played: new Set<string>() };
+  const addPoints: AddPoints = (key, username, points, eventId) => {
+    const entry = totals.get(key) ?? { username, total_points: 0, events_played: new Set<string>() };
     entry.total_points += points;
     entry.events_played.add(eventId);
-    totals.set(userId, entry);
+    totals.set(key, entry);
   };
 
   for (const event of events) {
@@ -406,4 +658,57 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
     .map(([user_id, data]) => ({ user_id, username: data.username, total_points: data.total_points, events_played: data.events_played.size }))
     .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username))
     .map((entry, idx) => ({ rank: idx + 1, ...entry }));
+}
+
+/** Parses a JSON object body; returns null for invalid JSON or non-object bodies. */
+export async function readJsonObject(request: { json(): Promise<unknown> }): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json();
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+    return body as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+const NULLABLE_STRING_FIELDS = [
+  'description', 'start_date', 'end_date', 'event_image_url', 'game_id',
+  'guild_id', 'channel_id', 'livestream_link',
+] as const;
+
+/**
+ * Validates a series create/update body. Returns an error message or null.
+ * For updates (`partial`), name may be omitted but must be a non-empty string
+ * when present; nullable fields accept null.
+ */
+export function validateSeriesBody(body: Record<string, unknown>, partial: boolean): string | null {
+  if (body.name !== undefined || !partial) {
+    if (typeof body.name !== 'string' || body.name.trim().length === 0) return 'name must be a non-empty string';
+  }
+  for (const f of NULLABLE_STRING_FIELDS) {
+    const v = body[f];
+    if (v !== undefined && v !== null && typeof v !== 'string') return `${f} must be a string`;
+  }
+  for (const f of ['announcements', 'player_notifications'] as const) {
+    if (body[f] !== undefined && typeof body[f] !== 'boolean') return `${f} must be a boolean`;
+  }
+  if (body.scoring_config !== undefined && !(partial && body.scoring_config === null)) {
+    const err = validateScoringConfig(body.scoring_config);
+    if (err) return err;
+  }
+  return null;
+}
+
+/**
+ * Explicit child-row cleanup for a match. Foreign keys are off app-wide, so
+ * ON DELETE CASCADE/SET NULL never fires; call this inside a transaction
+ * before deleting the match row itself.
+ */
+export async function deleteMatchDependents(db: Db, matchId: string): Promise<void> {
+  await db.run(
+    'DELETE FROM match_game_placements WHERE match_game_id IN (SELECT id FROM match_games WHERE match_id = ?)',
+    [matchId]
+  );
+  await db.run('DELETE FROM match_teams WHERE match_id = ?', [matchId]);
+  await db.run('DELETE FROM series_events WHERE match_id = ?', [matchId]);
 }

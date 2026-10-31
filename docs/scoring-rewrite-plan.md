@@ -212,7 +212,7 @@ Add new tables/columns. Backfill from legacy columns. **Do not drop legacy colum
 4. `022_series_tables.sql`:
    - Create `series`, `series_events`, indexes.
 
-5. `023_drop_legacy_columns.sql` (**only run in Phase 8**):
+5. `027_drop_legacy_columns.sql` (**only run in Phase 8**; originally planned as 023 — 023 became `023_ai_processor_version.sql`, 024–026 cover series event uniques, setup-phase persistence and scorecard position suggestions):
    - Drop from `matches`: `blue_team_voice_channel`, `red_team_voice_channel`.
    - Rebuild `match_games` without: `team_a`, `team_b`, `winner_id`, `participant_winner_id`, `participant1_id`, `participant2_id`, `is_ffa_mode`, `score_a`, `score_b`, `position_results`, `points_awarded`.
    - Drop from `match_participants`: `team`, `team_assignment`. Make `team_id` NOT NULL.
@@ -271,7 +271,7 @@ Add new tables/columns. Backfill from legacy columns. **Do not drop legacy colum
 **Files (modify):**
 - `processes/stats-processor/modules/ai-extractor.ts` — scoring_type aware; build prompt per type; resolve teams via `match_teams`.
 - `src/lib/scoring-functions.ts` → `queueScorecardPrompts` — DM copy adapts per scoring_type.
-- App settings (DB): add `ai_processor_version` ('legacy' | 'v2'), defaults to 'legacy' through Phase 7; flipped in Phase 8.
+- App settings (DB): add `ai_processor_version` ('legacy' | 'v2'), default is 'v2' (as implemented in `023_ai_processor_version.sql`); set 'legacy' only as a rollback switch.
 
 ### Phase 6: Series entity
 
@@ -304,8 +304,8 @@ Add new tables/columns. Backfill from legacy columns. **Do not drop legacy colum
 
 ### Phase 8: Final cleanup
 
-- Flip `ai_processor_version` setting to `'v2'`.
-- Run migration `023_drop_legacy_columns.sql`.
+- (`ai_processor_version` already defaults to `'v2'`; remove the legacy switch once validated.)
+- Run migration `027_drop_legacy_columns.sql`.
 - Delete any dual-write / legacy fallback shims left in `scoring-functions.ts`.
 - Delete any unused references to dropped columns (`blue_team_voice_channel`, `red_team_voice_channel`, `team_assignment`, `team`, `team_side` authoritative path, legacy match_games columns).
 - Update `CLAUDE.md`:
@@ -349,7 +349,7 @@ Add new tables/columns. Backfill from legacy columns. **Do not drop legacy colum
 - `migrations/020_tournaments_cumulative_format.sql`
 - `migrations/021_backfill_match_teams.sql`
 - `migrations/022_series_tables.sql`
-- `migrations/023_drop_legacy_columns.sql`
+- `migrations/027_drop_legacy_columns.sql`
 - `src/lib/types/scoring.ts`
 - `src/lib/match-setup.ts`
 - `src/lib/series.ts`
@@ -390,7 +390,7 @@ Add new tables/columns. Backfill from legacy columns. **Do not drop legacy colum
 - Mantine v9 was already adopted (see `MEMORY.md` → `project_mantine_upgrade`). Use v9 calendar/date components from `@mantine/dates` for series scheduling.
 - `queueScoreNotification()` (existing) — reuse for series-event-completion announcements.
 - `match_participants.receives_map_codes` (commander flag) — keep; still relevant for Normal team modes.
-- Migration 018's table-rebuild pattern is the template for migrations 020 and 023 (SQLite can't widen CHECK constraints in place).
+- Migration 018's table-rebuild pattern is the template for migrations 020 and 027 (SQLite can't widen CHECK constraints in place).
 
 ---
 
@@ -527,7 +527,7 @@ The existing test inventory under `tests/` is extensive. Every phase has a corre
 ### Phase 8 — cleanup verification tests
 
 **UPDATE:**
-- `tests/integration/database/migrations.test.ts` — assert legacy columns dropped after migration 023.
+- `tests/integration/database/migrations.test.ts` — assert legacy columns dropped after migration 027.
 - `tests/integration/database/schema.test.ts` — final schema shape.
 - `tests/integration/database/foreign-keys.test.ts` — `match_participants.team_id` is NOT NULL now.
 - `tests/integration/system/full-suite-sanity.test.ts` — full sanity sweep across the new system.
@@ -557,7 +557,7 @@ After all phases:
 1. **Migration safety:**
    - Boot fresh DB → `npm run migrate` → assert all new tables/columns exist.
    - Boot against a **copy of a real prod DB** (`./app_data/data/matchexec.db`) → confirm backfill produces correct data for each scoring_type currently present.
-   - Confirm legacy column drops in migration 023 don't break any startup queries.
+   - Confirm legacy column drops in migration 027 don't break any startup queries.
 
 2. **Normal end-to-end:** Create OW2 5v5 match → gather → assign (verify Blue/Red `match_teams` rows) → battle → complete. Compare scoring against pre-migration behavior on a duplicate match.
 
@@ -589,5 +589,5 @@ After all phases:
 - **`match_game_placements` can be wide** — 30 rows per game for a 30-player FFA × N maps adds up. Indexed on `(match_game_id)` and `(entity_type, entity_id)`. Watch perf on large FFA matches.
 - **N-team voice channels:** Discord rate limits will bite if we naively create one channel per team for a 30-team race. Cap at `MAX_VOICE_CHANNELS_PER_MATCH` (default 8); for FFA/Position default to a single shared voice channel or none.
 - **Mantine v9 calendar components:** verify `@mantine/dates` v9 subpackage import paths.
-- **SQLite CHECK constraints can't be widened in place.** Migrations 020 and 023 follow migration 018's table-rebuild pattern. Be careful with FK references during rebuilds.
+- **SQLite CHECK constraints can't be widened in place.** Migrations 020 and 027 follow migration 018's table-rebuild pattern. Be careful with FK references during rebuilds.
 - **Test fixtures churn:** updating `tests/utils/fixtures.ts` (Phase 1) is load-bearing for the entire test suite. Verify fixture changes don't unintentionally break unrelated tests by running the full suite after Phase 1 is complete.

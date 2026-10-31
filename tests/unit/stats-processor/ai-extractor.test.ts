@@ -255,3 +255,51 @@ describe('AIExtractor', () => {
     });
   });
 });
+
+describe('AIExtractor suggested positions', () => {
+  const extractor = new AIExtractor({});
+  const participants = [
+    { id: 'p1', username: 'Alice' },
+    { id: 'p2', username: 'Bob' },
+    { id: 'p3', username: 'Carol' },
+  ];
+
+  it('maps extracted names to participant ids', () => {
+    expect(extractor.buildSuggestedPositions({ alice: 2, 'BOB!': 1 }, participants)).toEqual({ p1: 2, p2: 1 });
+  });
+
+  it('ignores names that are not participants of the match', () => {
+    expect(extractor.buildSuggestedPositions({ Alice: 1, Mallory: 2 }, participants)).toEqual({ p1: 1 });
+    expect(extractor.buildSuggestedPositions({ Mallory: 1 }, participants)).toBeNull();
+  });
+
+  it('rejects non-integer, non-positive or duplicate positions', () => {
+    expect(extractor.buildSuggestedPositions({ Alice: 1.5 }, participants)).toBeNull();
+    expect(extractor.buildSuggestedPositions({ Alice: 0 }, participants)).toBeNull();
+    expect(extractor.buildSuggestedPositions({ Alice: '1' }, participants)).toBeNull();
+    expect(extractor.buildSuggestedPositions({ Alice: 1, Bob: 1 }, participants)).toBeNull();
+  });
+
+  it('rejects non-object input', () => {
+    expect(extractor.buildSuggestedPositions(null, participants)).toBeNull();
+    expect(extractor.buildSuggestedPositions([1, 2], participants)).toBeNull();
+  });
+
+  it('stores a suggestion on the submission and never writes placements', async () => {
+    const run = vi.fn().mockResolvedValue({});
+    const all = vi.fn().mockResolvedValue(participants);
+    const ex = new AIExtractor({ run, all, get: vi.fn() });
+    await (ex as any).storeSuggestedPositions('sub-1', 'match-1', { Alice: 2, Bob: 1 });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][0]).toContain('UPDATE scorecard_submissions SET suggested_positions');
+    expect(JSON.parse(run.mock.calls[0][1][0])).toEqual({ p1: 2, p2: 1 });
+    expect(JSON.stringify(run.mock.calls)).not.toContain('match_game_placements');
+  });
+
+  it('validateExtractionResponse caps player count and name length', () => {
+    const many = JSON.stringify({ players: Array.from({ length: 100 }, (_, i) => ({ playerName: `p${i}`, stats: {}, confidence: 1 })) });
+    expect(extractor.validateExtractionResponse(many)).toBe('too many players');
+    const longName = JSON.stringify({ players: [{ playerName: 'x'.repeat(500), stats: {}, confidence: 1 }] });
+    expect(extractor.validateExtractionResponse(longName)).toBe('playerName too long');
+  });
+});

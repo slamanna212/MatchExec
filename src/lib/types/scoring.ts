@@ -77,6 +77,10 @@ export interface SaveNormalResultBody {
   loserTeamId?: string;             // new: match_teams.id
   winnerScore?: number;
   loserScore?: number;
+  /** Map ended in a draw (no winner). Takes precedence over winner/winnerTeamId. */
+  draw?: boolean;
+  /** Correct an already-scored game / complete match; does not re-fire completion side effects. */
+  rescore?: boolean;
 }
 
 export interface SaveFfaResultBody {
@@ -84,13 +88,15 @@ export interface SaveFfaResultBody {
   matchId: string;
   gameId: string;
   winnerParticipantId: string;
+  rescore?: boolean;
 }
 
 export interface SavePositionResultBody {
   type: 'Position';
   matchId: string;
   gameId: string;
-  positionResults: Record<string, number>;  // participantId → 1-based position
+  positionResults: Record<string, number>;  // participantId → 1-based position (positive, unique)
+  rescore?: boolean;
 }
 
 export type SaveResultBody = SaveNormalResultBody | SaveFfaResultBody | SavePositionResultBody;

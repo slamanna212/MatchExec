@@ -158,13 +158,27 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
     const guild = await processor['client'].guilds.fetch(settings.guild_id);
 
     const channelIds: string[] = [];
-    for (const name of channelNames) {
-      const channel = await guild.channels.create({
-        name,
-        type: 2,
-        parent: categoryId,
-      });
-      channelIds.push(channel.id);
+    const createdChannels: Array<{ id: string; delete: () => Promise<unknown> }> = [];
+    try {
+      for (const name of channelNames) {
+        const channel = await guild.channels.create({
+          name,
+          type: 2,
+          parent: categoryId,
+        });
+        createdChannels.push(channel);
+        channelIds.push(channel.id);
+      }
+    } catch (createError) {
+      // Don't leave orphaned channels behind when a later creation fails
+      for (const created of createdChannels) {
+        try {
+          await created.delete();
+        } catch (cleanupError) {
+          logger.warning(`⚠️ Failed to clean up voice channel ${created.id} after partial failure:`, cleanupError instanceof Error ? cleanupError.message : 'Unknown');
+        }
+      }
+      throw createError;
     }
 
     logger.debug(`✅ Voice channel(s) created: ${channelIds.join(', ')}`);
@@ -1165,7 +1179,8 @@ export class QueueProcessor {
         announcement.blue_team_voice_channel,
         announcement.red_team_voice_channel,
         announcement.announcement_type,
-        announcement.first_team
+        announcement.first_team,
+        announcement.match_id
       );
 
       if (result.success) {

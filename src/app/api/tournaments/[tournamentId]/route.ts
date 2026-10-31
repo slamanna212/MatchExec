@@ -4,6 +4,8 @@ import { getDbInstance } from '../../../../lib/database-init';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { withTransaction } from '@/lib/transaction';
+import { deleteMatchDependents } from '@/lib/series';
 import { validateMaxLength } from '@/lib/utils/validation';
 
 interface TournamentWithDetails extends Tournament {
@@ -265,7 +267,23 @@ export async function DELETE(
     }
 
     // Delete the tournament (CASCADE will handle related records)
-    await db.run('DELETE FROM tournaments WHERE id = ?', [tournamentId]);
+    // FKs are off, so explicitly clean up the tournament's matches and series events.
+    await withTransaction(db, async () => {
+      const matchRows = await db.all<{ id: string }>('SELECT id FROM matches WHERE tournament_id = ?', [tournamentId]);
+      for (const { id } of matchRows) {
+        await deleteMatchDependents(db, id);
+        await db.run('DELETE FROM match_games WHERE match_id = ?', [id]);
+        await db.run('DELETE FROM match_participants WHERE match_id = ?', [id]);
+      }
+      await db.run('DELETE FROM matches WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM series_events WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM tournament_matches WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM tournament_round_byes WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM tournament_team_members WHERE team_id IN (SELECT id FROM tournament_teams WHERE tournament_id = ?)', [tournamentId]);
+      await db.run('DELETE FROM tournament_teams WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM tournament_participants WHERE tournament_id = ?', [tournamentId]);
+      await db.run('DELETE FROM tournaments WHERE id = ?', [tournamentId]);
+    });
     
     logger.debug(`✅ Tournament deleted: ${tournamentId}`);
     

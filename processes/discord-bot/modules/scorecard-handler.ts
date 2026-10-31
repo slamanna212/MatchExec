@@ -149,8 +149,17 @@ export class ScorecardHandler {
       if (!statCount || statCount.cnt === 0) return false;
 
       const commanders = await this.db.all<CommanderRecord>(
-        `SELECT id, discord_user_id, team_assignment FROM match_participants
-         WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL`,
+        `SELECT mp.id, mp.discord_user_id,
+                CASE
+                  WHEN mt.id IS NULL THEN mp.team_assignment
+                  WHEN mt.is_reserve = 1 THEN 'reserve'
+                  WHEN mt.team_order = 0 THEN 'blue'
+                  WHEN mt.team_order = 1 THEN 'red'
+                  ELSE NULL
+                END AS team_assignment
+         FROM match_participants mp
+         LEFT JOIN match_teams mt ON mt.id = mp.team_id
+         WHERE mp.match_id = ? AND mp.receives_map_codes = 1 AND mp.discord_user_id IS NOT NULL`,
         [matchId]
       );
       if (!commanders || commanders.length === 0) return false;

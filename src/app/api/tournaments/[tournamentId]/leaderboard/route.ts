@@ -2,6 +2,7 @@ import type { NextRequest, NextResponse } from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { getCumulativeStandings } from '@/lib/tournament-standings';
 
 /**
  * GET /api/tournaments/[tournamentId]/leaderboard
@@ -24,26 +25,15 @@ export async function GET(
       return apiError('Leaderboard is only available for cumulative-points tournaments', 400);
     }
 
-    // Per-participant totals
-    const totals = await db.all<{
-      participant_id: string;
-      username: string;
-      total_points: number;
-      matches_played: number;
-    }>(`
-      SELECT
-        mp.id as participant_id,
-        mp.username,
-        COALESCE(SUM(mgp.points_awarded), 0) as total_points,
-        COUNT(DISTINCT mg.match_id) as matches_played
-      FROM match_participants mp
-      JOIN matches m ON mp.match_id = m.id AND m.tournament_id = ?
-      LEFT JOIN match_game_placements mgp
-        ON mgp.entity_id = mp.id AND mgp.entity_type = 'participant'
-      LEFT JOIN match_games mg ON mg.id = mgp.match_game_id AND mg.match_id = m.id
-      GROUP BY mp.id, mp.username
-      ORDER BY total_points DESC, mp.username ASC
-    `, [tournamentId]);
+    // Per-player totals, aggregated across matches by a stable player key (tie-aware ranks)
+    const totals = (await getCumulativeStandings(db, tournamentId)).map(r => ({
+      rank: r.rank,
+      participant_id: r.participant_id,
+      player_key: r.player_key,
+      username: r.username,
+      total_points: r.total_points,
+      matches_played: r.matches_played,
+    }));
 
     // Per-match breakdown
     const matchBreakdown = await db.all<{
@@ -67,7 +57,7 @@ export async function GET(
         mgp.points_awarded
       FROM matches m
       JOIN match_participants mp ON mp.match_id = m.id
-      LEFT JOIN match_games mg ON mg.match_id = m.id AND mg.status = 'complete'
+      LEFT JOIN match_games mg ON mg.match_id = m.id AND mg.status = 'completed'
       LEFT JOIN match_game_placements mgp
         ON mgp.match_game_id = mg.id
         AND mgp.entity_id = mp.id
@@ -79,7 +69,7 @@ export async function GET(
     return apiOk({
       tournament_id: tournamentId,
       tournament_name: tournament.name,
-      leaderboard: totals.map((r, idx) => ({ rank: idx + 1, ...r })),
+      leaderboard: totals,
       match_breakdown: matchBreakdown,
     });
   } catch (error) {

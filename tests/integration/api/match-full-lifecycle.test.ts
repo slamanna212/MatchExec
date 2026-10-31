@@ -157,15 +157,16 @@ describe('Match Full Lifecycle (K1)', () => {
     expect(scoredGame?.status).toBe('completed');
     expect(scoredGame?.winner_id).toBe('team1');
 
-    // ── Step 8: Transition → complete ───────────────────────────────────────
+    // ── Step 8: scoring the only map auto-completes the match (once) ─────────
+    const autoCompleted = await db.get(`SELECT status FROM matches WHERE id = ?`, [matchId]) as { status: string };
+    expect(autoCompleted.status).toBe('complete');
+
+    // Completing again is rejected: complete is terminal (no repeated side effects)
     const completeReq = createMockRequest('POST', `/api/matches/${matchId}/transition`, {
       newStatus: 'complete',
     });
     const completeRes = await transitionMatch(completeReq, createRouteParams({ matchId }));
-    const { status: completeStatus, data: completeData } = await parseResponse(completeRes);
-
-    expect(completeStatus).toBe(200);
-    expect(completeData.status).toBe('complete');
+    expect(completeRes.status).toBe(400);
 
     // Verify deletion queued on complete
     const deletion = await db.get(

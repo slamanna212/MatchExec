@@ -9,7 +9,6 @@ import {
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
   generateCumulativeMatches,
-  addAllTeamsToMatch,
   saveGeneratedMatches
 } from '@/lib/tournament-bracket';
 import type { Database } from '@/lib/database/connection';
@@ -155,12 +154,9 @@ export async function POST(
 
     const { generatedMatches, tournamentMatches } = matchData;
 
-    await saveGeneratedMatches(generatedMatches, tournamentMatches);
-
-    // For cumulative-points: add all tournament participants to the match
-    if (matchData.isCumulative && generatedMatches.length > 0) {
-      await addAllTeamsToMatch(tournamentId, generatedMatches[0].id);
-    }
+    // Cumulative-points: all tournament participants are added to the match (and given
+    // per-participant match_teams) inside the same transaction as the match insert.
+    await saveGeneratedMatches(generatedMatches, tournamentMatches, { addAllTeams: !!matchData.isCumulative });
 
     await queueMatchAnnouncements(db, generatedMatches);
 

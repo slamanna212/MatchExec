@@ -18,7 +18,9 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    // status may be repeated (?status=a&status=b) or comma-separated (?status=a,b)
+    const statuses = searchParams.getAll('status').flatMap(v => v.split(',')).map(v => v.trim()).filter(Boolean);
+    const excludeTournament = searchParams.get('exclude_tournament') === 'true';
     const limitParam = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const limit = limitParam ? parseInt(limitParam, 10) : null;
@@ -41,11 +43,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const params: (string | number)[] = [];
 
-    if (status === 'complete') {
-      query += ` WHERE m.status = 'complete'`;
+    const tournamentFilter = excludeTournament ? ' AND m.tournament_id IS NULL' : '';
+    if (statuses.length > 1) {
+      query += ` WHERE m.status IN (${statuses.map(() => '?').join(', ')})${tournamentFilter}`;
+      params.push(...statuses);
+    } else if (statuses[0] === 'complete') {
+      query += ` WHERE m.status = 'complete'${tournamentFilter}`;
     } else {
       // Default behavior: show all matches EXCEPT completed ones
-      query += ` WHERE m.status != 'complete'`;
+      query += ` WHERE m.status != 'complete'${tournamentFilter}`;
     }
 
     query += ` GROUP BY m.id ORDER BY m.updated_at DESC`;

@@ -2,7 +2,7 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { VoiceChannelService } from './voice-channel-service';
 import { MapCodeService } from './map-code-service';
-import { queueDiscordDeletion } from './scoring-functions';
+import { queueDiscordDeletion, runMatchCompletionSideEffects } from './scoring-functions';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { createMatchTeams } from './match-setup';
@@ -330,53 +330,10 @@ export async function handleTournamentAssignTransition(tournamentId: string): Pr
  * Queues Discord deletion and cleans up voice channels
  */
 export async function handleCompleteTransition(matchId: string): Promise<void> {
-  try {
-    // Queue Discord message/event deletion
-    await queueDiscordDeletion(matchId);
-    logger.debug(`🗑️ Discord deletion queued for completed match: ${matchId}`);
-  } catch (error) {
-    logger.error('❌ Error queuing Discord deletion for completed match:', error);
-  }
-
-  // Clean up voice channels
-  try {
-    await deleteMatchVoiceChannels(matchId);
-    logger.debug(`🔇 Voice channels deleted for completed match: ${matchId}`);
-  } catch (error) {
-    logger.error('❌ Error deleting voice channels for completed match:', error);
-  }
-
-  try {
-    const name = await getMatchName(matchId);
-    await logFeedEvent({
-      eventType: 'match_completed',
-      priority: 2,
-      title: 'Match Completed',
-      description: `"${name}" has finished`,
-      matchId,
-    });
-  } catch (error) {
-    logger.error('❌ Error logging complete feed event:', error);
-  }
-
-  // Queue stats report DMs if all submissions are in a final state
-  try {
-    const db = await getDbInstance();
-    const pending = await db.get<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM scorecard_submissions
-       WHERE match_id = ? AND review_status NOT IN ('approved', 'rejected', 'auto_approved', 'failed')`,
-      [matchId]
-    );
-    if (!pending || pending.cnt === 0) {
-      const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-      await db.run(
-        `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
-        [queueId, matchId]
-      );
-    }
-  } catch (error) {
-    logger.error('❌ Error queuing stats report DMs for completed match:', error);
-  }
+  // Shared with auto-complete (scoring-functions.updateMatchStatusIfComplete) so the
+  // completion side effects — winner notification, Discord/voice cleanup, stats
+  // queues, match_completed feed event — are defined (and fire) in exactly one place.
+  await runMatchCompletionSideEffects(matchId);
 }
 
 /**

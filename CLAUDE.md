@@ -166,7 +166,7 @@ docker run --rm -p 3000:3000 --env-file .env matchexec:test
 │   │   ├── index.ts              # Main bot implementation
 │   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
 │   └── scheduler/                # Cron scheduler process
-├── migrations/                   # Database migrations (22 files; 019-022 added for scoring rewrite)
+├── migrations/                   # Database migrations (26 files; 019-022 scoring rewrite, 023 ai_processor_version (default 'v2'), 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions)
 ├── data/games/                   # Game data (6 games with modes/maps)
 ├── s6-overlay/                   # Docker init system config
 └── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
@@ -256,6 +256,20 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
   - Process names have no suffix
   - Web app runs compiled `server.js`
   - No file watching
+
+## Conventions
+
+- **Transactions**: use `withTransaction` from `@/lib/transaction` (implementation in `lib/database/transaction.ts`) for multi-statement writes.
+- **Foreign keys are NOT enforced** (`PRAGMA foreign_keys` off), so deletes must clean up child rows explicitly.
+- **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/scoring-functions.ts`.
+
+## Authentication (opt-in)
+
+Disabled unless `ADMIN_PASSWORD` is set. When set, `src/proxy.ts` calls `authGate` (`src/lib/auth.ts`) and requires an HMAC-signed session cookie for all pages and `/api/*` except `/login`, `/api/auth/*`, `/api/health`, `/api/db-status`, `/api/welcome-flow`. Env vars (see `.env.example`):
+- `ADMIN_PASSWORD` - enables auth
+- `AUTH_SECRET` - cookie signing secret (default: hash of password)
+- `AUTH_SESSION_DAYS` - session lifetime (default 7)
+- `INTERNAL_API_TOKEN` - sent as `x-internal-token` by bot/scheduler when calling the web API (default: derived from the secret)
 
 ## Key Features
 
@@ -453,9 +467,9 @@ tests/
 | `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |
 
 ### Known Issues
-- **DB isolation**: ~48 integration API tests fail because `getTestDb()` and `getDbInstance()` use separate database connections. Tests that insert data directly via `getTestDb()` and then query via API route handlers (which use `getDbInstance()`) will get 404s. Unit tests and queue/schema tests are unaffected.
+- **DB isolation (fixed)**: `setupTestDatabase()` in `tests/utils/test-db.ts` calls `setDbForTesting()` so `getTestDb()` and `getDbInstance()` share one connection; API route tests see data inserted via `getTestDb()`.
 - **FK schema mismatch**: Enabling `PRAGMA foreign_keys=ON` in tests reveals that the `matches` table has a malformed FK reference to `game_maps`. This must be fixed in migrations before FK constraints can be enabled in tests.
-- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `023_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
+- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `027_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
 
 ### Writing Tests
 - Use `getTestDb()` for direct DB operations in tests

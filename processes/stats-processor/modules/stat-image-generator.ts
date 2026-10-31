@@ -1,12 +1,29 @@
-// @ts-nocheck - Database method calls have complex typing issues
+import type { StatsDb } from './db-types';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { GameStatDefinition } from '../../../shared/types';
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Pick a display color for a player's team. Teams 1/2 keep the classic
+ * blue/red; 3+ teams use their match_teams.team_color (when it is a valid hex).
+ */
+function resolveTeamColor(stat: { team_assignment?: unknown; team_color?: unknown }): string {
+  if (stat.team_assignment === 'blue') return '#5b9bd5';
+  if (stat.team_assignment === 'red') return '#e06c75';
+  if (typeof stat.team_color === 'string' && HEX_COLOR.test(stat.team_color)) return stat.team_color;
+  return '#8a6fd8';
+}
+
 export class StatImageGenerator {
-  constructor(private db: unknown) {}
+  private db: StatsDb;
+
+  constructor(db: unknown) {
+    this.db = db as StatsDb;
+  }
 
   async generateMatchStatImages(queueId: string, matchId: string): Promise<void> {
     try {
@@ -20,9 +37,10 @@ export class StatImageGenerator {
 
       // Load aggregated stats
       const matchStats = await this.db.all(
-        `SELECT mps.*, mp.username, mp.team_assignment
+        `SELECT mps.*, mp.username, mp.team_assignment, mt.team_color, mt.team_name
          FROM match_player_stats mps
          JOIN match_participants mp ON mp.id = mps.participant_id
+         LEFT JOIN match_teams mt ON mt.id = mp.team_id
          WHERE mps.match_id = ?`,
         [matchId]
       );
@@ -204,9 +222,8 @@ export class StatImageGenerator {
         ctx.fillText(String(stat.username || ''), 20, y + 10);
 
         if (showTeamColumn) {
-          const teamColor = stat.team_assignment === 'blue' ? '#5b9bd5' : '#e06c75';
-          ctx.fillStyle = teamColor;
-          ctx.fillText(String(stat.team_assignment || '').toUpperCase(), 200, y + 10);
+          ctx.fillStyle = resolveTeamColor(stat);
+          ctx.fillText(String(stat.team_assignment || stat.team_name || '').toUpperCase().slice(0, 12), 200, y + 10);
         }
 
         let statsObj: Record<string, number> = {};
@@ -264,7 +281,7 @@ export class StatImageGenerator {
       // Header bar — team_assignment only means blue/red for Normal matches;
       // FFA/Position use a neutral accent since there's no team to color by.
       const headerColor = scoringType === 'Normal'
-        ? (playerStat.team_assignment === 'blue' ? '#5b9bd5' : '#e06c75')
+        ? resolveTeamColor(playerStat)
         : '#8a6fd8';
       ctx.fillStyle = headerColor;
       ctx.fillRect(0, 0, width, 60);

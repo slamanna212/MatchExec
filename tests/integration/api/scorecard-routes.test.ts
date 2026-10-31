@@ -445,7 +445,12 @@ describe('Match Game Result Route', () => {
 
   describe('POST /api/matches/[matchId]/games/[gameId]/result', () => {
     it('returns 400 for invalid winner', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await db.run(
+        `INSERT INTO match_games (id, match_id, round, participant1_id, participant2_id, status)
+         VALUES ('mg-1', ?, 1, 'p1', 'p2', 'ongoing')`,
+        [match.id]
+      );
       const request = createMockRequest('POST', `/api/matches/${match.id}/games/mg-1/result`, {
         winner: 'invalid',
         gameId: 'mg-1',
@@ -481,7 +486,7 @@ describe('Match Game Result Route', () => {
     });
 
     it('saves result when match_game exists', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await db.run(
         `INSERT INTO match_games (id, match_id, round, participant1_id, participant2_id, status)
          VALUES ('mg-save', ?, 1, 'p1', 'p2', 'ongoing')`,

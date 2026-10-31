@@ -341,7 +341,8 @@ export type MatchFormat = 'casual' | 'competitive';
 export interface MatchResult {
   matchId: string;
   gameId: string; // match_games.id
-  winner: 'team1' | 'team2';
+  /** 'team1'/'team2' for team_order 0/1; 'team' for a 3rd+ team (use winnerTeamId); 'tie' for a draw. */
+  winner: 'team1' | 'team2' | 'team' | 'tie';
   winnerTeamId?: string; // match_teams.id — preferred, N-team-aware winner reference
   loserTeamId?: string; // match_teams.id — optional explicit non-winner reference (for scores)
   winnerScore?: number;
@@ -350,6 +351,10 @@ export interface MatchResult {
   isFfaMode?: boolean;
   positionResults?: Record<string, number>; // For Position modes: {participantId: position}
   isPositionMode?: boolean;
+  /** Normal mode only: the map ended in a draw (no winner). */
+  draw?: boolean;
+  /** Explicitly re-score an already-scored game / complete match (no completion side effects). */
+  rescore?: boolean;
   completedAt: Date;
 }
 

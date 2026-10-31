@@ -108,7 +108,8 @@ function MapDetailPanel({
   scorecardUploaded,
   onScorecardUploaded,
   matchId,
-  onConfirm
+  onConfirm,
+  onDraw
 }: {
   selectedGame: MatchGame;
   gameType: string;
@@ -122,6 +123,7 @@ function MapDetailPanel({
   onScorecardUploaded: () => void;
   matchId: string;
   onConfirm: () => void;
+  onDraw: () => void;
 }) {
   const imageUrl = selectedGame.image_url || getMapImageUrl(gameType, selectedGame.map_id);
   const mapName = formatMapName(selectedGame.map_id, selectedGame.map_name);
@@ -166,6 +168,10 @@ function MapDetailPanel({
               />
             ))}
           </div>
+
+          <Button variant="subtle" color="gray" size="xs" onClick={onDraw} disabled={submitting}>
+            Record as draw (no winner)
+          </Button>
 
           {requiresScorecard && selectedGame.status === 'ongoing' && !scorecardUploaded && (
             <>
@@ -254,10 +260,11 @@ export function TeamMapScoring({
     if (!selectedGame) return;
     try {
       const winnerOrder = teams.find(t => t.id === teamId)?.team_order ?? 0;
+      // Only team_order 0/1 map onto the legacy labels; 3rd+ teams are identified by winnerTeamId.
       const result: MatchResult = {
         matchId,
         gameId: selectedGame.id,
-        winner: winnerOrder === 1 ? 'team2' : 'team1',
+        winner: winnerOrder === 0 ? 'team1' : winnerOrder === 1 ? 'team2' : 'team',
         winnerTeamId: teamId,
         isFfaMode: false,
         completedAt: new Date()
@@ -267,6 +274,27 @@ export function TeamMapScoring({
       if (onAllMapsCompleted) onAllMapsCompleted();
     } catch (err) {
       logger.error('Error submitting winner:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save result');
+    }
+  };
+
+  const handleDraw = async () => {
+    if (!selectedGame || selectedGame.status === 'completed' || submitting) return;
+    try {
+      const result: MatchResult = {
+        matchId,
+        gameId: selectedGame.id,
+        winner: 'tie',
+        draw: true,
+        isFfaMode: false,
+        completedAt: new Date()
+      };
+      await onResultSubmit(result);
+      setPendingTeamId(null);
+      await refetch();
+      if (onAllMapsCompleted) onAllMapsCompleted();
+    } catch (err) {
+      logger.error('Error submitting draw:', err);
       setError(err instanceof Error ? err.message : 'Failed to save result');
     }
   };
@@ -314,6 +342,7 @@ export function TeamMapScoring({
           onScorecardUploaded={() => setScorecardUploaded(true)}
           matchId={matchId}
           onConfirm={() => setConfirmModalOpen(true)}
+          onDraw={handleDraw}
         />
       ) : (
         <Alert color="blue" icon={<IconMap size={16} />}>

@@ -93,13 +93,13 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
 
   const [addEventType, setAddEventType] = useState<'match' | 'tournament'>('match');
   const [addEventId, setAddEventId] = useState<string>('');
-  const [addEventMultiplier, setAddEventMultiplier] = useState<number>(1);
+  const [addEventMultiplier, setAddEventMultiplier] = useState<number | string>(1);
+  const [activeTab, setActiveTab] = useState<string>('events');
   const [addingSaving, setAddingSaving] = useState(false);
   const [matchOptions, setMatchOptions] = useState<MatchOption[]>([]);
   const [tournamentOptions, setTournamentOptions] = useState<TournamentOption[]>([]);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     try {
       const [seriesRes, eventsRes, standingsRes] = await Promise.all([
         fetch(`/api/series/${seriesId}`),
@@ -112,6 +112,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
         return;
       }
 
+      setError(null);
       setSeries((await seriesRes.json()).series);
       if (eventsRes.ok) setEvents((await eventsRes.json()).events ?? []);
       if (standingsRes.ok) setStandings((await standingsRes.json()).standings ?? []);
@@ -128,7 +129,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   const fetchOptions = useCallback(async () => {
     try {
       const [matchRes, tournamentRes] = await Promise.all([
-        fetch('/api/matches?status=complete&status=battle&status=assign&status=gather'),
+        fetch('/api/matches?status=created&status=gather&status=assign&status=battle&status=complete&exclude_tournament=true'),
         fetch('/api/tournaments'),
       ]);
       if (matchRes.ok) {
@@ -154,6 +155,11 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
 
   const handleAddEvent = async () => {
     if (!addEventId) { showError('Please select an event'); return; }
+    const multiplier = typeof addEventMultiplier === 'number' ? addEventMultiplier : Number(addEventMultiplier);
+    if (addEventMultiplier === '' || !Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 10) {
+      showError('Points multiplier must be a number between 0.1 and 10');
+      return;
+    }
     setAddingSaving(true);
     try {
       const res = await fetch(`/api/series/${seriesId}/events`, {
@@ -163,11 +169,12 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           event_type: addEventType,
           match_id: addEventType === 'match' ? addEventId : undefined,
           tournament_id: addEventType === 'tournament' ? addEventId : undefined,
-          points_multiplier: addEventMultiplier,
+          points_multiplier: multiplier,
         }),
       });
       if (!res.ok) {
-        showError('Failed to add event');
+        const data = await res.json().catch(() => ({}));
+        showError(data.error ?? 'Failed to add event');
         return;
       }
       showSuccess('Event added to series');
@@ -182,20 +189,23 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   };
 
   const handleRemoveEvent = async (eventId: string) => {
+    if (!window.confirm('Remove this event from the series? Its points will no longer count.')) return;
     try {
       const res = await fetch(`/api/series/${seriesId}/events/${eventId}`, { method: 'DELETE' });
       if (res.ok) {
         showSuccess('Event removed');
         fetchData();
       } else {
-        showError('Failed to remove event');
+        const data = await res.json().catch(() => ({}));
+        showError(data.error ?? 'Failed to remove event');
       }
     } catch (err) {
       logger.error('Error removing event:', err);
+      showError('An error occurred');
     }
   };
 
-  if (loading) {
+  if (loading && !series) {
     return (
       <Container>
         <Center style={{ minHeight: 400 }}>
@@ -215,6 +225,8 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
       </Container>
     );
   }
+
+  const eventsLocked = series.status === 'complete' || series.status === 'cancelled';
 
   const eventOptions = addEventType === 'match'
     ? matchOptions.map(m => ({ value: m.id, label: m.name }))
@@ -267,7 +279,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           </Group>
         )}
 
-        <Tabs defaultValue="events">
+        <Tabs value={activeTab} onChange={(v) => setActiveTab(v ?? 'events')}>
           <Tabs.List>
             <Tabs.Tab value="events" leftSection={<IconSwords size={14} />}>Events ({events.length})</Tabs.Tab>
             <Tabs.Tab value="standings" leftSection={<IconMedal size={14} />}>Standings ({standings.length})</Tabs.Tab>
@@ -280,6 +292,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                   size="sm"
                   leftSection={<IconPlus size={14} />}
                   onClick={handleOpenAddEvent}
+                  disabled={eventsLocked}
                 >
                   Add Event
                 </Button>
@@ -328,6 +341,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                             color="red"
                             variant="subtle"
                             size="sm"
+                            disabled={eventsLocked}
                             onClick={() => handleRemoveEvent(ev.id)}
                           >
                             <IconTrash size={14} />
@@ -410,11 +424,12 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
             label="Points Multiplier"
             description="Points from this event are multiplied by this value"
             value={addEventMultiplier}
-            onChange={(v) => setAddEventMultiplier(Number(v) || 1)}
+            onChange={setAddEventMultiplier}
             min={0.1}
             max={10}
             step={0.5}
-            decimalScale={1}
+            decimalScale={2}
+            allowDecimal
           />
 
           <Divider />

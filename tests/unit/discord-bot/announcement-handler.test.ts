@@ -468,6 +468,61 @@ describe('AnnouncementHandler', () => {
     });
   });
 
+  describe('winner embeds for N-team / FFA / Position results', () => {
+    const baseWinner = {
+      matchName: 'Big Match',
+      winningPlayers: ['<@u1>'],
+      team1Score: 0,
+      team2Score: 0,
+      totalMaps: 3
+    };
+
+    it("uses winning_team_name for a 'team' winner and omits the scoreline", async () => {
+      const match = await createMatch(game.id, mode.id);
+      const { embed } = await announcementHandler.createMatchWinnerEmbed({
+        ...baseWinner, matchId: match.id, gameId: game.id, winner: 'team', winningTeamName: 'Gold Team'
+      });
+      expect(embed.setTitle).toHaveBeenCalledWith(expect.stringContaining('Gold Team Wins'));
+      const names = embed.data.fields.flat().map((f: any) => f.name);
+      expect(names).not.toContain('📊 Final Score');
+    });
+
+    it("renders 'participant' winners without an X - Y scoreline", async () => {
+      const match = await createMatch(game.id, mode.id);
+      const { embed } = await announcementHandler.createMatchWinnerEmbed({
+        ...baseWinner, matchId: match.id, gameId: game.id, winner: 'participant', winningTeamName: 'Speedy'
+      });
+      expect(embed.setTitle).toHaveBeenCalledWith(expect.stringContaining('Speedy Wins'));
+      expect(embed.setDescription).toHaveBeenCalledWith(expect.stringContaining('Winner: **Speedy**'));
+      const names = embed.data.fields.flat().map((f: any) => f.name);
+      expect(names).not.toContain('📊 Final Score');
+    });
+
+    it('keeps the scoreline and tie wording for 2-team results', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const { embed } = await announcementHandler.createMatchWinnerEmbed({
+        ...baseWinner, matchId: match.id, gameId: game.id, winner: 'tie', winningTeamName: '', team1Score: 2, team2Score: 2
+      });
+      expect(embed.setTitle).toHaveBeenCalledWith(expect.stringContaining('Match Tied'));
+      const names = embed.data.fields.flat().map((f: any) => f.name);
+      expect(names).toContain('📊 Final Score');
+    });
+
+    it('renders many participants as chunked compact fields within the 25-field cap', () => {
+      const embed: any = { data: { fields: [{}, {}, {}] }, addFields: vi.fn(function(this: any, f: any[]) { this.data.fields.push(...f); return this; }) };
+      const teams = Array.from({ length: 60 }, (_, i) => ({
+        team_name: `Player ${i}`,
+        participants: [{ username: `a-rather-long-participant-name-${i}` }]
+      }));
+      announcementHandler.addCompactParticipantFields(embed, teams, false);
+      const added = embed.data.fields.slice(3);
+      expect(added.length).toBeGreaterThan(1);
+      expect(embed.data.fields.length).toBeLessThanOrEqual(23);
+      for (const f of added) expect(f.value.length).toBeLessThanOrEqual(1024);
+      expect(added.some((f: any) => /[🔵🔴]/u.test(f.name))).toBe(false);
+    });
+  });
+
   describe('postTournamentWinnerNotification', () => {
     it('should post tournament winner notification', async () => {
       await db.run(`

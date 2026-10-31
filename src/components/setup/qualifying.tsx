@@ -10,13 +10,15 @@ interface Participant {
   avatar_url?: string | null;
 }
 
-interface QualifyingTime {
+export interface QualifyingTime {
   participantId: string;
   lapTimeMs: number | null;
 }
 
 interface QualifyingProps {
   participants: Participant[];
+  /** Previously saved lap times (ms) keyed by participant id. */
+  initialTimes?: Record<string, number | null>;
   onChange?: (times: QualifyingTime[]) => void;
 }
 
@@ -24,9 +26,9 @@ interface QualifyingProps {
  * Racing setup: record qualifying lap times to determine grid order.
  * Times are entered in milliseconds; display as mm:ss.mmm.
  */
-export function Qualifying({ participants, onChange }: QualifyingProps): JSX.Element {
+export function Qualifying({ participants, initialTimes, onChange }: QualifyingProps): JSX.Element {
   const [times, setTimes] = useState<QualifyingTime[]>(
-    participants.map((p) => ({ participantId: p.id, lapTimeMs: null }))
+    participants.map((p) => ({ participantId: p.id, lapTimeMs: initialTimes?.[p.id] ?? null }))
   );
 
   const updateTime = (id: string, ms: number | null) => {

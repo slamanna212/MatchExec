@@ -3,6 +3,8 @@ import { getDbInstance } from './database-init';
 import type { Database } from '../../lib/database/connection';
 import { VoiceChannelService } from './voice-channel-service';
 import { logger } from './logger';
+import { withTransaction } from '@/lib/transaction';
+import { createMatchTeams, createNamedMatchTeams } from './match-setup';
 
 interface GameMode {
   id: string;
@@ -202,7 +204,7 @@ async function fetchGameData(db: Database, gameId: string, gameModeId: string) {
 
     // Fetch all non-workshop modes
     const gameModes = await db.all(
-      'SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE "%workshop%"',
+      `SELECT * FROM game_modes WHERE game_id = ? AND id NOT LIKE '%workshop%'`,
       [gameId]
     ) as GameMode[];
 
@@ -236,7 +238,8 @@ async function fetchGameData(db: Database, gameId: string, gameModeId: string) {
 
   // Fetch all modes with the same team size
   const gameModes = await db.all(
-    'SELECT * FROM game_modes WHERE game_id = ? AND team_size = ? AND id NOT LIKE "%workshop%" AND id NOT LIKE "%custom%"',
+    // `IS ?` so a NULL team_size (FFA/Position modes) matches other NULL team_size modes
+    `SELECT * FROM game_modes WHERE game_id = ? AND team_size IS ? AND id NOT LIKE '%workshop%' AND id NOT LIKE '%custom%'`,
     [gameId, selectedMode.team_size]
   ) as GameMode[];
 
@@ -665,7 +668,9 @@ export async function generateCumulativeMatches(
     maps: mapList,
     rounds_per_match: roundsPerMatch,
     max_participants: 999,
-    status: 'gather',
+    // 'assign' so transitionFirstRoundMatches picks it up when the tournament
+    // moves to battle; match_teams are created in saveGeneratedMatches.
+    status: 'assign',
     match_type: 'tournament',
     tournament_id: tournamentId,
     tournament_round: 1,
@@ -713,6 +718,9 @@ export async function addAllTeamsToMatch(tournamentId: string, matchId: string):
       `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, member.is_captain ? 1 : 0]);
     }
   }
+
+  // FFA/Position: one match_teams row per participant (idempotent)
+  await createMatchTeams(matchId);
 }
 
 /**
@@ -948,7 +956,8 @@ async function addTeamParticipants(
   db: Awaited<ReturnType<typeof getDbInstance>>,
   matchId: string,
   teamId: string,
-  teamColor: 'red' | 'blue'
+  teamColor: 'red' | 'blue',
+  matchTeamId?: string
 ): Promise<void> {
   const teamMembers = await db.all(`
     SELECT user_id, discord_user_id, username, is_captain
@@ -960,24 +969,60 @@ async function addTeamParticipants(
     const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     await db.run(`
       INSERT INTO match_participants (
-        id, match_id, user_id, discord_user_id, username, team, team_assignment, receives_map_codes, joined_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, teamColor, teamColor, member.is_captain ? 1 : 0]);
+        id, match_id, user_id, discord_user_id, username, team, team_assignment, team_id, receives_map_codes, joined_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [participantId, matchId, member.user_id, member.discord_user_id, member.username, teamColor, teamColor, matchTeamId ?? null, member.is_captain ? 1 : 0]);
   }
 }
 
+const TOURNAMENT_TEAM_COLORS = { blue: '#4A90E2', red: '#E04A4A' } as const;
+
 /**
- * Save generated matches to database
+ * Create match_teams rows named after the two tournament teams (order 0 = team1/blue,
+ * order 1 = team2/red) and add each tournament team's members as participants linked
+ * to the matching match_teams row. Safe to call for a match whose teams are not yet
+ * known (does nothing).
+ */
+async function setupTournamentMatchTeams(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string,
+  team1Id: string | null | undefined,
+  team2Id: string | null | undefined
+): Promise<void> {
+  if (!team1Id || !team2Id) {
+    // Partially known match: still add whichever side exists so rosters are not lost
+    if (team1Id) await addTeamParticipants(db, matchId, team1Id, 'blue');
+    if (team2Id) await addTeamParticipants(db, matchId, team2Id, 'red');
+    return;
+  }
+
+  const t1 = await db.get<{ team_name: string }>('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]);
+  const t2 = await db.get<{ team_name: string }>('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]);
+
+  const [blueId, redId] = await createNamedMatchTeams(matchId, [
+    { name: t1?.team_name ?? 'Team 1', color: TOURNAMENT_TEAM_COLORS.blue },
+    { name: t2?.team_name ?? 'Team 2', color: TOURNAMENT_TEAM_COLORS.red },
+  ]);
+  await db.run('UPDATE matches SET team_count = 2 WHERE id = ?', [matchId]);
+
+  await addTeamParticipants(db, matchId, team1Id, 'blue', blueId);
+  await addTeamParticipants(db, matchId, team2Id, 'red', redId);
+}
+
+/**
+ * Save generated matches to database (single transaction).
+ *
+ * @param options.addAllTeams - cumulative-points: add every tournament team member to the
+ *   (single) match and create per-participant match_teams, inside the same transaction.
  */
 export async function saveGeneratedMatches(
   matches: GeneratedMatch[],
-  tournamentMatches: TournamentMatchInfo[]
+  tournamentMatches: TournamentMatchInfo[],
+  options: { addAllTeams?: boolean } = {}
 ): Promise<void> {
   const db = await getDbInstance();
 
-  await db.run('BEGIN TRANSACTION');
-
-  try {
+  await withTransaction(db, async () => {
     // Insert matches
     for (const match of matches) {
       await insertMatch(db, match);
@@ -985,6 +1030,12 @@ export async function saveGeneratedMatches(
 
     // Insert tournament match relationships
     for (const tournamentMatch of tournamentMatches) {
+      // Prefer the team ids carried on the generated match (they are the ones the
+      // match row itself was built from); fall back to the tournament-match record.
+      const generated = matches.find(m => m.id === tournamentMatch.id);
+      const team1Id = generated?.team1_id || tournamentMatch.team1_id || undefined;
+      const team2Id = generated?.team2_id || tournamentMatch.team2_id || undefined;
+
       await db.run(`
         INSERT INTO tournament_matches (
           match_id, tournament_id, round, bracket_type, team1_id, team2_id,
@@ -992,17 +1043,13 @@ export async function saveGeneratedMatches(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
         tournamentMatch.id, tournamentMatch.tournament_id, tournamentMatch.round,
-        tournamentMatch.bracket_type, tournamentMatch.team1_id, tournamentMatch.team2_id,
+        tournamentMatch.bracket_type, team1Id, team2Id,
         tournamentMatch.match_order, tournamentMatch.parent_match1_id, tournamentMatch.parent_match2_id
       ]);
 
-      // Add team members as match participants
-      if (tournamentMatch.team1_id) {
-        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team1_id, 'blue');
-      }
-
-      if (tournamentMatch.team2_id) {
-        await addTeamParticipants(db, tournamentMatch.id, tournamentMatch.team2_id, 'red');
+      // match_teams named after the tournament teams + participants linked to them
+      if (!options.addAllTeams) {
+        await setupTournamentMatchTeams(db, tournamentMatch.id, team1Id, team2Id);
       }
     }
 
@@ -1014,9 +1061,16 @@ export async function saveGeneratedMatches(
       }
     }
 
-    await db.run('COMMIT');
+    if (options.addAllTeams) {
+      for (const match of matches) {
+        await addAllTeamsToMatch(match.tournament_id, match.id);
+      }
+    }
+  });
 
-    // Create voice channels for all tournament matches
+  // Create voice channels for all tournament matches (after commit; skipped for
+  // cumulative matches which hold every participant)
+  if (!options.addAllTeams) {
     for (const match of matches) {
       try {
         await VoiceChannelService.setupMatchVoiceChannels(match.id);
@@ -1025,9 +1079,6 @@ export async function saveGeneratedMatches(
         logger.error(`Failed to create voice channels for tournament match ${match.id}:`, error);
       }
     }
-  } catch (error) {
-    await db.run('ROLLBACK');
-    throw error;
   }
 }
 

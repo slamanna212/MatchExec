@@ -1,4 +1,4 @@
-// @ts-nocheck - Database method calls have complex typing issues
+import type { StatsDb } from './modules/db-types';
 import { waitForDatabaseReady } from '../../lib/database';
 import { logger } from '../../src/lib/logger/server';
 import { AIExtractor } from './modules/ai-extractor';
@@ -6,7 +6,7 @@ import { StatImageGenerator } from './modules/stat-image-generator';
 
 class StatsProcessor {
   private isRunning = false;
-  private db: unknown;
+  private db!: StatsDb;
   private aiExtractor: AIExtractor | null = null;
   private imageGenerator: StatImageGenerator | null = null;
   private intervals: ReturnType<typeof setInterval>[] = [];

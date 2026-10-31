@@ -6,6 +6,8 @@ import { parseMatchResponse } from '../helpers';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
 import { apiError, apiOk } from '@/lib/api-response';
+import { withTransaction } from '@/lib/transaction';
+import { deleteMatchDependents } from '@/lib/series';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
 
@@ -262,7 +264,11 @@ export async function DELETE(
 
     // Delete the match (CASCADE will handle related records)
     // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
-    await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
+    // FKs are off, so explicitly remove match_teams, placements and series events too.
+    await withTransaction(db, async () => {
+      await deleteMatchDependents(db, matchId);
+      await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
+    });
     
     return apiOk({ success: true });
   } catch (error) {

@@ -164,7 +164,8 @@ function RaceDetailPanel({
   onPositionChange,
   onSubmit,
   submitting,
-  isValid
+  isValid,
+  prefilledNote
 }: {
   selectedGame: MatchGame;
   gameType: string;
@@ -174,6 +175,7 @@ function RaceDetailPanel({
   onSubmit: () => void;
   submitting: boolean;
   isValid: boolean;
+  prefilledNote: boolean;
 }) {
   const imageUrl = selectedGame.image_url || getMapImageUrl(gameType, selectedGame.map_id);
   const raceName = formatMapName(selectedGame.map_id, selectedGame.map_name);
@@ -218,6 +220,10 @@ function RaceDetailPanel({
             <Text size="sm" c="dimmed" fw={500}>Assign finishing positions</Text>
             <Badge size="sm" color="blue" ml="auto">Position Scoring</Badge>
           </Group>
+
+          {prefilledNote && (
+            <Text size="xs" c="blue" ta="center">Pre-filled from scorecard AI — review before saving</Text>
+          )}
 
           <div className={styles.participantList}>
             {participants.map(participant => {
@@ -283,6 +289,7 @@ export function PositionScoring({
   const [positionAssignments, setPositionAssignments] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
 
   const fetchMatchData = useCallback(async () => {
     try {
@@ -330,7 +337,39 @@ export function PositionScoring({
     }
   }, [participants, selectedGameId]);
 
+  // Pre-fill positions from an AI scorecard suggestion (if any) when a game is selected.
+  // Only applies while the admin hasn't entered anything; silent on 404/absent endpoint.
+  useEffect(() => {
+    setPrefilled(false);
+    if (!selectedGameId || participants.length === 0) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/matches/${matchId}/games/${selectedGameId}/suggested-positions`);
+        if (!res.ok) return;
+        const data = await res.json() as { suggestions?: Record<string, number> | null };
+        const suggestions = data?.suggestions;
+        if (cancelled || !suggestions || Object.keys(suggestions).length === 0) return;
+        const valid = Object.entries(suggestions).filter(
+          ([pid, pos]) => participants.some(p => p.id === pid) && Number.isInteger(pos) && pos > 0
+        );
+        if (valid.length === 0) return;
+        setPositionAssignments(prev => {
+          if (Object.values(prev).some(v => v !== null)) return prev; // admin already entered something
+          const next = { ...prev };
+          for (const [pid, pos] of valid) next[pid] = pos;
+          return next;
+        });
+        setPrefilled(true);
+      } catch {
+        // endpoint absent or network error — ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [matchId, selectedGameId, participants]);
+
   const handlePositionChange = (participantId: string, value: string | null) => {
+    setPrefilled(false);
     setPositionAssignments(prev => ({
       ...prev,
       [participantId]: value ? parseInt(value) : null
@@ -427,6 +466,7 @@ export function PositionScoring({
           onSubmit={handleSubmit}
           submitting={submitting}
           isValid={isValid()}
+          prefilledNote={prefilled}
         />
       ) : (
         <div className={styles.detailPanel}>

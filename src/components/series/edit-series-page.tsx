@@ -88,16 +88,20 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          description: description.trim() || undefined,
-          start_date: startDate?.toISOString() ?? undefined,
-          end_date: endDate?.toISOString() ?? undefined,
-          livestream_link: livestreamLink.trim() || undefined,
+          description: description.trim() || null,
+          start_date: startDate?.toISOString() ?? null,
+          end_date: endDate?.toISOString() ?? null,
+          livestream_link: livestreamLink.trim() || null,
           announcements,
           player_notifications: playerNotifications,
           scoring_config: scoringConfig,
         }),
       });
-      if (!res.ok) { showError('Failed to update series'); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error ?? 'Failed to update series');
+        return;
+      }
       showSuccess('Series updated');
       router.push(`/series/${seriesId}`);
     } catch (err) {

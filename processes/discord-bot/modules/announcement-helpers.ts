@@ -10,9 +10,65 @@ import { safePublicPath } from './utils';
 import * as path from 'path';
 import * as fs from 'fs';
 
+/** Winner kinds written by the scoring engine into Discord queue rows. */
+export type WinnerKind = 'team1' | 'team2' | 'tie' | 'team' | 'participant';
+
+/** Only team1/team2/tie results have a meaningful "X - Y" scoreline. */
+export function isTwoSidedResult(winner: WinnerKind): boolean {
+  return winner === 'team1' || winner === 'team2' || winner === 'tie';
+}
+
+const GENERIC_TEAM_NAMES = new Set(['blue team', 'red team', 'team1', 'team2', 'team 1', 'team 2']);
+
+/**
+ * winning_team_name is authoritative (the scoring engine resolves it for N-team,
+ * FFA and Position matches). Only fall back to the match's team1/team2 names when
+ * it is empty or a generic Blue/Red placeholder for a team1/team2 winner.
+ */
+export function resolveWinnerDisplayName(
+  winner: WinnerKind,
+  winningTeamName: string | null | undefined,
+  team1Name?: string | null,
+  team2Name?: string | null
+): string {
+  const name = (winningTeamName ?? '').trim();
+  const isGeneric = name === '' || GENERIC_TEAM_NAMES.has(name.toLowerCase());
+  if (!isGeneric) return name;
+  if (winner === 'team1' && team1Name) return team1Name;
+  if (winner === 'team2' && team2Name) return team2Name;
+  return name || 'Unknown';
+}
+
+export const DISCORD_FIELD_VALUE_LIMIT = 1024;
+export const DISCORD_MAX_FIELDS = 25;
+/** Matches with more active teams than this render as compact participant lists. */
+export const MAX_FIELD_PER_TEAM_COUNT = 8;
+
+/**
+ * Split lines into chunks that each fit a Discord embed field value (1024 chars).
+ * Overlong single lines are truncated with an ellipsis.
+ */
+export function chunkLinesForFields(lines: string[], limit = DISCORD_FIELD_VALUE_LIMIT): string[] {
+  const chunks: string[] = [];
+  let current = '';
+  for (const raw of lines) {
+    const line = raw.length > limit ? `${raw.slice(0, limit - 1)}…` : raw;
+    if (current && current.length + 1 + line.length > limit) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current ? `${current}\n${line}` : line;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 export interface MatchStartData {
   gameName: string;
   gameColor: number;
+  /** game_modes.scoring_type of the match (defaults to 'Normal'). */
+  scoringType?: string;
   blueTeamVoiceChannel: string | null;
   redTeamVoiceChannel: string | null;
   team1Name?: string;
@@ -70,12 +126,15 @@ export async function fetchMatchStartData(
       red_team_voice_channel?: string;
       team1_name?: string;
       team2_name?: string;
+      scoring_type?: string;
     }>(`
       SELECT g.name as game_name, g.color as game_color, g.icon_url as game_icon,
              m.blue_team_voice_channel, m.red_team_voice_channel,
-             m.team1_name, m.team2_name
+             m.team1_name, m.team2_name,
+             COALESCE(gmode.scoring_type, 'Normal') as scoring_type
       FROM matches m
       JOIN games g ON m.game_id = g.id
+      LEFT JOIN game_modes gmode ON gmode.id = m.mode_id AND gmode.game_id = m.game_id
       WHERE m.id = ?
     `, [matchId]);
 
@@ -94,15 +153,20 @@ export async function fetchMatchStartData(
       const blueTeam = teams.find(t => t.team_order === 0);
       const redTeam = teams.find(t => t.team_order === 1);
 
+      // FFA/Position matches have one match_teams row per participant, so
+      // team 0/1 are just the first two players: never present them as sides.
+      const isTeamMode = (matchData.scoring_type ?? 'Normal') === 'Normal';
+
       return {
         gameName: matchData.game_name,
+        scoringType: matchData.scoring_type ?? 'Normal',
         gameColor: matchData.game_color ? parseInt(matchData.game_color.replace('#', ''), 16) : defaultData.gameColor,
         // New system takes priority for voice channels
         blueTeamVoiceChannel: blueTeam?.voice_channel_id || matchData.blue_team_voice_channel || null,
         redTeamVoiceChannel: redTeam?.voice_channel_id || matchData.red_team_voice_channel || null,
         // New system takes priority for team names
-        team1Name: blueTeam?.team_name || matchData.team1_name,
-        team2Name: redTeam?.team_name || matchData.team2_name
+        team1Name: isTeamMode ? (blueTeam?.team_name || matchData.team1_name) : undefined,
+        team2Name: isTeamMode ? (redTeam?.team_name || matchData.team2_name) : undefined
       };
     }
   } catch (error) {

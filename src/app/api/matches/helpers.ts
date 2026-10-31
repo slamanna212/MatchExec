@@ -47,6 +47,7 @@ export function validateMatchRequest(body: MatchRequestBody): ValidationResult {
     validateMaxLength(body.livestreamLink, 500, 'livestreamLink'),
     validateEnum(body.rules, RULES_VALUES, 'rules'),
     validateNumberRange(body.rounds, 1, 9, 'rounds'),
+    validateNumberRange(body.teamCount, 2, 16, 'teamCount'),
   ]) {
     if (!check.valid) return check;
   }

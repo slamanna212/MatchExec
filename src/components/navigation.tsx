@@ -220,6 +220,26 @@ interface NavigationProps {
   children: React.ReactNode
 }
 
+function LogoutButton({ compact }: { compact?: boolean }): JSX.Element | null {
+  const [enabled, setEnabled] = useState(false)
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then(r => r.json())
+      .then(d => setEnabled(!!d.enabled && !!d.authenticated))
+      .catch(() => setEnabled(false))
+  }, [])
+  if (!enabled) return null
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    window.location.href = '/login'
+  }
+  return (
+    <UnstyledButton onClick={logout} aria-label="Log out" style={{ color: '#F5F5F5', fontSize: '13px', textAlign: 'center' }}>
+      {compact ? '⎋' : 'Log out'}
+    </UnstyledButton>
+  )
+}
+
 export function Navigation({ children }: NavigationProps): JSX.Element {
   const [opened, { toggle }] = useDisclosure(false)
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
@@ -410,6 +430,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
 
         {/* Drawer Footer */}
         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <LogoutButton />
           {/* Gradient separator */}
           <div style={{
             height: '1px',
@@ -523,6 +544,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
 
         <AppShell.Section>
           <div style={{ padding: desktopCollapsed ? '12px 6px' : '12px 12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <LogoutButton compact={desktopCollapsed} />
             {/* Gradient separator */}
             <div style={{
               height: '1px',

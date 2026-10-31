@@ -103,10 +103,10 @@ export function TournamentContentPanel({
   onStartAllMatches
 }: TournamentContentPanelProps): JSX.Element {
   const router = useRouter();
-  // Bracket tournaments (single/double-elimination) are pre-formed team vs
-  // team; cumulative-points tournaments (FFA/Position) have no bracket and
-  // no pre-formed teams — everyone plays every round — so those two tabs
-  // don't apply and are hidden.
+  // Cumulative-points tournaments (FFA/Position) have no bracket, so the
+  // Bracket tab is hidden. The Teams tab stays (shown as "Participants") —
+  // each participant is a solo team, and it is the only place to see/manage
+  // who is playing.
   const isCumulative = tournament.format === 'cumulative-points';
   const defaultTab = isCumulative ? 'standings' : 'teams';
 
@@ -114,7 +114,7 @@ export function TournamentContentPanel({
     if (typeof window === 'undefined') return defaultTab;
     const saved = localStorage.getItem(`tournament_tab_${tournament.id}`);
     const valid = isCumulative
-      ? (['standings', 'control'] as const)
+      ? (['teams', 'standings', 'control'] as const)
       : (['teams', 'bracket', 'standings', 'control'] as const);
     return (valid as readonly string[]).includes(saved ?? '') ? (saved as typeof valid[number]) : defaultTab;
   });
@@ -130,6 +130,10 @@ export function TournamentContentPanel({
             data={
               isCumulative
                 ? [
+                    {
+                      label: <span>Participants<span className="hidden md:inline"> ({teams.length})</span></span>,
+                      value: 'teams'
+                    },
                     { label: 'Standings', value: 'standings' },
                     { label: 'Control', value: 'control' }
                   ]

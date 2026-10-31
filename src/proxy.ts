@@ -1,11 +1,17 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { authGate } from '@/lib/auth';
 
 const WELCOME_COOKIE = 'welcome_flow_completed';
 const WELCOME_PATH = '/welcome';
 
 export async function proxy(request: NextRequest) {
+  const denied = await authGate(request);
+  if (denied) return denied;
+
   const { pathname } = request.nextUrl;
+  // API routes only go through the auth gate (no welcome-flow redirect)
+  if (pathname.startsWith('/api/')) return NextResponse.next();
   const isWelcomePath = pathname === WELCOME_PATH || pathname.startsWith(`${WELCOME_PATH}/`);
 
   const cookie = request.cookies.get(WELCOME_COOKIE)?.value;
@@ -49,5 +55,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon\\.ico|manifest\\.json|.*\\.svg|.*\\.png|.*\\.ico|.*\\.webp|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|manifest\\.json|.*\\.svg|.*\\.png|.*\\.ico|.*\\.webp|.*\\.jpg|.*\\.jpeg|.*\\.gif).*)'],
 };

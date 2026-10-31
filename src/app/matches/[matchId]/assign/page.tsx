@@ -23,7 +23,7 @@ import {
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle, IconMapRoute, IconGripVertical } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
-import { SetupPhase } from '@/components/setup/setup-phase';
+import { SetupPhase, type SetupData } from '@/components/setup/setup-phase';
 
 interface SignupField {
   id: string;
@@ -88,6 +88,8 @@ export default function AssignPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [setupData, setSetupData] = useState<SetupData>({});
   const [draggedParticipant, setDraggedParticipant] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -201,8 +203,39 @@ export default function AssignPage({
     setDraggedParticipant(null);
   };
 
+  const handleSetupChange = useCallback((data: SetupData) => {
+    setSetupData(prev => ({ ...prev, ...data }));
+  }, []);
+
+  const handleSetupContinue = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const payload: SetupData = scoringType === 'Position' ? setupData : {};
+      if (Object.keys(payload).length > 0) {
+        const response = await fetch(`/api/matches/${matchId}/setup`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          setSaveError(data?.error ?? 'Failed to save setup');
+          return;
+        }
+      }
+      router.push(`/matches/${matchId}`);
+    } catch (err) {
+      logger.error('Error saving setup:', err);
+      setSaveError('An error occurred while saving the setup');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const teamAssignments = participants.map(p => ({
         participantId: p.id,
@@ -219,10 +252,13 @@ export default function AssignPage({
       if (response.ok) {
         router.push(`/matches/${matchId}`);
       } else {
+        const data = await response.json().catch(() => null);
         logger.error('Failed to save team assignments');
+        setSaveError(data?.error ?? 'Failed to save team assignments');
       }
     } catch (err) {
       logger.error('Error saving team assignments:', err);
+      setSaveError('An error occurred while saving team assignments');
     } finally {
       setSaving(false);
     }
@@ -420,12 +456,16 @@ export default function AssignPage({
             breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
           />
 
-          <SetupPhase matchId={matchId} setupComponents={match.setup_components ?? undefined} />
+          <SetupPhase matchId={matchId} setupComponents={match.setup_components ?? undefined} onSetupChange={handleSetupChange} />
+
+          {saveError && (
+            <Alert color="red" icon={<IconAlertCircle size={16} />}>{saveError}</Alert>
+          )}
 
           <Divider />
 
           <Group justify="flex-end">
-            <Button onClick={() => router.push(`/matches/${matchId}`)}>
+            <Button onClick={handleSetupContinue} loading={saving}>
               Continue
             </Button>
           </Group>
@@ -434,7 +474,7 @@ export default function AssignPage({
     );
   }
 
-  const columnSpan = activeTeams.length > 0 ? Math.floor(12 / (activeTeams.length + 1)) : 4;
+  const columnSpan = activeTeams.length > 0 ? Math.max(3, Math.floor(12 / (activeTeams.length + 1))) : 4;
 
   return (
     <Container size="xl" py="xl">
@@ -475,6 +515,12 @@ export default function AssignPage({
             ))}
           </Stack>
         </div>
+
+        {saveError && (
+          <Alert color="red" icon={<IconAlertCircle size={16} />} withCloseButton onClose={() => setSaveError(null)}>
+            {saveError}
+          </Alert>
+        )}
 
         <Divider />
 
