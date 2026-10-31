@@ -28,6 +28,7 @@ import { showError, showSuccess } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
+import { cleanMapId } from '@/lib/utils/map-utils';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -429,7 +430,7 @@ export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
           Object.keys(notes).forEach(timestampedMapId => {
             if (!updated[timestampedMapId]) {
               // Get base map ID by stripping timestamp
-              const baseMapId = timestampedMapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+              const baseMapId = cleanMapId(timestampedMapId);
               const baseMapDetail = updated[baseMapId];
               
               if (baseMapDetail) {

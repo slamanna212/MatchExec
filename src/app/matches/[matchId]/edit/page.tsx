@@ -26,6 +26,7 @@ import { PageHeader } from '@/components/PageHeader';
 import type { GameMode, GameMapWithMode, SelectedMapCard } from '@/components/create-match/useMatchForm';
 import { MapSelector } from '@/components/create-match/MapSelector';
 import { SelectedMapsList } from '@/components/create-match/SelectedMapsList';
+import { cleanMapId } from '@/lib/utils/map-utils';
 
 interface MatchData {
   id: string;
@@ -58,7 +59,7 @@ function findMapDetail(
   mapsByBaseId: Record<string, MapDetail[]>
 ): MapDetail | undefined {
   if (mapsById[mapId]) return mapsById[mapId];
-  const baseId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+  const baseId = cleanMapId(mapId);
   if (mapsById[baseId]) return mapsById[baseId];
   const parts = baseId.split('-');
   for (let i = parts.length - 1; i >= 1; i--) {
@@ -318,7 +319,7 @@ export default function EditMatchPage({
 
       const mapIds = selectedMaps.map(m => {
         // Strip the unique timestamp suffix added during selection to get canonical map ID
-        return m.id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        return cleanMapId(m.id);
       });
 
       const res = await fetch(`/api/matches/${matchId}`, {

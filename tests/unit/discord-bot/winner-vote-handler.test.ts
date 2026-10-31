@@ -305,9 +305,13 @@ describe('WinnerVoteHandler', () => {
   // ─── submitWinner ───────────────────────────────────────────────────────────
 
   describe('submitWinner', () => {
+    const addGame = (matchId: string, id: string, status = 'ongoing') =>
+      db.run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, ?)`, [id, matchId, status]);
+
     it('calls saveMatchResult mapping blue to team1', async () => {
       const { saveMatchResult } = await import('@/lib/scoring-functions');
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await addGame(match.id, 'game-sw');
 
       await handler.submitWinner(match.id, 'game-sw', 'blue');
 
@@ -319,7 +323,8 @@ describe('WinnerVoteHandler', () => {
 
     it('calls saveMatchResult mapping red to team2', async () => {
       const { saveMatchResult } = await import('@/lib/scoring-functions');
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await addGame(match.id, 'game-sw2');
 
       await handler.submitWinner(match.id, 'game-sw2', 'red');
 
@@ -327,6 +332,50 @@ describe('WinnerVoteHandler', () => {
         matchId: match.id,
         winner: 'team2',
       }));
+    });
+
+    it('never passes rescore, so it cannot overwrite a result', async () => {
+      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await addGame(match.id, 'game-sw3');
+
+      await handler.submitWinner(match.id, 'game-sw3', 'blue');
+
+      const result = vi.mocked(saveMatchResult).mock.calls[0][1];
+      expect(result.rescore).toBeUndefined();
+    });
+
+    it('does not override a map that was already scored', async () => {
+      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await addGame(match.id, 'game-done', 'completed');
+
+      await handler.submitWinner(match.id, 'game-done', 'red');
+
+      expect(saveMatchResult).not.toHaveBeenCalled();
+    });
+
+    it('does not score a match that is no longer in battle', async () => {
+      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const match = await createMatch(game.id, mode.id, { status: 'complete' });
+      await addGame(match.id, 'game-late');
+
+      await handler.submitWinner(match.id, 'game-late', 'blue');
+
+      expect(saveMatchResult).not.toHaveBeenCalled();
+    });
+
+    it('treats a concurrent first score as a no-op, not an error', async () => {
+      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { logger } = await import('../../../src/lib/logger/server');
+      const err = Object.assign(new Error('already scored'), { name: 'GameAlreadyScoredError' });
+      vi.mocked(saveMatchResult).mockRejectedValueOnce(err);
+      const match = await createMatch(game.id, mode.id, { status: 'battle' });
+      await addGame(match.id, 'game-race');
+
+      await handler.submitWinner(match.id, 'game-race', 'blue');
+
+      expect(logger.error).not.toHaveBeenCalled();
     });
   });
 });

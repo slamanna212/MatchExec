@@ -7,6 +7,7 @@ import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
+import { cleanMapId } from '@/lib/utils/map-utils';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
 const parseDbTimestamp = (timestamp: string | null | undefined): Date | null => {
@@ -155,7 +156,7 @@ export default function HistoryMatchPage({
           const updated = { ...prev };
           Object.keys(notes).forEach(timestampedMapId => {
             if (!updated[timestampedMapId]) {
-              const baseMapId = timestampedMapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+              const baseMapId = cleanMapId(timestampedMapId);
               const baseMapDetail = updated[baseMapId];
 
               if (baseMapDetail) {

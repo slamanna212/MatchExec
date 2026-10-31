@@ -6,6 +6,7 @@ import { queueDiscordDeletion, runMatchCompletionSideEffects } from './scoring-f
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { createMatchTeams } from './match-setup';
+import { cleanMapId } from './utils/map-utils';
 
 async function getMatchName(matchId: string): Promise<string> {
   try {
@@ -264,8 +265,12 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
     if (firstGame) {
       let mapName: string | null = null;
       if (firstGame.map_id) {
-        const strippedId = firstGame.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
+        // Scope by the match's game: map IDs are only unique per game.
+        const mapRow = await db.get<{ name: string }>(
+          `SELECT gm.name FROM game_maps gm JOIN matches m ON m.game_id = gm.game_id
+           WHERE m.id = ? AND gm.id = ?`,
+          [matchId, cleanMapId(firstGame.map_id)]
+        );
         mapName = mapRow?.name ?? null;
       }
       await logFeedEvent({

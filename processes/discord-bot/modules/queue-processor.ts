@@ -15,6 +15,7 @@ import type { VoiceHandler } from './voice-handler';
 import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
+import { cleanMapId } from '../../../src/lib/utils/map-utils';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -1470,7 +1471,7 @@ export class QueueProcessor {
     if (maps.length > 0) {
       const mapNames: string[] = [];
       for (const mapId of maps) {
-        const baseMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const baseMapId = cleanMapId(mapId);
         const mapRow = await this.db!.get<{ name: string }>(`
           SELECT name FROM game_maps WHERE id = ?
         `, [baseMapId]);

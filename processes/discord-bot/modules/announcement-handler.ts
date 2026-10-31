@@ -32,6 +32,7 @@ import {
 } from './announcement-helpers';
 import type { WinnerKind } from './announcement-helpers';
 import { safePublicPath, capTitle } from './utils';
+import { cleanMapId } from '../../../src/lib/utils/map-utils';
 
 export class AnnouncementHandler {
   constructor(
@@ -242,10 +243,10 @@ export class AnnouncementHandler {
         let mapNote = mapNotes[mapIdentifier];
         if (!mapNote) {
           // Get the clean map ID without timestamp
-          const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+          const baseMapId = cleanMapId(mapIdentifier);
           
           // Find all notes that match this base map ID and get by index
-          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${cleanMapId}-`)).sort((a, b) => a.localeCompare(b));
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${baseMapId}-`)).sort((a, b) => a.localeCompare(b));
           mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
         }
         
@@ -378,8 +379,8 @@ export class AnnouncementHandler {
     try {
       const mapNames: string[] = [];
       for (const mapId of maps) {
-        const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const displayName = await this.fetchMapName(gameId, cleanMapId);
+        const baseMapId = cleanMapId(mapId);
+        const displayName = await this.fetchMapName(gameId, baseMapId);
         mapNames.push(`**${displayName}**`);
       }
 
@@ -619,8 +620,8 @@ export class AnnouncementHandler {
     if (!this.db) return null;
 
     try {
-      const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-      const mapData = await this.fetchMapData(gameId, cleanMapId);
+      const baseMapId = cleanMapId(mapIdentifier);
+      const mapData = await this.fetchMapData(gameId, baseMapId);
 
       if (!mapData) {
         return this.createFallbackMapEmbed(mapIdentifier, mapNumber);
@@ -1338,7 +1339,7 @@ export class AnnouncementHandler {
       }
 
       // Get map data
-      const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      const baseMapId = cleanMapId(mapId);
       const mapData = await this.db.get<{
         name: string;
         image_url: string;
@@ -1347,7 +1348,7 @@ export class AnnouncementHandler {
         FROM game_maps gm
         WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
         LIMIT 1
-      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+      `, [gameId, baseMapId, `%${baseMapId}%`]);
 
       if (mapData) {
         mapName = mapData.name;

@@ -15,7 +15,7 @@ vi.mock('@/lib/voice-channel-manager', () => ({
   deleteMatchVoiceChannels: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { seedBasicTestData, createMatch, createMatchParticipant, createGameMode } from '../utils/fixtures';
+import { seedBasicTestData, createMatch, createMatchParticipant, createGameMode, createGame } from '../utils/fixtures';
 import { getTestDb } from '../utils/test-db';
 import {
   saveMatchResult,
@@ -23,6 +23,10 @@ import {
   getGameResult,
   determineMatchWinner,
   resolveWinnerEntity,
+  rankByPoints,
+  getOverallPositionScore,
+  getMatchGamesWithResults,
+  GameAlreadyScoredError,
 } from '@/lib/scoring-functions';
 import type { MatchResult } from '@/shared/types';
 
@@ -99,7 +103,7 @@ describe('N-team / FFA / Position result handling', () => {
 
       const base = { isFfaMode: false, isPositionMode: true };
       await saveMatchResult(gid, normalResult(match.id, gid, { ...base, positionResults: { [a.id]: 1, [b.id]: 2, [c.id]: 3 } }));
-      await saveMatchResult(gid, normalResult(match.id, gid, { ...base, positionResults: { [b.id]: 1, [a.id]: 2 } }));
+      await saveMatchResult(gid, normalResult(match.id, gid, { ...base, positionResults: { [b.id]: 1, [a.id]: 2 }, rescore: true }));
 
       const rows = await all(`SELECT entity_id, position, is_winner FROM match_game_placements WHERE match_game_id = ?`, [gid]);
       expect(rows).toHaveLength(2);
@@ -113,13 +117,28 @@ describe('N-team / FFA / Position result handling', () => {
       const [gid] = await addGames(match.id, 2);
 
       await saveMatchResult(gid, normalResult(match.id, gid, { winnerTeamId: t0 }));
-      await saveMatchResult(gid, normalResult(match.id, gid, { winner: 'team2', winnerTeamId: t1 }));
+      await saveMatchResult(gid, normalResult(match.id, gid, { winner: 'team2', winnerTeamId: t1, rescore: true }));
 
       const rows = await all(`SELECT entity_id, is_winner FROM match_game_placements WHERE match_game_id = ?`, [gid]);
       expect(rows).toHaveLength(2);
       expect(rows.filter(r => r.is_winner).map(r => r.entity_id)).toEqual([t1]);
       const legacy = await getTestDb().get<Row>(`SELECT winner_id FROM match_games WHERE id = ?`, [gid]);
       expect(legacy?.winner_id).toBe('team2');
+    });
+
+    it('rejects re-saving a scored game without rescore and leaves the result intact', async () => {
+      const match = await createMatch(game.id, normalMode.id, { status: 'battle' });
+      const [t0, t1] = await addTeams(match.id, ['Alpha', 'Beta']);
+      const [gid] = await addGames(match.id, 2);
+
+      await saveMatchResult(gid, normalResult(match.id, gid, { winnerTeamId: t0 }));
+      await expect(saveMatchResult(gid, normalResult(match.id, gid, { winner: 'team2', winnerTeamId: t1 })))
+        .rejects.toBeInstanceOf(GameAlreadyScoredError);
+
+      const rows = await all(`SELECT entity_id, is_winner FROM match_game_placements WHERE match_game_id = ?`, [gid]);
+      expect(rows.filter(r => r.is_winner).map(r => r.entity_id)).toEqual([t0]);
+      const ongoing = await all(`SELECT id FROM match_games WHERE match_id = ? AND status = 'ongoing'`, [match.id]);
+      expect(ongoing).toHaveLength(1);
     });
 
     it('does not re-fire completion side effects but recomputes winner_team', async () => {
@@ -276,6 +295,106 @@ describe('N-team / FFA / Position result handling', () => {
 
       expect(await getMatchResult(gid)).toMatchObject({ isPositionMode: true, positionResults: { [a.id]: 1 } });
       expect((await getGameResult(gid))?.type).toBe('Position');
+    });
+  });
+
+  describe('team Position ranking', () => {
+    it('rankByPoints shares positions on ties and gives no winner for a top tie', () => {
+      expect(rankByPoints(new Map([['a', 10], ['b', 10], ['c', 4]]))).toEqual([
+        { teamId: 'a', points: 10, position: 1, isWinner: false },
+        { teamId: 'b', points: 10, position: 1, isWinner: false },
+        { teamId: 'c', points: 4, position: 3, isWinner: false },
+      ]);
+      expect(rankByPoints(new Map([['a', 3], ['b', 9], ['c', 3]]))).toEqual([
+        { teamId: 'b', points: 9, position: 1, isWinner: true },
+        { teamId: 'a', points: 3, position: 2, isWinner: false },
+        { teamId: 'c', points: 3, position: 2, isWinner: false },
+      ]);
+    });
+
+    it('writes tied team-endurance placements with no winner', async () => {
+      const pos = await createGameMode(game.id, { scoring_type: 'Position', name: 'Endurance' });
+      const match = await createMatch(game.id, pos.id, { status: 'battle' });
+      const [t0, t1] = await addTeams(match.id, ['Alpha', 'Beta']);
+      const [gid] = await addGames(match.id, 2);
+      const ps = await Promise.all(['A1', 'A2', 'B1', 'B2'].map((n, i) => createMatchParticipant(match.id, `u${i}`, n)));
+      const db = getTestDb();
+      for (const [i, p] of ps.entries()) {
+        await db.run(`UPDATE match_participants SET team_id = ? WHERE id = ?`, [i < 2 ? t0 : t1, p.id]);
+      }
+      // Spread 4/3/2/1: Alpha (1st+4th) = 5, Beta (2nd+3rd) = 5 → tie.
+      await db.run(`UPDATE matches SET position_scoring_override = ? WHERE id = ?`, [JSON.stringify({ '1': 4, '2': 3, '3': 2, '4': 1 }), match.id]);
+      await saveMatchResult(gid, normalResult(match.id, gid, {
+        isPositionMode: true,
+        positionResults: { [ps[0].id]: 1, [ps[1].id]: 4, [ps[2].id]: 2, [ps[3].id]: 3 },
+      }));
+
+      const teamRows = await all(
+        `SELECT entity_id, position, points_awarded, is_winner FROM match_game_placements WHERE match_game_id = ? AND entity_type = 'team'`, [gid]
+      );
+      expect(teamRows).toHaveLength(2);
+      expect(teamRows.every(r => r.position === 1 && r.points_awarded === 5 && r.is_winner === 0)).toBe(true);
+    });
+  });
+
+  describe('getOverallPositionScore', () => {
+    it('totals placements (not legacy JSON) and reports a top tie as no winner', async () => {
+      const pos = await createGameMode(game.id, { scoring_type: 'Position', name: 'Race' });
+      const match = await createMatch(game.id, pos.id, { status: 'battle' });
+      const [g1, g2] = await addGames(match.id, 3);
+      const a = await createMatchParticipant(match.id, 'u1', 'A');
+      const b = await createMatchParticipant(match.id, 'u2', 'B');
+      const base = { isPositionMode: true };
+      await saveMatchResult(g1, normalResult(match.id, g1, { ...base, positionResults: { [a.id]: 1, [b.id]: 2 } }));
+      await saveMatchResult(g2, normalResult(match.id, g2, { ...base, positionResults: { [b.id]: 1, [a.id]: 2 } }));
+      // Wipe the legacy columns to prove they aren't read.
+      await getTestDb().run(`UPDATE match_games SET points_awarded = NULL, position_results = NULL WHERE match_id = ?`, [match.id]);
+
+      const score = await getOverallPositionScore(match.id);
+      expect(score.participantScores[a.id]).toEqual({ username: 'A', totalPoints: 43, races: 2 });
+      expect(score.participantScores[b.id]).toEqual({ username: 'B', totalPoints: 43, races: 2 });
+      expect(score.winner).toBeNull();
+    });
+  });
+
+  describe('ensureMatchGameExists (via saveMatchResult)', () => {
+    it('creates a missing `_game_N` row with round N and the Nth map', async () => {
+      const match = await createMatch(game.id, normalMode.id, { status: 'battle', maps: JSON.stringify(['m-one', 'm-two-1776547135395-abc']) });
+      const [t0] = await addTeams(match.id, ['Alpha', 'Beta']);
+      const gid = `${match.id}_game_2`;
+
+      await saveMatchResult(gid, normalResult(match.id, gid, { winnerTeamId: t0 }));
+
+      const row = await getTestDb().get<Row>(`SELECT round, map_id FROM match_games WHERE id = ?`, [gid]);
+      expect(row).toMatchObject({ round: 2, map_id: 'm-two-1776547135395-abc' });
+    });
+
+    it('rejects ids that do not follow the `_game_N` convention', async () => {
+      const match = await createMatch(game.id, normalMode.id, { status: 'battle' });
+      await expect(saveMatchResult(`${match.id}_game_x`, normalResult(match.id, `${match.id}_game_x`, {})))
+        .rejects.toThrow(/not found/);
+      await expect(saveMatchResult(`${match.id}_game_0`, normalResult(match.id, `${match.id}_game_0`, {})))
+        .rejects.toThrow(/not found/);
+    });
+  });
+
+  describe('getMatchGamesWithResults', () => {
+    it('scopes map lookups to the match game and resolves instance-suffixed map ids', async () => {
+      const db = getTestDb();
+      const other = await createGame({ name: 'Other Game' });
+      const otherMode = await createGameMode(other.id, { scoring_type: 'FFA', name: 'Other FFA' });
+      // Same map id in two games (like "midtown" in Overwatch 2 and Marvel Rivals).
+      await db.run(`INSERT INTO game_maps (id, game_id, name, mode_id) VALUES ('midtown', ?, 'Midtown (ours)', ?)`, [game.id, normalMode.id]);
+      await db.run(`INSERT INTO game_maps (id, game_id, name, mode_id) VALUES ('midtown', ?, 'Midtown (theirs)', ?)`, [other.id, otherMode.id]);
+
+      const match = await createMatch(game.id, normalMode.id, { status: 'battle' });
+      await db.run(`INSERT INTO match_games (id, match_id, round, map_id, status) VALUES (?, ?, 1, 'midtown', 'ongoing')`, [`${match.id}_game_1`, match.id]);
+      await db.run(`INSERT INTO match_games (id, match_id, round, map_id, status) VALUES (?, ?, 2, 'midtown-1776547135395-abc', 'pending')`, [`${match.id}_game_2`, match.id]);
+
+      const games = await getMatchGamesWithResults(match.id);
+      expect(games).toHaveLength(2);
+      expect(games.map(g => g.map_name)).toEqual(['Midtown (ours)', 'Midtown (ours)']);
+      expect(games.every(g => g.mode_scoring_type === 'Normal')).toBe(true);
     });
   });
 });

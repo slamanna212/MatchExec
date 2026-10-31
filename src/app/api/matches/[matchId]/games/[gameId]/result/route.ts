@@ -1,5 +1,12 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { saveMatchResult, getMatchResult, getGameResult, getScoringTypeForGame } from '../../../../../../../lib/scoring-functions';
+import {
+  saveMatchResult,
+  getMatchResult,
+  getGameResult,
+  getScoringTypeForGame,
+  getTournamentRescoreBlocker,
+  GameAlreadyScoredError
+} from '../../../../../../../lib/scoring-functions';
 import { getDbInstance } from '../../../../../../../lib/database-init';
 import type { MatchResult } from '@/shared/types';
 import type { SaveResultBody } from '@/lib/types/scoring';
@@ -14,7 +21,13 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string; gameId: string }> }
 ): Promise<NextResponse> {
   try {
-    const { gameId } = await params;
+    const { matchId, gameId } = await params;
+
+    const db = await getDbInstance();
+    const game = await db.get<{ id: string }>(
+      'SELECT id FROM match_games WHERE id = ? AND match_id = ?', [gameId, matchId]
+    );
+    if (!game) return apiError('Game not found for this match', 404);
 
     // Return typed GameResult if placements exist, else fall back to legacy MatchResult
     const typed = await getGameResult(gameId);
@@ -129,6 +142,10 @@ async function buildResult(
     if (new Set(positions).size !== positions.length) {
       throw new ValidationError('positionResults positions must be unique');
     }
+    // Unique positive integers that are all <= N means exactly 1..N, so someone finished 1st.
+    if (!positions.every(p => (p as number) <= positions.length)) {
+      throw new ValidationError(`positionResults positions must run 1 to ${positions.length} with no gaps`);
+    }
     await assertParticipantsInMatch(db, matchId, ids, 'positionResults');
     return {
       result: {
@@ -237,6 +254,8 @@ export async function POST(
       if (!rescore) {
         return apiError('Match is already complete; pass rescore: true to correct a result', 400);
       }
+      const blocker = await getTournamentRescoreBlocker(db, matchId);
+      if (blocker) return apiError(blocker, 409);
     } else if (match.status !== 'battle') {
       return apiError(`Cannot score a match in "${match.status}" status; it must be in battle`, 400);
     }
@@ -246,6 +265,9 @@ export async function POST(
     return apiOk({ success: true, message });
   } catch (error) {
     if (error instanceof ValidationError) return apiError(error.message, error.status);
+    if (error instanceof GameAlreadyScoredError) {
+      return apiError('This map was scored by someone else just now; pass rescore: true to correct its result', 409);
+    }
     logger.error('Error saving match result:', error);
     return apiError(error instanceof Error ? error.message : 'Failed to save match result');
   }

@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { withTransaction } from './transaction';
+import { cleanMapId } from './utils/map-utils';
 import type {
   MatchResult,
   MatchFormat,
@@ -63,13 +64,62 @@ export async function getTeamName(teamId: string): Promise<string | null> {
   return row?.team_name ?? null;
 }
 
+interface MapLookupRow {
+  id: string;
+  name: string;
+  image_url?: string;
+  mode_id?: string;
+  game_id: string;
+  mode_scoring_type?: string;
+}
+
 /**
- * Resolve position points for a match, honouring the 3-level override chain:
- * match-level override → tournament-level override (if the match belongs to
- * a tournament) → game default.
+ * Look up game_maps rows for a set of (possibly instance-suffixed) map IDs, keyed by
+ * clean map ID. Always scoped to gameId: map IDs are only unique per game (e.g.
+ * "midtown" exists in both Overwatch 2 and Marvel Rivals).
  */
-export async function getPointsForPositionByMatchId(position: number, matchId: string): Promise<number> {
-  const db = await getDbInstance();
+async function lookupMaps(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  gameId: string,
+  mapIds: Array<string | null | undefined>
+): Promise<Record<string, MapLookupRow>> {
+  const cleanIds = [...new Set(mapIds.filter((id): id is string => !!id).map(cleanMapId))];
+  if (!gameId || cleanIds.length === 0) return {};
+  const rows = await db.all<MapLookupRow>(
+    `SELECT gm.id, gm.name, gm.image_url, gm.mode_id, gm.game_id,
+            gamemode.scoring_type AS mode_scoring_type
+     FROM game_maps gm
+     LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
+     WHERE gm.game_id = ? AND gm.id IN (${cleanIds.map(() => '?').join(', ')})`,
+    [gameId, ...cleanIds]
+  );
+  return Object.fromEntries(rows.map(r => [r.id, r]));
+}
+
+/** Display name of a match's (possibly instance-suffixed) map, scoped to the match's game. */
+async function lookupMapName(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string,
+  mapId: string | null | undefined
+): Promise<string | null> {
+  if (!mapId) return null;
+  const row = await db.get<{ name: string }>(
+    `SELECT gm.name FROM game_maps gm JOIN matches m ON m.game_id = gm.game_id
+     WHERE m.id = ? AND gm.id = ?`,
+    [matchId, cleanMapId(mapId)]
+  );
+  return row?.name ?? null;
+}
+
+/**
+ * Resolve a match's position points spread, honouring the 3-level override chain:
+ * match-level position_scoring_override → tournament-level position_scoring_override
+ * (if the match belongs to a tournament) → game scoring_config default.
+ */
+export async function resolvePositionScoringConfig(
+  db: Awaited<ReturnType<typeof getDbInstance>>,
+  matchId: string
+): Promise<PositionScoringConfig> {
   const row = await db.get<{ position_scoring_override?: string; tournament_scoring_override?: string; scoring_config?: string }>(
     `SELECT m.position_scoring_override, t.position_scoring_override as tournament_scoring_override, g.scoring_config
      FROM matches m
@@ -79,14 +129,20 @@ export async function getPointsForPositionByMatchId(position: number, matchId: s
     [matchId]
   );
   const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
-  return getPointsForPosition(position, parsePositionScoringConfig(raw));
+  return parsePositionScoringConfig(raw);
 }
 
 /**
- * Calculate points awarded for position results.
- * Checks the 3-level override chain: match-level position_scoring_override →
- * tournament-level position_scoring_override (if the match belongs to a
- * tournament) → game scoring_config default.
+ * Resolve position points for a match via resolvePositionScoringConfig.
+ */
+export async function getPointsForPositionByMatchId(position: number, matchId: string): Promise<number> {
+  const db = await getDbInstance();
+  return getPointsForPosition(position, await resolvePositionScoringConfig(db, matchId));
+}
+
+/**
+ * Calculate points awarded for position results, using the match's spread
+ * (see resolvePositionScoringConfig).
  * @param positionResults - participantId → 1-based position
  * @param matchGameId - match_games.id (used to resolve the match and its overrides)
  */
@@ -97,18 +153,10 @@ export async function calculatePositionPoints(
   const db = await getDbInstance();
 
   try {
-    const row = await db.get<{ position_scoring_override?: string; tournament_scoring_override?: string; scoring_config?: string }>(
-      `SELECT m.position_scoring_override, t.position_scoring_override as tournament_scoring_override, g.scoring_config
-       FROM match_games mg
-       JOIN matches m ON mg.match_id = m.id
-       JOIN games g ON m.game_id = g.id
-       LEFT JOIN tournaments t ON m.tournament_id = t.id
-       WHERE mg.id = ?`,
-      [matchGameId]
-    );
-
-    const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
-    const config = parsePositionScoringConfig(raw);
+    const game = await db.get<{ match_id: string }>(`SELECT match_id FROM match_games WHERE id = ?`, [matchGameId]);
+    const config = game
+      ? await resolvePositionScoringConfig(db, game.match_id)
+      : parsePositionScoringConfig(null);
 
     const pointsAwarded: Record<string, number> = {};
     for (const [participantId, position] of Object.entries(positionResults)) {
@@ -233,9 +281,7 @@ export async function queueBattleStartDMs(matchId: string): Promise<void> {
     );
     if (!firstGame) return;
 
-    const baseMapId = firstGame.map_id.replace(/-\d{10,}-[a-zA-Z0-9]+$/, '');
-    const mapData = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [baseMapId]);
-    const mapName = mapData?.name || firstGame.map_id;
+    const mapName = (await lookupMapName(db, matchId, firstGame.map_id)) || firstGame.map_id;
 
     await queueScorecardPrompts(matchId, firstGame.id, mapName);
     await queueWinnerVote(matchId, firstGame.id, mapName);
@@ -273,50 +319,11 @@ export async function getMatchGames(matchId: string): Promise<Array<Record<strin
 
     // All games in a match share the same game_id (from the parent match)
     const gameId = String(games[0].match_game_id || '');
-
-    // Compute clean map IDs (strip timestamp suffixes added during map customisation)
-    const cleanMapIds = games
-      .map(g => String(g.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, ''))
-      .filter(id => id !== '');
-
-    // Fetch all map data in a single query, filtered by the correct game_id to avoid
-    // returning the wrong map when multiple games share the same map name/id.
-    const mapLookup: Record<string, {
-      name: string;
-      image_url?: string;
-      mode_id?: string;
-      game_id: string;
-      mode_scoring_type?: string;
-    }> = {};
-
-    if (gameId && cleanMapIds.length > 0) {
-      const placeholders = cleanMapIds.map(() => '?').join(', ');
-      const mapQuery = `
-        SELECT gm.id, gm.name, gm.image_url, gm.mode_id, gm.game_id,
-               gamemode.scoring_type AS mode_scoring_type
-        FROM game_maps gm
-        LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
-        WHERE gm.game_id = ? AND gm.id IN (${placeholders})
-      `;
-
-      const mapRows = await db.all<{
-        id: string;
-        name: string;
-        image_url?: string;
-        mode_id?: string;
-        game_id: string;
-        mode_scoring_type?: string;
-      }>(mapQuery, [gameId, ...cleanMapIds]);
-
-      for (const row of mapRows) {
-        mapLookup[row.id] = row;
-      }
-    }
+    const mapLookup = await lookupMaps(db, gameId, games.map(g => g.map_id as string | null));
 
     // Enrich each game with its map data
     for (const game of games) {
-      const cleanMapId = String(game.map_id || '').replace(/-\d+-[a-zA-Z0-9]+$/, '');
-      const mapData = mapLookup[cleanMapId];
+      const mapData = mapLookup[cleanMapId(String(game.map_id || ''))];
       if (mapData) {
         game.map_name = mapData.name;
         game.image_url = mapData.image_url;
@@ -356,22 +363,35 @@ async function ensureMatchGameExists(matchGameId: string, matchId: string): Prom
     return;
   }
 
-  if (!matchGameId.startsWith(`${matchId}_game_`)) {
+  const prefix = `${matchId}_game_`;
+  const roundSuffix = matchGameId.startsWith(prefix) ? matchGameId.slice(prefix.length) : '';
+  if (!/^[1-9]\d*$/.test(roundSuffix)) {
     throw new Error(`Game ${matchGameId} not found for match ${matchId}`);
   }
-  const matchRow = await db.get<{ id: string }>(`SELECT id FROM matches WHERE id = ?`, [matchId]);
+  const round = Number(roundSuffix);
+
+  const matchRow = await db.get<{ id: string; maps?: string | null }>(`SELECT id, maps FROM matches WHERE id = ?`, [matchId]);
   if (!matchRow) {
     throw new Error(`Match ${matchId} not found`);
+  }
+
+  // Mirror initializeMatchGames: game N plays the match's Nth map.
+  let mapId: string | null = null;
+  try {
+    const maps = matchRow.maps ? JSON.parse(matchRow.maps) as unknown : null;
+    if (Array.isArray(maps) && typeof maps[round - 1] === 'string') mapId = maps[round - 1] as string;
+  } catch {
+    logger.warning(`Malformed maps JSON for match ${matchId}; creating game ${matchGameId} without a map`);
   }
 
   await db.run(
     `INSERT INTO match_games (
        id, match_id, round, participant1_id, participant2_id,
-       status, created_at, updated_at
-     ) VALUES (?, ?, 1, 'team1', 'team2', 'ongoing', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [matchGameId, matchId]
+       map_id, status, created_at, updated_at
+     ) VALUES (?, ?, ?, 'team1', 'team2', ?, 'ongoing', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [matchGameId, matchId, round, mapId]
   );
-  logger.debug(`Created match game entry ${matchGameId} for match ${matchId}`);
+  logger.debug(`Created match game entry ${matchGameId} (round ${round}) for match ${matchId}`);
 }
 
 /**
@@ -393,12 +413,11 @@ export async function getScoringTypeForGame(
     v === 'Normal' || v === 'FFA' || v === 'Position';
 
   if (row.map_id) {
-    const cleanMapId = row.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
     const mapMode = await db.get<{ scoring_type?: string }>(
       `SELECT gamemode.scoring_type FROM game_maps gm
        JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
        WHERE gm.game_id = ? AND gm.id = ?`,
-      [row.game_id, cleanMapId]
+      [row.game_id, cleanMapId(row.map_id)]
     );
     if (valid(mapMode?.scoring_type)) return mapMode.scoring_type;
   }
@@ -437,6 +456,46 @@ export async function resolveWinnerEntity(
   else if (row.tournament_id) type = 'tournament_team';
   else type = 'match_team';
   return { type, id: row.winner_team };
+}
+
+/**
+ * Why a completed tournament match can no longer be rescored, or null if it can.
+ * Once the bracket has consumed a match's result (a later match was generated with
+ * either of its teams, or the tournament finished), changing winner_team would leave
+ * the bracket inconsistent, since nothing re-seeds the downstream matches.
+ * Later matches are detected by rowid: bracket rows are only ever inserted, so a
+ * higher rowid means the match was generated after this one.
+ */
+export async function getTournamentRescoreBlocker(db: Db, matchId: string): Promise<string | null> {
+  const row = await db.get<{ tournament_status: string; rowid: number; team1_id: string | null; team2_id: string | null }>(
+    `SELECT t.status AS tournament_status, tm.rowid AS rowid, tm.team1_id, tm.team2_id
+     FROM matches m
+     JOIN tournaments t ON t.id = m.tournament_id
+     LEFT JOIN tournament_matches tm ON tm.match_id = m.id
+     WHERE m.id = ?`,
+    [matchId]
+  );
+  if (!row) return null; // standalone match
+
+  if (row.tournament_status === 'complete') {
+    return 'The tournament is complete; its match results can no longer be rescored';
+  }
+
+  const teams = [row.team1_id, row.team2_id].filter((t): t is string => !!t);
+  if (row.rowid == null || teams.length === 0) return null;
+
+  const placeholders = teams.map(() => '?').join(',');
+  const later = await db.get<{ match_id: string }>(
+    `SELECT tm2.match_id FROM tournament_matches tm2
+     JOIN tournament_matches tm ON tm.match_id = ?
+     WHERE tm2.tournament_id = tm.tournament_id AND tm2.rowid > tm.rowid
+       AND (tm2.team1_id IN (${placeholders}) OR tm2.team2_id IN (${placeholders}))
+     LIMIT 1`,
+    [matchId, ...teams, ...teams]
+  );
+  return later
+    ? 'The bracket has already advanced past this match; it can no longer be rescored'
+    : null;
 }
 
 const genPlacementId = () => `mgp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // NOSONAR
@@ -655,6 +714,23 @@ async function savePlacementsForPosition(
 }
 
 /**
+ * Competition ranking (1, 1, 3) by points, highest first: tied entries share a
+ * position, and a tie for the top spot yields no winner, matching
+ * determineMatchWinner's tie handling.
+ */
+export function rankByPoints(
+  points: Map<string, number>
+): Array<{ teamId: string; points: number; position: number; isWinner: boolean }> {
+  const ranked = [...points.entries()].sort((a, b) => b[1] - a[1]);
+  const topTied = ranked.length > 1 && ranked[0][1] === ranked[1][1];
+  let position = 0;
+  return ranked.map(([teamId, pts], i) => {
+    if (i === 0 || pts !== ranked[i - 1][1]) position = i + 1;
+    return { teamId, points: pts, position, isWinner: position === 1 && !topTied };
+  });
+}
+
+/**
  * Team-endurance Position matches (participants grouped into match_teams with 2+
  * members) additionally get team-level placement rows, derived by summing each
  * team's members' points_awarded for this game and ranking teams by total. This
@@ -694,14 +770,12 @@ async function savePlacementsForPositionTeams(
   }
   if (teamPoints.size === 0) return;
 
-  const ranked = [...teamPoints.entries()].sort((a, b) => b[1] - a[1]);
-  for (let i = 0; i < ranked.length; i++) {
-    const [teamId, points] = ranked[i];
+  for (const { teamId, points, position, isWinner } of rankByPoints(teamPoints)) {
     await db.run(
       `INSERT INTO match_game_placements
        (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
        VALUES (?, ?, 'team', ?, ?, ?, ?)`,
-      [genPlacementId(), matchGameId, teamId, i + 1, points, i === 0 ? 1 : 0]
+      [genPlacementId(), matchGameId, teamId, position, points, isWinner ? 1 : 0]
     );
   }
 }
@@ -773,12 +847,26 @@ async function handlePostSaveNotifications(
   return nextMap !== null;
 }
 
+/** Thrown by saveMatchResult when the game is already scored and the caller didn't ask to rescore. */
+export class GameAlreadyScoredError extends Error {
+  constructor(public matchGameId: string) {
+    super(`Game ${matchGameId} is already scored; pass rescore: true to correct its result`);
+    this.name = 'GameAlreadyScoredError';
+  }
+}
+
 /**
  * Save match result - handles team-based, FFA, and Position scoring.
  *
- * DB writes (legacy columns + placements) run in one transaction. Re-saving an
- * already-completed game is a rescore: placements are replaced and the match's
- * winner_team recomputed, but no notification/completion side effects re-fire.
+ * DB writes (legacy columns + placements) run in one transaction. The "already
+ * scored?" check runs inside that transaction (BEGIN IMMEDIATE holds the write lock
+ * across processes), so when the web UI and a Discord winner vote score the same game
+ * concurrently exactly one of them performs the first score and runs the
+ * next-map/completion side effects; the other gets GameAlreadyScoredError.
+ *
+ * Overwriting an already-completed game requires `result.rescore`: placements are
+ * replaced and the match's winner_team recomputed, but no notification/completion
+ * side effects re-fire.
  */
 export async function saveMatchResult(
   matchGameId: string,
@@ -790,11 +878,13 @@ export async function saveMatchResult(
 
   try {
     await ensureMatchGameExists(matchGameId, result.matchId);
-    const prior = await db.get<{ status: string }>('SELECT status FROM match_games WHERE id = ?', [matchGameId]);
-    const isRescore = prior?.status === 'completed';
 
-    await withTransaction(db, async () => {
+    const isRescore = await withTransaction(db, async () => {
+      const prior = await db.get<{ status: string }>('SELECT status FROM match_games WHERE id = ?', [matchGameId]);
+      const alreadyScored = prior?.status === 'completed';
+      if (alreadyScored && !result.rescore) throw new GameAlreadyScoredError(matchGameId);
       await saveScoringModeResult(db, matchGameId, result);
+      return alreadyScored;
     });
 
     if (isRescore) {
@@ -807,7 +897,7 @@ export async function saveMatchResult(
     const isMatchComplete = await updateMatchStatusIfComplete(matchGameId);
     await queueVoiceAnnouncementForScore(result.matchId, hasNextMap, isMatchComplete);
   } catch (error) {
-    logger.error('Error in saveMatchResult:', error);
+    if (!(error instanceof GameAlreadyScoredError)) logger.error('Error in saveMatchResult:', error);
     throw error;
   }
 }
@@ -1058,7 +1148,7 @@ export async function getGameResult(matchGameId: string): Promise<GameResult | n
     return { type: 'FFA', matchGameId, matchId: game.match_id, placements: typed };
   } catch (error) {
     logger.error('Error in getGameResult:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -1071,15 +1161,14 @@ async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round
   try {
     // Find the first pending map and set it to ongoing
     const nextMapQuery = `
-      SELECT mg.id, mg.round, mg.map_id, gm.name as map_name
+      SELECT mg.id, mg.round, mg.map_id
       FROM match_games mg
-      LEFT JOIN game_maps gm ON mg.map_id = gm.id
       WHERE mg.match_id = ? AND mg.status = 'pending'
       ORDER BY mg.round ASC
       LIMIT 1
     `;
 
-    const nextMap = await db.get<{ id: string; round: number; map_id?: string; map_name?: string }>(nextMapQuery, [matchId]);
+    const nextMap = await db.get<{ id: string; round: number; map_id?: string }>(nextMapQuery, [matchId]);
 
     if (nextMap) {
       const updateQuery = `
@@ -1091,13 +1180,7 @@ async function setNextMapToOngoing(matchId: string): Promise<{ id: string; round
       await db.run(updateQuery, [nextMap.id]);
       logger.debug(`Set next map ${nextMap.id} to ongoing status`);
 
-      // Resolve map name — the JOIN may miss if map_id has a custom suffix
-      let mapName: string | null = nextMap.map_name ?? null;
-      if (!mapName && nextMap.map_id) {
-        const strippedId = nextMap.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
-        mapName = mapRow?.name ?? null;
-      }
+      const mapName = await lookupMapName(db, matchId, nextMap.map_id);
 
       // Queue map code PMs for the new map if map codes are supported
       try {
@@ -1232,11 +1315,9 @@ export async function queueScoreNotification(matchGameId: string, result: MatchR
     // Get match and game data
     const gameDataQuery = `
       SELECT mg.match_id, mg.round, mg.map_id,
-             m.name as match_name, m.game_id,
-             gm.name as map_name
+             m.name as match_name, m.game_id
       FROM match_games mg
       JOIN matches m ON mg.match_id = m.id
-      LEFT JOIN game_maps gm ON mg.map_id = gm.id
       WHERE mg.id = ?
     `;
 
@@ -1246,7 +1327,6 @@ export async function queueScoreNotification(matchGameId: string, result: MatchR
       map_id?: string;
       match_name: string;
       game_id: string;
-      map_name?: string;
     }>(gameDataQuery, [matchGameId]);
 
     if (!gameData) {
@@ -1364,10 +1444,11 @@ async function getMatchTeamId(
     WHERE m.id = ?
   `, [matchId]);
 
+  // insertMatch stores blue_team_id = team1 and red_team_id = team2 (team1 is blue/team_order 0).
   if (teamNumber === 1) {
-    return teamData?.team1_id || teamData?.red_team_id || null;
+    return teamData?.team1_id || teamData?.blue_team_id || null;
   }
-  return teamData?.team2_id || teamData?.blue_team_id || null;
+  return teamData?.team2_id || teamData?.red_team_id || null;
 }
 
 /**
@@ -1686,55 +1767,32 @@ export async function getOverallPositionScore(matchId: string): Promise<{
   const db = await getDbInstance();
 
   try {
-    const query = `
-      SELECT mg.points_awarded, mg.position_results
-      FROM match_games mg
-      WHERE mg.match_id = ?
-        AND mg.status = 'completed'
-        AND mg.points_awarded IS NOT NULL
-    `;
+    // Same totals as determineMatchWinner (getParticipantPointTotals), plus race count and username.
+    const rows = await db.all<{ entity_id: string; username: string | null; total_pts: number; races: number }>(
+      `SELECT mgp.entity_id, mp.username,
+              SUM(COALESCE(mgp.points_awarded, mgp.is_winner)) as total_pts,
+              COUNT(*) as races
+       FROM match_games mg
+       JOIN match_game_placements mgp ON mgp.match_game_id = mg.id
+       LEFT JOIN match_participants mp ON mp.id = mgp.entity_id
+       WHERE mg.match_id = ? AND mg.status = 'completed' AND mgp.entity_type = 'participant'
+       GROUP BY mgp.entity_id
+       ORDER BY total_pts DESC`,
+      [matchId]
+    );
 
-    const games = await db.all<{
-      points_awarded: string;
-      position_results: string;
-    }>(query, [matchId]);
-
-    // Aggregate points across all races
     const participantScores: Record<string, { username: string; totalPoints: number; races: number }> = {};
-
-    for (const game of games) {
-      const pointsAwarded = JSON.parse(game.points_awarded) as Record<string, number>;
-
-      for (const [participantId, points] of Object.entries(pointsAwarded)) {
-        if (!participantScores[participantId]) {
-          // Get participant username
-          const participantQuery = `SELECT username FROM match_participants WHERE id = ?`;
-          const participant = await db.get<{ username: string }>(participantQuery, [participantId]);
-
-          participantScores[participantId] = {
-            username: participant?.username || 'Unknown',
-            totalPoints: 0,
-            races: 0
-          };
-        }
-
-        participantScores[participantId].totalPoints += points;
-        participantScores[participantId].races += 1;
-      }
+    for (const row of rows) {
+      participantScores[row.entity_id] = {
+        username: row.username || 'Unknown',
+        totalPoints: row.total_pts,
+        races: row.races
+      };
     }
 
-    // Determine winner (participant with highest total points)
-    let winner: string | null = null;
-    let highestPoints = -1;
-
-    for (const [participantId, data] of Object.entries(participantScores)) {
-      if (data.totalPoints > highestPoints) {
-        highestPoints = data.totalPoints;
-        winner = participantId;
-      } else if (data.totalPoints === highestPoints) {
-        winner = null; // Tie
-      }
-    }
+    // A tie for the top total yields no winner.
+    const isTie = rows.length > 1 && rows[0].total_pts === rows[1].total_pts;
+    const winner = rows.length > 0 && !isTie ? rows[0].entity_id : null;
 
     return {
       participantScores,
@@ -1884,27 +1942,37 @@ export async function getMatchGamesWithResults(matchId: string): Promise<Array<{
   const db = await getDbInstance();
 
   try {
-    const games = await db.all<{
+    const rawGames = await db.all<{
       id: string;
       round: number;
-      map_name: string;
-      mode_scoring_type: string;
+      map_id?: string | null;
+      game_id: string;
       status: string;
       winner_id?: string;
       participant_winner_id?: string;
       participant_winner_name?: string;
       is_ffa_mode: number;
     }>(
-      `SELECT mg.id, mg.round, mg.winner_id, mg.participant_winner_id, mg.is_ffa_mode, mg.status,
-              gm.name as map_name, gamemode.scoring_type as mode_scoring_type,
+      `SELECT mg.id, mg.round, mg.map_id, m.game_id, mg.winner_id, mg.participant_winner_id, mg.is_ffa_mode, mg.status,
               mp.username as participant_winner_name
        FROM match_games mg
-       LEFT JOIN game_maps gm ON mg.map_id = gm.id
-       LEFT JOIN game_modes gamemode ON gm.mode_id = gamemode.id AND gm.game_id = gamemode.game_id
+       JOIN matches m ON m.id = mg.match_id
        LEFT JOIN match_participants mp ON mg.participant_winner_id = mp.id
        WHERE mg.match_id = ? ORDER BY mg.round ASC`,
       [matchId]
     );
+
+    // Map data is looked up per game (map IDs aren't unique across games) and with
+    // instance suffixes stripped, so customised maps still resolve.
+    const mapLookup = await lookupMaps(db, rawGames[0]?.game_id ?? '', rawGames.map(g => g.map_id));
+    const games = rawGames.map(({ map_id, game_id: _gameId, ...game }) => {
+      const mapData = map_id ? mapLookup[cleanMapId(map_id)] : undefined;
+      return {
+        ...game,
+        map_name: mapData?.name as string,
+        mode_scoring_type: mapData?.mode_scoring_type as string,
+      };
+    });
 
     // Enrich each game with placements if available
     const enriched = await Promise.all(games.map(async game => {

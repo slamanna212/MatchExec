@@ -6,6 +6,7 @@ import type { MatchDbRow } from '@/shared/types';
 import { validateRequiredFields, validateMaxLength, validateNumberRange, validateEnum, safeJSONParse, validatePositionScoringOverride } from '@/lib/utils/validation';
 import type { ValidationResult } from '@/lib/utils/validation';
 import type { Database } from '@/lib/database/connection';
+import { cleanMapId } from '@/lib/utils/map-utils';
 
 export interface MatchRequestBody {
   name: string;
@@ -81,7 +82,7 @@ export async function resolveModeFromMaps(
   let modeId: string | null = null;
   let scoringType: string | null = null;
   for (const mapId of maps) {
-    const cleanId = String(mapId).replace(/-\d+-[a-zA-Z0-9]+$/, '');
+    const cleanId = cleanMapId(String(mapId));
     const row = await db.get<{ mode_id: string; scoring_type: string | null }>(
       `SELECT gm.mode_id, gmo.scoring_type
        FROM game_maps gm

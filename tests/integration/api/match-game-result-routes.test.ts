@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRouteParams } from '../../utils/api-helpers';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { seedBasicTestData, createMatch, createGameMode, createTournament } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 
 vi.mock('@/lib/logger', () => ({
@@ -25,6 +25,7 @@ import {
 } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
 import { GET as getOverallScore } from '@/app/api/matches/[matchId]/overall-score/route';
 import { GET as getGames } from '@/app/api/matches/[matchId]/games/route';
+import { saveMatchResult, GameAlreadyScoredError } from '@/lib/scoring-functions';
 
 function makeJsonRequest(body: unknown): Request {
   return new Request('http://localhost', {
@@ -37,9 +38,12 @@ function makeJsonRequest(body: unknown): Request {
 describe('Match Game Result Routes', () => {
   let matchId: string;
   let gameId: string;
+  let seeded: Awaited<ReturnType<typeof seedBasicTestData>>;
 
   beforeEach(async () => {
-    const { game, mode } = await seedBasicTestData();
+    vi.mocked(saveMatchResult).mockClear();
+    seeded = await seedBasicTestData();
+    const { game, mode } = seeded;
     const match = await createMatch(game.id, mode.id);
     matchId = match.id;
 
@@ -72,6 +76,14 @@ describe('Match Game Result Routes', () => {
       expect(body.error).toMatch(/no result/i);
     });
 
+    it('returns 404 when the game belongs to a different match', async () => {
+      const other = await createMatch(seeded.game.id, seeded.mode.id);
+      const req = { url: `http://localhost` } as any;
+      const res = await getResult(req, createRouteParams({ matchId: other.id, gameId }));
+      expect(res.status).toBe(404);
+      expect((await res.json()).error).toMatch(/not found for this match/i);
+    });
+
     it('returns 404 for a completely unknown gameId', async () => {
       const req = { url: `http://localhost` } as any;
       const res = await getResult(req, createRouteParams({ matchId, gameId: 'nonexistent' }));
@@ -94,6 +106,68 @@ describe('Match Game Result Routes', () => {
   });
 
   describe('POST /api/matches/[matchId]/games/[gameId]/result', () => {
+    it('returns 400 when Position results have a gap (no 1st place)', async () => {
+      const pos = await createGameMode(seeded.game.id, { scoring_type: 'Position', name: 'Race' });
+      const match = await createMatch(seeded.game.id, pos.id, { status: 'battle' });
+      const gid = `${match.id}_game_1`;
+      await getTestDb().run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'ongoing')`, [gid, match.id]);
+
+      const res = await postResult(
+        makeJsonRequest({ isPositionMode: true, positionResults: { a: 2, b: 3 } }) as any,
+        createRouteParams({ matchId: match.id, gameId: gid })
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/1 to 2 with no gaps/);
+    });
+
+    it('returns 409 when another submission scored the map first', async () => {
+      vi.mocked(saveMatchResult).mockRejectedValueOnce(new GameAlreadyScoredError(gameId));
+      const res = await postResult(makeJsonRequest({ winner: 'team1' }) as any, createRouteParams({ matchId, gameId }));
+      expect(res.status).toBe(409);
+    });
+
+    describe('rescoring a completed tournament match', () => {
+      async function setupTournamentMatch(opts: { laterMatchWithTeam?: boolean; tournamentStatus?: string } = {}) {
+        const db = getTestDb();
+        const t = await createTournament(seeded.game.id, { status: (opts.tournamentStatus ?? 'battle') as any });
+        await db.run(`UPDATE matches SET status = 'complete', tournament_id = ? WHERE id = ?`, [t.id, matchId]);
+        await db.run(`UPDATE match_games SET status = 'completed', winner_id = 'team1' WHERE id = ?`, [gameId]);
+        await db.run(
+          `INSERT INTO tournament_matches (match_id, tournament_id, round, bracket_type, team1_id, team2_id, match_order)
+           VALUES (?, ?, 1, 'winners', 'team-a', 'team-b', 1)`, [matchId, t.id]
+        );
+        if (opts.laterMatchWithTeam) {
+          const next = await createMatch(seeded.game.id, seeded.mode.id);
+          await db.run(`UPDATE matches SET tournament_id = ? WHERE id = ?`, [t.id, next.id]);
+          await db.run(
+            `INSERT INTO tournament_matches (match_id, tournament_id, round, bracket_type, team1_id, team2_id, match_order)
+             VALUES (?, ?, 2, 'winners', 'team-a', 'team-c', 1)`, [next.id, t.id]
+          );
+        }
+      }
+
+      it('is allowed before the bracket advances', async () => {
+        await setupTournamentMatch();
+        const res = await postResult(makeJsonRequest({ winner: 'team2', rescore: true }) as any, createRouteParams({ matchId, gameId }));
+        expect(res.status).toBe(200);
+      });
+
+      it('returns 409 once a later match includes either team', async () => {
+        await setupTournamentMatch({ laterMatchWithTeam: true });
+        const res = await postResult(makeJsonRequest({ winner: 'team2', rescore: true }) as any, createRouteParams({ matchId, gameId }));
+        expect(res.status).toBe(409);
+        expect((await res.json()).error).toMatch(/bracket has already advanced/);
+        expect(saveMatchResult).not.toHaveBeenCalled();
+      });
+
+      it('returns 409 once the tournament is complete', async () => {
+        await setupTournamentMatch({ tournamentStatus: 'complete' });
+        const res = await postResult(makeJsonRequest({ winner: 'team2', rescore: true }) as any, createRouteParams({ matchId, gameId }));
+        expect(res.status).toBe(409);
+        expect((await res.json()).error).toMatch(/tournament is complete/);
+      });
+    });
+
     it('returns 400 when winner is missing', async () => {
       const req = makeJsonRequest({ gameId, matchId }) as any;
       const res = await postResult(req, createRouteParams({ matchId, gameId }));
