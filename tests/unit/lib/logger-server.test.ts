@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('@/lib/database-init', () => ({
-  getDbInstance: vi.fn(),
+vi.mock('@/lib/settings', () => ({
+  getAppSetting: vi.fn(),
 }));
 
-import { getDbInstance } from '@/lib/database-init';
+import { getAppSetting } from '@/lib/settings';
 
 // server.ts only exports a singleton. We test the singleton's behavior directly.
 
-const mockGetDbInstance = getDbInstance as ReturnType<typeof vi.fn>;
+const mockGetAppSetting = getAppSetting as ReturnType<typeof vi.fn>;
 
 // We can't easily instantiate ServerLogger directly since server.ts doesn't
 // export the class. Test through the exported `logger` singleton instead.
@@ -69,11 +69,9 @@ describe('ServerLogger (singleton)', () => {
   });
 
   describe('loadLogLevel — DB integration', () => {
-    it('loads level from DB when cache is expired', async () => {
+    it('loads level from app_settings when cache is expired', async () => {
       logger['levelCache'] = null;
-      mockGetDbInstance.mockResolvedValue({
-        get: vi.fn().mockResolvedValue({ setting_value: 'debug' }),
-      });
+      mockGetAppSetting.mockResolvedValue('debug');
       await logger.reload();
       expect(logger.getCurrentLevel()).toBe('debug');
     });
@@ -81,23 +79,20 @@ describe('ServerLogger (singleton)', () => {
     it('ignores invalid DB level value and keeps existing', async () => {
       logger['currentLevel'] = 'warning';
       logger['levelCache'] = null;
-      mockGetDbInstance.mockResolvedValue({
-        get: vi.fn().mockResolvedValue({ setting_value: 'nonsense' }),
-      });
+      mockGetAppSetting.mockResolvedValue('nonsense');
       await logger.reload();
       expect(logger.getCurrentLevel()).toBe('warning');
     });
 
     it('falls back to warning when DB throws', async () => {
       logger['levelCache'] = null;
-      mockGetDbInstance.mockRejectedValue(new Error('DB down'));
+      mockGetAppSetting.mockRejectedValue(new Error('DB down'));
       await logger.reload();
       expect(logger.getCurrentLevel()).toBe('warning');
     });
 
     it('uses cached level within cache window', async () => {
-      const fakeGet = vi.fn().mockResolvedValue({ setting_value: 'info' });
-      mockGetDbInstance.mockResolvedValue({ get: fakeGet });
+      mockGetAppSetting.mockResolvedValue('info');
       // Warm cache
       logger['levelCache'] = { level: 'error', timestamp: Date.now() };
       await logger.reload(); // reload clears cache and re-reads
@@ -105,7 +100,7 @@ describe('ServerLogger (singleton)', () => {
       logger['levelCache'] = { level: 'error', timestamp: Date.now() };
       await logger['loadLogLevel']();
       // DB should NOT have been called again (cache hit)
-      expect(fakeGet).toHaveBeenCalledTimes(1);
+      expect(mockGetAppSetting).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
+
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -29,6 +32,7 @@ describe('HealthMonitor — Extended', () => {
   afterEach(() => {
     monitor.stop();
     vi.clearAllMocks();
+    resetSettingsStore();
   });
 
   describe('checkSchedulerHeartbeat (private) — via bracket notation', () => {
@@ -40,10 +44,7 @@ describe('HealthMonitor — Extended', () => {
 
     it('alerts when scheduler heartbeat is older than 10 minutes', async () => {
       const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('scheduler_last_heartbeat', ?)`,
-        [fifteenMinutesAgo]
-      );
+      settingsStore.app.set('scheduler_last_heartbeat', fifteenMinutesAgo);
 
        
       await (monitor as any).checkSchedulerHeartbeat();
@@ -56,10 +57,7 @@ describe('HealthMonitor — Extended', () => {
 
     it('does not alert when scheduler heartbeat is recent (2 minutes ago)', async () => {
       const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('scheduler_last_heartbeat', ?)`,
-        [twoMinutesAgo]
-      );
+      settingsStore.app.set('scheduler_last_heartbeat', twoMinutesAgo);
 
        
       await (monitor as any).checkSchedulerHeartbeat();
@@ -77,11 +75,7 @@ describe('HealthMonitor — Extended', () => {
 
     it('alerts when stats processor heartbeat is older than 10 minutes', async () => {
       const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value)
-         VALUES ('stats_processor_last_heartbeat', ?)`,
-        [twentyMinutesAgo]
-      );
+      settingsStore.app.set('stats_processor_last_heartbeat', twentyMinutesAgo);
 
        
       await (monitor as any).checkStatsProcessorHeartbeat();
@@ -93,11 +87,7 @@ describe('HealthMonitor — Extended', () => {
 
     it('does not alert when stats processor heartbeat is recent', async () => {
       const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value)
-         VALUES ('stats_processor_last_heartbeat', ?)`,
-        [oneMinuteAgo]
-      );
+      settingsStore.app.set('stats_processor_last_heartbeat', oneMinuteAgo);
 
        
       await (monitor as any).checkStatsProcessorHeartbeat();

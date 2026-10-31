@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -54,6 +57,7 @@ describe('MatchExecScheduler', () => {
     game = testData.game;
     mode = testData.mode;
     vi.clearAllMocks();
+    resetSettingsStore();
 
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
@@ -170,13 +174,7 @@ describe('MatchExecScheduler', () => {
     });
 
     it('reads cron settings from the database when available', async () => {
-      await db.run(`
-        INSERT INTO scheduler_settings (
-          id, match_check_cron, channel_refresh_cron,
-          created_at, updated_at
-        ) VALUES (1, '*/30 * * * * *', '0 0 1 * * *',
-          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `);
+      settingsStore.scheduler = { id: 1, match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' };
 
       const cronModule = await import('node-cron');
       const mockSchedule = cronModule.schedule as ReturnType<typeof vi.fn>;
@@ -202,10 +200,7 @@ describe('MatchExecScheduler', () => {
 
     it('returns early when heartbeat is recent (< 10 minutes old)', async () => {
       const recentHeartbeat = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
-        [recentHeartbeat]
-      );
+      settingsStore.app.set('discord_bot_last_heartbeat', recentHeartbeat);
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
@@ -215,10 +210,7 @@ describe('MatchExecScheduler', () => {
 
     it('queues a health alert and updates rate-limit when heartbeat is stale', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 min ago
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
-        [staleHeartbeat]
-      );
+      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
@@ -236,10 +228,7 @@ describe('MatchExecScheduler', () => {
 
     it('skips when within rate-limit window (< 1 hour since last alert)', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
-        [staleHeartbeat]
-      );
+      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
       const recentAlert = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 min ago
       await db.run(
         `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,
@@ -254,10 +243,7 @@ describe('MatchExecScheduler', () => {
 
     it('queues a new alert when rate-limit window has expired (> 1 hour since last alert)', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO app_settings (setting_key, setting_value) VALUES ('discord_bot_last_heartbeat', ?)`,
-        [staleHeartbeat]
-      );
+      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
       const expiredAlert = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
       await db.run(
         `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,

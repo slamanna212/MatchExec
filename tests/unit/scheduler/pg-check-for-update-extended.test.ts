@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -16,8 +17,8 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
 
 import { UpdateCheckJob } from '../../../processes/scheduler/jobs/check-for-update';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
+import { getAppSetting, setAppSetting } from '../../../src/lib/settings';
 
 const mockLogFeedEvent = logFeedEvent as ReturnType<typeof vi.fn>;
 
@@ -26,27 +27,25 @@ const CURRENT_VERSION = (() => {
   return pkg.version as string;
 })();
 
-async function seedUpdateSettings(db: ReturnType<typeof getTestDb>) {
-  await db.run(
-    `INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type) VALUES
-      ('update_check_enabled',  'true',  'boolean'),
-      ('latest_version',        '',      'string'),
-      ('update_check_last_run', '',      'string'),
-      ('update_available',      'false', 'boolean')`
-  );
+async function resetUpdateSettings() {
+  await setAppSetting('update_check_enabled', 'true');
+  await setAppSetting('latest_version', '');
+  await setAppSetting('update_check_last_run', '');
+  await setAppSetting('update_available', 'false');
 }
+
+setupPgTestFile({ seed: true });
+
+const getRow = async (key: string) => ({ setting_value: await getAppSetting(key) });
 
 describe('UpdateCheckJob — extended', () => {
   let job: UpdateCheckJob;
-  let db: ReturnType<typeof getTestDb>;
 
   beforeEach(async () => {
-    db = getTestDb();
-    await seedBasicTestData();
-    await seedUpdateSettings(db);
+    await resetUpdateSettings();
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    job = new UpdateCheckJob(db as any);
+    job = new UpdateCheckJob(getPgTestDb());
   });
 
   describe('isRateLimited()', () => {
@@ -57,30 +56,21 @@ describe('UpdateCheckJob — extended', () => {
 
     it('returns true when last run was within 60 seconds', async () => {
       const tenSecondsAgo = new Date(Date.now() - 10 * 1000).toISOString();
-      await db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`,
-        [tenSecondsAgo]
-      );
+      await setAppSetting('update_check_last_run', tenSecondsAgo);
       const result = await job.isRateLimited();
       expect(result).toBe(true);
     });
 
     it('returns false when last run was more than 60 seconds ago', async () => {
       const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-      await db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`,
-        [twoMinutesAgo]
-      );
+      await setAppSetting('update_check_last_run', twoMinutesAgo);
       const result = await job.isRateLimited();
       expect(result).toBe(false);
     });
 
     it('returns false when last run was exactly 23 hours ago (only 60s rate limit applies)', async () => {
       const twentyThreeHoursAgo = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
-      await db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`,
-        [twentyThreeHoursAgo]
-      );
+      await setAppSetting('update_check_last_run', twentyThreeHoursAgo);
       const result = await job.isRateLimited();
       expect(result).toBe(false);
     });
@@ -104,10 +94,8 @@ describe('UpdateCheckJob — extended', () => {
       await job.checkForUpdate();
       const after = new Date();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-      );
-      const lastRun = new Date(row!.setting_value);
+      const row = await getRow('update_check_last_run');
+      const lastRun = new Date(row.setting_value!);
       expect(lastRun.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
       expect(lastRun.getTime()).toBeLessThanOrEqual(after.getTime() + 1000);
     });
@@ -122,25 +110,18 @@ describe('UpdateCheckJob — extended', () => {
       const before = new Date();
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-      );
-      const lastRun = new Date(row!.setting_value);
+      const row = await getRow('update_check_last_run');
+      const lastRun = new Date(row.setting_value!);
       expect(lastRun.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
     });
 
     it('does NOT update update_check_last_run when check is skipped due to throttle', async () => {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      await db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`,
-        [oneHourAgo]
-      );
+      await setAppSetting('update_check_last_run', oneHourAgo);
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-      );
+      const row = await getRow('update_check_last_run');
       expect(row?.setting_value).toBe(oneHourAgo);
     });
 
@@ -153,9 +134,7 @@ describe('UpdateCheckJob — extended', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'latest_version'`
-      );
+      const row = await getRow('latest_version');
       expect(row?.setting_value).toBe(`v${CURRENT_VERSION}`);
     });
   });
@@ -249,9 +228,7 @@ describe('UpdateCheckJob — extended', () => {
 
   describe('checkForUpdate — update_available flag transitions', () => {
     it('sets update_available back to false when current version matches after prior update', async () => {
-      await db.run(
-        `UPDATE app_settings SET setting_value = 'true' WHERE setting_key = 'update_available'`
-      );
+      await setAppSetting('update_available', 'true');
 
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
@@ -261,9 +238,7 @@ describe('UpdateCheckJob — extended', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_available'`
-      );
+      const row = await getRow('update_available');
       expect(row?.setting_value).toBe('false');
     });
   });

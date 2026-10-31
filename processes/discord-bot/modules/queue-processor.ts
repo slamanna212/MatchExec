@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
+import { getAnyDiscordSettings } from '../../../src/lib/settings';
 import type { AnnouncementHandler } from './announcement-handler';
 import type { ReminderHandler } from './reminder-handler';
 import type { EventHandler } from './event-handler';
@@ -150,7 +151,7 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
   }
 
   try {
-    const settings = await processor['db'].get<{ guild_id: string }>(`SELECT guild_id FROM discord_settings LIMIT 1`);
+    const settings = await getAnyDiscordSettings();
 
     if (!settings?.guild_id) {
       throw new Error('Guild ID not configured');
@@ -1158,7 +1159,7 @@ export class QueueProcessor {
       if (updateResult.changes === 0) return;
 
       if (announcement.announcement_type === 'welcome') {
-        const settings = await this.db.get<{ match_start_delay_seconds?: number }>(`SELECT match_start_delay_seconds FROM discord_settings LIMIT 1`);
+        const settings = await getAnyDiscordSettings();
         const delaySecs = settings?.match_start_delay_seconds ?? 45;
         const elapsedSecs = (Date.now() - new Date(`${announcement.created_at}Z`).getTime()) / 1000;
         if (elapsedSecs < delaySecs) {

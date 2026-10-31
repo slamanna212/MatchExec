@@ -7,13 +7,12 @@ module.exports = {
   apps: [
     {
       name: isDev ? 'db-migrator-dev' : 'db-migrator',
-      script: './scripts/migrate-background.ts',
+      script: './lib/db/migrate.ts',
       interpreter: 'pnpm',
       interpreter_args: 'exec tsx',
       autorestart: false,
       env: {
         NODE_ENV: isDev ? 'development' : 'production',
-        DATABASE_PATH: './app_data/data/matchexec.db',
         TZ: 'UTC'
       }
     },

@@ -17,12 +17,6 @@ import type { Database } from '../../../lib/database/connection';
 import { createMockRequest, parseResponse } from '../../utils/api-helpers';
 import { POST as createMatch } from '@/app/api/matches/route';
 
-vi.mock('../../../lib/database/status', () => ({
-  markDbReady: vi.fn(),
-  markDbNotReady: vi.fn(),
-  getDbStatus: vi.fn().mockReturnValue({ ready: true, progress: 'done' }),
-}));
-
 describe('Full-Suite Sanity (M2)', () => {
   let db: ReturnType<typeof getTestDb>;
 

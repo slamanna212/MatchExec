@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import type { Database } from '../../../lib/database/connection';
 import { getDiscordAvatarUrl } from '../../discord-bot/utils/avatar-fetcher';
 import { logger } from '../../../src/lib/logger/server';
+import { getDiscordSettings } from '../../../src/lib/settings';
 
 export class AvatarUpdateJob {
   private discordClient: Client | null = null;
@@ -21,9 +22,7 @@ export class AvatarUpdateJob {
 
     try {
       // Get bot token from database
-      const settings = await this.db.get<{ bot_token: string }>(
-        'SELECT bot_token FROM discord_settings WHERE id = 1'
-      );
+      const settings = await getDiscordSettings();
 
       if (!settings?.bot_token) {
         throw new Error('Bot token not found in discord_settings');

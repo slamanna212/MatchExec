@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 await esbuild.build({
-  entryPoints: [join(__dirname, 'scripts/migrate-background.ts')],
+  entryPoints: [join(__dirname, 'lib/db/migrate.ts')],
   bundle: true,
   platform: 'node',
   target: 'node24',

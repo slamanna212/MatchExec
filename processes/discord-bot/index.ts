@@ -5,6 +5,7 @@ import type { Database } from '../../lib/database';
 import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 import { logger } from '../../src/lib/logger/server';
+import { getAppSetting, setAppSetting } from '../../src/lib/settings';
 import { SignupFormLoader } from '../../lib/signup-forms';
 
 // Import our modules
@@ -150,12 +151,7 @@ class MatchExecBot {
     if (!this.db) return false;
 
     try {
-      const result = await this.db.get<{ setting_value: string }>(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['welcome_flow_completed']
-      );
-
-      return result?.setting_value === 'true';
+      return (await getAppSetting('welcome_flow_completed')) === 'true';
     } catch (error) {
       logger.error('❌ Error checking welcome flow status:', error);
       return false;
@@ -202,7 +198,7 @@ class MatchExecBot {
       }
 
       // Initialize settings manager
-      this.settingsManager = new SettingsManager(this.db);
+      this.settingsManager = new SettingsManager();
       this.settings = await this.settingsManager.loadSettings();
 
       if (!this.settings?.bot_token) {
@@ -250,12 +246,7 @@ class MatchExecBot {
       // Send initial heartbeat
       try {
         const now = new Date().toISOString();
-        await this.db.run(
-          `INSERT INTO app_settings (setting_key, setting_value, updated_at)
-           VALUES (?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-          ['discord_bot_last_heartbeat', now, now]
-        );
+        await setAppSetting('discord_bot_last_heartbeat', now);
         logger.debug('💓 Initial Discord bot heartbeat sent');
       } catch (error) {
         logger.error('Failed to send initial Discord bot heartbeat:', error);
@@ -295,12 +286,7 @@ class MatchExecBot {
       if (this.db && this.isReady) {
         try {
           const now = new Date().toISOString();
-          await this.db.run(
-            `INSERT INTO app_settings (setting_key, setting_value, updated_at)
-             VALUES (?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-            ['discord_bot_last_heartbeat', now, now]
-          );
+          await setAppSetting('discord_bot_last_heartbeat', now);
           logger.debug('💓 Discord bot heartbeat sent');
         } catch (error) {
           logger.error('Failed to persist Discord bot heartbeat:', error);

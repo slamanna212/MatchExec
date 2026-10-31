@@ -3,8 +3,6 @@ import { createMockRequest, parseResponse, createRouteParams } from '../../utils
 import { seedBasicTestData, createTournament, createGameMode, createMatch, createMatchParticipant } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 
-import { GET as getHealth } from '@/app/api/health/route';
-import { GET as getVersion } from '@/app/api/version/route';
 import { GET as getFeed } from '@/app/api/feed/route';
 import { GET as getStatsSettings, PUT as putStatsSettings } from '@/app/api/settings/stats/route';
 import { GET as getTournamentStandings } from '@/app/api/tournaments/[tournamentId]/standings/route';
@@ -22,39 +20,6 @@ describe('Misc Routes', () => {
     game = data.game;
     mode = data.mode;
     db = getTestDb();
-  });
-
-  // ─── GET /api/health ─────────────────────────────────────────────────────────
-
-  describe('GET /api/health', () => {
-    it('returns 200 with healthy status', async () => {
-      const response = await getHealth();
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.status).toBe('healthy');
-      expect(body.services.database).toBe('up');
-    });
-
-    it('returns timestamp', async () => {
-      const response = await getHealth();
-      const body = await response.json();
-
-      expect(body.timestamp).toBeDefined();
-      expect(() => new Date(body.timestamp)).not.toThrow();
-    });
-  });
-
-  // ─── GET /api/version ────────────────────────────────────────────────────────
-
-  describe('GET /api/version', () => {
-    it('returns 200 with version info', async () => {
-      const response = await getVersion();
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body).toHaveProperty('version');
-    });
   });
 
   // ─── GET /api/feed ───────────────────────────────────────────────────────────

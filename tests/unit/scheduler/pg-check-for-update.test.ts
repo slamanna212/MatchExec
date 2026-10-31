@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -16,8 +17,9 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
 
 import { UpdateCheckJob } from '../../../processes/scheduler/jobs/check-for-update';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
+import { activityFeed } from '../../../lib/db/schema';
+import { getAppSetting, setAppSetting } from '../../../src/lib/settings';
 
 const mockLogFeedEvent = logFeedEvent as ReturnType<typeof vi.fn>;
 
@@ -27,32 +29,30 @@ const CURRENT_VERSION = (() => {
   return pkg.version as string;
 })();
 
-async function seedUpdateSettings(db: ReturnType<typeof getTestDb>) {
-  await db.run(
-    `INSERT OR IGNORE INTO app_settings (setting_key, setting_value, data_type) VALUES
-      ('update_check_enabled',  'true',  'boolean'),
-      ('latest_version',        '',      'string'),
-      ('update_check_last_run', '',      'string'),
-      ('update_available',      'false', 'boolean')`
-  );
+async function resetUpdateSettings() {
+  await setAppSetting('update_check_enabled', 'true');
+  await setAppSetting('latest_version', '');
+  await setAppSetting('update_check_last_run', '');
+  await setAppSetting('update_available', 'false');
 }
+
+setupPgTestFile({ seed: true });
+
+const getRow = async (key: string) => ({ setting_value: await getAppSetting(key) });
 
 describe('UpdateCheckJob', () => {
   let job: UpdateCheckJob;
-  let db: ReturnType<typeof getTestDb>;
 
   beforeEach(async () => {
-    db = getTestDb();
-    await seedBasicTestData();
-    await seedUpdateSettings(db);
+    await resetUpdateSettings();
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    job = new UpdateCheckJob(db as any);
+    job = new UpdateCheckJob(getPgTestDb());
   });
 
   describe('checkForUpdate', () => {
     it('does nothing when update_check_enabled is false', async () => {
-      await db.run(`UPDATE app_settings SET setting_value = 'false' WHERE setting_key = 'update_check_enabled'`);
+      await setAppSetting('update_check_enabled', 'false');
       await job.checkForUpdate();
       expect(fetch).not.toHaveBeenCalled();
       expect(mockLogFeedEvent).not.toHaveBeenCalled();
@@ -60,7 +60,7 @@ describe('UpdateCheckJob', () => {
 
     it('skips when last run was within 23 hours', async () => {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      await db.run(`UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`, [oneHourAgo]);
+      await setAppSetting('update_check_last_run', oneHourAgo);
       await job.checkForUpdate();
       expect(fetch).not.toHaveBeenCalled();
     });
@@ -89,19 +89,13 @@ describe('UpdateCheckJob', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_available'`
-      );
+      const row = await getRow('update_available');
       expect(row?.setting_value).toBe('true');
 
-      const latestRow = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'latest_version'`
-      );
+      const latestRow = await getRow('latest_version');
       expect(latestRow?.setting_value).toBe('v9.9.9');
 
-      const lastRunRow = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-      );
+      const lastRunRow = await getRow('update_check_last_run');
       expect(lastRunRow?.setting_value).toBeTruthy();
     });
 
@@ -114,9 +108,7 @@ describe('UpdateCheckJob', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_available'`
-      );
+      const row = await getRow('update_available');
       expect(row?.setting_value).toBe('false');
       expect(mockLogFeedEvent).not.toHaveBeenCalled();
     });
@@ -130,9 +122,7 @@ describe('UpdateCheckJob', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_available'`
-      );
+      const row = await getRow('update_available');
       expect(row?.setting_value).toBe('false');
       expect(mockLogFeedEvent).not.toHaveBeenCalled();
     });
@@ -156,10 +146,9 @@ describe('UpdateCheckJob', () => {
     });
 
     it('does NOT call logFeedEvent when feed event for this version already exists', async () => {
-      await db.run(
-        `INSERT INTO activity_feed (id, event_type, priority, title, metadata, created_at)
-         VALUES ('test-dedup-1', 'update_available', 2, 'Test', '{"latestVersion":"v9.9.9"}', CURRENT_TIMESTAMP)`
-      );
+      await getPgTestDb().insert(activityFeed).values({
+        id: 'test-dedup-1', event_type: 'update_available', priority: 2, title: 'Test', metadata: { latestVersion: 'v9.9.9' },
+      });
 
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
@@ -181,9 +170,7 @@ describe('UpdateCheckJob', () => {
 
       await job.checkForUpdate();
 
-      const row = await db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_available'`
-      );
+      const row = await getRow('update_available');
       expect(row?.setting_value).toBe('false');
       expect(mockLogFeedEvent).not.toHaveBeenCalled();
     });

@@ -4,10 +4,7 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { eq } from 'drizzle-orm';
-import { db } from '@lib/db';
-import { appSettings } from '@lib/db/schema';
-import { isSystemReady } from '@lib/db/system-status';
+import { getWelcomeFlowState } from '@/lib/welcome-flow';
 import { logger } from '@/lib/logger';
 
 export const WELCOME_COOKIE = 'welcome_flow_completed';
@@ -18,9 +15,8 @@ export interface WelcomeState { dbReady: boolean; completed: boolean }
 /** Reads welcome status straight from the database (no self-fetch of /api/welcome-flow). */
 export async function getWelcomeState(): Promise<WelcomeState> {
   try {
-    if (!(await isSystemReady())) return { dbReady: false, completed: false };
-    const rows = await db.select({ v: appSettings.setting_value }).from(appSettings).where(eq(appSettings.setting_key, 'welcome_flow_completed')).limit(1);
-    return { dbReady: true, completed: rows[0]?.v === 'true' };
+    const { dbReady, completed } = await getWelcomeFlowState();
+    return { dbReady, completed };
   } catch (error) {
     logger.error('Error checking welcome status:', error);
     return { dbReady: false, completed: false };

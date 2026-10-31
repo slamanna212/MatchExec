@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('../../../src/lib/settings', () => ({ setAppSetting: vi.fn().mockResolvedValue(undefined) }));
+import { setAppSetting } from '../../../src/lib/settings';
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
 }));
@@ -125,15 +128,12 @@ describe('StatsProcessor — Extended', () => {
     await import('../../../processes/stats-processor/index');
     // Flush startup
     for (let i = 0; i < 10; i++) await Promise.resolve();
-    mockDb.run.mockClear();
+    vi.mocked(setAppSetting).mockClear();
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
     for (let i = 0; i < 5; i++) await Promise.resolve();
 
-    const heartbeatCall = mockDb.run.mock.calls.some((c: unknown[]) =>
-      Array.isArray(c[1]) && (c[1] as unknown[])[0] === 'stats_processor_last_heartbeat'
-    );
-    expect(heartbeatCall).toBe(true);
+    expect(setAppSetting).toHaveBeenCalledWith('stats_processor_last_heartbeat', expect.any(String));
   });
 
   it('does not call processSubmission when extraction queue is empty', async () => {

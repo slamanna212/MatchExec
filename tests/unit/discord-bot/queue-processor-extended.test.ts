@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks, createMockChannel } from '../../mocks/discord';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -69,6 +72,9 @@ describe('QueueProcessor — Extended', () => {
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
+
+    resetSettingsStore();
+    settingsStore.discord = { guild_id: 'guild-ext', bot_token: 'tok-ext', match_start_delay_seconds: 5 };
 
     await db.run(
       `INSERT INTO discord_settings (guild_id, bot_token, announcements_channel_id)

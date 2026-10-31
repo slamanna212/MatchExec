@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks, createMockChannel } from '../../mocks/discord';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 
 // Mock the logger to prevent database access during import
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),
@@ -74,6 +77,9 @@ describe('QueueProcessor', () => {
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
+
+    resetSettingsStore();
+    settingsStore.discord = { guild_id: 'guild-123', bot_token: 'test-bot-token', match_start_delay_seconds: 5 };
 
     // Insert Discord settings
     await db.run(`

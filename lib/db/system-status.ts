@@ -1,8 +1,8 @@
 /**
  * Readiness / progress record (replaces `.db-status.json`; works across pods).
  *
- * The old file-based `lib/database/status.ts` stays in use by the Next + SQLite code until the System
- * domain is ported (Stage 2). `/api/db-status` and the ready-checker will read from here afterwards.
+ * The old file-based `lib/database/status.ts` has been removed; `/api/db-status`, the welcome middleware and the process
+ * start-up wait (`waitForSystemReady`) all read this row.
  */
 import { eq } from 'drizzle-orm';
 import { db as defaultDb, type Executor } from './index';
@@ -67,3 +67,21 @@ export async function setSystemStatus(input: SetSystemStatusInput, ex: Executor 
 
 export const markSystemReady = (message = 'Ready', ex: Executor = defaultDb): Promise<SystemStatus> =>
   setSystemStatus({ phase: 'ready', message, progress: 100 }, ex);
+
+/**
+ * Poll `system_status` until the migrator reports `ready` (used by the bot, scheduler and stats-processor at
+ * startup instead of the old `.db-status.json` file). Rejects after `timeoutMs`.
+ */
+export async function waitForSystemReady(
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+  ex: Executor = defaultDb,
+): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? 120_000;
+  const intervalMs = opts.intervalMs ?? 500;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await isSystemReady(ex)) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Database not ready after ${timeoutMs}ms timeout (system_status.phase is not 'ready')`);
+}

@@ -1,6 +1,6 @@
 import type { LogLevel } from './base';
 import { BaseLogger } from './base';
-import { getDbInstance } from '../database-init';
+import { getAppSetting } from '../settings';
 
 class ServerLogger extends BaseLogger {
   protected async loadLogLevel(): Promise<void> {
@@ -11,14 +11,10 @@ class ServerLogger extends BaseLogger {
         return;
       }
 
-      const db = await getDbInstance();
-      const result = await db.get(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['log_level']
-      ) as { setting_value: string } | undefined;
+      const result = await getAppSetting('log_level');
 
-      if (result && this.isValidLogLevel(result.setting_value)) {
-        this.currentLevel = result.setting_value as LogLevel;
+      if (result && this.isValidLogLevel(result)) {
+        this.currentLevel = result;
         this.levelCache = {
           level: this.currentLevel,
           timestamp: Date.now(),

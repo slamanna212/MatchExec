@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock('../../../processes/discord-bot/utils/avatar-fetcher', () => ({
 import { AvatarUpdateJob } from '../../../processes/scheduler/jobs/update-avatars';
 import { getDiscordAvatarUrl } from '../../../processes/discord-bot/utils/avatar-fetcher';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 
 const mockGetDiscordAvatarUrl = getDiscordAvatarUrl as ReturnType<typeof vi.fn>;
@@ -43,9 +46,8 @@ describe('AvatarUpdateJob', () => {
     modeId = seed.mode.id;
     vi.clearAllMocks();
 
-    await db.run(
-      `INSERT INTO discord_settings (guild_id, bot_token) VALUES ('guild-1', 'test-token')`
-    );
+    resetSettingsStore();
+    settingsStore.discord = { guild_id: 'guild-1', bot_token: 'test-token' };
 
     job = new AvatarUpdateJob(db as any);
 

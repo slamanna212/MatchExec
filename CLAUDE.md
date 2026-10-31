@@ -210,7 +210,7 @@ The seeder checks `dataVersion` and only re-seeds when changed, preventing dupli
 
 ### Migration and Seeding
 
-Database migrations and seeding use `scripts/migrate-background.ts`, which provides status tracking for the loading screen UI. The migration process is handled differently based on the environment:
+Database migrations and seeding use `lib/db/migrate.ts`, which records progress in the `system_status` table for the loading screen UI. The migration process is handled differently based on the environment:
 
 ```bash
 # Run migrations and seeding manually

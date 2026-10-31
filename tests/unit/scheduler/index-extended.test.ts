@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
+import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+
+vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -50,6 +53,7 @@ describe('MatchExecScheduler — extended', () => {
     game = testData.game;
     mode = testData.mode;
     vi.clearAllMocks();
+    resetSettingsStore();
 
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
@@ -110,10 +114,7 @@ describe('MatchExecScheduler — extended', () => {
 
   describe('cleanupFeedEvents', () => {
     it('removes feed events older than the configured retention period', async () => {
-      await db.run(
-        `INSERT OR REPLACE INTO app_settings (setting_key, setting_value, data_type)
-         VALUES ('feed_retention_days', '7', 'number')`
-      );
+      settingsStore.app.set('feed_retention_days', '7');
 
       // Insert an old event (8 days ago) and a recent one
       const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
@@ -137,10 +138,7 @@ describe('MatchExecScheduler — extended', () => {
     });
 
     it('does not remove events when retention period is 0 or invalid', async () => {
-      await db.run(
-        `INSERT OR REPLACE INTO app_settings (setting_key, setting_value, data_type)
-         VALUES ('feed_retention_days', '0', 'number')`
-      );
+      settingsStore.app.set('feed_retention_days', '0');
 
       const oldDate = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
       await db.run(
@@ -157,7 +155,7 @@ describe('MatchExecScheduler — extended', () => {
 
     it('defaults to 180-day retention when setting is absent', async () => {
       // Ensure no retention setting exists
-      await db.run(`DELETE FROM app_settings WHERE setting_key = 'feed_retention_days'`);
+      settingsStore.app.delete('feed_retention_days');
 
       const recentEnough = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
       await db.run(
@@ -230,10 +228,7 @@ describe('MatchExecScheduler — extended', () => {
     });
 
     it('queues a reminder for an upcoming match', async () => {
-      await db.run(
-        `INSERT INTO discord_settings (guild_id, bot_token, match_reminder_minutes)
-         VALUES ('guild-1', 'token', 30)`
-      );
+      settingsStore.discord = { guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 };
 
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
       const match = await createMatch(game.id, mode.id, {
@@ -252,10 +247,7 @@ describe('MatchExecScheduler — extended', () => {
     });
 
     it('does not re-queue a reminder already in the queue', async () => {
-      await db.run(
-        `INSERT INTO discord_settings (guild_id, bot_token, match_reminder_minutes)
-         VALUES ('guild-1', 'token', 30)`
-      );
+      settingsStore.discord = { guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 };
 
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {

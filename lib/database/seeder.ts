@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import type { Database } from './connection';
-import { markDbNotReady } from './status';
 
 interface GameData {
   id: string;
@@ -81,7 +80,6 @@ export class DatabaseSeeder {
 
   async seedDatabase(): Promise<void> {
     console.log('🌱 Starting database seeding...');
-    markDbNotReady('Starting database seeding...');
 
     // Seed games first
     const gameDirectories = this.getGameDirectories();
@@ -89,16 +87,13 @@ export class DatabaseSeeder {
 
     for (let i = 0; i < gameDirectories.length; i++) {
       const gameDir = gameDirectories[i];
-      markDbNotReady(`Seeding game data (${i + 1}/${gameDirectories.length})...`);
       await this.seedGame(gameDir);
     }
 
     // Seed voice data
-    markDbNotReady('Seeding voice data...');
     await this.seedVoices();
 
     console.log('✅ Database seeding completed');
-    // Note: markDbReady() is called by the migration script after seeding completes
   }
 
   private getGameDirectories(): string[] {

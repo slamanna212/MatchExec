@@ -1,6 +1,9 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { Database } from '../../../lib/database/connection';
+import { and, eq, sql } from 'drizzle-orm';
+import { db as defaultDb, type Executor } from '../../../lib/db';
+import { activityFeed } from '../../../lib/db/schema';
+import { getAppSetting, updateAppSetting } from '../../../src/lib/settings';
 import { logger } from '../../../src/lib/logger/server';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
@@ -26,27 +29,22 @@ function isNewer(latest: [number, number, number], current: [number, number, num
 }
 
 export class UpdateCheckJob {
-  private db: Database;
+  private db: Executor;
 
-  constructor(db: Database) {
+  constructor(db: Executor = defaultDb) {
     this.db = db;
   }
 
   async checkForUpdate(): Promise<void> {
     try {
-      const enabledRow = await this.db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_enabled'`
-      );
-      if (enabledRow?.setting_value === 'false') {
+      if ((await getAppSetting('update_check_enabled', this.db)) === 'false') {
         logger.debug('Update check disabled, skipping');
         return;
       }
 
-      const lastRunRow = await this.db.get<{ setting_value: string }>(
-        `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-      );
-      if (lastRunRow?.setting_value) {
-        const lastRun = new Date(lastRunRow.setting_value).getTime();
+      const lastRunValue = await getAppSetting('update_check_last_run', this.db);
+      if (lastRunValue) {
+        const lastRun = new Date(lastRunValue).getTime();
         const hoursSince = (Date.now() - lastRun) / (1000 * 60 * 60);
         if (hoursSince < CHECK_INTERVAL_HOURS) {
           logger.debug(`Update check ran ${hoursSince.toFixed(1)}h ago, skipping`);
@@ -93,18 +91,9 @@ export class UpdateCheckJob {
       const nowIso = new Date().toISOString();
       const updateAvailable = isNewer(latestParts, currentParts);
 
-      await this.db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'latest_version'`,
-        [tag]
-      );
-      await this.db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_check_last_run'`,
-        [nowIso]
-      );
-      await this.db.run(
-        `UPDATE app_settings SET setting_value = ? WHERE setting_key = 'update_available'`,
-        [updateAvailable ? 'true' : 'false']
-      );
+      await updateAppSetting('latest_version', tag, this.db);
+      await updateAppSetting('update_check_last_run', nowIso, this.db);
+      await updateAppSetting('update_available', updateAvailable ? 'true' : 'false', this.db);
 
       if (!updateAvailable) {
         logger.info(`MatchExec is up to date (${tag})`);
@@ -113,12 +102,11 @@ export class UpdateCheckJob {
 
       logger.info(`New version available: ${tag} (current: v${packageJson.version})`);
 
-      const existing = await this.db.get<{ id: string }>(
-        `SELECT id FROM activity_feed
-         WHERE event_type = 'update_available'
-         AND json_extract(metadata, '$.latestVersion') = ?`,
-        [tag]
-      );
+      const [existing] = await this.db
+        .select({ id: activityFeed.id })
+        .from(activityFeed)
+        .where(and(eq(activityFeed.event_type, 'update_available'), sql`${activityFeed.metadata}->>'latestVersion' = ${tag}`))
+        .limit(1);
 
       if (existing) {
         logger.debug(`Feed event for ${tag} already exists, skipping duplicate`);
@@ -146,11 +134,9 @@ export class UpdateCheckJob {
   }
 
   async isRateLimited(): Promise<boolean> {
-    const row = await this.db.get<{ setting_value: string }>(
-      `SELECT setting_value FROM app_settings WHERE setting_key = 'update_check_last_run'`
-    );
-    if (!row?.setting_value) return false;
-    const lastRun = new Date(row.setting_value).getTime();
+    const value = await getAppSetting('update_check_last_run', this.db);
+    if (!value) return false;
+    const lastRun = new Date(value).getTime();
     return (Date.now() - lastRun) < RATE_LIMIT_SECONDS * 1000;
   }
 }

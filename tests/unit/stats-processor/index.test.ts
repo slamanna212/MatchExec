@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('../../../src/lib/settings', () => ({ setAppSetting: vi.fn().mockResolvedValue(undefined) }));
+import { setAppSetting } from '../../../src/lib/settings';
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),
@@ -79,18 +82,14 @@ describe('StatsProcessor — queue processing', () => {
     await expect(import('../../../processes/stats-processor/index')).resolves.not.toThrow();
   });
 
-  it('sends an initial heartbeat to the app_settings table on start', async () => {
+  it('sends an initial heartbeat to app_settings on start', async () => {
     await import('../../../processes/stats-processor/index');
 
     // Flush all pending microtasks so start() completes through the heartbeat INSERT.
     // Do NOT use vi.runAllTimersAsync() here — it would loop infinitely on setIntervals.
     for (let i = 0; i < 10; i++) await Promise.resolve();
 
-    // The heartbeat key is the first element of the params array (SQL uses ? placeholders)
-    const insertedHeartbeat = mockDb.run.mock.calls.some((c: unknown[]) =>
-      Array.isArray(c[1]) && (c[1] as unknown[])[0] === 'stats_processor_last_heartbeat'
-    );
-    expect(insertedHeartbeat).toBe(true);
+    expect(setAppSetting).toHaveBeenCalledWith('stats_processor_last_heartbeat', expect.any(String));
   });
 
   it('processes extraction queue items using AIExtractor', async () => {

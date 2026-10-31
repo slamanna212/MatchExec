@@ -1,6 +1,7 @@
 import type { Database } from '../../../lib/database/connection';
 import type { AnnouncementHandler } from './announcement-handler';
 import { logger } from '../../../src/lib/logger/server';
+import { getAppSetting } from '../../../src/lib/settings';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 interface HealthAlertConfig {
@@ -91,17 +92,14 @@ export class HealthMonitor {
   private async checkSchedulerHeartbeat(): Promise<void> {
     try {
       // Fetch last heartbeat from database
-      const result = await this.db.get<{ setting_value: string }>(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['scheduler_last_heartbeat']
-      );
+      const heartbeat = await getAppSetting('scheduler_last_heartbeat');
 
-      if (!result?.setting_value) {
+      if (!heartbeat) {
         logger.debug('No scheduler heartbeat found in database yet');
         return;
       }
 
-      const lastHeartbeat = new Date(result.setting_value);
+      const lastHeartbeat = new Date(heartbeat);
       const now = new Date();
       const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
 
@@ -126,17 +124,14 @@ export class HealthMonitor {
    */
   private async checkStatsProcessorHeartbeat(): Promise<void> {
     try {
-      const result = await this.db.get<{ setting_value: string }>(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['stats_processor_last_heartbeat']
-      );
+      const heartbeat = await getAppSetting('stats_processor_last_heartbeat');
 
-      if (!result?.setting_value) {
+      if (!heartbeat) {
         logger.debug('No stats-processor heartbeat found in database yet');
         return;
       }
 
-      const lastHeartbeat = new Date(result.setting_value);
+      const lastHeartbeat = new Date(heartbeat);
       const now = new Date();
       const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
 

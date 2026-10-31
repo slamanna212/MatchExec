@@ -1,6 +1,7 @@
 import type { StatsDb } from './modules/db-types';
 import { waitForDatabaseReady } from '../../lib/database';
 import { logger } from '../../src/lib/logger/server';
+import { setAppSetting } from '../../src/lib/settings';
 import { AIExtractor } from './modules/ai-extractor';
 import { StatImageGenerator } from './modules/stat-image-generator';
 
@@ -26,12 +27,7 @@ class StatsProcessor {
       // Send initial heartbeat
       try {
         const now = new Date().toISOString();
-        await this.db.run(
-          `INSERT INTO app_settings (setting_key, setting_value, updated_at)
-           VALUES (?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-          ['stats_processor_last_heartbeat', now, now]
-        );
+        await setAppSetting('stats_processor_last_heartbeat', now);
         logger.debug('💓 Initial stats processor heartbeat sent');
       } catch (error) {
         logger.error('Failed to send initial stats processor heartbeat:', error);
@@ -62,12 +58,7 @@ class StatsProcessor {
         if (!this.isRunning) return;
         try {
           const now = new Date().toISOString();
-          await this.db.run(
-            `INSERT INTO app_settings (setting_key, setting_value, updated_at)
-             VALUES (?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`,
-            ['stats_processor_last_heartbeat', now, now]
-          );
+          await setAppSetting('stats_processor_last_heartbeat', now);
           logger.debug('💓 Stats processor heartbeat sent');
         } catch (error) {
           logger.error('Failed to persist stats processor heartbeat:', error);

@@ -2,11 +2,11 @@ import { waitForDatabaseReady } from '../../lib/database';
 import type { Database } from '../../lib/database/connection';
 import * as cron from 'node-cron';
 import { createHash } from 'crypto';
-import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
 import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
+import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
 
 /**
  * Token sent as x-internal-token when calling the web API with opt-in auth on.
@@ -58,11 +58,7 @@ class MatchExecScheduler {
       // Send initial heartbeat for health monitoring
       try {
         const now = new Date().toISOString();
-        await this.db.run(
-          `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
-           WHERE setting_key = ?`,
-          [now, 'scheduler_last_heartbeat']
-        );
+        await setAppSetting('scheduler_last_heartbeat', now);
         logger.debug('💓 Initial scheduler heartbeat sent');
       } catch (error) {
         logger.error('Failed to send initial scheduler heartbeat:', error);
@@ -85,9 +81,7 @@ class MatchExecScheduler {
 
   private async loadSchedulerSettings() {
     try {
-      const settings = (await this.db.get(
-        'SELECT * FROM scheduler_settings WHERE id = 1'
-      )) as SchedulerSettings | null;
+      const settings = await getSchedulerSettings();
 
       if (!settings) {
         logger.debug('⚠️ No scheduler settings found, using defaults');
@@ -105,7 +99,7 @@ class MatchExecScheduler {
         this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
         // Check for updates daily at 9am UTC
-        this.updateCheckJob = new UpdateCheckJob(this.db);
+        this.updateCheckJob = new UpdateCheckJob();
         this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
@@ -128,7 +122,7 @@ class MatchExecScheduler {
       this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
       // Check for updates daily at 9am UTC
-      this.updateCheckJob = new UpdateCheckJob(this.db);
+      this.updateCheckJob = new UpdateCheckJob();
       this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
@@ -246,9 +240,7 @@ class MatchExecScheduler {
   private async queueMatchReminders() {
     try {
       // Get Discord settings to know the reminder minutes
-      const discordSettings = await this.db.get<{ match_reminder_minutes: number }>(
-        'SELECT match_reminder_minutes FROM discord_settings WHERE id = 1'
-      );
+      const discordSettings = await getDiscordSettings();
 
       if (!discordSettings?.match_reminder_minutes) {
         logger.debug('⚠️ No Discord reminder settings found, skipping reminder queue');
@@ -312,9 +304,7 @@ class MatchExecScheduler {
   private async queuePlayerReminders() {
     try {
       // Get Discord settings to know the player reminder minutes
-      const discordSettings = await this.db.get<{ player_reminder_minutes: number }>(
-        'SELECT player_reminder_minutes FROM discord_settings WHERE id = 1'
-      );
+      const discordSettings = await getDiscordSettings();
       
       if (!discordSettings?.player_reminder_minutes) {
         logger.debug('⚠️ No player reminder settings found, skipping player reminder queue');
@@ -552,10 +542,7 @@ class MatchExecScheduler {
 
   private async cleanupFeedEvents() {
     try {
-      const setting = await this.db.get<{ setting_value: string }>(
-        "SELECT setting_value FROM app_settings WHERE setting_key = 'feed_retention_days'"
-      );
-      const retentionDays = parseInt(setting?.setting_value ?? '180', 10);
+      const retentionDays = parseInt((await getAppSetting('feed_retention_days')) ?? '180', 10);
       if (isNaN(retentionDays) || retentionDays <= 0) return;
 
       const result = await this.db.run(
@@ -581,11 +568,7 @@ class MatchExecScheduler {
         // Persist heartbeat timestamp to database for health monitoring
         try {
           const now = new Date().toISOString();
-          await this.db.run(
-            `UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE setting_key = ?`,
-            [now, 'scheduler_last_heartbeat']
-          );
+          await setAppSetting('scheduler_last_heartbeat', now);
         } catch (error) {
           logger.error('Failed to persist scheduler heartbeat:', error);
         }
@@ -606,17 +589,14 @@ class MatchExecScheduler {
     const ALERT_TYPE = 'discord_bot_heartbeat_missing';
 
     try {
-      const result = await this.db.get<{ setting_value: string }>(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
-        ['discord_bot_last_heartbeat']
-      );
+      const botHeartbeat = await getAppSetting('discord_bot_last_heartbeat');
 
-      if (!result?.setting_value) {
+      if (!botHeartbeat) {
         logger.debug('No discord bot heartbeat found in database yet');
         return;
       }
 
-      const lastHeartbeat = new Date(result.setting_value);
+      const lastHeartbeat = new Date(botHeartbeat);
       const now = new Date();
       const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
 
