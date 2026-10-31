@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@/shared': path.resolve(__dirname, './shared'),
+      // @/lib/database lives in root lib/, not src/lib/ — match tsconfig fallback order
+      '@/lib/database': path.resolve(__dirname, './lib/database'),
       '@/lib': path.resolve(__dirname, './src/lib'),
       '@': path.resolve(__dirname, './src'),
       '@lib': path.resolve(__dirname, './lib'),

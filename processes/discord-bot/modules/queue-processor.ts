@@ -1,6 +1,7 @@
 import type { Client, Message } from 'discord.js';
 import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
+import type { StatsReportHandler } from './stats-report-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import fs from 'fs';
@@ -14,6 +15,7 @@ import type { VoiceHandler } from './voice-handler';
 import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
+import { cleanMapId } from '../../../src/lib/utils/map-utils';
 
 // Interfaces for different queue types - matching existing DB structure
 
@@ -127,8 +129,14 @@ type RequestHandler = (processor: QueueProcessor, request: BotRequest) => Promis
 async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const requestData = JSON.parse(request.data);
   const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
+  // N-team aware: channelNames is the preferred payload shape (one name per
+  // team). Falls back to the legacy blueChannelName/redChannelName pair for
+  // requests queued by an older version of the caller.
+  const channelNames: string[] = Array.isArray(requestData.channelNames) && requestData.channelNames.length > 0
+    ? requestData.channelNames
+    : [blueChannelName, ...(!isSingleTeam && redChannelName ? [redChannelName] : [])];
 
-  logger.debug(`Creating voice channel${isSingleTeam ? '' : 's'} for match ${matchId} in category ${categoryId}`);
+  logger.debug(`Creating ${channelNames.length} voice channel(s) for match ${matchId} in category ${categoryId}`);
 
   // Mark as processing
   const updateResult = await processor['db'].run(`
@@ -150,30 +158,38 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
 
     const guild = await processor['client'].guilds.fetch(settings.guild_id);
 
-    const blueChannel = await guild.channels.create({
-      name: blueChannelName,
-      type: 2,
-      parent: categoryId,
-    });
-
-    let redChannel;
-    if (!isSingleTeam && redChannelName) {
-      redChannel = await guild.channels.create({
-        name: redChannelName,
-        type: 2,
-        parent: categoryId,
-      });
-      logger.debug(`✅ Voice channels created: ${blueChannel.id}, ${redChannel.id}`);
-    } else {
-      logger.debug(`✅ Voice channel created: ${blueChannel.id}`);
+    const channelIds: string[] = [];
+    const createdChannels: Array<{ id: string; delete: () => Promise<unknown> }> = [];
+    try {
+      for (const name of channelNames) {
+        const channel = await guild.channels.create({
+          name,
+          type: 2,
+          parent: categoryId,
+        });
+        createdChannels.push(channel);
+        channelIds.push(channel.id);
+      }
+    } catch (createError) {
+      // Don't leave orphaned channels behind when a later creation fails
+      for (const created of createdChannels) {
+        try {
+          await created.delete();
+        } catch (cleanupError) {
+          logger.warning(`⚠️ Failed to clean up voice channel ${created.id} after partial failure:`, cleanupError instanceof Error ? cleanupError.message : 'Unknown');
+        }
+      }
+      throw createError;
     }
+
+    logger.debug(`✅ Voice channel(s) created: ${channelIds.join(', ')}`);
 
     await processor['db'].run(`
       UPDATE discord_bot_requests
       SET status = 'completed', result = ?, updated_at = datetime('now')
       WHERE id = ?
     `, [
-      JSON.stringify({ success: true, blueChannelId: blueChannel.id, redChannelId: redChannel?.id }),
+      JSON.stringify({ success: true, channelIds, blueChannelId: channelIds[0], redChannelId: channelIds[1] }),
       request.id
     ]);
   } catch (error) {
@@ -382,6 +398,7 @@ export class QueueProcessor {
   private processingVoiceTests = new Set<string>(); // Track users currently processing voice tests
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
+  private statsReportHandler: StatsReportHandler | null = null;
 
   constructor(
     private client: Client,
@@ -400,6 +417,10 @@ export class QueueProcessor {
 
   setWinnerVoteHandler(handler: WinnerVoteHandler) {
     this.winnerVoteHandler = handler;
+  }
+
+  setStatsReportHandler(handler: StatsReportHandler) {
+    this.statsReportHandler = handler;
   }
 
   async processAnnouncementQueue() {
@@ -1159,7 +1180,8 @@ export class QueueProcessor {
         announcement.blue_team_voice_channel,
         announcement.red_team_voice_channel,
         announcement.announcement_type,
-        announcement.first_team
+        announcement.first_team,
+        announcement.match_id
       );
 
       if (result.success) {
@@ -1449,7 +1471,7 @@ export class QueueProcessor {
     if (maps.length > 0) {
       const mapNames: string[] = [];
       for (const mapId of maps) {
-        const baseMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+        const baseMapId = cleanMapId(mapId);
         const mapRow = await this.db!.get<{ name: string }>(`
           SELECT name FROM game_maps WHERE id = ?
         `, [baseMapId]);
@@ -1647,11 +1669,44 @@ export class QueueProcessor {
       this.processDiscordBotRequests(),
       this.processMatchEditQueue(),
       this.processHealthAlertQueue(),
+      this.processStatsReportQueue(),
       // Must run in order: map code → winner vote → scorecard
       this.processMapCodeQueue()
         .then(() => this.processWinnerVoteQueue())
         .then(() => this.processScorecardPromptQueue()),
     ]);
+  }
+
+  async processStatsReportQueue() {
+    if (!this.client.isReady() || !this.db || !this.statsReportHandler) return;
+
+    try {
+      const pending = await this.db.all<{ id: string; match_id: string }>(
+        `SELECT id, match_id FROM discord_stats_report_queue WHERE status = 'pending' LIMIT 3`
+      );
+
+      for (const item of (pending || [])) {
+        try {
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'processing', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+          await this.statsReportHandler.processMatch(item.match_id);
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'completed', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [item.id]
+          );
+        } catch (err) {
+          logger.error(`Error processing stats report queue item ${item.id}:`, err);
+          await this.db.run(
+            `UPDATE discord_stats_report_queue SET status = 'failed', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [err instanceof Error ? err.message : 'Unknown error', item.id]
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing stats report queue:', error);
+    }
   }
 
   async processHealthAlertQueue() {

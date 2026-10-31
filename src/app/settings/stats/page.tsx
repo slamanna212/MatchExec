@@ -19,6 +19,7 @@ interface StatsSettings {
   enabled: boolean;
   providers: Array<{ instanceId: string; providerId: string; model: string; hasKey: boolean }>;
   winner_vote_enabled?: boolean;
+  stats_report_dm_enabled?: boolean;
 }
 
 interface ProviderInstance {
@@ -205,6 +206,7 @@ export default function StatsSettingsPage() {
     initialValues: {
       enabled: false,
       winner_vote_enabled: true,
+      stats_report_dm_enabled: false,
     },
   });
 
@@ -215,6 +217,7 @@ export default function StatsSettingsPage() {
         form.setValues({
           enabled: data.enabled,
           winner_vote_enabled: data.winner_vote_enabled ?? true,
+          stats_report_dm_enabled: data.stats_report_dm_enabled ?? false,
         });
 
         setProviders(
@@ -312,7 +315,7 @@ export default function StatsSettingsPage() {
     closeAdd();
   };
 
-  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean }) => {
+  const saveProviders = async (providerList: ProviderInstance[], formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean }) => {
     setSaving(true);
     try {
       const body = {
@@ -351,7 +354,7 @@ export default function StatsSettingsPage() {
     }
   };
 
-  const handleSave = async (formValues: { enabled: boolean }) => {
+  const handleSave = async (formValues: { enabled: boolean; winner_vote_enabled: boolean; stats_report_dm_enabled: boolean }) => {
     await saveProviders(providers, formValues);
   };
 
@@ -519,6 +522,13 @@ export default function StatsSettingsPage() {
                 description="Send commanders a DM after each map asking them to vote on who won via reaction."
                 checked={form.values.winner_vote_enabled}
                 onChange={(e) => form.setFieldValue('winner_vote_enabled', e.currentTarget.checked)}
+              />
+
+              <Switch
+                label="Enable Stats Report DMs"
+                description="Send each participant a personalized DM with their match stats after the match completes and all scorecards are reviewed."
+                checked={form.values.stats_report_dm_enabled}
+                onChange={(e) => form.setFieldValue('stats_report_dm_enabled', e.currentTarget.checked)}
               />
             </Stack>
           </Card>

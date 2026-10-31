@@ -8,17 +8,21 @@ import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   validateMatchRequest,
   prepareMatchData,
+  resolveModeFromMaps,
   insertMatchToDatabase,
   parseMatchResponse,
   type MatchRequestBody
 } from './helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { MATCH_SERIES_JSON_SQL, parseSeriesRefs } from '@/lib/series';
 
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    // status may be repeated (?status=a&status=b) or comma-separated (?status=a,b)
+    const statuses = searchParams.getAll('status').flatMap(v => v.split(',')).map(v => v.trim()).filter(Boolean);
+    const excludeTournament = searchParams.get('exclude_tournament') === 'true';
     const limitParam = searchParams.get('limit');
     const offsetParam = searchParams.get('offset');
     const limit = limitParam ? parseInt(limitParam, 10) : null;
@@ -30,7 +34,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
              t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
              gm.name as map_name,
-             COUNT(DISTINCT mp.id) as participant_count
+             COUNT(DISTINCT mp.id) as participant_count,
+             ${MATCH_SERIES_JSON_SQL} as series_json
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       LEFT JOIN tournament_matches tm ON m.id = tm.match_id
@@ -41,11 +46,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const params: (string | number)[] = [];
 
-    if (status === 'complete') {
-      query += ` WHERE m.status = 'complete'`;
+    const tournamentFilter = excludeTournament ? ' AND m.tournament_id IS NULL' : '';
+    if (statuses.length > 1) {
+      query += ` WHERE m.status IN (${statuses.map(() => '?').join(', ')})${tournamentFilter}`;
+      params.push(...statuses);
+    } else if (statuses[0] === 'complete') {
+      query += ` WHERE m.status = 'complete'${tournamentFilter}`;
     } else {
       // Default behavior: show all matches EXCEPT completed ones
-      query += ` WHERE m.status != 'complete'`;
+      query += ` WHERE m.status != 'complete'${tournamentFilter}`;
     }
 
     query += ` GROUP BY m.id ORDER BY m.updated_at DESC`;
@@ -65,10 +74,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         maps = safeJSONParse(mapsString, maps);
       }
 
+      const { series_json: seriesJson, ...rest } = match as MatchDbRow & { series_json?: string };
       return {
-        ...match,
+        ...rest,
         maps,
-        map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {})
+        map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {}),
+        series: parseSeriesRefs(seriesJson),
       };
     });
 
@@ -80,7 +91,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const totalParticipants = (matches as Array<MatchDbRow & { participant_count?: number }>).reduce(
       (sum, m) => sum + (m.participant_count || 0), 0
     );
-    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
+    // Series membership changes don't touch matches.updated_at, so fold it in
+    const seriesLinks = parsedMatches.reduce((sum, m) => sum + m.series.length, 0);
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}:${seriesLinks}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new NextResponse(null, { status: 304, headers: { ETag: etag } });
@@ -106,7 +119,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const db = await getDbInstance();
 
     // Prepare match data
-    const preparedData = await prepareMatchData(body, db);
+    const mode = await resolveModeFromMaps(db, body.gameId, body.maps);
+    if (mode.error) {
+      return apiError(mode.error, 400);
+    }
+    const preparedData = await prepareMatchData(body, db, mode.modeId);
 
     // Insert match into database
     await insertMatchToDatabase(db, body, preparedData);

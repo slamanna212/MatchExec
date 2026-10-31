@@ -19,12 +19,20 @@ import {
   fetchMatchStartData,
   buildMapListField,
   fetchTeamAssignments,
+  fetchMatchTeamRows,
   buildTeamFieldValue,
   getMatchLink,
   attachEventImage,
-  getImageAttachmentName
+  getImageAttachmentName,
+  chunkLinesForFields,
+  resolveWinnerDisplayName,
+  isTwoSidedResult,
+  MAX_FIELD_PER_TEAM_COUNT,
+  DISCORD_MAX_FIELDS
 } from './announcement-helpers';
+import type { WinnerKind } from './announcement-helpers';
 import { safePublicPath, capTitle } from './utils';
+import { cleanMapId } from '../../../src/lib/utils/map-utils';
 
 export class AnnouncementHandler {
   constructor(
@@ -235,10 +243,10 @@ export class AnnouncementHandler {
         let mapNote = mapNotes[mapIdentifier];
         if (!mapNote) {
           // Get the clean map ID without timestamp
-          const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+          const baseMapId = cleanMapId(mapIdentifier);
           
           // Find all notes that match this base map ID and get by index
-          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${cleanMapId}-`)).sort((a, b) => a.localeCompare(b));
+          const matchingKeys = Object.keys(mapNotes).filter(key => key.startsWith(`${baseMapId}-`)).sort((a, b) => a.localeCompare(b));
           mapNote = matchingKeys[i] ? mapNotes[matchingKeys[i]] : '';
         }
         
@@ -371,8 +379,8 @@ export class AnnouncementHandler {
     try {
       const mapNames: string[] = [];
       for (const mapId of maps) {
-        const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const displayName = await this.fetchMapName(gameId, cleanMapId);
+        const baseMapId = cleanMapId(mapId);
+        const displayName = await this.fetchMapName(gameId, baseMapId);
         mapNames.push(`**${displayName}**`);
       }
 
@@ -612,8 +620,8 @@ export class AnnouncementHandler {
     if (!this.db) return null;
 
     try {
-      const cleanMapId = mapIdentifier.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-      const mapData = await this.fetchMapData(gameId, cleanMapId);
+      const baseMapId = cleanMapId(mapIdentifier);
+      const mapData = await this.fetchMapData(gameId, baseMapId);
 
       if (!mapData) {
         return this.createFallbackMapEmbed(mapIdentifier, mapNumber);
@@ -1055,11 +1063,80 @@ export class AnnouncementHandler {
   private async addTeamFieldsIfNeeded(embed: EmbedBuilder, eventData: any, matchData: any): Promise<void> {
     if (!this.db) return;
 
-    const teams = await fetchTeamAssignments(this.db, eventData.id);
+    // Try new match_teams-based rendering first
+    const teamRows = await fetchMatchTeamRows(this.db, eventData.id);
 
+    if (teamRows.length > 0) {
+      const active = teamRows.filter(t => !t.is_reserve);
+      const reserve = teamRows.find(t => t.is_reserve);
+
+      const isTeamMode = (matchData.scoringType ?? 'Normal') === 'Normal';
+      const compact = !isTeamMode || active.length > MAX_FIELD_PER_TEAM_COUNT;
+
+      if (compact) {
+        this.addCompactParticipantFields(embed, active, isTeamMode);
+      } else {
+        for (const team of active) {
+          if (team.participants.length === 0) continue;
+          const emoji = team.team_order === 0 ? '🔵' : team.team_order === 1 ? '🔴' : '🟢';
+          const header = `${emoji} ${team.team_name}`;
+          const value = buildTeamFieldValue(team.participants, team.voice_channel_id || null);
+          embed.addFields([{ name: header, value, inline: true }]);
+        }
+      }
+
+      if (reserve && reserve.participants.length > 0) {
+        const reserveList = reserve.participants
+          .map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)
+          .join('\n');
+        for (const [i, chunk] of chunkLinesForFields(reserveList.split('\n')).slice(0, 1).entries()) {
+          embed.addFields([{ name: i === 0 ? '🟡 Reserves' : '🟡 Reserves (cont.)', value: chunk, inline: true }]);
+        }
+      }
+      return;
+    }
+
+    // Legacy fallback
+    const teams = await fetchTeamAssignments(this.db, eventData.id);
     this.addBlueTeamField(embed, teams.blueTeam, matchData);
     this.addRedTeamField(embed, teams.redTeam, matchData);
     this.addReservesField(embed, teams.reserves);
+  }
+
+  /**
+   * Render FFA/Position matches (or matches with very many teams) as compact
+   * participant lists chunked to Discord's 1024-char field limit, never
+   * exceeding the 25-field embed cap (2 slots stay reserved for reserves and
+   * the match link).
+   */
+  private addCompactParticipantFields(
+    embed: EmbedBuilder,
+    teams: Array<{ team_name: string; participants: Array<{ username: string; discord_user_id?: string }> }>,
+    isTeamMode: boolean
+  ): void {
+    const lines: string[] = [];
+    for (const team of teams) {
+      if (team.participants.length === 0) continue;
+      const names = team.participants.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
+      if (isTeamMode) {
+        lines.push(`**${team.team_name}**: ${names.join(', ')}`);
+      } else {
+        lines.push(...names);
+      }
+    }
+    if (lines.length === 0) return;
+
+    const used = embed.data.fields?.length ?? 0;
+    const available = Math.max(0, DISCORD_MAX_FIELDS - used - 2);
+    const chunks = chunkLinesForFields(lines).slice(0, available);
+    const label = isTeamMode ? 'Teams' : 'Participants';
+    chunks.forEach((chunk, i) => {
+      embed.addFields([{
+        name: i === 0 ? `👥 ${label} (${lines.length})` : `👥 ${label} (cont.)`,
+        value: chunk,
+        inline: false
+      }]);
+    });
   }
 
   private addBlueTeamField(embed: EmbedBuilder, blueTeam: any[], matchData: any): void {
@@ -1143,7 +1220,7 @@ export class AnnouncementHandler {
     gameId: string;
     gameNumber: number;
     mapId: string;
-    winner: 'team1' | 'team2';
+    winner: WinnerKind;
     winningTeamName: string;
     winningPlayers: string[];
   }) {
@@ -1262,7 +1339,7 @@ export class AnnouncementHandler {
       }
 
       // Get map data
-      const cleanMapId = mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+      const baseMapId = cleanMapId(mapId);
       const mapData = await this.db.get<{
         name: string;
         image_url: string;
@@ -1271,7 +1348,7 @@ export class AnnouncementHandler {
         FROM game_maps gm
         WHERE gm.game_id = ? AND (gm.id = ? OR LOWER(gm.name) LIKE LOWER(?))
         LIMIT 1
-      `, [gameId, cleanMapId, `%${cleanMapId}%`]);
+      `, [gameId, baseMapId, `%${baseMapId}%`]);
 
       if (mapData) {
         mapName = mapData.name;
@@ -1336,7 +1413,7 @@ export class AnnouncementHandler {
     gameId: string;
     gameNumber: number;
     mapId: string;
-    winner: 'team1' | 'team2';
+    winner: WinnerKind;
     winningTeamName: string;
     winningPlayers: string[];
   }): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
@@ -1344,9 +1421,12 @@ export class AnnouncementHandler {
     const metadata = await this.fetchMapScoreMetadata(scoreData.gameId, scoreData.matchId, scoreData.mapId);
 
     // Determine winning team display name
-    let winningTeamDisplay = scoreData.winningTeamName;
-    if (scoreData.winner === 'team1' && metadata.team1Name) winningTeamDisplay = metadata.team1Name;
-    else if (scoreData.winner === 'team2' && metadata.team2Name) winningTeamDisplay = metadata.team2Name;
+    const winningTeamDisplay = resolveWinnerDisplayName(
+      scoreData.winner,
+      scoreData.winningTeamName,
+      metadata.team1Name,
+      metadata.team2Name
+    );
 
     // Build embed
     const mapProgress = metadata.totalMaps > 0 ? `${scoreData.gameNumber}/${metadata.totalMaps}` : scoreData.gameNumber.toString();
@@ -1398,7 +1478,7 @@ export class AnnouncementHandler {
     matchId: string;
     matchName: string;
     gameId: string;
-    winner: 'team1' | 'team2' | 'tie';
+    winner: WinnerKind;
     winningTeamName: string;
     winningPlayers: string[];
     team1Score: number;
@@ -1516,7 +1596,7 @@ export class AnnouncementHandler {
   private generateWinnerTitleDescription(
     winnerData: {
       matchName: string;
-      winner: 'team1' | 'team2' | 'tie';
+      winner: WinnerKind;
       team1Score: number;
       team2Score: number;
     },
@@ -1526,6 +1606,14 @@ export class AnnouncementHandler {
       return {
         title: `🤝 ${winnerData.matchName} - Match Tied!`,
         description: `The match ended in a **${winnerData.team1Score}-${winnerData.team2Score}** tie!`
+      };
+    }
+
+    // 3rd+ team / FFA / Position winners have no meaningful two-sided scoreline
+    if (winnerData.winner === 'team' || winnerData.winner === 'participant') {
+      return {
+        title: `🏆 ${winningTeamDisplay} Wins ${winnerData.matchName}!`,
+        description: `**${winnerData.matchName}** is complete! Winner: **${winningTeamDisplay}**`
       };
     }
 
@@ -1570,7 +1658,7 @@ export class AnnouncementHandler {
     matchId: string;
     matchName: string;
     gameId: string;
-    winner: 'team1' | 'team2' | 'tie';
+    winner: WinnerKind;
     winningTeamName: string;
     winningPlayers: string[];
     team1Score: number;
@@ -1584,9 +1672,12 @@ export class AnnouncementHandler {
     );
 
     // Determine winning team display name
-    let winningTeamDisplay = winnerData.winningTeamName;
-    if (winnerData.winner === 'team1' && team1Name) winningTeamDisplay = team1Name;
-    else if (winnerData.winner === 'team2' && team2Name) winningTeamDisplay = team2Name;
+    const winningTeamDisplay = resolveWinnerDisplayName(
+      winnerData.winner,
+      winnerData.winningTeamName,
+      team1Name,
+      team2Name
+    );
 
     // Generate title and description
     const { title, description } = this.generateWinnerTitleDescription(winnerData, winningTeamDisplay);
@@ -1599,13 +1690,17 @@ export class AnnouncementHandler {
       .setTitle(capTitle(title))
       .setDescription(description)
       .setColor(embedColor)
-      .addFields([
-        { name: '🎮 Game', value: gameName, inline: true },
-        { name: '📊 Final Score', value: `${winnerData.team1Score} - ${winnerData.team2Score}`, inline: true },
-        { name: '🗺️ Maps Played', value: winnerData.totalMaps.toString(), inline: true }
-      ])
+      .addFields([{ name: '🎮 Game', value: gameName, inline: true }])
       .setTimestamp()
       .setFooter({ text: 'MatchExec • Match Complete' });
+
+    // Only 2-sided results have a meaningful "X - Y" scoreline
+    if (isTwoSidedResult(winnerData.winner)) {
+      embed.addFields([
+        { name: '📊 Final Score', value: `${winnerData.team1Score} - ${winnerData.team2Score}`, inline: true }
+      ]);
+    }
+    embed.addFields([{ name: '🗺️ Maps Played', value: winnerData.totalMaps.toString(), inline: true }]);
 
     // Add winning team players (if not a tie)
     if (winnerData.winner !== 'tie' && winnerData.winningPlayers.length > 0) {

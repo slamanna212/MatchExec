@@ -377,6 +377,27 @@ describe('VoiceHandler', () => {
       expect(result.message).toContain('1 channels');
     });
 
+    it('announces in every match_teams voice channel (deduped) and rotates the first team', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const insert = (id: string, order: number, channel: string | null, reserve = 0) => db.run(
+        `INSERT INTO match_teams (id, match_id, team_name, team_color, team_order, is_reserve, voice_channel_id)
+         VALUES (?, ?, ?, '#fff', ?, ?, ?)`,
+        [id, match.id, `Team ${order}`, order, reserve, channel]
+      );
+      await insert('vt-1', 0, 'chan-a');
+      await insert('vt-2', 1, 'chan-b');
+      await insert('vt-3', 2, 'chan-c');
+      await insert('vt-4', 3, 'chan-c'); // shared channel is announced once
+      await insert('vt-res', 99, 'chan-reserve', 1);
+
+      const spy = vi.spyOn(voiceHandler, 'playVoiceAnnouncement').mockResolvedValue(true);
+
+      const result = await voiceHandler.playTeamAnnouncements(null, null, 'nextround', 'red', match.id);
+
+      expect(result.success).toBe(true);
+      expect(spy.mock.calls.map(c => c[0])).toEqual(['chan-b', 'chan-c', 'chan-a']);
+    });
+
     it('should fail when no channels provided', async () => {
       const result = await voiceHandler.playTeamAnnouncements(
         null,

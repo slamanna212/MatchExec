@@ -2,6 +2,7 @@ import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { getCumulativeStandings } from '@/lib/tournament-standings';
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +12,17 @@ export async function GET(
     const { tournamentId } = await params;
     const db = await getDbInstance();
 
-    // Get all teams with their match statistics
+    const tournament = await db.get<{ format: string }>(
+      'SELECT format FROM tournaments WHERE id = ?',
+      [tournamentId]
+    );
+    if (!tournament) return apiError('Tournament not found', 404);
+
+    if (tournament.format === 'cumulative-points') {
+      return apiOk({ standings: await getCumulativeStandings(db, tournamentId) });
+    }
+
+    // Bracket (single/double-elimination) standings
     const standings = await db.all<{
       team_id: string;
       team_name: string;

@@ -1,5 +1,6 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
+import { cleanMapId } from './utils/map-utils';
 
 /**
  * Service for handling map code operations and lookups
@@ -87,7 +88,7 @@ export class MapCodeService {
   ): Promise<boolean> {
     try {
       // Strip instance suffix (e.g., "antarctic-peninsula-1776547135395-lsqxspqvk" -> "antarctic-peninsula")
-      const baseMapId = mapId.replace(/-\d{10,}-[a-zA-Z0-9]+$/, '');
+      const baseMapId = cleanMapId(mapId);
 
       // Get the actual map name from database using base ID
       const mapName = await this.getMapName(gameId, baseMapId);

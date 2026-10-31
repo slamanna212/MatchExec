@@ -63,7 +63,7 @@ export interface Tournament {
   id: string;
   name: string;
   description?: string;
-  format: 'single-elimination' | 'double-elimination';
+  format: 'single-elimination' | 'double-elimination' | 'cumulative-points';
   status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
   game_id: string;
   rounds_per_match: number;
@@ -73,6 +73,11 @@ export interface Tournament {
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
   stats_enabled?: number;
+  announcements?: string;
+  player_notifications?: number;
+  livestream_link?: string;
+  /** JSON-stringified PositionScoringConfig — per-tournament override of the game's default spread. */
+  position_scoring_override?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -197,7 +202,7 @@ export const TOURNAMENT_FLOW_STEPS = {
 } as const;
 
 // Tournament format types
-export type TournamentFormat = 'single-elimination' | 'double-elimination';
+export type TournamentFormat = 'single-elimination' | 'double-elimination' | 'cumulative-points';
 
 // Tournament status types  
 export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
@@ -336,11 +341,20 @@ export type MatchFormat = 'casual' | 'competitive';
 export interface MatchResult {
   matchId: string;
   gameId: string; // match_games.id
-  winner: 'team1' | 'team2';
+  /** 'team1'/'team2' for team_order 0/1; 'team' for a 3rd+ team (use winnerTeamId); 'tie' for a draw. */
+  winner: 'team1' | 'team2' | 'team' | 'tie';
+  winnerTeamId?: string; // match_teams.id — preferred, N-team-aware winner reference
+  loserTeamId?: string; // match_teams.id — optional explicit non-winner reference (for scores)
+  winnerScore?: number;
+  loserScore?: number;
   participantWinnerId?: string; // For FFA modes
   isFfaMode?: boolean;
   positionResults?: Record<string, number>; // For Position modes: {participantId: position}
   isPositionMode?: boolean;
+  /** Normal mode only: the map ended in a draw (no winner). */
+  draw?: boolean;
+  /** Explicitly re-score an already-scored game / complete match (no completion side effects). */
+  rescore?: boolean;
   completedAt: Date;
 }
 
@@ -481,10 +495,13 @@ export interface ScorecardDmMessage {
 export interface AIExtractionResult {
   players: Array<{
     playerName: string;
-    teamSide: 'blue' | 'red' | 'unknown';
+    teamSide?: 'blue' | 'red' | 'unknown';
+    position?: number;
     stats: Record<string, number>;
     confidence: number;
   }>;
+  /** Populated by the extractor for FFA/Position modes; maps playerName → position */
+  playerPositions?: Record<string, number>;
   mapName?: string;
   gameResult?: {
     team1Score?: number;

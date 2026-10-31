@@ -1,4 +1,4 @@
-/* Same master-detail layout as SimpleMapScoring */
+/* Same master-detail layout as TeamMapScoring/FfaMapScoring */
 .container {
   display: grid;
   grid-template-columns: 260px 1fr;

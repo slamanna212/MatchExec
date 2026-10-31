@@ -7,7 +7,10 @@ import { MATCH_FLOW_STEPS, TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 type ItemType = 'match' | 'tournament';
 
 interface StageRingProps {
-  status: string;
+  /** Match/tournament status; ignored when `value` is given. */
+  status?: string;
+  /** Explicit progress 0-100 (e.g. series event-completion %). Overrides `status`. */
+  value?: number;
   gameColor?: string;
   type?: ItemType;
   size?: number;
@@ -23,6 +26,7 @@ function getProgress(status: string, type: ItemType): number {
 
 export function StageRing({
   status,
+  value,
   gameColor,
   type = 'match',
   size = 50,
@@ -34,7 +38,7 @@ export function StageRing({
       thickness={thickness}
       sections={[
         {
-          value: getProgress(status, type),
+          value: value ?? (status ? getProgress(status, type) : 0),
           color: gameColor || FALLBACK_COLOR,
         },
       ]}

@@ -15,7 +15,7 @@ interface ConditionalNavigationProps {
  */
 export function ConditionalNavigation({ children }: ConditionalNavigationProps): JSX.Element {
   const pathname = usePathname();
-  const isWelcomePage = pathname.startsWith('/welcome');
+  const isWelcomePage = pathname.startsWith('/welcome') || pathname.startsWith('/login');
 
   // On welcome pages, render children without Navigation wrapper
   if (isWelcomePage) {

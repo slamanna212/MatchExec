@@ -24,6 +24,7 @@ import { capTitle } from './utils';
 
 // Import SignupFormLoader
 import { SignupFormLoader } from '../../../lib/signup-forms';
+import { version } from '../../../package.json';
 
 // Import helper functions
 import { parseModalCustomId } from '../utils/id-parsers';
@@ -206,7 +207,10 @@ export class InteractionHandler {
         .setDescription('List upcoming and active tournaments (up to 5)'),
       new SlashCommandBuilder()
         .setName('help')
-        .setDescription('Get links to MatchExec documentation')
+        .setDescription('Get links to MatchExec documentation'),
+      new SlashCommandBuilder()
+        .setName('mine')
+        .setDescription('View your active match and tournament signups')
     ];
 
     try {
@@ -240,6 +244,9 @@ export class InteractionHandler {
         case 'help':
           await this.handleHelpCommand(interaction);
           break;
+        case 'mine':
+          await this.handleMineCommand(interaction);
+          break;
         default:
           await interaction.reply({
             content: '❌ Unknown command.',
@@ -262,14 +269,25 @@ export class InteractionHandler {
   private async handleStatusCommand(interaction: ChatInputCommandInteraction) {
     const uptime = process.uptime();
     const uptimeString = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
-    
+
+    const queueRow = await this.db.get<{ count: number }>(`
+      SELECT SUM(cnt) as count FROM (
+        SELECT COUNT(*) as cnt FROM discord_announcement_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_reminder_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_match_start_queue WHERE status='failed'
+        UNION ALL SELECT COUNT(*) FROM discord_player_reminder_queue WHERE status='failed'
+      )
+    `);
+    const queueDepth = queueRow?.count ?? 0;
+
     const status = [
       `🤖 **MatchExec Bot Status**`,
       `✅ Bot Online`,
+      `🔖 Version: v${version}`,
       `⏱️ Uptime: ${uptimeString}`,
-      `🏠 Guild: ${interaction.guildId}`,
       `📡 Ping: ${this.client.ws.ping}ms`,
-      `🗄️ Database: ${this.db ? '✅ Connected' : '❌ Disconnected'}`
+      `🗄️ Database: ${this.db ? '✅ Connected' : '❌ Disconnected'}`,
+      `📬 Queue: ${queueDepth === 0 ? '✅ No failures' : `⚠️ ${queueDepth} failed`}`
     ].join('\n');
 
     await interaction.reply({
@@ -393,6 +411,69 @@ export class InteractionHandler {
       const extraParts = field.value.split(' · ').slice(1);
       field.value = [`🎮 ${tournament.game_name}`, `🏟️ ${formatLabel}`, ...extraParts].join(' · ');
       embed.addFields(field);
+    }
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  private async handleMineCommand(interaction: ChatInputCommandInteraction) {
+    const discordUserId = interaction.user.id;
+
+    const matches = await this.db.all<{
+      id: string; name: string; status: string; start_date: string | null; game_name: string;
+    }>(`
+      SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
+      FROM match_participants mp
+      JOIN matches m ON mp.match_id = m.id
+      JOIN games g ON m.game_id = g.id
+      WHERE mp.discord_user_id = ?
+        AND m.status IN ('gather', 'assign', 'battle')
+      ORDER BY m.start_date ASC
+    `, [discordUserId]);
+
+    const tournaments = await this.db.all<{
+      id: string; name: string; status: string; start_date: string | null; game_name: string;
+    }>(`
+      SELECT t.id, t.name, t.status, t.start_date, g.name as game_name
+      FROM tournament_participants tp
+      JOIN tournaments t ON tp.tournament_id = t.id
+      JOIN games g ON t.game_id = g.id
+      WHERE tp.discord_user_id = ?
+        AND t.status IN ('gather', 'assign', 'battle')
+      ORDER BY t.start_date ASC
+    `, [discordUserId]);
+
+    if (!matches.length && !tournaments.length) {
+      await interaction.reply({ content: 'You have no active match or tournament signups.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const showLabels = matches.length > 0 && tournaments.length > 0;
+
+    const embed = new EmbedBuilder()
+      .setTitle('📋 Your Signups')
+      .setColor(0x5865F2);
+
+    if (matches.length) {
+      if (showLabels) embed.addFields({ name: 'Matches', value: '​', inline: false });
+      for (const match of matches) {
+        const msg = await this.db.get<{ message_id: string; channel_id: string }>(
+          `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+          [match.id]
+        );
+        embed.addFields(this.buildEventField(match, msg, this.settings?.guild_id));
+      }
+    }
+
+    if (tournaments.length) {
+      if (showLabels) embed.addFields({ name: 'Tournaments', value: '​', inline: false });
+      for (const tournament of tournaments) {
+        const msg = await this.db.get<{ message_id: string; channel_id: string }>(
+          `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
+          [tournament.id]
+        );
+        embed.addFields(this.buildEventField(tournament, msg, this.settings?.guild_id));
+      }
     }
 
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

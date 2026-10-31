@@ -4,9 +4,10 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
-import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+import { validateMaxLength, validateNumberRange, validateEnum, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { TOURNAMENT_SERIES_JSON_SQL, parseSeriesRefs } from '@/lib/series';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 
@@ -25,14 +26,19 @@ interface TournamentBody {
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
+  announcements?: Array<{ id: string; value: number; unit: 'minutes' | 'hours' | 'days' }>;
+  playerNotifications?: boolean;
+  livestreamLink?: string;
+  /** JSON-stringified PositionScoringConfig — overrides the game's default spread for FFA/Position tournaments. */
+  positionScoringOverride?: string;
 }
 
 function validateTournamentBody(body: Partial<TournamentBody>): string | null {
   if (!body.name || !body.gameId || !body.gameModeId || !body.format || !body.roundsPerMatch) {
     return 'Missing required fields: name, gameId, gameModeId, format, and roundsPerMatch';
   }
-  if (!['single-elimination', 'double-elimination'].includes(body.format)) {
-    return 'Invalid format. Must be single-elimination or double-elimination';
+  if (!['single-elimination', 'double-elimination', 'cumulative-points'].includes(body.format)) {
+    return 'Invalid format. Must be single-elimination, double-elimination, or cumulative-points';
   }
 
   for (const check of [
@@ -44,6 +50,8 @@ function validateTournamentBody(body: Partial<TournamentBody>): string | null {
   ]) {
     if (!check.valid) return check.error;
   }
+  const overrideError = validatePositionScoringOverrideJson(body.positionScoringOverride);
+  if (overrideError) return overrideError;
 
   return null;
 }
@@ -57,6 +65,34 @@ async function validateGameModeId(db: Database, gameId: string, gameModeId: stri
   }
   const gameMode = await db.get<{ id: string }>('SELECT id FROM game_modes WHERE id = ? AND game_id = ?', [gameModeId, gameId]);
   if (!gameMode) return 'Invalid game mode ID or game mode does not belong to the selected game';
+  return null;
+}
+
+/**
+ * Cross-check the chosen format against the mode's scoring_type: bracket
+ * formats only make sense for Normal (team vs team) modes; FFA/Position
+ * modes only support cumulative-points. Without this, picking e.g. an FFA
+ * mode with 'single-elimination' either throws an opaque "no game modes
+ * found" error (team_size IS NULL never matches in the bracket-generation
+ * query) or, for Position-individual modes, silently builds a real
+ * elimination bracket pairing one-person "teams".
+ */
+async function validateFormatMatchesScoringType(db: Database, gameId: string, gameModeId: string, format: string): Promise<string | null> {
+  let scoringType: string | undefined;
+  if (gameId === 'overwatch2' && gameModeId.startsWith('ow2-')) {
+    scoringType = 'Normal';
+  } else {
+    const mode = await db.get<{ scoring_type?: string }>('SELECT scoring_type FROM game_modes WHERE id = ? AND game_id = ?', [gameModeId, gameId]);
+    scoringType = mode?.scoring_type ?? 'Normal';
+  }
+
+  const isBracketFormat = format === 'single-elimination' || format === 'double-elimination';
+  if (scoringType === 'Normal' && !isBracketFormat) {
+    return 'Normal (team vs team) modes require single-elimination or double-elimination format';
+  }
+  if (scoringType !== 'Normal' && isBracketFormat) {
+    return `${scoringType} modes don't support brackets — use cumulative-points format`;
+  }
   return null;
 }
 
@@ -77,7 +113,11 @@ function buildTournamentInsertValues(body: TournamentBody, tournamentId: string,
     body.eventImageUrl || null,
     body.allowPlayerTeamSelection ? 1 : 0,
     body.allowMatchEditing === false ? 0 : 1,
-    body.statsEnabled ? 1 : 0
+    body.statsEnabled ? 1 : 0,
+    body.announcements ? JSON.stringify(body.announcements) : null,
+    body.playerNotifications === false ? 0 : 1,
+    body.livestreamLink || null,
+    body.positionScoringOverride || null,
   ];
 }
 
@@ -115,7 +155,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             SELECT 1 FROM tournament_matches tm WHERE tm.tournament_id = t.id
           ) THEN 1
           ELSE 0
-        END as has_bracket
+        END as has_bracket,
+        ${TOURNAMENT_SERIES_JSON_SQL} as series_json
       FROM tournaments t
       LEFT JOIN games g ON t.game_id = g.id
       LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
@@ -139,14 +180,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       params.push(limit, offset);
     }
 
-    const tournaments = await db.all<TournamentDbRow>(query, params);
+    const tournaments = (await db.all<TournamentDbRow & { series_json?: string }>(query, params))
+      .map(({ series_json: seriesJson, ...t }) => ({ ...t, series: parseSeriesRefs(seriesJson) }));
 
     // Compute ETag for efficient polling
     const maxUpdatedAt = tournaments.reduce(
       (max, t) => { const val = String(t.updated_at); return val > max ? val : max; },
       ''
     );
-    const etag = `"${tournaments.length}:${maxUpdatedAt}"`;
+    // Series membership changes don't touch tournaments.updated_at, so fold it in
+    const seriesLinks = tournaments.reduce((sum, t) => sum + t.series.length, 0);
+    const etag = `"${tournaments.length}:${maxUpdatedAt}:${seriesLinks}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new NextResponse(null, { status: 304, headers: { ETag: etag } });
@@ -175,6 +219,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return apiError(gameModeError, 400);
     }
 
+    const formatError = await validateFormatMatchesScoringType(db, body.gameId, body.gameModeId, body.format);
+    if (formatError) {
+      return apiError(formatError, 400);
+    }
+
     const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     const startDateTime = body.startDate ? new Date(body.startDate).toISOString() : null;
     const startTimeOnly = body.startTime ? new Date(body.startTime).toISOString() : null;
@@ -183,8 +232,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       INSERT INTO tournaments (
         id, name, description, game_id, game_mode_id, format, status, rounds_per_match,
         ruleset, max_participants, start_date, start_time, event_image_url,
-        allow_player_team_selection, allow_match_editing, stats_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allow_player_team_selection, allow_match_editing, stats_enabled,
+        announcements, player_notifications, livestream_link, position_scoring_override
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, buildTournamentInsertValues(body, tournamentId, startDateTime, startTimeOnly));
     
     const tournament = await db.get<TournamentDbRow>(`

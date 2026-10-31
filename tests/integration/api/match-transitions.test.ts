@@ -212,3 +212,71 @@ describe('Match Transitions API', () => {
     });
   });
 });
+
+describe('Match transition map', () => {
+  let game: any;
+
+  beforeEach(async () => {
+    const data = await seedBasicTestData();
+    game = data.game;
+  });
+
+  async function makeMatch(status: string): Promise<string> {
+    const db = getTestDb();
+    await db.run(
+      `INSERT INTO matches (id, name, game_id, guild_id, channel_id, start_date, start_time, status, max_participants, match_format)
+       VALUES ('tm-1', 'Test Match', ?, 'guild', 'channel', datetime('now'), datetime('now'), ?, 10, 'casual')`,
+      [game.id, status]
+    );
+    return 'tm-1';
+  }
+
+  async function go(matchId: string, newStatus: string, extra: Record<string, unknown> = {}) {
+    const request = createMockRequest('POST', `/api/matches/${matchId}/transition`, { newStatus, ...extra });
+    return parseResponse(await transitionMatch(request, createRouteParams({ matchId })));
+  }
+
+  it.each([
+    ['created', 'gather'], ['created', 'cancelled'],
+    ['gather', 'assign'], ['gather', 'cancelled'],
+    ['assign', 'battle'], ['assign', 'cancelled'],
+  ])('allows %s -> %s', async (from, to) => {
+    const id = await makeMatch(from);
+    const { status, data } = await go(id, to);
+    expect(status).toBe(200);
+    expect(data.status).toBe(to);
+  });
+
+  it.each([
+    ['created', 'assign'], ['created', 'battle'], ['gather', 'battle'], ['assign', 'complete'],
+    ['battle', 'gather'],
+  ])('rejects %s -> %s', async (from, to) => {
+    const id = await makeMatch(from);
+    const { status } = await go(id, to, { force: true });
+    expect(status).toBe(400);
+  });
+
+  it('rejects same-status transitions', async () => {
+    const id = await makeMatch('gather');
+    expect((await go(id, 'gather')).status).toBe(400);
+  });
+
+  it('treats complete and cancelled as terminal', async () => {
+    for (const from of ['complete', 'cancelled']) {
+      const db = getTestDb();
+      await db.run(`DELETE FROM matches WHERE id = 'tm-1'`);
+      const id = await makeMatch(from);
+      expect((await go(id, 'cancelled')).status).toBe(400);
+      expect((await go(id, 'complete', { force: true })).status).toBe(400);
+    }
+  });
+
+  it('does not fire completion side effects twice', async () => {
+    const db = getTestDb();
+    const id = await makeMatch('battle');
+    expect((await go(id, 'complete', { force: true })).status).toBe(200);
+    expect((await go(id, 'complete', { force: true })).status).toBe(400);
+    const row = await db.get<{ c: number }>(`SELECT COUNT(*) c FROM discord_deletion_queue WHERE match_id = ?`, [id]);
+    expect(row?.c).toBe(1);
+  });
+});

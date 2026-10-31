@@ -112,6 +112,88 @@ describe('Transition Handlers', () => {
       expect(statusUpdate.status).toBe('pending');
     });
 
+    it('should create Blue and Red match_teams rows for Normal mode', async () => {
+      const match = await createMatch(game.id, mode.id, { status: 'gather' });
+
+      await handleAssignTransition(match.id.toString());
+
+      const db = getTestDb();
+      const teams = await new Promise<any[]>((resolve, reject) => {
+        db.all(
+          `SELECT * FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC`,
+          [match.id],
+          (err, rows) => err ? reject(err) : resolve(rows)
+        );
+      });
+
+      expect(teams).toHaveLength(2);
+      expect(teams[0].team_name).toBe('Blue');
+      expect(teams[0].team_order).toBe(0);
+      expect(teams[1].team_name).toBe('Red');
+      expect(teams[1].team_order).toBe(1);
+    });
+
+    it('should create one match_team per participant for FFA mode', async () => {
+      // Insert an FFA-type game mode
+      const db = getTestDb();
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO game_modes (id, game_id, name, scoring_type) VALUES ('ffa-mode', ?, 'Deathmatch', 'FFA')`,
+          [game.id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      const match = await createMatch(game.id, 'ffa-mode', { status: 'gather' });
+
+      // Add two participants
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_participants (id, match_id, user_id, username, joined_at) VALUES ('p1', ?, 'u1', 'Alice', CURRENT_TIMESTAMP)`,
+          [match.id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          `INSERT INTO match_participants (id, match_id, user_id, username, joined_at) VALUES ('p2', ?, 'u2', 'Bob', CURRENT_TIMESTAMP)`,
+          [match.id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+
+      await handleAssignTransition(match.id.toString());
+
+      const teams = await new Promise<any[]>((resolve, reject) => {
+        db.all(
+          `SELECT * FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC`,
+          [match.id],
+          (err, rows) => err ? reject(err) : resolve(rows)
+        );
+      });
+
+      expect(teams).toHaveLength(2);
+      expect(teams.map((t: any) => t.team_name)).toEqual(expect.arrayContaining(['Alice', 'Bob']));
+    });
+
+    it('should be idempotent — calling twice does not duplicate match_teams', async () => {
+      const match = await createMatch(game.id, mode.id, { status: 'gather' });
+
+      await handleAssignTransition(match.id.toString());
+      await handleAssignTransition(match.id.toString());
+
+      const db = getTestDb();
+      const teams = await new Promise<any[]>((resolve, reject) => {
+        db.all(
+          `SELECT * FROM match_teams WHERE match_id = ? AND is_reserve = 0`,
+          [match.id],
+          (err, rows) => err ? reject(err) : resolve(rows)
+        );
+      });
+
+      expect(teams).toHaveLength(2);
+    });
+
     it('should call voice channel setup', async () => {
       const match = await createMatch(game.id, mode.id, { status: 'gather' });
       const { VoiceChannelService } = await import('@/lib/voice-channel-service');

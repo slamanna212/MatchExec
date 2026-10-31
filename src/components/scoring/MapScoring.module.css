@@ -1,4 +1,4 @@
-/* Single-map scoring layout */
+/* Shared map-scoring layout — used by TeamMapScoring and FfaMapScoring */
 .container {
   width: 100%;
 }
@@ -49,14 +49,17 @@
 }
 
 /* ── Team win cards ──────────────────────────────────── */
+/* N-team aware: each card gets its accent color via the --team-accent custom
+   property (set inline per team), rather than fixed blue/red variant classes. */
 .winnerGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 14px;
   margin-top: 4px;
 }
 
 .teamCard {
+  --team-accent: var(--mantine-color-gray-5);
   padding: 24px 16px;
   border-radius: 10px;
   cursor: pointer;
@@ -65,41 +68,24 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  border: 2px solid transparent;
+  border: 2px solid color-mix(in srgb, var(--team-accent) 25%, transparent);
+  background: color-mix(in srgb, var(--team-accent) 10%, transparent);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  background: none;
   font-family: inherit;
   width: 100%;
+}
+
+.teamCard:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--team-accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--team-accent) 75%, transparent);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--team-accent) 35%, transparent);
 }
 
 .teamCard:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none !important;
-}
-
-.teamCardBlue {
-  background: rgba(34, 139, 230, 0.1);
-  border-color: rgba(34, 139, 230, 0.25);
-}
-
-.teamCardBlue:hover:not(:disabled) {
-  background: rgba(34, 139, 230, 0.22);
-  border-color: rgba(34, 139, 230, 0.75);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 28px rgba(34, 139, 230, 0.35);
-}
-
-.teamCardRed {
-  background: rgba(250, 82, 82, 0.1);
-  border-color: rgba(250, 82, 82, 0.25);
-}
-
-.teamCardRed:hover:not(:disabled) {
-  background: rgba(250, 82, 82, 0.22);
-  border-color: rgba(250, 82, 82, 0.75);
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 28px rgba(250, 82, 82, 0.35);
 }
 
 .teamCardIcon {
@@ -110,16 +96,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.teamCardIconBlue {
-  background: rgba(34, 139, 230, 0.2);
-  color: var(--mantine-color-blue-5);
-}
-
-.teamCardIconRed {
-  background: rgba(250, 82, 82, 0.2);
-  color: var(--mantine-color-red-5);
+  background: color-mix(in srgb, var(--team-accent) 20%, transparent);
+  color: var(--team-accent);
 }
 
 .teamCardName {

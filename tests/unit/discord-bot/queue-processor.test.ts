@@ -534,6 +534,32 @@ describe('QueueProcessor', () => {
       expect(result.success).toBe(true);
     });
 
+    it('should delete already-created voice channels when a later creation fails', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const firstDelete = vi.fn().mockResolvedValue(undefined);
+
+      await db.run(`
+        INSERT INTO discord_bot_requests (id, type, data, status, created_at)
+        VALUES (?, 'voice_channel_create', ?, 'pending', datetime('now'))
+      `, ['bot-request-partial', JSON.stringify({
+        matchId: match.id,
+        categoryId: 'category-123',
+        channelNames: ['Team A', 'Team B', 'Team C']
+      })]);
+
+      const create = vi.fn()
+        .mockResolvedValueOnce({ id: 'chan-1', delete: firstDelete })
+        .mockRejectedValueOnce(new Error('Missing Permissions'));
+      mockDiscordClient.guilds.fetch.mockResolvedValue({ channels: { create } });
+
+      await queueProcessor.processDiscordBotRequests();
+
+      const request = await db.get('SELECT status, result FROM discord_bot_requests WHERE id = ?', ['bot-request-partial']);
+      expect(request.status).toBe('failed');
+      expect(firstDelete).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
     it('should clean up old completed requests', async () => {
       // Create an old completed request (older than 1 hour)
       await db.run(`

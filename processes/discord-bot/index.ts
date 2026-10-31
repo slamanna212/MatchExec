@@ -18,6 +18,7 @@ import { InteractionHandler } from './modules/interaction-handler';
 import { HealthMonitor } from './modules/health-monitor';
 import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
+import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 
 class MatchExecBot {
@@ -37,6 +38,7 @@ class MatchExecBot {
   private healthMonitor: HealthMonitor | null = null;
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
+  private statsReportHandler: StatsReportHandler | null = null;
   private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
   private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -236,6 +238,8 @@ class MatchExecBot {
       this.winnerVoteHandler = new WinnerVoteHandler(this.client, this.db);
       this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
+      this.statsReportHandler = new StatsReportHandler(this.db, this.client);
+      this.queueProcessor.setStatsReportHandler(this.statsReportHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
       this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client, this.db);
 
@@ -461,18 +465,31 @@ class MatchExecBot {
       initialized = await this.initialize();
     }
 
-    if (!this.settings?.bot_token) {
-      logger.error('❌ No bot token available, cannot start bot');
-      logger.info('💡 Configure Discord settings in the web interface');
-      process.exit(0);
-    }
+    // Keep trying to log in — handles invalid/expired tokens without crash-looping
+    while (true) {
+      if (!this.settings?.bot_token) {
+        logger.error('❌ No bot token available, cannot start bot');
+        logger.info('💡 Configure Discord settings in the web interface');
+        process.exit(0);
+      }
 
-    try {
-      await this.client.login(this.settings.bot_token);
-      logger.info('✅ Discord bot successfully connected');
-    } catch (error) {
-      logger.error('❌ Failed to login to Discord:', error);
-      process.exit(1);
+      try {
+        await this.client.login(this.settings.bot_token);
+        logger.info('✅ Discord bot successfully connected');
+        break;
+      } catch (error) {
+        const isTokenInvalid = (error as { code?: string }).code === 'TokenInvalid';
+
+        if (isTokenInvalid) {
+          logger.error('❌ Invalid Discord bot token - please update your bot token in the web settings');
+          logger.info('💡 The bot will retry in 30 seconds');
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          this.settings = await this.settingsManager!.loadSettings();
+        } else {
+          logger.error('❌ Failed to login to Discord:', error);
+          process.exit(1);
+        }
+      }
     }
   }
 }

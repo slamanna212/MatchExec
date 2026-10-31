@@ -1,11 +1,25 @@
 import { waitForDatabaseReady } from '../../lib/database';
 import type { Database } from '../../lib/database/connection';
 import * as cron from 'node-cron';
+import { createHash } from 'crypto';
 import type { SchedulerSettings } from '../../shared/types';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
 import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
+
+/**
+ * Token sent as x-internal-token when calling the web API with opt-in auth on.
+ * Mirrors getInternalToken() in src/lib/auth.ts (which uses Web Crypto and
+ * next/server, so it isn't imported here). Returns null when auth is off.
+ */
+function getInternalApiToken(): string | null {
+  if (process.env.INTERNAL_API_TOKEN) return process.env.INTERNAL_API_TOKEN;
+  if (!process.env.ADMIN_PASSWORD) return null;
+  const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+  const secret = process.env.AUTH_SECRET || sha256(process.env.ADMIN_PASSWORD);
+  return sha256(`${secret}:internal`);
+}
 
 interface AnnouncementItem {
   id?: string;
@@ -688,11 +702,14 @@ class MatchExecScheduler {
       
       // Call the channel refresh API
       const baseUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const internalToken = getInternalApiToken();
+      if (internalToken) {
+        headers['x-internal-token'] = internalToken;
+      }
       const response = await fetch(`${baseUrl}/api/channels/refresh-names`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (response.ok) {

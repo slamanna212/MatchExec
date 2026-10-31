@@ -4,8 +4,18 @@ import type { MatchDbRow } from '@/shared/types';
 import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { handleStatusTransition } from '@/lib/transition-handlers';
-import { areAllGamesCompleted, determineMatchWinner } from '@/lib/scoring-functions';
+import { areAllGamesCompleted, determineMatchWinner, resolveWinnerEntity } from '@/lib/scoring-functions';
 import { apiError, apiOk } from '@/lib/api-response';
+
+/** Allowed match status transitions. 'complete' and 'cancelled' are terminal. */
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  created: ['gather', 'cancelled'],
+  gather: ['assign', 'cancelled'],
+  assign: ['battle', 'cancelled'],
+  battle: ['complete', 'cancelled'],
+  complete: [],
+  cancelled: [],
+};
 
 export async function POST(
   request: NextRequest,
@@ -32,14 +42,18 @@ export async function POST(
       return apiError('Match not found', 404);
     }
 
-    // Validate status transition (basic flow validation)
-    const currentStep = MATCH_FLOW_STEPS[currentMatch.status as keyof typeof MATCH_FLOW_STEPS];
-    const newStep = MATCH_FLOW_STEPS[newStatus as keyof typeof MATCH_FLOW_STEPS];
-
-    if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
-      return apiError('Cannot move backwards in match flow', 400);
+    // Explicit transition map: complete/cancelled are terminal and same-status is rejected.
+    if (currentMatch.status === newStatus) {
+      return apiError(`Match is already in "${newStatus}" status`, 400);
+    }
+    const allowed = ALLOWED_TRANSITIONS[currentMatch.status] ?? [];
+    if (!allowed.includes(newStatus)) {
+      return apiError(`Cannot transition match from "${currentMatch.status}" to "${newStatus}"`, 400);
     }
 
+    // Compare-and-set on the current status so concurrent requests can't both transition
+    // (and therefore can't both fire the transition side effects).
+    let updateResult;
     if (newStatus === 'complete') {
       if (!force) {
         const allScored = await areAllGamesCompleted(db, matchId);
@@ -48,15 +62,18 @@ export async function POST(
         }
       }
       const winnerTeam = await determineMatchWinner(db, matchId);
-      await db.run(
-        `UPDATE matches SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [winnerTeam, matchId]
+      updateResult = await db.run(
+        `UPDATE matches SET status = 'complete', winner_team = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?`,
+        [winnerTeam, matchId, currentMatch.status]
       );
     } else {
-      await db.run(
-        `UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [newStatus, matchId]
+      updateResult = await db.run(
+        `UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?`,
+        [newStatus, matchId, currentMatch.status]
       );
+    }
+    if (!updateResult.changes) {
+      return apiError('Match status changed concurrently; please retry', 409);
     }
 
     logger.debug(`🔄 Match ${matchId} transitioned from ${currentMatch.status} to ${newStatus}`);
@@ -84,8 +101,11 @@ export async function POST(
       maps = typeof updatedMatch.maps === 'string' ? JSON.parse(updatedMatch.maps) : updatedMatch.maps;
     }
 
+    const winnerEntity = await resolveWinnerEntity(db, matchId);
+
     const parsedMatch = {
       ...(updatedMatch || {}),
+      winner_entity_type: winnerEntity.type,
       maps,
       map_codes: updatedMatch?.map_codes ? JSON.parse(updatedMatch.map_codes as string) : {},
       map_codes_supported: Boolean(updatedMatch?.map_codes_supported),

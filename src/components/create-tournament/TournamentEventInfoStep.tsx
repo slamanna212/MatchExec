@@ -1,7 +1,7 @@
 'use client'
 
 import type { JSX } from 'react';
-import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Checkbox, Button, Group } from '@mantine/core';
+import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Checkbox, Button, Group, Divider } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
 import { EventImageUpload } from '../create-match/EventImageUpload';
@@ -95,6 +95,29 @@ export function TournamentEventInfoStep({
         description="When enabled, matches in this tournament can be edited before they reach the battle phase. When disabled, matches cannot be edited at any phase."
         checked={formData.allowMatchEditing ?? true}
         onChange={(e) => updateFormData('allowMatchEditing', e.currentTarget.checked)}
+      />
+
+      <TextInput
+        label="Livestream Link"
+        placeholder="https://twitch.tv/... (optional)"
+        value={formData.livestreamLink || ''}
+        onChange={(e) => updateFormData('livestreamLink', e.target.value)}
+      />
+
+      <Divider
+        label={
+          <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: '0.06em' }}>
+            Options
+          </Text>
+        }
+        labelPosition="left"
+      />
+
+      <Checkbox
+        label="Player Notifications"
+        description="Send Discord DMs to players before each tournament match starts"
+        checked={formData.playerNotifications !== false}
+        onChange={(e) => updateFormData('playerNotifications', e.currentTarget.checked)}
       />
 
       {hasStatDefs && (

@@ -2,9 +2,11 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { VoiceChannelService } from './voice-channel-service';
 import { MapCodeService } from './map-code-service';
-import { queueDiscordDeletion } from './scoring-functions';
+import { queueDiscordDeletion, runMatchCompletionSideEffects } from './scoring-functions';
 import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
+import { createMatchTeams } from './match-setup';
+import { cleanMapId } from './utils/map-utils';
 
 async function getMatchName(matchId: string): Promise<string> {
   try {
@@ -161,7 +163,17 @@ export async function handleAssignTransition(matchId: string): Promise<void> {
     // Don't throw - just log the error
   }
 
-  // Create voice channels so they're ready when match starts
+  // Create match_teams rows for this match (idempotent)
+  try {
+    await createMatchTeams(matchId);
+    logger.debug(`✅ Match teams created for match: ${matchId}`);
+  } catch (error) {
+    logger.error('❌ Error creating match teams:', error);
+  }
+
+  // Create voice channels so they're ready when match starts. Channel IDs are
+  // written directly to each match_teams row (N-team aware) inside
+  // setupMatchVoiceChannels — no separate sync step needed.
   try {
     await VoiceChannelService.setupMatchVoiceChannels(matchId);
   } catch (error) {
@@ -253,8 +265,12 @@ export async function handleBattleTransition(matchId: string): Promise<void> {
     if (firstGame) {
       let mapName: string | null = null;
       if (firstGame.map_id) {
-        const strippedId = firstGame.map_id.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-        const mapRow = await db.get<{ name: string }>('SELECT name FROM game_maps WHERE id = ?', [strippedId]);
+        // Scope by the match's game: map IDs are only unique per game.
+        const mapRow = await db.get<{ name: string }>(
+          `SELECT gm.name FROM game_maps gm JOIN matches m ON m.game_id = gm.game_id
+           WHERE m.id = ? AND gm.id = ?`,
+          [matchId, cleanMapId(firstGame.map_id)]
+        );
         mapName = mapRow?.name ?? null;
       }
       await logFeedEvent({
@@ -319,34 +335,10 @@ export async function handleTournamentAssignTransition(tournamentId: string): Pr
  * Queues Discord deletion and cleans up voice channels
  */
 export async function handleCompleteTransition(matchId: string): Promise<void> {
-  try {
-    // Queue Discord message/event deletion
-    await queueDiscordDeletion(matchId);
-    logger.debug(`🗑️ Discord deletion queued for completed match: ${matchId}`);
-  } catch (error) {
-    logger.error('❌ Error queuing Discord deletion for completed match:', error);
-  }
-
-  // Clean up voice channels
-  try {
-    await deleteMatchVoiceChannels(matchId);
-    logger.debug(`🔇 Voice channels deleted for completed match: ${matchId}`);
-  } catch (error) {
-    logger.error('❌ Error deleting voice channels for completed match:', error);
-  }
-
-  try {
-    const name = await getMatchName(matchId);
-    await logFeedEvent({
-      eventType: 'match_completed',
-      priority: 2,
-      title: 'Match Completed',
-      description: `"${name}" has finished`,
-      matchId,
-    });
-  } catch (error) {
-    logger.error('❌ Error logging complete feed event:', error);
-  }
+  // Shared with auto-complete (scoring-functions.updateMatchStatusIfComplete) so the
+  // completion side effects — winner notification, Discord/voice cleanup, stats
+  // queues, match_completed feed event — are defined (and fire) in exactly one place.
+  await runMatchCompletionSideEffects(matchId);
 }
 
 /**

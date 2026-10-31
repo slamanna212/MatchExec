@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { TournamentFormat } from '@/shared/types';
+import type { AnnouncementTime } from '../create-match/useMatchForm';
 
 export interface GameWithIcon {
   id: string;
@@ -31,7 +32,12 @@ export interface TournamentFormData {
   allowPlayerTeamSelection?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
+  announcements?: AnnouncementTime[];
+  playerNotifications?: boolean;
+  livestreamLink?: string;
 }
+
+export type { AnnouncementTime };
 
 /**
  * Custom hook for managing tournament creation form state
@@ -59,7 +65,10 @@ export function useTournamentForm() {
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
       allowMatchEditing: true,
-      statsEnabled: false
+      statsEnabled: false,
+      announcements: [],
+      playerNotifications: true,
+      livestreamLink: '',
     };
   });
 
@@ -97,7 +106,10 @@ export function useTournamentForm() {
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
       allowMatchEditing: true,
-      statsEnabled: false
+      statsEnabled: false,
+      announcements: [],
+      playerNotifications: true,
+      livestreamLink: '',
     });
     sessionStorage.removeItem('tournamentFormData');
   };

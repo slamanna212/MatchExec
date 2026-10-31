@@ -42,6 +42,7 @@ import {
   IconDatabaseExport,
   IconChartBar,
   IconRss,
+  IconTimeline,
 } from '@tabler/icons-react'
 import type { VersionInfo } from '@/lib/version-client';
 import { getVersionInfo } from '@/lib/version-client';
@@ -68,6 +69,7 @@ function isNavSectionActive(itemHref: string, pathname: string | null): boolean 
   if (itemHref === '/settings') return Boolean(pathname?.startsWith('/settings'));
   if (itemHref === '/tournaments') return Boolean(pathname?.startsWith('/tournaments'));
   if (itemHref === '/matches') return Boolean(pathname?.startsWith('/matches'));
+  if (itemHref === '/series') return Boolean(pathname?.startsWith('/series'));
   return false;
 }
 
@@ -154,6 +156,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: string }>> = {
   swords: IconSwords,
   history: IconHistory,
   trophy: IconTrophy,
+  series: IconTimeline,
   gamepad: IconDeviceGamepad2,
   hash: IconHash,
   settings: IconSettings,
@@ -188,6 +191,12 @@ const STATIC_NAV_ITEMS: NavItemData[] = [
     iconName: 'trophy',
     links: [{ label: 'History', href: '/tournaments/history', iconName: 'history' }],
   },
+  {
+    label: 'Series',
+    href: '/series',
+    iconName: 'series',
+    links: [{ label: 'History', href: '/series/history', iconName: 'history' }],
+  },
   { label: 'Games',    href: '/games',    iconName: 'gamepad' },
   { label: 'Channels', href: '/channels', iconName: 'hash' },
   { label: 'Info',     href: '/info',     iconName: 'info' },
@@ -209,6 +218,26 @@ const STATIC_NAV_ITEMS: NavItemData[] = [
 
 interface NavigationProps {
   children: React.ReactNode
+}
+
+function LogoutButton({ compact }: { compact?: boolean }): JSX.Element | null {
+  const [enabled, setEnabled] = useState(false)
+  useEffect(() => {
+    fetch('/api/auth/status')
+      .then(r => r.json())
+      .then(d => setEnabled(!!d.enabled && !!d.authenticated))
+      .catch(() => setEnabled(false))
+  }, [])
+  if (!enabled) return null
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    window.location.href = '/login'
+  }
+  return (
+    <UnstyledButton onClick={logout} aria-label="Log out" style={{ color: '#F5F5F5', fontSize: '13px', textAlign: 'center' }}>
+      {compact ? '⎋' : 'Log out'}
+    </UnstyledButton>
+  )
 }
 
 export function Navigation({ children }: NavigationProps): JSX.Element {
@@ -401,6 +430,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
 
         {/* Drawer Footer */}
         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <LogoutButton />
           {/* Gradient separator */}
           <div style={{
             height: '1px',
@@ -422,7 +452,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
                 </Tooltip>
               ) : (
                 <div
-                  title={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`}
+                  title={versionInfo.isDev ? `Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}` : `Branch: ${versionInfo.branch} | Env: ${versionInfo.platform ?? 'unknown'}`}
                   style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}
                 >
                   {versionInfo.version}
@@ -514,6 +544,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
 
         <AppShell.Section>
           <div style={{ padding: desktopCollapsed ? '12px 6px' : '12px 12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <LogoutButton compact={desktopCollapsed} />
             {/* Gradient separator */}
             <div style={{
               height: '1px',
@@ -535,7 +566,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
                       </div>
                     </Tooltip>
                   ) : (
-                    <Tooltip label={`Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}`} position="top" withArrow>
+                    <Tooltip label={versionInfo.isDev ? `Branch: ${versionInfo.branch} | Commit: ${versionInfo.commitHash}` : `Branch: ${versionInfo.branch} | Env: ${versionInfo.platform ?? 'unknown'}`} position="top" withArrow>
                       <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02', cursor: 'help', userSelect: 'none' }}>
                         {versionInfo.version}
                       </div>

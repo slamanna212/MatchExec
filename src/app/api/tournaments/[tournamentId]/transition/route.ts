@@ -20,11 +20,26 @@ function validateNewStatus(newStatus: string | undefined): string | null {
   return null;
 }
 
+/**
+ * Allowed tournament status transitions. Forward moves are one step at a time (skipping
+ * 'assign' would start a tournament with no bracket); 'complete' and 'cancelled' are terminal.
+ */
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  created: ['gather', 'cancelled'],
+  gather: ['assign', 'cancelled'],
+  assign: ['battle', 'cancelled'],
+  battle: ['complete', 'cancelled'],
+  complete: [],
+  cancelled: [],
+};
+
 function validateTournamentStatusTransition(currentTournament: Tournament, newStatus: string): string | null {
-  const currentStep = TOURNAMENT_FLOW_STEPS[currentTournament.status as keyof typeof TOURNAMENT_FLOW_STEPS];
-  const newStep = TOURNAMENT_FLOW_STEPS[newStatus as keyof typeof TOURNAMENT_FLOW_STEPS];
-  if (newStep.progress < currentStep.progress && newStatus !== 'cancelled') {
-    return 'Cannot move backwards in tournament flow';
+  if (currentTournament.status === newStatus) {
+    return `Tournament is already in "${newStatus}" status`;
+  }
+  const allowed = ALLOWED_TRANSITIONS[currentTournament.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    return `Cannot transition tournament from "${currentTournament.status}" to "${newStatus}"`;
   }
   return null;
 }
@@ -91,7 +106,15 @@ export async function POST(
       }
     }
 
-    await db.run(`UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [newStatus, tournamentId]);
+    // Compare-and-set on the current status so concurrent requests can't both transition
+    // (and therefore can't both fire the transition side effects).
+    const updateResult = await db.run(
+      `UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?`,
+      [newStatus, tournamentId, currentTournament.status]
+    );
+    if (!updateResult.changes) {
+      return apiError('Tournament status changed concurrently; please retry', 409);
+    }
     logger.debug(`🏆 Tournament ${tournamentId} transitioned from ${currentTournament.status} to ${newStatus}`);
 
     await executeTournamentStatusActions(db, tournamentId, newStatus);

@@ -151,7 +151,7 @@ export async function handleEndTransition(
 }
 
 /**
- * Auto-creates solo teams for games with team_size = 1
+ * Auto-creates solo teams for individual modes (FFA/Position scoring or team_size = 1)
  *
  * Checks if the game supports solo play (team_size = 1) and automatically
  * creates one team per participant if no teams exist.
@@ -172,21 +172,36 @@ async function autoCreateSoloTeams(
 
     if (existingTeamCount && existingTeamCount.count > 0) return;
 
-    const participants = await db.all<{ id: string; user_id: string; username: string }>(`
-      SELECT id, user_id, username FROM tournament_participants WHERE tournament_id = ?
+    const participants = await db.all<{ id: string; user_id: string; discord_user_id: string | null; username: string }>(`
+      SELECT id, user_id, discord_user_id, username FROM tournament_participants WHERE tournament_id = ?
     `, [tournamentId]);
 
     if (participants.length === 0) return;
 
-    const gameModes = await db.all<{ team_size: number }>(`
-      SELECT team_size FROM game_modes WHERE game_id = (
-        SELECT game_id FROM tournaments WHERE id = ?
-      )
+    // Individual modes (FFA / Position scoring, or team_size 1) get one solo team per participant.
+    // FFA/Position modes have a NULL team_size, so the scoring_type must be checked as well.
+    const tournamentMode = await db.get<{ scoring_type: string | null; team_size: number | null }>(`
+      SELECT gm.scoring_type, gm.team_size
+      FROM tournaments t
+      JOIN game_modes gm ON gm.id = t.game_mode_id AND gm.game_id = t.game_id
+      WHERE t.id = ?
     `, [tournamentId]);
 
-    const hasSoloMode = gameModes.some((mode: { team_size: number }) => mode.team_size === 1);
+    let isIndividualMode = tournamentMode
+      ? tournamentMode.scoring_type === 'FFA' || tournamentMode.scoring_type === 'Position' || tournamentMode.team_size === 1
+      : false;
 
-    if (hasSoloMode) {
+    if (!tournamentMode) {
+      // Fallback for tournaments without a resolvable mode: any solo mode in the game
+      const gameModes = await db.all<{ team_size: number | null }>(`
+        SELECT team_size FROM game_modes WHERE game_id = (
+          SELECT game_id FROM tournaments WHERE id = ?
+        )
+      `, [tournamentId]);
+      isIndividualMode = gameModes.some(mode => mode.team_size === 1);
+    }
+
+    if (isIndividualMode) {
       logger.debug(`🤖 Auto-creating solo teams for ${participants.length} participants`);
 
       for (const participant of participants) {
@@ -199,9 +214,9 @@ async function autoCreateSoloTeams(
         `, [teamId, tournamentId, participant.username]);
 
         await db.run(`
-          INSERT INTO tournament_team_members (id, team_id, user_id, username)
-          VALUES (?, ?, ?, ?)
-        `, [memberId, teamId, participant.user_id, participant.username]);
+          INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
+          VALUES (?, ?, ?, ?, ?)
+        `, [memberId, teamId, participant.user_id, participant.discord_user_id, participant.username]);
 
         await db.run(`
           UPDATE tournament_participants SET team_assignment = ? WHERE id = ?

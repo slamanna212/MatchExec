@@ -9,11 +9,13 @@ import {
   Button,
   Card,
   Badge,
-  Image
+  Image,
+  Divider
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { TournamentWithGameDetails } from '@/shared/types';
 import { StageRing } from '../StageRing';
+import { SeriesMembershipRow } from '../series/SeriesMembershipRow';
 
 // Use shared type as local alias
 type TournamentWithGame = TournamentWithGameDetails;
@@ -24,6 +26,7 @@ interface TournamentInfoPanelProps {
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
   onAssignTeams: () => void;
   onDelete: () => void;
+  onEdit: () => void;
   onStatusTransition: (newStatus: string) => void;
   onGenerateBracket: () => Promise<void>;
   onProgressTournament: () => Promise<void>;
@@ -35,171 +38,88 @@ export function TournamentInfoPanel({
   parseDbTimestamp,
   onAssignTeams,
   onDelete,
+  onEdit,
   onStatusTransition,
   onGenerateBracket,
   onProgressTournament
 }: TournamentInfoPanelProps): JSX.Element {
   const showActions = tournament.status !== 'complete' && tournament.status !== 'cancelled';
 
-  const getActionButtons = () => {
+  const confirmCloseSignups = () => {
+    modals.openConfirmModal({
+      title: 'Close Signups',
+      children: (
+        <Text size="sm">
+          Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new participants from joining.
+        </Text>
+      ),
+      labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+      confirmProps: { color: 'orange' },
+      onConfirm: () => onStatusTransition('assign'),
+    });
+  };
+
+  const confirmNextRound = () => {
+    modals.openConfirmModal({
+      title: 'Next Round',
+      children: (
+        <Text size="sm">
+          Are you sure you want to advance to the next round? This will progress the tournament to the next set of matches.
+        </Text>
+      ),
+      labels: { confirm: 'Next Round', cancel: 'Cancel' },
+      confirmProps: { color: 'green' },
+      onConfirm: () => { void onProgressTournament(); },
+    });
+  };
+
+  const confirmEndTournament = () => {
+    modals.openConfirmModal({
+      title: 'End Tournament',
+      children: (
+        <Text size="sm">
+          Are you sure you want to end &quot;{tournament.name}&quot;? This will mark the tournament as complete.
+        </Text>
+      ),
+      labels: { confirm: 'End Tournament', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => onStatusTransition('complete'),
+    });
+  };
+
+  /** Primary (filled, full-width) next-step action for the current status. */
+  const getPrimaryAction = (): { label: string; onClick: () => void } | null => {
     switch (tournament.status) {
-      case 'created':
-        return (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            <Button
-              variant="filled"
-              color="violet"
-              fullWidth
-              onClick={() => onStatusTransition('gather')}
-            >
-              Open Signups
-            </Button>
-            <Button
-              color="red"
-              variant="light"
-              fullWidth
-              onClick={onDelete}
-            >
-              Delete Tournament
-            </Button>
-          </div>
-        );
-      case 'gather':
-        return (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            <Button
-              variant="light"
-              color="violet"
-              fullWidth
-              onClick={onAssignTeams}
-            >
-              Assign Teams
-            </Button>
-            <Button
-              variant="light"
-              color="orange"
-              fullWidth
-              onClick={() => {
-                modals.openConfirmModal({
-                  title: 'Close Signups',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to close signups for &quot;{tournament.name}&quot;? This will prevent new participants from joining.
-                    </Text>
-                  ),
-                  labels: { confirm: 'Close Signups', cancel: 'Cancel' },
-                  confirmProps: { color: 'orange' },
-                  onConfirm: () => onStatusTransition('assign'),
-                });
-              }}
-            >
-              Close Signups
-            </Button>
-            <Button
-              color="red"
-              variant="light"
-              fullWidth
-              onClick={onDelete}
-            >
-              Delete Tournament
-            </Button>
-          </div>
-        );
-      case 'assign':
-        return (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            <Button
-              variant="light"
-              color="violet"
-              fullWidth
-              onClick={onAssignTeams}
-            >
-              Assign Teams
-            </Button>
-            {hasBracket ? (
-              <Button
-                variant="filled"
-                color="violet"
-                fullWidth
-                onClick={() => onStatusTransition('battle')}
-              >
-                Start Tournament
-              </Button>
-            ) : (
-              <Button
-                variant="light"
-                color="violet"
-                fullWidth
-                onClick={onGenerateBracket}
-              >
-                Generate Bracket
-              </Button>
-            )}
-            <Button
-              color="red"
-              variant="light"
-              fullWidth
-              onClick={onDelete}
-            >
-              Delete Tournament
-            </Button>
-          </div>
-        );
-      case 'battle':
-        return (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            <Button
-              variant="filled"
-              color="violet"
-              fullWidth
-              onClick={() => {
-                modals.openConfirmModal({
-                  title: 'Next Round',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to advance to the next round? This will progress the tournament to the next set of matches.
-                    </Text>
-                  ),
-                  labels: { confirm: 'Next Round', cancel: 'Cancel' },
-                  confirmProps: { color: 'green' },
-                  onConfirm: () => { void onProgressTournament(); },
-                });
-              }}
-            >
-              Next Round
-            </Button>
-            <Button
-              variant="light"
-              color="red"
-              fullWidth
-              onClick={() => {
-                modals.openConfirmModal({
-                  title: 'End Tournament',
-                  children: (
-                    <Text size="sm">
-                      Are you sure you want to end &quot;{tournament.name}&quot;? This will mark the tournament as complete.
-                    </Text>
-                  ),
-                  labels: { confirm: 'End Tournament', cancel: 'Cancel' },
-                  confirmProps: { color: 'red' },
-                  onConfirm: () => onStatusTransition('complete'),
-                });
-              }}
-            >
-              End Tournament
-            </Button>
-          </div>
-        );
-      default:
-        return null;
+      case 'created': return { label: 'Open Signups', onClick: () => onStatusTransition('gather') };
+      case 'gather': return { label: 'Close Signups', onClick: confirmCloseSignups };
+      case 'assign': return hasBracket
+        ? { label: 'Start Tournament', onClick: () => onStatusTransition('battle') }
+        : { label: 'Generate Bracket', onClick: () => { void onGenerateBracket(); } };
+      case 'battle': return { label: 'Next Round', onClick: confirmNextRound };
+      default: return null;
     }
   };
+
+  const primary = getPrimaryAction();
+  const showAssignTeams = tournament.status === 'gather' || tournament.status === 'assign';
+  const showEnd = tournament.status === 'battle';
+  // Deleting a running tournament isn't offered here (unchanged from the previous layout).
+  const showDelete = tournament.status !== 'battle';
+
+  const formatLabel = (() => {
+    switch (tournament.format) {
+      case 'single-elimination': return 'Single Elimination';
+      case 'double-elimination': return 'Double Elimination';
+      case 'cumulative-points': return 'Cumulative Points';
+      default: return tournament.format;
+    }
+  })();
 
   return (
     <div style={{ position: 'sticky', top: 20 }}>
       <Stack gap="md">
         {/* Card 1: Header */}
-        <Card withBorder padding="lg" shadow="sm">
+        <Card withBorder radius="md" padding="lg" shadow="sm">
           <Stack gap="md">
             <Group>
               <Avatar
@@ -234,14 +154,14 @@ export function TournamentInfoPanel({
         </Card>
 
         {/* Card 2: Details */}
-        <Card withBorder padding="lg" shadow="sm">
+        <Card withBorder radius="md" padding="lg" shadow="sm">
           <Stack gap="sm">
             <Group justify="space-between">
               <Text size="sm" fw={500} c="dimmed">Format:</Text>
-              <Badge variant="light">
-                {tournament.format === 'single-elimination' ? 'Single Elimination' : 'Double Elimination'}
-              </Badge>
+              <Badge variant="light">{formatLabel}</Badge>
             </Group>
+
+            <SeriesMembershipRow kind="tournament" id={tournament.id} />
 
             <Group justify="space-between">
               <Text size="sm" fw={500} c="dimmed">Rounds/Match:</Text>
@@ -311,10 +231,33 @@ export function TournamentInfoPanel({
           </Stack>
         </Card>
 
-        {/* Card 3: Action Buttons */}
+        {/* Card 3: Actions (MatchActionsCard structure) */}
         {showActions && (
-          <Card withBorder padding="lg" shadow="sm">
-            {getActionButtons()}
+          <Card withBorder radius="md" padding="lg" shadow="sm">
+            <Stack gap="xs">
+              {primary && (
+                <Button variant="filled" color="violet" fullWidth onClick={primary.onClick}>
+                  {primary.label}
+                </Button>
+              )}
+              <Group grow gap="xs">
+                {showAssignTeams && (
+                  <Button size="sm" variant="light" color="violet" onClick={onAssignTeams}>Assign Teams</Button>
+                )}
+                <Button size="sm" variant="light" color="violet" onClick={onEdit}>Edit Tournament</Button>
+                {showEnd && (
+                  <Button size="sm" variant="light" color="red" onClick={confirmEndTournament}>End Tournament</Button>
+                )}
+              </Group>
+              {showDelete && (
+                <>
+                  <Divider />
+                  <Button variant="subtle" color="red" fullWidth size="sm" onClick={onDelete}>
+                    Delete Tournament
+                  </Button>
+                </>
+              )}
+            </Stack>
           </Card>
         )}
       </Stack>

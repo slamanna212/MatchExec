@@ -6,7 +6,10 @@ import { logger } from '@/lib/logger';
  */
 export async function queueTournamentWinnerNotification(
   tournamentId: string,
-  winnerId: string
+  winnerId: string,
+  // Cumulative-points tournaments may end in a tie (no single winning team): the
+  // caller supplies the display name and player mentions instead of a team id.
+  override?: { winningTeamName: string; winningPlayers: string[] }
 ): Promise<boolean> {
   try {
     const db = await getDbInstance();
@@ -30,25 +33,36 @@ export async function queueTournamentWinnerNotification(
       return false;
     }
 
-    // Get winning team data
-    const winningTeam = await db.get<{ team_name: string }>(`
-      SELECT team_name
-      FROM tournament_teams
-      WHERE id = ?
-    `, [winnerId]);
+    let winningTeamName: string;
+    let winningPlayerLabels: string[];
 
-    if (!winningTeam) {
-      logger.error('Winning team not found:', winnerId);
-      return false;
+    if (override) {
+      winningTeamName = override.winningTeamName;
+      winningPlayerLabels = override.winningPlayers;
+    } else {
+      // Get winning team data
+      const winningTeam = await db.get<{ team_name: string }>(`
+        SELECT team_name
+        FROM tournament_teams
+        WHERE id = ?
+      `, [winnerId]);
+
+      if (!winningTeam) {
+        logger.error('Winning team not found:', winnerId);
+        return false;
+      }
+
+      // Get winning team members
+      const winningPlayers = await db.all<{ username: string; discord_user_id?: string | null }>(`
+        SELECT username, discord_user_id
+        FROM tournament_team_members
+        WHERE team_id = ?
+        ORDER BY username
+      `, [winnerId]);
+
+      winningTeamName = winningTeam.team_name;
+      winningPlayerLabels = winningPlayers.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username);
     }
-
-    // Get winning team members
-    const winningPlayers = await db.all<{ username: string; discord_user_id?: string | null }>(`
-      SELECT username, discord_user_id
-      FROM tournament_team_members
-      WHERE team_id = ?
-      ORDER BY username
-    `, [winnerId]);
 
     // Get total participant count
     const participantCount = await db.get<{ total: number }>(`
@@ -74,8 +88,8 @@ export async function queueTournamentWinnerNotification(
       `🏆 ${tournamentData.tournament_name}`, // Add trophy emoji to identify as tournament
       tournamentData.game_id,
       'tournament', // Special marker to identify this as a tournament winner
-      winningTeam.team_name,
-      JSON.stringify(winningPlayers.map(p => p.discord_user_id ? `<@${p.discord_user_id}>` : p.username)),
+      winningTeamName,
+      JSON.stringify(winningPlayerLabels),
       participantCount?.total || 0, // Use team1_score for total participants
       tournamentData.format === 'double-elimination' ? 1 : 0, // Use team2_score to store format info
       1 // total_maps = 1 to indicate tournament (vs multiple maps in match)

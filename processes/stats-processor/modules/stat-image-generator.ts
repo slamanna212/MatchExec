@@ -1,12 +1,29 @@
-// @ts-nocheck - Database method calls have complex typing issues
+import type { StatsDb } from './db-types';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { GameStatDefinition } from '../../../shared/types';
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Pick a display color for a player's team. Teams 1/2 keep the classic
+ * blue/red; 3+ teams use their match_teams.team_color (when it is a valid hex).
+ */
+function resolveTeamColor(stat: { team_assignment?: unknown; team_color?: unknown }): string {
+  if (stat.team_assignment === 'blue') return '#5b9bd5';
+  if (stat.team_assignment === 'red') return '#e06c75';
+  if (typeof stat.team_color === 'string' && HEX_COLOR.test(stat.team_color)) return stat.team_color;
+  return '#8a6fd8';
+}
+
 export class StatImageGenerator {
-  constructor(private db: unknown) {}
+  private db: StatsDb;
+
+  constructor(db: unknown) {
+    this.db = db as StatsDb;
+  }
 
   async generateMatchStatImages(queueId: string, matchId: string): Promise<void> {
     try {
@@ -20,9 +37,10 @@ export class StatImageGenerator {
 
       // Load aggregated stats
       const matchStats = await this.db.all(
-        `SELECT mps.*, mp.username, mp.team_assignment
+        `SELECT mps.*, mp.username, mp.team_assignment, mt.team_color, mt.team_name
          FROM match_player_stats mps
          JOIN match_participants mp ON mp.id = mps.participant_id
+         LEFT JOIN match_teams mt ON mt.id = mp.team_id
          WHERE mps.match_id = ?`,
         [matchId]
       );
@@ -35,8 +53,17 @@ export class StatImageGenerator {
         return;
       }
 
-      // Load game stat definitions
-      const match = await this.db.get('SELECT game_id FROM matches WHERE id = ?', [matchId]);
+      // Load game stat definitions + scoring_type (Normal shows a Team column;
+      // FFA/Position have no meaningful team_assignment, so that column and
+      // its blue/red coloring would be nonsensical for them).
+      const match = await this.db.get(
+        `SELECT m.game_id, COALESCE(gm.scoring_type, 'Normal') as scoring_type
+         FROM matches m
+         LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+         WHERE m.id = ?`,
+        [matchId]
+      );
+      const scoringType: string = match?.scoring_type ?? 'Normal';
       const statDefs = match ? await this.db.all(
         'SELECT * FROM game_stat_definitions WHERE game_id = ? ORDER BY sort_order',
         [match.game_id]
@@ -50,7 +77,7 @@ export class StatImageGenerator {
 
       try {
         // Generate team stat image
-        const teamImagePath = await this.generateTeamStatImage(matchId, matchStats, statDefs, outputDir);
+        const teamImagePath = await this.generateTeamStatImage(matchId, matchStats, statDefs, outputDir, scoringType);
         logger.debug(`🖼️ Generated team stat image: ${teamImagePath}`);
 
         // Generate individual player images
@@ -59,7 +86,8 @@ export class StatImageGenerator {
             matchId,
             playerStat,
             statDefs,
-            outputDir
+            outputDir,
+            scoringType
           );
           if (playerImagePath) {
             await this.db.run(
@@ -136,11 +164,18 @@ export class StatImageGenerator {
     matchId: string,
     matchStats: unknown[],
     statDefs: GameStatDefinition[],
-    outputDir: string
+    outputDir: string,
+    scoringType = 'Normal'
   ): Promise<string | null> {
     try {
       // Dynamically import @napi-rs/canvas
       const { createCanvas } = await import('@napi-rs/canvas');
+
+      // Normal matches show a Team column (blue/red); FFA/Position have no
+      // meaningful team_assignment, so that column is dropped for them and
+      // the stat columns shift left to fill the space.
+      const showTeamColumn = scoringType === 'Normal';
+      const statsStartX = showTeamColumn ? 300 : 220;
 
       const width = 1200;
       const height = Math.max(600, 200 + matchStats.length * 60);
@@ -161,16 +196,16 @@ export class StatImageGenerator {
 
       // Column headers
       const primaryStats = statDefs.filter(s => s.is_primary).slice(0, 5);
-      const colWidth = (width - 300) / Math.max(primaryStats.length, 1);
+      const colWidth = (width - statsStartX) / Math.max(primaryStats.length, 1);
 
       ctx.fillStyle = '#a0a0a0';
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('Player', 20, 90);
-      ctx.fillText('Team', 200, 90);
+      if (showTeamColumn) ctx.fillText('Team', 200, 90);
       primaryStats.forEach((stat, i) => {
         ctx.textAlign = 'center';
-        ctx.fillText(stat.display_name, 300 + colWidth * i + colWidth / 2, 90);
+        ctx.fillText(stat.display_name, statsStartX + colWidth * i + colWidth / 2, 90);
       });
 
       // Player rows
@@ -186,9 +221,10 @@ export class StatImageGenerator {
         ctx.textAlign = 'left';
         ctx.fillText(String(stat.username || ''), 20, y + 10);
 
-        const teamColor = stat.team_assignment === 'blue' ? '#5b9bd5' : '#e06c75';
-        ctx.fillStyle = teamColor;
-        ctx.fillText(String(stat.team_assignment || '').toUpperCase(), 200, y + 10);
+        if (showTeamColumn) {
+          ctx.fillStyle = resolveTeamColor(stat);
+          ctx.fillText(String(stat.team_assignment || stat.team_name || '').toUpperCase().slice(0, 12), 200, y + 10);
+        }
 
         let statsObj: Record<string, number> = {};
         try { statsObj = JSON.parse(String(stat.total_stats_json || '{}')); } catch { /* skip */ }
@@ -202,7 +238,7 @@ export class StatImageGenerator {
             : s.format === 'decimal'
             ? val.toFixed(2)
             : String(Math.round(val));
-          ctx.fillText(display, 300 + colWidth * j + colWidth / 2, y + 10);
+          ctx.fillText(display, statsStartX + colWidth * j + colWidth / 2, y + 10);
         });
       }
 
@@ -227,7 +263,8 @@ export class StatImageGenerator {
     matchId: string,
     playerStat: Record<string, unknown>,
     statDefs: GameStatDefinition[],
-    outputDir: string
+    outputDir: string,
+    scoringType = 'Normal'
   ): Promise<string | null> {
     try {
       const { createCanvas } = await import('@napi-rs/canvas');
@@ -241,9 +278,12 @@ export class StatImageGenerator {
       ctx.fillStyle = '#1a1a2e';
       ctx.fillRect(0, 0, width, height);
 
-      // Header bar
-      const teamColor = playerStat.team_assignment === 'blue' ? '#5b9bd5' : '#e06c75';
-      ctx.fillStyle = teamColor;
+      // Header bar — team_assignment only means blue/red for Normal matches;
+      // FFA/Position use a neutral accent since there's no team to color by.
+      const headerColor = scoringType === 'Normal'
+        ? resolveTeamColor(playerStat)
+        : '#8a6fd8';
+      ctx.fillStyle = headerColor;
       ctx.fillRect(0, 0, width, 60);
 
       ctx.fillStyle = '#ffffff';

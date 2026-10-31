@@ -6,6 +6,8 @@ import { parseMatchResponse } from '../helpers';
 import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
 import { apiError, apiOk } from '@/lib/api-response';
+import { withTransaction } from '@/lib/transaction';
+import { deleteMatchDependents } from '@/lib/series';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
 
@@ -48,23 +50,29 @@ export async function GET(
     }
     const db = await getDbInstance();
     
-    // Fetch match with game info including map_codes_supported
+    // Fetch match with game info including map_codes_supported, plus the game
+    // mode's scoring_type/setup_components — needed by the assign/setup-phase
+    // and scoring UI to dispatch the correct per-scoring_type experience.
     const match = await db.get<MatchDbRow & {
       game_name?: string;
       game_icon?: string;
       game_color?: string;
       map_codes_supported?: number;
       tournament_allow_match_editing?: number;
+      scoring_type?: string;
+      setup_components?: string | null;
     }>(`
       SELECT m.*,
         g.name as game_name, g.icon_url as game_icon, g.color as game_color, g.map_codes_supported,
-        t.allow_match_editing as tournament_allow_match_editing
+        t.allow_match_editing as tournament_allow_match_editing,
+        gm.scoring_type, gm.setup_components
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       LEFT JOIN tournaments t ON m.tournament_id = t.id
+      LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
       WHERE m.id = ?
     `, [matchId]);
-    
+
     if (!match) {
       return apiError('Match not found', 404);
     }
@@ -76,7 +84,9 @@ export async function GET(
       map_codes: match.map_codes ? JSON.parse(match.map_codes) : {},
       map_codes_supported: Boolean(match.map_codes_supported),
       // NULL (non-tournament match) → true, 1 → true, 0 → false
-      tournament_allow_match_editing: match.tournament_allow_match_editing !== 0
+      tournament_allow_match_editing: match.tournament_allow_match_editing !== 0,
+      scoring_type: match.scoring_type ?? 'Normal',
+      setup_components: match.setup_components ? JSON.parse(match.setup_components) : null,
     };
     
     return apiOk(parsedMatch);
@@ -254,7 +264,11 @@ export async function DELETE(
 
     // Delete the match (CASCADE will handle related records)
     // Note: Voice channels will be cleaned up by the scheduler when it detects orphaned channels
-    await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
+    // FKs are off, so explicitly remove match_teams, placements and series events too.
+    await withTransaction(db, async () => {
+      await deleteMatchDependents(db, matchId);
+      await db.run('DELETE FROM matches WHERE id = ?', [matchId]);
+    });
     
     return apiOk({ success: true });
   } catch (error) {

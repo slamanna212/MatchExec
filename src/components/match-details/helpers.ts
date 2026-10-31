@@ -77,12 +77,7 @@ export function extractModeNameFromMapId(cleanMapId: string): string {
   return lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
 }
 
-/**
- * Clean map ID by removing instance suffixes
- */
-export function cleanMapId(mapId: string): string {
-  return mapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
-}
+export { cleanMapId } from '@/lib/utils/map-utils';
 
 /**
  * Format a DB timestamp for display using a consistent locale string format

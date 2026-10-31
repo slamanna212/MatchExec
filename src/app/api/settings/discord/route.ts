@@ -108,9 +108,14 @@ async function restartDiscordBot(): Promise<void> {
       logger.debug('🔄 Restarting Discord bot process due to Discord settings change');
       execFile('pkill', ['-TERM', '-f', 'node dist/discord-bot.js'], (error) => {
         if (error) {
-          logger.error('❌ Error restarting Discord bot:', error.message);
+          const exitCode = (error as NodeJS.ErrnoException & { code?: number }).code;
+          if (exitCode === 1) {
+            logger.debug('ℹ️ Discord bot was not running when restart triggered (will be restarted automatically)');
+          } else {
+            logger.error('❌ Error restarting Discord bot:', error.message);
+          }
         } else {
-          logger.debug('✅ Discord bot restart triggered, s6-overlay will restart it');
+          logger.debug('✅ Discord bot restart triggered');
         }
       });
     }

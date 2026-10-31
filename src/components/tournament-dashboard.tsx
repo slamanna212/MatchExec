@@ -24,11 +24,18 @@ import { modals } from '@mantine/modals';
 import type { Tournament} from '@/shared/types';
 import { IconTrophy, IconSearch } from '@tabler/icons-react';
 import { StageRing } from './StageRing';
+import { SeriesCardLinks, type SeriesRef } from './series/SeriesCardLinks';
 import { EmptyState } from './EmptyState';
 import { notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
+
+const FORMAT_LABELS: Record<string, string> = {
+  'single-elimination': 'Single Elim',
+  'double-elimination': 'Double Elim',
+  'cumulative-points': 'Cumulative',
+};
 
 interface TournamentWithGame extends Tournament {
   game_name?: string;
@@ -36,6 +43,7 @@ interface TournamentWithGame extends Tournament {
   game_color?: string;
   event_image_url?: string;
   participant_count?: number;
+  series?: SeriesRef[];
   has_bracket?: boolean;
 }
 
@@ -99,6 +107,7 @@ const TournamentCard = memo(({
         <Stack gap={4} style={{ flex: 1 }}>
           <Text fw={600}>{tournament.name}</Text>
           <Text size="sm" c="dimmed">{tournament.game_name}</Text>
+          <SeriesCardLinks series={tournament.series} />
         </Stack>
         <StageRing status={tournament.status} gameColor={tournament.game_color} type="tournament" />
       </Group>
@@ -114,7 +123,7 @@ const TournamentCard = memo(({
           <Stack gap={2} align="center">
             <Text size="xs" c="dimmed">Format</Text>
             <Badge size="sm" variant="light">
-              {tournament.format === 'single-elimination' ? 'Single Elim' : 'Double Elim'}
+              {FORMAT_LABELS[tournament.format] ?? tournament.format}
             </Badge>
           </Stack>
           <Stack gap={2} align="center">

@@ -37,6 +37,7 @@ interface ModeData {
   maxPlayers?: number;
   scoringType?: string; // FFA or Normal
   scoring?: Record<string, unknown>; // Flexible scoring configuration
+  setupComponents?: string[]; // e.g. ['qualifying', 'grid_order']
 }
 
 interface MapData {
@@ -242,10 +243,11 @@ export class DatabaseSeeder {
         const teamSize = mode.teamSize !== undefined ? mode.teamSize : null;
         const maxTeams = mode.maxTeams || 2;
         const maxPlayers = mode.maxPlayers || null;
+        const setupComponents = mode.setupComponents ? JSON.stringify(mode.setupComponents) : null;
         await this.db.run(`
-          INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType]);
+          INSERT INTO game_modes (id, game_id, name, description, team_size, max_teams, max_players, scoring_type, setup_components, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [mode.id, gameId, mode.name, mode.description, teamSize, maxTeams, maxPlayers, scoringType, setupComponents]);
       }
 
       await this.db.run('COMMIT');

@@ -17,7 +17,8 @@ import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import type { MatchFormat, MatchResult } from '@/shared/types';
 import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
-import { SimpleMapScoring } from '@/components/scoring/SimpleMapScoring';
+import { TeamMapScoring } from '@/components/scoring/TeamMapScoring';
+import { FfaMapScoring } from '@/components/scoring/FfaMapScoring';
 import { PositionScoring } from '@/components/scoring/PositionScoring';
 
 interface MatchData {
@@ -169,8 +170,18 @@ export default function ScoringPage({
               </Button>
             </Group>
           </Stack>
+        ) : scoringType === 'FFA' ? (
+          <FfaMapScoring
+            matchId={matchId}
+            gameType={match.game_id}
+            onResultSubmit={handleResultSubmit}
+            submitting={submitting}
+            onAllMapsCompleted={handleAllMapsCompleted}
+            matchStatsEnabled={(match.stats_enabled ?? 0) === 1}
+            initialGameId={initialGameId}
+          />
         ) : (
-          <SimpleMapScoring
+          <TeamMapScoring
             matchId={matchId}
             gameType={match.game_id}
             onResultSubmit={handleResultSubmit}

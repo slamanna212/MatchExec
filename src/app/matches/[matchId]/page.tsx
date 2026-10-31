@@ -12,6 +12,7 @@ import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
 import { showError, notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
+import { cleanMapId } from '@/lib/utils/map-utils';
 
 const formatMapName = (mapId: string) => {
   // Convert map ID to proper display name
@@ -147,7 +148,7 @@ export default function MatchPage({
           const updated = { ...prev };
           Object.keys(notes).forEach(timestampedMapId => {
             if (!updated[timestampedMapId]) {
-              const baseMapId = timestampedMapId.replace(/-\d+-[a-zA-Z0-9]+$/, '');
+              const baseMapId = cleanMapId(timestampedMapId);
               const baseMapDetail = updated[baseMapId];
 
               if (baseMapDetail) {

@@ -11,13 +11,16 @@
     "name": "Quick Race",
     "description": "Fast-paced competitive racing with shorter duration. Players compete for the best finishing position.",
     "maxTeams": 1,
-    "scoringType": "Position"
+    "scoringType": "Position",
+    "setupComponents": ["qualifying", "grid_order"]
   },
   {
     "id": "endurancerace",
     "name": "Endurance Race",
-    "description": "Long-distance racing that tests consistency and strategy. Finishing position determines the winner.",
-    "maxTeams": 1,
-    "scoringType": "Position"
+    "description": "Long-distance team racing that tests consistency and strategy. Drivers are grouped into teams of 3; each team's finishing position determines the winner.",
+    "maxTeams": 6,
+    "teamSize": 3,
+    "scoringType": "Position",
+    "setupComponents": ["qualifying", "grid_order"]
   }
 ]

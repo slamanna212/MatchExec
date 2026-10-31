@@ -1,4 +1,4 @@
-// @ts-nocheck - Database method calls have complex typing issues
+import type { StatsDb } from './db-types';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -9,10 +9,16 @@ import { resolveModelId } from '../../../src/lib/ai-model-resolver';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 const MAX_RETRIES = 3;
+const MAX_PLAYERS = 64;
+const MAX_NAME_LENGTH = 100;
 const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
 
 export class AIExtractor {
-  constructor(private db: unknown) {}
+  private db: StatsDb;
+
+  constructor(db: unknown) {
+    this.db = db as StatsDb;
+  }
 
   private async appendLog(submissionId: string, message: string): Promise<void> {
     await this.db.run(
@@ -42,12 +48,16 @@ export class AIExtractor {
       );
       if (!submission) throw new Error(`Submission ${submissionId} not found`);
 
-      // Load match to get game_id
+      // Load match to get game_id and scoring_type
       const match = await this.db.get(
-        'SELECT id, game_id FROM matches WHERE id = ?',
+        `SELECT m.id, m.game_id, COALESCE(gm.scoring_type, 'Normal') as scoring_type
+         FROM matches m
+         LEFT JOIN game_modes gm ON gm.id = m.mode_id AND gm.game_id = m.game_id
+         WHERE m.id = ?`,
         [submission.match_id]
       );
       if (!match) throw new Error(`Match ${submission.match_id} not found`);
+      const scoringType: string = match.scoring_type ?? 'Normal';
 
       // Load stat definitions
       const statDefs = await this.db.all(
@@ -90,7 +100,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, scoringType);
       let rawResponse: string | null = null;
       let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;
@@ -147,22 +157,42 @@ export class AIExtractor {
         [rawResponse, submissionId]
       );
 
+      // Resolve team_side ('blue'/'red') to the match's real match_teams.id
+      // (team_order 0/1) — team_id is the new authoritative FK that replaces
+      // team_side's role; team_side is kept for legacy display only.
+      const teamIdBySide = scoringType === 'Normal'
+        ? await this.resolveNormalTeamIds(submission.match_id)
+        : null;
+
       // Create scorecard_player_stats rows
       for (const player of extractionResult.players) {
         const statId = crypto.randomUUID();
+        const teamSide = player.teamSide === 'unknown' ? null : player.teamSide;
+        const teamId = teamSide && teamIdBySide ? (teamIdBySide[teamSide] ?? null) : null;
         await this.db.run(
-          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, team_side, stats_json, confidence_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO scorecard_player_stats (id, submission_id, match_id, match_game_id, extracted_player_name, team_side, team_id, stats_json, confidence_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             statId,
             submissionId,
             submission.match_id,
             submission.match_game_id,
             player.playerName,
-            player.teamSide === 'unknown' ? null : player.teamSide,
+            teamSide,
+            teamId,
             JSON.stringify(player.stats),
             player.confidence,
           ]
+        );
+      }
+
+      // Store extracted positions for FFA/Position modes as a suggestion only
+      // (pre-fills the Position scoring UI; an admin must confirm).
+      if (scoringType !== 'Normal' && extractionResult.playerPositions) {
+        await this.storeSuggestedPositions(
+          submissionId,
+          submission.match_id,
+          extractionResult.playerPositions
         );
       }
 
@@ -272,16 +302,43 @@ export class AIExtractor {
     }
   }
 
-  buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string): string {
+  private async resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> {
+    const teams = await this.db.all<{ id: string; team_order: number }>(
+      `SELECT id, team_order FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC LIMIT 2`,
+      [matchId]
+    );
+    const bySide: Record<string, string> = {};
+    for (const t of teams) {
+      if (t.team_order === 0) bySide.blue = t.id;
+      else if (t.team_order === 1) bySide.red = t.id;
+    }
+    return bySide;
+  }
+
+  buildPrompt(statDefs: GameStatDefinition[], gameName: string, teamSide?: string, aiNotes?: string, scoringType = 'Normal'): string {
     const statList = statDefs.map(s => `- ${s.name}: ${s.display_name} (${s.stat_type})`).join('\n');
     const gameSpecificSection = aiNotes
       ? `\nGAME-SPECIFIC NOTES:\n${aiNotes}${teamSide ? `\nThe submitter is on the ${teamSide} team.` : ''}\n`
       : '';
+
+    const isPositionBased = scoringType === 'Position' || scoringType === 'FFA';
+    const positionInstruction = isPositionBased
+      ? `- position: the player's finishing position/rank (1 = first place). Include this for ALL players.`
+      : `- teamSide: "blue", "red", or "unknown" based on team colors or positioning`;
+
+    const positionSchema = isPositionBased
+      ? `      "position": number,`
+      : `      "teamSide": "blue" | "red" | "unknown",`;
+
+    const positionNote = isPositionBased
+      ? `- This is a ${scoringType} mode — extract finishing positions/ranks for ALL players\n- position 1 = winner/first place`
+      : ``;
+
     return `You are analyzing a ${gameName} end-of-match scorecard screenshot.
 
 Extract ALL player statistics visible in the image. For each player, provide:
 - playerName: the in-game username exactly as shown
-- teamSide: "blue", "red", or "unknown" based on team colors or positioning
+${positionInstruction}
 - stats: an object with the following fields (use 0 if not visible):
 ${statList}
 - confidence: a number from 0 to 1 indicating how confident you are in the extraction
@@ -295,13 +352,14 @@ IMPORTANT RULES:
 - Normalize numbers: "12.5K" → 12500, "1.2M" → 1200000
 - For decimal stats (like KDA), keep as decimal number
 - If a stat is not visible for a player, use 0
+${positionNote}
 
 Return JSON matching this exact structure:
 {
   "players": [
     {
       "playerName": "string",
-      "teamSide": "blue" | "red" | "unknown",
+${positionSchema}
       "stats": { ${statDefs.map(s => `"${s.name}": number`).join(', ')} },
       "confidence": number
     }
@@ -330,9 +388,11 @@ Return JSON matching this exact structure:
 
     if (!Array.isArray(parsed.players)) return 'players is not an array';
     if (parsed.players.length === 0) return 'players array is empty';
+    if (parsed.players.length > MAX_PLAYERS) return 'too many players';
 
     for (const player of parsed.players) {
       if (!player.playerName || typeof player.playerName !== 'string') return 'player missing playerName';
+      if (player.playerName.length > MAX_NAME_LENGTH) return 'playerName too long';
       if (!player.stats || typeof player.stats !== 'object' || Array.isArray(player.stats)) return 'player missing stats object';
 
       for (const val of Object.values(player.stats)) {
@@ -355,12 +415,87 @@ Return JSON matching this exact structure:
   }
 
   parseExtractionResult(rawResponse: string): AIExtractionResult {
-    // Strip markdown fences if present
     let cleaned = rawResponse.trim();
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     }
-    return JSON.parse(cleaned) as AIExtractionResult;
+    const result = JSON.parse(cleaned) as AIExtractionResult;
+
+    // Populate playerPositions index from per-player position field
+    const hasPositions = result.players.some(p => typeof p.position === 'number');
+    if (hasPositions) {
+      result.playerPositions = {};
+      for (const player of result.players) {
+        if (typeof player.position === 'number' && !(player.playerName in result.playerPositions)) {
+          result.playerPositions[player.playerName] = player.position;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate AI-extracted finishing positions and map them to this match's
+   * participants. AI output is untrusted (a doctored screenshot can say
+   * anything), so this only ever produces a *suggestion*: strict shape checks,
+   * positive unique integers, and only participants of this match. Returns
+   * null when nothing usable remains.
+   */
+  buildSuggestedPositions(
+    playerPositions: unknown,
+    participants: Array<{ id: string; username: string }>
+  ): Record<string, number> | null {
+    if (!playerPositions || typeof playerPositions !== 'object' || Array.isArray(playerPositions)) return null;
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const suggestion: Record<string, number> = {};
+    const usedPositions = new Set<number>();
+
+    for (const [playerName, position] of Object.entries(playerPositions as Record<string, unknown>)) {
+      if (typeof position !== 'number' || !Number.isInteger(position) || position < 1 || position > MAX_PLAYERS) return null;
+      if (usedPositions.has(position)) return null; // duplicate rank: ambiguous, discard the lot
+
+      const normalizedName = normalize(String(playerName).slice(0, MAX_NAME_LENGTH));
+      if (!normalizedName) continue;
+      const matched = participants.filter(p => normalize(p.username) === normalizedName);
+      if (matched.length !== 1) continue; // unknown or ambiguous name
+      if (suggestion[matched[0].id] !== undefined) return null; // two extracted names -> same participant
+
+      suggestion[matched[0].id] = position;
+      usedPositions.add(position);
+    }
+
+    return Object.keys(suggestion).length > 0 ? suggestion : null;
+  }
+
+  private async storeSuggestedPositions(
+    submissionId: string,
+    matchId: string,
+    playerPositions: Record<string, number>
+  ): Promise<void> {
+    try {
+      const participants = await this.db.all<{ id: string; username: string }>(
+        'SELECT id, username FROM match_participants WHERE match_id = ?',
+        [matchId]
+      );
+      if (!participants || participants.length === 0) return;
+
+      const suggestion = this.buildSuggestedPositions(playerPositions, participants);
+      if (!suggestion) {
+        logger.warning(`AI positions for submission ${submissionId} were unusable; no suggestion stored`);
+        return;
+      }
+
+      // Never writes official results: an admin confirms via the Position scoring UI.
+      await this.db.run(
+        'UPDATE scorecard_submissions SET suggested_positions = ? WHERE id = ?',
+        [JSON.stringify(suggestion), submissionId]
+      );
+      logger.debug(`Stored AI position suggestion for submission ${submissionId}`);
+    } catch (err) {
+      logger.error('Error storing AI position suggestion:', err);
+    }
   }
 
   async autoAssignParticipants(

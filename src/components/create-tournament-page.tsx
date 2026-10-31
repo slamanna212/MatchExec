@@ -16,6 +16,7 @@ import { TournamentEventInfoStep } from './create-tournament/TournamentEventInfo
 import { TournamentFormatStep } from './create-tournament/TournamentFormatStep';
 import { TournamentTeamSettingsStep } from './create-tournament/TournamentTeamSettingsStep';
 import { TournamentReviewStep } from './create-tournament/TournamentReviewStep';
+import { AnnouncementsStep } from './create-match/AnnouncementsStep';
 
 export function CreateTournamentPage(): JSX.Element {
   const router = useRouter();
@@ -200,10 +201,12 @@ export function CreateTournamentPage(): JSX.Element {
       case 2:
         return !!(formData.name && formData.roundsPerMatch);
       case 3:
-        return !!(formData.format && formData.gameModeId);
+        return true; // Announcements step — always optional
       case 4:
-        return true;
+        return !!(formData.format && formData.gameModeId);
       case 5:
+        return true;
+      case 6:
         return true;
       default:
         return true;
@@ -228,6 +231,7 @@ export function CreateTournamentPage(): JSX.Element {
         {/* Step Indicator */}
         <Stepper active={currentStep - 1} size="sm">
           <Stepper.Step icon={<IconDeviceGamepad2 size={18} />} />
+          <Stepper.Step icon={<IconCalendar size={18} />} />
           <Stepper.Step icon={<IconCalendar size={18} />} />
           <Stepper.Step icon={<IconTrophy size={18} />} />
           <Stepper.Step icon={<IconUsers size={18} />} />
@@ -261,16 +265,27 @@ export function CreateTournamentPage(): JSX.Element {
         )}
 
         {currentStep === 3 && (
+          <AnnouncementsStep
+            announcements={formData.announcements || []}
+            updateFormData={(field, value) => {
+              if (field === 'announcements') updateFormData('announcements', value);
+            }}
+            onBack={handleBack}
+            onNext={handleNext}
+          />
+        )}
+
+        {currentStep === 4 && (
           <TournamentFormatStep
             formData={formData}
             updateFormData={updateFormData}
             onBack={handleBack}
             onNext={handleNext}
-            canProceed={canProceedFromStep(3)}
+            canProceed={canProceedFromStep(4)}
           />
         )}
 
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <TournamentTeamSettingsStep
             formData={formData}
             newTeamName={newTeamName}
@@ -283,13 +298,13 @@ export function CreateTournamentPage(): JSX.Element {
           />
         )}
 
-        {currentStep === 5 && (
+        {currentStep === 6 && (
           <TournamentReviewStep
             formData={formData}
             games={games}
             onBack={handleBack}
             onCreate={handleCreateTournament}
-            canProceed={canProceedFromStep(5)}
+            canProceed={canProceedFromStep(6)}
           />
         )}
       </Stack>

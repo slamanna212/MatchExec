@@ -11,14 +11,16 @@ import {
   Stack,
   Grid,
   Card,
-  Group
+  Group,
+  Breadcrumbs,
+  Anchor
 } from '@mantine/core';
-import { IconTrophy } from '@tabler/icons-react';
-import { PageHeader } from '@/components/PageHeader';
+import Link from 'next/link';
 import { modals } from '@mantine/modals';
 import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentInfoPanel } from '@/components/tournament-details/TournamentInfoPanel';
 import { TournamentContentPanel } from '@/components/tournament-details/TournamentContentPanel';
+import type { CumulativeStanding } from '@/components/tournament/leaderboard-view';
 import { showError, notificationHelper } from '@/lib/notifications';
 
 // Utility function to properly convert SQLite UTC timestamps to Date objects
@@ -85,7 +87,7 @@ export default function TournamentPage({
   const [tournament, setTournament] = useState<TournamentWithGame | null>(null);
   const [teams, setTeams] = useState<TeamWithMembers[]>([]);
   const [matches, setMatches] = useState<BracketMatch[]>([]);
-  const [standings, setStandings] = useState<TeamStanding[]>([]);
+  const [standings, setStandings] = useState<(TeamStanding | CumulativeStanding)[]>([]);
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -544,43 +546,55 @@ export default function TournamentPage({
     );
   }
 
-  return (
-    <div className="container mx-auto py-6 px-2">
-      <Stack gap="lg">
-        <PageHeader
-          icon={IconTrophy}
-          title={tournament.name}
-          breadcrumbs={[{ title: 'Tournaments', href: '/tournaments' }]}
-        />
+  const isHistory = tournament.status === 'complete';
+  const parentTitle = isHistory ? 'Tournament History' : 'Tournaments';
+  const parentHref = isHistory ? '/tournaments/history' : '/tournaments';
 
-        <Grid>
-          <Grid.Col span={{ base: 12, md: 4 }}>
-            <TournamentInfoPanel
-              tournament={tournament}
-              hasBracket={hasBracket}
-              parseDbTimestamp={parseDbTimestamp}
-              onAssignTeams={() => router.push(`/tournaments/${tournamentId}/assign`)}
-              onDelete={handleDelete}
-              onStatusTransition={handleStatusTransition}
-              onGenerateBracket={handleGenerateBracket}
-              onProgressTournament={handleProgressTournament}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 8 }}>
-            <TournamentContentPanel
-              tournament={tournament}
-              teams={teams}
-              matches={matches}
-              standings={standings}
-              loading={contentLoading}
-              onGenerateMatches={handleGenerateBracket}
-              onBracketAssignment={handleBracketAssignment}
-              onStartMatch={handleStartMatch}
-              onStartAllMatches={handleStartAllMatches}
-            />
-          </Grid.Col>
-        </Grid>
-      </Stack>
+  return (
+    <div className="container mx-auto py-6 pl-2 pr-2">
+      <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
+        <Anchor size="sm" c="dimmed" component={Link} href={parentHref}>{parentTitle}</Anchor>
+        <Text size="sm">{tournament.name}</Text>
+      </Breadcrumbs>
+      <Anchor
+        component={Link}
+        href={parentHref}
+        size="sm"
+        c="dimmed"
+        hiddenFrom="sm"
+        style={{ display: 'block', marginBottom: '0.5rem', marginLeft: '0.5rem' }}
+      >
+        ← {parentTitle}
+      </Anchor>
+
+      <Grid gap="lg">
+        <Grid.Col span={{ base: 12, md: 4 }} pl={{ base: 'md', md: 0 }}>
+          <TournamentInfoPanel
+            tournament={tournament}
+            hasBracket={hasBracket}
+            parseDbTimestamp={parseDbTimestamp}
+            onAssignTeams={() => router.push(`/tournaments/${tournamentId}/assign`)}
+            onDelete={handleDelete}
+            onEdit={() => router.push(`/tournaments/${tournamentId}/edit`)}
+            onStatusTransition={handleStatusTransition}
+            onGenerateBracket={handleGenerateBracket}
+            onProgressTournament={handleProgressTournament}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 8 }} pr={{ base: 'md', md: 0 }}>
+          <TournamentContentPanel
+            tournament={tournament}
+            teams={teams}
+            matches={matches}
+            standings={standings}
+            loading={contentLoading}
+            onGenerateMatches={handleGenerateBracket}
+            onBracketAssignment={handleBracketAssignment}
+            onStartMatch={handleStartMatch}
+            onStartAllMatches={handleStartAllMatches}
+          />
+        </Grid.Col>
+      </Grid>
     </div>
   );
 }

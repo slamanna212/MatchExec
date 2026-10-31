@@ -22,7 +22,10 @@ export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
     eventImageUrl: formData.eventImageUrl || null,
     allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false,
     allowMatchEditing: formData.allowMatchEditing !== false,
-    statsEnabled: formData.statsEnabled || false
+    statsEnabled: formData.statsEnabled || false,
+    announcements: formData.announcements && formData.announcements.length > 0 ? formData.announcements : undefined,
+    playerNotifications: formData.playerNotifications !== false,
+    livestreamLink: formData.livestreamLink || undefined,
   };
 }
 

@@ -3,6 +3,7 @@ import { getDbInstance } from '../../../../../lib/database-init';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { withTransaction } from '@/lib/transaction';
 
 export async function GET(
   request: NextRequest,
@@ -162,49 +163,84 @@ export async function PUT(
       return apiError('Tournament not found', 404);
     }
     
-    // Clear all existing team member assignments for this tournament
-    await db.run(`
-      DELETE FROM tournament_team_members
-      WHERE team_id IN (
-        SELECT id FROM tournament_teams WHERE tournament_id = ?
-      )
-    `, [tournamentId]);
+    // Every team must belong to this tournament; otherwise a stray teamId would
+    // write members into another tournament's team.
+    const ownedTeams = await db.all<{ id: string }>(
+      'SELECT id FROM tournament_teams WHERE tournament_id = ?',
+      [tournamentId]
+    );
+    const ownedIds = new Set(ownedTeams.map(t => t.id));
+    const foreign = teams.find((t: { teamId?: string }) => !t || typeof t.teamId !== 'string' || !ownedIds.has(t.teamId));
+    if (foreign) {
+      return apiError('teams contains a team that does not belong to this tournament', 400);
+    }
 
-    // Reset all participants in this tournament to reserve status
-    await db.run(`
-      UPDATE tournament_participants
-      SET team_assignment = NULL
-      WHERE tournament_id = ?
-    `, [tournamentId]);
-
-    // Add new team member assignments
+    // Members must be signed-up participants of this tournament (their discord_user_id is what
+    // series standings use as player identity) and can only be on one team.
+    const participantRows = await db.all<{ user_id: string }>(
+      'SELECT user_id FROM tournament_participants WHERE tournament_id = ?',
+      [tournamentId]
+    );
+    const participantIds = new Set(participantRows.map(p => p.user_id));
+    const seen = new Set<string>();
     for (const team of teams) {
-      if (team.members && team.members.length > 0) {
-        for (const member of team.members) {
-          const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-          // Get discord_user_id from tournament_participants
-          const participant = await db.get<{ discord_user_id: string }>(`
-            SELECT discord_user_id
-            FROM tournament_participants
-            WHERE tournament_id = ? AND user_id = ?
-          `, [tournamentId, member.userId]);
-
-          await db.run(`
-            INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username, is_captain)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [memberId, team.teamId, member.userId, participant?.discord_user_id || null, member.username, member.isCaptain ? 1 : 0]);
-
-          // Update the participant's team assignment
-          await db.run(`
-            UPDATE tournament_participants
-            SET team_assignment = ?
-            WHERE tournament_id = ? AND user_id = ?
-          `, [team.teamId, tournamentId, member.userId]);
+      for (const member of team.members ?? []) {
+        if (!member || typeof member.userId !== 'string' || !participantIds.has(member.userId)) {
+          return apiError(`Member ${member?.userId ?? '(missing userId)'} is not a participant of this tournament`, 400);
         }
+        if (seen.has(member.userId)) {
+          return apiError(`Member ${member.userId} is assigned to more than one team`, 400);
+        }
+        seen.add(member.userId);
       }
     }
-    
+
+    await withTransaction(db, async () => {
+      // Clear all existing team member assignments for this tournament
+      await db.run(`
+        DELETE FROM tournament_team_members
+        WHERE team_id IN (
+          SELECT id FROM tournament_teams WHERE tournament_id = ?
+        )
+      `, [tournamentId]);
+
+      // Reset all participants in this tournament to reserve status
+      await db.run(`
+        UPDATE tournament_participants
+        SET team_assignment = NULL
+        WHERE tournament_id = ?
+      `, [tournamentId]);
+
+      // Add new team member assignments
+      for (const team of teams) {
+        if (team.members && team.members.length > 0) {
+          for (const member of team.members) {
+            const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
+
+            // Get discord_user_id from tournament_participants
+            const participant = await db.get<{ discord_user_id: string }>(`
+              SELECT discord_user_id
+              FROM tournament_participants
+              WHERE tournament_id = ? AND user_id = ?
+            `, [tournamentId, member.userId]);
+
+            await db.run(`
+              INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username, is_captain)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `, [memberId, team.teamId, member.userId, participant?.discord_user_id || null, member.username, member.isCaptain ? 1 : 0]);
+
+            // Update the participant's team assignment
+            await db.run(`
+              UPDATE tournament_participants
+              SET team_assignment = ?
+              WHERE tournament_id = ? AND user_id = ?
+            `, [team.teamId, tournamentId, member.userId]);
+          }
+        }
+      }
+      
+    });
+
     return apiOk({ success: true });
   } catch (error) {
     logger.error('Error updating team assignments:', error);
@@ -237,8 +273,21 @@ export async function DELETE(
       return apiError('Team not found', 404);
     }
 
-    // Delete the team (CASCADE will handle team members)
-    await db.run('DELETE FROM tournament_teams WHERE id = ?', [teamId]);
+    // A team that is already placed in the bracket can't be removed without breaking it.
+    const inBracket = await db.get<{ count: number }>(
+      'SELECT COUNT(*) as count FROM tournament_matches WHERE tournament_id = ? AND (team1_id = ? OR team2_id = ?)',
+      [tournamentId, teamId, teamId]
+    );
+    if (inBracket && inBracket.count > 0) {
+      return apiError('Cannot delete a team that is part of the generated bracket', 409);
+    }
+
+    // FKs are off, so remove the team's members and clear participants' assignment explicitly.
+    await withTransaction(db, async () => {
+      await db.run('DELETE FROM tournament_team_members WHERE team_id = ?', [teamId]);
+      await db.run('UPDATE tournament_participants SET team_assignment = NULL WHERE tournament_id = ? AND team_assignment = ?', [tournamentId, teamId]);
+      await db.run('DELETE FROM tournament_teams WHERE id = ?', [teamId]);
+    });
 
     return apiOk({ success: true });
   } catch (error) {

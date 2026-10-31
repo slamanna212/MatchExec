@@ -25,6 +25,7 @@ import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
 import { IconClockHour3 } from '@tabler/icons-react';
+import { SeriesCardLinks, type SeriesRef } from './series/SeriesCardLinks';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -34,6 +35,10 @@ interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start
   rounds?: number;
   maps?: string[];
   livestream_link?: string;
+  tournament_name?: string;
+  tournament_round?: number;
+  tournament_bracket_type?: string;
+  series?: SeriesRef[];
   event_image_url?: string;
   created_at: string;
   updated_at: string;
@@ -92,6 +97,12 @@ const HistoryMatchCard = memo(({
         <Stack gap="xs" style={{ flex: 1 }}>
           <Text fw={600}>{match.name}</Text>
           <Text size="sm" c="dimmed">{match.game_name}</Text>
+          {match.tournament_name && (
+            <Text size="xs" c="violet" fw={500}>
+              {match.tournament_name} - Round {match.tournament_round} ({match.tournament_bracket_type})
+            </Text>
+          )}
+          <SeriesCardLinks series={match.series} />
         </Stack>
         <StageRing status={match.status} gameColor={match.game_color} />
       </Group>

@@ -100,3 +100,47 @@ export function safeJSONStringify(value: unknown): string {
     return '[]';
   }
 }
+
+/**
+ * Validate a points spread (per match or per tournament). Accepts the flat `{ "1": 25, "2": 18 }` form
+ * the create form sends, or the `{ type: 'Position', pointsPerPosition: {...} }` form
+ * used by games and tournaments. Returns an error message or null.
+ */
+export function validatePositionScoringOverride(override: unknown): string | null {
+  if (override === undefined || override === null) return null;
+  if (typeof override !== 'object' || Array.isArray(override)) {
+    return 'positionScoringOverride must be an object';
+  }
+  const record = override as Record<string, unknown>;
+  const spread = (record.pointsPerPosition ?? record) as Record<string, unknown>;
+  if (typeof spread !== 'object' || spread === null || Array.isArray(spread)) {
+    return 'positionScoringOverride.pointsPerPosition must be an object';
+  }
+  const entries = Object.entries(spread);
+  if (entries.length === 0) return 'positionScoringOverride must define at least one position';
+  for (const [position, points] of entries) {
+    if (!/^[1-9]\d*$/.test(position)) {
+      return `positionScoringOverride has invalid position "${position}"`;
+    }
+    if (typeof points !== 'number' || !Number.isFinite(points)) {
+      return `positionScoringOverride points for position ${position} must be a number`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Validate a points spread stored as a JSON string (tournaments.position_scoring_override).
+ * Returns an error message or null.
+ */
+export function validatePositionScoringOverrideJson(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (typeof raw !== 'string') return 'positionScoringOverride must be a JSON string';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return 'positionScoringOverride is not valid JSON';
+  }
+  return validatePositionScoringOverride(parsed);
+}

@@ -421,7 +421,8 @@ export class VoiceHandler {
     blueTeamChannelId: string | null,
     redTeamChannelId: string | null,
     audioType: 'welcome' | 'nextround' | 'finish',
-    firstTeam: 'blue' | 'red' = 'blue'
+    firstTeam: 'blue' | 'red' = 'blue',
+    matchId?: string
   ): Promise<{ success: boolean; message: string }> {
     try {
       if (!this.client.isReady()) {
@@ -438,10 +439,20 @@ export class VoiceHandler {
         return { success: false, message: 'Voice announcements are disabled' };
       }
 
-      const channels = [];
-      
-      // Add channels in the order specified by firstTeam
-      if (firstTeam === 'blue') {
+      const channels: Array<{ id: string; team: string }> = [];
+
+      // N-team aware: announce in every match_teams.voice_channel_id (deduped, so a
+      // shared FFA lobby is announced once). The legacy blue/red columns remain the
+      // fallback when match_teams has no channels.
+      const teamChannelIds = matchId ? await this.getMatchTeamVoiceChannels(matchId) : [];
+      if (teamChannelIds.length > 0) {
+        // Rotate the starting channel: 'blue' starts at team 1, 'red' at team 2, etc.
+        const start = firstTeam === 'red' ? 1 % teamChannelIds.length : 0;
+        for (let i = 0; i < teamChannelIds.length; i++) {
+          const idx = (start + i) % teamChannelIds.length;
+          channels.push({ id: teamChannelIds[idx], team: `team ${idx + 1}` });
+        }
+      } else if (firstTeam === 'blue') {
         if (blueTeamChannelId) channels.push({ id: blueTeamChannelId, team: 'blue' });
         if (redTeamChannelId) channels.push({ id: redTeamChannelId, team: 'red' });
       } else {
@@ -476,6 +487,25 @@ export class VoiceHandler {
     } catch (error) {
       logger.error('❌ Error playing team announcements:', error);
       return { success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+
+  /**
+   * Distinct voice channel IDs of a match's non-reserve teams, in team_order.
+   */
+  private async getMatchTeamVoiceChannels(matchId: string): Promise<string[]> {
+    if (!this.db) return [];
+    try {
+      const rows = await this.db.all<{ voice_channel_id: string }>(
+        `SELECT voice_channel_id FROM match_teams
+         WHERE match_id = ? AND is_reserve = 0 AND voice_channel_id IS NOT NULL AND voice_channel_id != ''
+         ORDER BY team_order ASC`,
+        [matchId]
+      );
+      return [...new Set((rows ?? []).map(r => r.voice_channel_id))];
+    } catch (error) {
+      logger.error('❌ Error reading match team voice channels:', error);
+      return [];
     }
   }
 

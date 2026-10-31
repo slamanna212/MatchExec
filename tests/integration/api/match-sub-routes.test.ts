@@ -102,7 +102,7 @@ describe('Match Sub-Routes API', () => {
 
   describe('POST /api/matches/[matchId]/assign-teams', () => {
     it('returns 400 when teamAssignments is missing', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'assign' });
       const request = createMockRequest('POST', `/api/matches/${match.id}/assign-teams`, {});
       const response = await assignTeams(request, createRouteParams({ matchId: match.id }));
       const { status } = await parseResponse(response);
@@ -110,7 +110,7 @@ describe('Match Sub-Routes API', () => {
     });
 
     it('returns 400 when teamAssignments is not an array', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'assign' });
       const request = createMockRequest('POST', `/api/matches/${match.id}/assign-teams`, {
         teamAssignments: 'invalid',
       });
@@ -120,7 +120,7 @@ describe('Match Sub-Routes API', () => {
     });
 
     it('assigns teams to participants successfully', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'assign' });
       const participant = await createMatchParticipant(match.id, 'user-1', 'Player1');
 
       const request = createMockRequest('POST', `/api/matches/${match.id}/assign-teams`, {
@@ -145,7 +145,7 @@ describe('Match Sub-Routes API', () => {
     });
 
     it('returns error for invalid team value', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'assign' });
       const participant = await createMatchParticipant(match.id, 'user-2', 'Player2');
 
       const request = createMockRequest('POST', `/api/matches/${match.id}/assign-teams`, {
@@ -160,7 +160,7 @@ describe('Match Sub-Routes API', () => {
     });
 
     it('handles empty teamAssignments array', async () => {
-      const match = await createMatch(game.id, mode.id);
+      const match = await createMatch(game.id, mode.id, { status: 'assign' });
       const request = createMockRequest('POST', `/api/matches/${match.id}/assign-teams`, {
         teamAssignments: [],
       });

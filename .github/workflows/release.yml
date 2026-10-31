@@ -84,8 +84,8 @@ jobs:
         tags: |
           ghcr.io/${{ github.actor }}/matchexec:v${{ needs.check-version.outputs.version }}-${{ matrix.platform }}
           ghcr.io/${{ github.actor }}/matchexec:latest-${{ matrix.platform }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type=gha,scope=${{ matrix.platform }}
+        cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 
   release:
     runs-on: ubuntu-latest

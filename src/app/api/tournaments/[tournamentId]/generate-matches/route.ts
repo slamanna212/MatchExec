@@ -2,12 +2,14 @@ import type {NextResponse,  NextRequest} from 'next/server';
 import { getDbInstance } from '@/lib/database-init';
 import { apiError, apiOk } from '@/lib/api-response';
 import { logger } from '@/lib/logger';
+import { withKeyedLock } from '@/lib/keyed-lock';
 import type {
   BracketAssignment
 } from '@/lib/tournament-bracket';
 import {
   generateSingleEliminationMatches,
   generateDoubleEliminationMatches,
+  generateCumulativeMatches,
   saveGeneratedMatches
 } from '@/lib/tournament-bracket';
 import type { Database } from '@/lib/database/connection';
@@ -26,6 +28,7 @@ interface GeneratedMatchData {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   generatedMatches: any[];
   tournamentMatches: TournamentMatchRecord[];
+  isCumulative?: boolean;
 }
 
 async function getBracketAssignments(db: Database, tournamentId: string, provided?: BracketAssignment[]): Promise<BracketAssignment[] | { error: string }> {
@@ -37,6 +40,24 @@ async function getBracketAssignments(db: Database, tournamentId: string, provide
 
 async function generateMatchesForFormat(tournament: Tournament, tournamentId: string, bracketAssignments: BracketAssignment[]): Promise<GeneratedMatchData | { error: string }> {
   const startTime = tournament.start_time ? new Date(tournament.start_time) : undefined;
+  const statsEnabled = tournament.stats_enabled ?? 0;
+
+  if (tournament.format === 'cumulative-points') {
+    const { matches, tournamentMatches } = await generateCumulativeMatches(
+      tournamentId, tournament.game_id, tournament.rounds_per_match, startTime
+    );
+    const matchesWithStats = matches.map(m => ({ ...m, stats_enabled: statsEnabled }));
+    // Add all team members to the cumulative match after saving
+    const tmRecords: TournamentMatchRecord[] = tournamentMatches.map(tm => ({
+      id: tm.id,
+      tournament_id: tournamentId,
+      round: tm.round,
+      bracket_type: tm.bracket_type,
+      match_order: tm.match_order,
+    }));
+    return { generatedMatches: matchesWithStats, tournamentMatches: tmRecords, isCumulative: true };
+  }
+
   let matches;
   if (tournament.format === 'single-elimination') {
     matches = await generateSingleEliminationMatches(tournamentId, bracketAssignments, tournament.game_id, tournament.rounds_per_match, startTime);
@@ -45,7 +66,6 @@ async function generateMatchesForFormat(tournament: Tournament, tournamentId: st
   } else {
     return { error: 'Invalid tournament format' };
   }
-  const statsEnabled = tournament.stats_enabled ?? 0;
   const matchesWithStats = matches.map(m => ({ ...m, stats_enabled: statsEnabled }));
   const tournamentMatches: TournamentMatchRecord[] = matchesWithStats.map((match, index) => ({
     id: match.id,
@@ -92,8 +112,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ tournamentId: string }> }
 ): Promise<NextResponse> {
+  const { tournamentId } = await params;
+  // Serialised per tournament: the "already generated" check and the insert span several
+  // awaits, so overlapping requests would otherwise each build a full bracket.
+  return withKeyedLock(`generate-matches:${tournamentId}`, () => generateForTournament(request, tournamentId));
+}
+
+async function generateForTournament(request: NextRequest, tournamentId: string): Promise<NextResponse> {
   try {
-    const { tournamentId } = await params;
     const body = await request.json().catch(() => ({}));
     const { assignments }: { assignments?: BracketAssignment[] } = body;
 
@@ -113,23 +139,32 @@ export async function POST(
       return apiError('Matches have already been generated for this tournament', 400);
     }
 
-    const bracketAssignmentsResult = await getBracketAssignments(db, tournamentId, assignments);
-    if ('error' in bracketAssignmentsResult) {
-      return apiError(bracketAssignmentsResult.error, 400);
+    // Cumulative-points doesn't use bracket assignments — it runs all participants together
+    const isCumulative = tournament.format === 'cumulative-points';
+    const bracketAssignmentsResult = isCumulative
+      ? []
+      : await getBracketAssignments(db, tournamentId, assignments);
+
+    if (!isCumulative) {
+      if ('error' in bracketAssignmentsResult) {
+        return apiError((bracketAssignmentsResult as { error: string }).error, 400);
+      }
+      if ((bracketAssignmentsResult as BracketAssignment[]).length < 2) {
+        return apiError('At least 2 teams must be assigned to bracket positions', 400);
+      }
     }
 
-    if (bracketAssignmentsResult.length < 2) {
-      return apiError('At least 2 teams must be assigned to bracket positions', 400);
-    }
-
-    const matchData = await generateMatchesForFormat(tournament, tournamentId, bracketAssignmentsResult);
+    const matchData = await generateMatchesForFormat(tournament, tournamentId, bracketAssignmentsResult as BracketAssignment[]);
     if ('error' in matchData) {
       return apiError(matchData.error, 400);
     }
 
     const { generatedMatches, tournamentMatches } = matchData;
 
-    await saveGeneratedMatches(generatedMatches, tournamentMatches);
+    // Cumulative-points: all tournament participants are added to the match (and given
+    // per-participant match_teams) inside the same transaction as the match insert.
+    await saveGeneratedMatches(generatedMatches, tournamentMatches, { addAllTeams: !!matchData.isCumulative });
+
     await queueMatchAnnouncements(db, generatedMatches);
 
     await db.run('UPDATE tournaments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [tournamentId]);

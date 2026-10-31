@@ -30,8 +30,17 @@ export class WinnerVoteHandler {
   async sendWinnerVotePrompts(matchId: string, matchGameId: string, mapName: string): Promise<boolean> {
     try {
       const commanders = await this.db.all<CommanderRecord>(
-        `SELECT id, discord_user_id, team_assignment FROM match_participants
-         WHERE match_id = ? AND receives_map_codes = 1 AND discord_user_id IS NOT NULL`,
+        `SELECT mp.id, mp.discord_user_id,
+                CASE
+                  WHEN mt.id IS NULL THEN mp.team_assignment
+                  WHEN mt.is_reserve = 1 THEN 'reserve'
+                  WHEN mt.team_order = 0 THEN 'blue'
+                  WHEN mt.team_order = 1 THEN 'red'
+                  ELSE NULL
+                END AS team_assignment
+         FROM match_participants mp
+         LEFT JOIN match_teams mt ON mt.id = mp.team_id
+         WHERE mp.match_id = ? AND mp.receives_map_codes = 1 AND mp.discord_user_id IS NOT NULL`,
         [matchId]
       );
 
@@ -224,6 +233,20 @@ export class WinnerVoteHandler {
   async submitWinner(matchId: string, matchGameId: string, winner: 'blue' | 'red'): Promise<void> {
     try {
       const { saveMatchResult } = await import('../../../src/lib/scoring-functions');
+      // A vote only ever records a first result: never override a map an admin already
+      // scored, and never score a match that has left battle. saveMatchResult re-checks
+      // the game status inside its transaction to close the race with a web submission.
+      const state = await this.db.get<{ match_status: string; game_status: string }>(
+        `SELECT m.status AS match_status, mg.status AS game_status
+         FROM match_games mg JOIN matches m ON m.id = mg.match_id
+         WHERE mg.id = ? AND mg.match_id = ?`,
+        [matchGameId, matchId]
+      );
+      if (state?.match_status !== 'battle' || state.game_status === 'completed') {
+        logger.info(`Winner vote for game ${matchGameId} ignored: game already scored or match not in battle`);
+        return;
+      }
+
       await saveMatchResult(matchGameId, {
         matchId,
         gameId: matchGameId,
@@ -232,6 +255,10 @@ export class WinnerVoteHandler {
       });
       logger.info(`✅ Winner vote consensus: ${winner} wins game ${matchGameId}`);
     } catch (error) {
+      if (error instanceof Error && error.name === 'GameAlreadyScoredError') {
+        logger.info(`Winner vote for game ${matchGameId} ignored: game was scored concurrently`);
+        return;
+      }
       logger.error(`Error submitting winner vote result for game ${matchGameId}:`, error);
     }
   }
