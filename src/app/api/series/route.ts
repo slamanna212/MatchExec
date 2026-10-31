@@ -1,5 +1,6 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { createSeries, listSeries, readJsonObject, validateSeriesBody, validateSeriesGameId } from '@/lib/series';
+import { createSeries, readJsonObject, validateSeriesBody, validateSeriesGameId } from '@/lib/series';
+import { findSeriesForMatch, findSeriesForTournament, listSeriesSummaries } from '@/lib/series-summary';
 import type { CreateSeriesInput } from '@/lib/series';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -7,8 +8,24 @@ import { apiError, apiOk } from '@/lib/api-response';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') ?? undefined;
-    const series = await listSeries(status);
+
+    // Membership lookups for the "Series" row on match/tournament detail pages.
+    const matchId = searchParams.get('match_id');
+    if (matchId) return apiOk({ memberships: await findSeriesForMatch(matchId) });
+    const tournamentId = searchParams.get('tournament_id');
+    if (tournamentId) return apiOk({ memberships: await findSeriesForTournament(tournamentId) });
+
+    // status may be repeated (?status=a&status=b) or comma-separated (?status=a,b)
+    const statuses = searchParams.getAll('status').flatMap(v => v.split(',')).map(v => v.trim()).filter(Boolean);
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
+    const offset = offsetParam ? Number.parseInt(offsetParam, 10) : undefined;
+    if ((limit !== undefined && (!Number.isInteger(limit) || limit < 1)) || (offset !== undefined && (!Number.isInteger(offset) || offset < 0))) {
+      return apiError('limit must be a positive integer and offset a non-negative integer', 400);
+    }
+
+    const series = await listSeriesSummaries({ statuses, limit, offset });
     return apiOk({ series });
   } catch (error) {
     logger.error('Error listing series:', error);

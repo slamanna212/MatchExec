@@ -1,74 +1,51 @@
 'use client'
 
-import { logger } from '@/lib/logger/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Container,
-  Stack,
-  TextInput,
-  Textarea,
-  Button,
-  Group,
-  Switch,
-  Loader,
-  Center,
-  Alert,
-  Divider,
-  Text,
-} from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
+import { Container, Stack, Button, Group, Loader, Center, Alert } from '@mantine/core';
 import { IconTimeline, IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
-import { showError, showSuccess } from '@/lib/notifications';
-import { ScoringConfigEditor } from './scoring-config-editor';
-import type { SeriesScoringConfig } from '@/lib/series';
-
-interface SeriesRow {
-  id: string;
-  name: string;
-  description?: string;
-  status: string;
-  start_date?: string;
-  end_date?: string;
-  livestream_link?: string;
-  announcements: boolean;
-  player_notifications: boolean;
-  scoring_config?: string;
-}
+import { logger } from '@/lib/logger/client';
+import { notificationHelper, showError } from '@/lib/notifications';
+import {
+  EMPTY_SERIES_FORM, buildSeriesPayload, isoToDateInput,
+  SeriesDetailsFields, SeriesNotificationsFields, SeriesScoringFields,
+} from './series-form';
+import type { SeriesFormData, UpdateSeriesForm } from './series-form';
+import { parseScoringConfig } from './series-shared';
+import type { SeriesSummary } from './series-shared';
 
 export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedName, setSavedName] = useState('');
+  const [form, setForm] = useState<SeriesFormData>(EMPTY_SERIES_FORM);
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [livestreamLink, setLivestreamLink] = useState('');
-  const [announcements, setAnnouncements] = useState(true);
-  const [playerNotifications, setPlayerNotifications] = useState(true);
-  const [scoringConfig, setScoringConfig] = useState<SeriesScoringConfig>({});
+  const update: UpdateSeriesForm = useCallback((key, value) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch(`/api/series/${seriesId}`);
-        if (!res.ok) { setError('Series not found'); return; }
-        const { series: s }: { series: SeriesRow } = await res.json();
-        setName(s.name);
-        setDescription(s.description ?? '');
-        setStartDate(s.start_date ? new Date(s.start_date) : null);
-        setEndDate(s.end_date ? new Date(s.end_date) : null);
-        setLivestreamLink(s.livestream_link ?? '');
-        setAnnouncements(s.announcements);
-        setPlayerNotifications(s.player_notifications);
-        if (s.scoring_config) {
-          try { setScoringConfig(JSON.parse(s.scoring_config)); } catch { /* leave default */ }
-        }
+        if (!res.ok) { setError(res.status === 404 ? 'Series not found' : 'Failed to load series'); return; }
+        const { series: s }: { series: SeriesSummary } = await res.json();
+        setSavedName(s.name);
+        setForm({
+          name: s.name,
+          description: s.description ?? '',
+          start_date: isoToDateInput(s.start_date),
+          end_date: isoToDateInput(s.end_date),
+          livestream_link: s.livestream_link ?? '',
+          event_image_url: s.event_image_url ?? null,
+          announcements: s.announcements,
+          player_notifications: s.player_notifications,
+          scoring_config: parseScoringConfig(s.scoring_config),
+        });
       } catch (err) {
         logger.error('Error loading series:', err);
         setError('Failed to load series');
@@ -76,37 +53,30 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
         setLoading(false);
       }
     };
-    load();
+    void load();
   }, [seriesId]);
 
   const handleSave = async () => {
-    if (!name.trim()) { showError('Name is required'); return; }
+    if (!form.name.trim()) { showError('Series name is required'); return; }
     setSaving(true);
+    const nid = `series-save-${seriesId}`;
+    notificationHelper.loading({ id: nid, message: 'Saving series...' });
     try {
       const res = await fetch(`/api/series/${seriesId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          start_date: startDate?.toISOString() ?? null,
-          end_date: endDate?.toISOString() ?? null,
-          livestream_link: livestreamLink.trim() || null,
-          announcements,
-          player_notifications: playerNotifications,
-          scoring_config: scoringConfig,
-        }),
+        body: JSON.stringify(buildSeriesPayload(form)),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showError(data.error ?? 'Failed to update series');
+        notificationHelper.update(nid, { type: 'error', message: data.error ?? 'Failed to update series' });
         return;
       }
-      showSuccess('Series updated');
+      notificationHelper.update(nid, { type: 'success', message: 'Series updated' });
       router.push(`/series/${seriesId}`);
     } catch (err) {
       logger.error('Error saving series:', err);
-      showError('An error occurred');
+      notificationHelper.update(nid, { type: 'error', message: 'An error occurred while saving' });
     } finally {
       setSaving(false);
     }
@@ -124,87 +94,33 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
     );
   }
 
+  const backToDetail = () => router.push(`/series/${seriesId}`);
+
   return (
     <Container size="md" py="xl">
       <Stack gap="lg">
         <PageHeader
           icon={IconTimeline}
           title="Edit Series"
-          subtitle={name}
+          subtitle={savedName}
           breadcrumbs={[
             { title: 'Series', href: '/series' },
-            { title: name, href: `/series/${seriesId}` },
+            { title: savedName, href: `/series/${seriesId}` },
           ]}
+          action={
+            <Button variant="outline" leftSection={<IconArrowLeft size={16} />} onClick={backToDetail}>
+              Back
+            </Button>
+          }
         />
 
-        <TextInput
-          label="Series Name"
-          required
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-        />
-
-        <Textarea
-          label="Description"
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-          autosize
-          minRows={3}
-        />
-
-        <Group grow>
-          <DatePickerInput
-            label="Start Date"
-            value={startDate}
-            onChange={(v) => setStartDate(v as Date | null)}
-            clearable
-          />
-          <DatePickerInput
-            label="End Date"
-            value={endDate}
-            onChange={(v) => setEndDate(v as Date | null)}
-            clearable
-            minDate={startDate ?? undefined}
-          />
-        </Group>
-
-        <TextInput
-          label="Livestream Link"
-          placeholder="https://twitch.tv/..."
-          value={livestreamLink}
-          onChange={(e) => setLivestreamLink(e.currentTarget.value)}
-        />
-
-        <Divider />
-        <Text fw={500} size="sm">Notifications</Text>
-
-        <Switch
-          label="Discord Announcements"
-          checked={announcements}
-          onChange={(e) => setAnnouncements(e.currentTarget.checked)}
-        />
-
-        <Switch
-          label="Player Notifications"
-          checked={playerNotifications}
-          onChange={(e) => setPlayerNotifications(e.currentTarget.checked)}
-        />
-
-        <Divider />
-
-        <ScoringConfigEditor value={scoringConfig} onChange={setScoringConfig} />
-
-        <Divider />
+        {/* Removing the image only clears the field: the saved series still uses the file until Save. */}
+        <SeriesDetailsFields form={form} update={update} deleteImageOnRemove={false} />
+        <SeriesNotificationsFields form={form} update={update} />
+        <SeriesScoringFields form={form} update={update} />
 
         <Group justify="space-between">
-          <Button
-            variant="outline"
-            leftSection={<IconArrowLeft size={14} />}
-            onClick={() => router.push(`/series/${seriesId}`)}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={backToDetail} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} loading={saving}>Save Changes</Button>
         </Group>
       </Stack>

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
@@ -18,7 +18,15 @@ import type { MatchWithGameDetails } from '../../../../shared/types';
 const roots: Root[] = [];
 const divs: HTMLDivElement[] = [];
 
+// The details card looks up series membership; default to "not in a series".
+let memberships: unknown[] = [];
+beforeEach(() => {
+  memberships = [];
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ memberships }) })));
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => { roots.forEach(r => r.unmount()); });
   divs.forEach(d => d.remove());
   roots.length = 0;
@@ -154,6 +162,30 @@ describe('MatchInfoPanel', () => {
       />
     );
     expect(container.textContent).toContain('Delete Match');
+  });
+
+  it('shows a Series row linking to the series when the match belongs to one', async () => {
+    memberships = [{
+      series_id: 's1', series_name: 'Fall 2026 Championship', series_status: 'active',
+      series_event_id: 'e1', points_multiplier: 1.5, event_order: 2, via: 'direct',
+    }];
+    const container = renderWithMantine(
+      <MatchInfoPanel match={makeMatch()} mapDetails={{}} mapNotes={{}} formatMapName={id => id} parseDbTimestamp={parseTs} />
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(fetch).toHaveBeenCalledWith('/api/series?match_id=match-1');
+    expect(container.textContent).toContain('Series:');
+    expect(container.textContent).toContain('Fall 2026 Championship');
+    expect(container.textContent).toContain('×1.5');
+    expect(container.querySelector('a[href="/series/s1"]')).not.toBeNull();
+  });
+
+  it('omits the Series row when the match is not in a series', async () => {
+    const container = renderWithMantine(
+      <MatchInfoPanel match={makeMatch()} mapDetails={{}} mapNotes={{}} formatMapName={id => id} parseDbTimestamp={parseTs} />
+    );
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(container.textContent).not.toContain('Series:');
   });
 
   it('is a function component', () => {

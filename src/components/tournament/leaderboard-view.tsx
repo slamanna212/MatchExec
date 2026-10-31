@@ -1,10 +1,10 @@
 'use client'
 
 import type { JSX } from 'react';
-import { Stack, Card, Group, Avatar, Text } from '@mantine/core';
+import { Card, Text } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import { EmptyState } from '../EmptyState';
-import { SectionLabel } from '../SectionLabel';
+import { RankedTable } from '../shared/RankedTable';
 
 export interface CumulativeStanding {
   rank: number;
@@ -23,11 +23,12 @@ interface LeaderboardViewProps {
  * Standings view for FFA/Position ('cumulative-points') tournaments — a
  * per-participant leaderboard ranked by total points across all rounds,
  * as opposed to the win/loss team standings used by bracket tournaments.
+ * Uses the shared RankedTable so it matches series and team standings.
  */
 export function LeaderboardView({ standings }: LeaderboardViewProps): JSX.Element {
   if (standings.length === 0) {
     return (
-      <Card withBorder>
+      <Card withBorder radius="md">
         <EmptyState
           icon={IconTrophy}
           title="No standings yet"
@@ -38,36 +39,29 @@ export function LeaderboardView({ standings }: LeaderboardViewProps): JSX.Elemen
   }
 
   return (
-    <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
-      {standings.map((entry) => (
-        <Card
-          key={entry.participant_id}
-          withBorder
-          p="md"
-          style={{
-            borderLeft: entry.rank === 1 ? '4px solid var(--mantine-color-yellow-5)' : undefined
-          }}
-        >
-          <Group justify="space-between" wrap="nowrap">
-            <Group gap="md">
-              <Avatar size="md" color={entry.rank === 1 ? 'yellow' : 'blue'} variant="filled">
-                {entry.rank}
-              </Avatar>
-              <div>
-                <Text fw={500} size="sm">{entry.username}</Text>
-                <Text size="xs" c="dimmed">
-                  {entry.matches_played} {entry.matches_played === 1 ? 'round' : 'rounds'} played
-                  {entry.best_position != null && ` · best finish P${entry.best_position}`}
-                </Text>
-              </div>
-            </Group>
-            <div style={{ textAlign: 'center' }}>
-              <SectionLabel>Points</SectionLabel>
-              <Text size="lg" fw={700} c="green">{entry.total_points}</Text>
-            </div>
-          </Group>
-        </Card>
-      ))}
-    </Stack>
+    <RankedTable
+      rows={standings}
+      getKey={(e) => e.participant_id}
+      getRank={(e) => e.rank}
+      primaryHeader="Player"
+      renderPrimary={(e) => (
+        <>
+          <Text fw={500} size="sm" truncate>{e.username}</Text>
+          <Text size="xs" c="dimmed">
+            {e.matches_played} {e.matches_played === 1 ? 'round' : 'rounds'} played
+            {e.best_position != null && ` · best finish P${e.best_position}`}
+          </Text>
+        </>
+      )}
+      columns={[
+        {
+          key: 'points',
+          header: 'Points',
+          width: '84px',
+          align: 'right',
+          render: (e) => <Text size="lg" fw={700}>{e.total_points}</Text>,
+        },
+      ]}
+    />
   );
 }

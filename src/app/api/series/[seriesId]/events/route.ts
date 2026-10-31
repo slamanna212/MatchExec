@@ -1,9 +1,10 @@
 import type { NextRequest, NextResponse } from 'next/server';
 import {
-  getSeriesById, addSeriesEvent, listSeriesEvents, readJsonObject,
+  getSeriesById, addSeriesEvent, readJsonObject,
   validatePointsMultiplier, validateEventOrder, checkSeriesEventTarget,
 } from '@/lib/series';
 import type { AddSeriesEventInput } from '@/lib/series';
+import { listSeriesEventDetails } from '@/lib/series-summary';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
@@ -15,7 +16,7 @@ export async function GET(
     const { seriesId } = await params;
     const series = await getSeriesById(seriesId);
     if (!series) return apiError('Series not found', 404);
-    const events = await listSeriesEvents(seriesId);
+    const events = await listSeriesEventDetails(seriesId);
     return apiOk({ events });
   } catch (error) {
     logger.error('Error listing series events:', error);

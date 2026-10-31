@@ -70,6 +70,17 @@ describe('StageRing', () => {
     container.remove();
   });
 
+  it('uses an explicit value (e.g. series completion %) instead of the status', () => {
+    const container = renderWithMantine(<StageRing value={50} gameColor="#ff0000" />);
+    // RingProgress draws the section as an SVG circle whose dash array reflects the value.
+    const circles = container.querySelectorAll('circle');
+    expect(circles.length).toBeGreaterThan(1);
+    const dash = (circles[circles.length - 1] as SVGCircleElement).getAttribute('stroke-dasharray') ?? '';
+    const [filled, total] = dash.split(',').map(Number);
+    expect(filled / (filled + total)).toBeCloseTo(0.5, 1);
+    container.remove();
+  });
+
   it('is a function component', () => {
     expect(typeof StageRing).toBe('function');
   });

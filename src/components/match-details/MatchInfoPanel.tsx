@@ -16,6 +16,7 @@ import { modals } from '@mantine/modals';
 import { useRouter } from 'next/navigation';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
+import { SeriesMembershipRow } from '../series/SeriesMembershipRow';
 
 // Use MatchWithGame as a local alias for the shared type
 type MatchWithGame = MatchWithGameDetails;
@@ -80,7 +81,7 @@ function MatchDetailsCard({
   const completedDisplay = match.status === 'complete' ? formatTs(parseDbTimestamp, match.updated_at) : null;
 
   return (
-    <Card withBorder padding="lg" shadow="sm">
+    <Card withBorder radius="md" padding="lg" shadow="sm">
       <Stack gap="sm">
         {match.rules && (
           <Group justify="space-between">
@@ -94,6 +95,7 @@ function MatchDetailsCard({
             <Text size="sm">{match.rounds}</Text>
           </Group>
         )}
+        <SeriesMembershipRow kind="match" id={match.id} />
         <Group justify="space-between">
           <Text size="sm" fw={500} c="dimmed">Player Notifications:</Text>
           <Badge variant="light" color={match.player_notifications !== 0 ? 'green' : 'gray'}>
@@ -184,7 +186,7 @@ function MatchActionsCard({
   const showEdit = !isHistory && Boolean(onEdit) && !NON_EDIT_STATUSES.has(match.status) && match.tournament_allow_match_editing !== false;
 
   return (
-    <Card withBorder padding="lg" shadow="sm">
+    <Card withBorder radius="md" padding="lg" shadow="sm">
       <Stack gap="xs">
         {matchInBattle && (
           <Button
@@ -246,7 +248,7 @@ export function MatchInfoPanel({
     <div style={{ position: 'sticky', top: 20 }}>
       <Stack gap="md">
         {/* Card 1: Header & Featured Image */}
-        <Card withBorder padding="lg" shadow="sm">
+        <Card withBorder radius="md" padding="lg" shadow="sm">
           <Stack gap="md">
             <Group>
               <Avatar src={match.game_icon} alt={match.game_name} size="lg" />

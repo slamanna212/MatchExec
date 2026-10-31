@@ -707,25 +707,35 @@ async function scoreTournamentEvent(
  * outcome to points via series.scoring_config. Only completed matches and
  * tournaments contribute (and count towards events_played).
  */
-export async function getSeriesStandings(seriesId: string): Promise<Array<{
+export interface SeriesStandingEventPoints {
+  series_event_id: string;
+  /** Points for this event after the multiplier; null when the player didn't take part. */
+  points: number | null;
+}
+
+export interface SeriesStandingRow {
   rank: number;
   username: string;
   user_id: string;
   total_points: number;
   events_played: number;
-}>> {
+  /** One entry per series event, in event_order. */
+  events: SeriesStandingEventPoints[];
+}
+
+export async function getSeriesStandings(seriesId: string): Promise<SeriesStandingRow[]> {
   const db = await getDbInstance();
 
   const series = await getSeriesById(seriesId);
   const config = parseScoringConfig(series?.scoring_config);
   const events = await listSeriesEvents(seriesId);
 
-  const totals = new Map<string, { username: string; total_points: number; events_played: Set<string> }>();
+  const totals = new Map<string, { username: string; total_points: number; per_event: Map<string, number> }>();
   const addPoints: AddPoints = (key, username, points, eventId) => {
-    const entry = totals.get(key) ?? { username, total_points: 0, events_played: new Set<string>() };
+    const entry = totals.get(key) ?? { username, total_points: 0, per_event: new Map<string, number>() };
     entry.username = username; // events are scored in order, so the latest name wins
     entry.total_points += points;
-    entry.events_played.add(eventId);
+    entry.per_event.set(eventId, (entry.per_event.get(eventId) ?? 0) + points);
     totals.set(key, entry);
   };
 
@@ -738,7 +748,13 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
   }
 
   const sorted = Array.from(totals.entries())
-    .map(([user_id, data]) => ({ user_id, username: data.username, total_points: data.total_points, events_played: data.events_played.size }))
+    .map(([user_id, data]) => ({
+      user_id,
+      username: data.username,
+      total_points: data.total_points,
+      events_played: data.per_event.size,
+      events: events.map(ev => ({ series_event_id: ev.id, points: data.per_event.get(ev.id) ?? null })),
+    }))
     .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username));
   // Players tied on points share a rank (same convention as tournament standings).
   const ranks = tieAwareRanks(sorted.map(e => e.total_points));

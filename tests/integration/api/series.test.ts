@@ -634,4 +634,141 @@ describe('Series API hardening', () => {
     expect(res.status).toBe(200);
     expect(await getTestDb().all(`SELECT * FROM series_events WHERE series_id = ?`, [seriesId])).toHaveLength(0);
   });
+
+  describe('UI read models', () => {
+    async function addParticipant(matchId: string, userId: string, username: string): Promise<string> {
+      const id = uniq('mp');
+      await getTestDb().run(
+        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username) VALUES (?, ?, ?, ?, ?)`,
+        [id, matchId, userId, userId, username]
+      );
+      return id;
+    }
+
+    it('GET /api/series returns counts, next event (with game), players and identity fallbacks', async () => {
+      const done = await insertMatch('complete');
+      const upcoming = await insertMatch('gather');
+      await addParticipant(done, 'u1', 'Alice');
+      await addParticipant(done, 'u2', 'Bob');
+      await addParticipant(upcoming, 'u1', 'Alice'); // same player in two events counts once
+      expect((await addEv({ event_type: 'match', match_id: done })).status).toBe(201);
+      expect((await addEv({ event_type: 'match', match_id: upcoming })).status).toBe(201);
+
+      const { status, data } = await parseResponse(await listSeries(createMockRequest('GET', '/api/series?status=active')));
+      expect(status).toBe(200);
+      const row = data.series.find((x: any) => x.id === seriesId);
+      expect(row.event_count).toBe(2);
+      expect(row.completed_event_count).toBe(1);
+      expect(row.participant_count).toBe(2);
+      expect(row.next_event).toMatchObject({ type: 'match', event_order: 2, game_id: game.id });
+      expect(row.last_event_game.game_id).toBe(game.id);
+      expect(row.series_game).toBeNull();
+      expect(row.champion).toBeNull();
+      expect(row.announcements).toBe(true);
+    });
+
+    it('next_event is null and counts are zero for a series with no events', async () => {
+      const { data } = await parseResponse(await getSeries(createMockRequest('GET', `/api/series/${seriesId}`), createRouteParams({ seriesId })));
+      expect(data.series).toMatchObject({ event_count: 0, completed_event_count: 0, participant_count: 0, next_event: null });
+    });
+
+    it('accepts several statuses and paginates with limit/offset', async () => {
+      const db = getTestDb();
+      const ids = [uniq('s_pg'), uniq('s_pg'), uniq('s_pg')];
+      for (const [i, id] of ids.entries()) {
+        await db.run(
+          `INSERT INTO series (id, name, status, announcements, player_notifications, created_at) VALUES (?, 'P', ?, 1, 1, datetime('now', ?))`,
+          [id, i === 0 ? 'cancelled' : 'complete', `+${i + 1} days`]
+        );
+      }
+      const first = await parseResponse(await listSeries(createMockRequest('GET', '/api/series?status=complete,cancelled&limit=2&offset=0')));
+      expect(first.data.series.map((x: any) => x.id)).toEqual([ids[2], ids[1]]);
+      const second = await parseResponse(await listSeries(createMockRequest('GET', '/api/series?status=complete&status=cancelled&limit=2&offset=2')));
+      expect(second.data.series.map((x: any) => x.id)).toContain(ids[0]);
+      expect((await parseResponse(await listSeries(createMockRequest('GET', '/api/series?limit=0')))).status).toBe(400);
+    });
+
+    it('history rows carry the champion of a complete series', async () => {
+      const db = getTestDb();
+      await db.run(`UPDATE series SET status = 'complete', scoring_config = ? WHERE id = ?`, [JSON.stringify({ match_win_points: 3 }), seriesId]);
+      const m = await insertMatch('complete');
+      const mtA = uniq('mt'); const mtB = uniq('mt');
+      await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order) VALUES (?, ?, 'A', 0)`, [mtA, m]);
+      await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order) VALUES (?, ?, 'B', 1)`, [mtB, m]);
+      await db.run(`INSERT INTO match_participants (id, match_id, user_id, username, team_id) VALUES (?, ?, 'ua', 'Winner', ?)`, [uniq('mp'), m, mtA]);
+      await db.run(`INSERT INTO match_participants (id, match_id, user_id, username, team_id) VALUES (?, ?, 'ub', 'Loser', ?)`, [uniq('mp'), m, mtB]);
+      const gA = uniq('mg');
+      await db.run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'completed')`, [gA, m]);
+      await db.run(`INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, is_winner) VALUES (?, ?, 'team', ?, 1)`, [uniq('pl'), gA, mtA]);
+      // Series is complete, so add the event directly rather than via the (now locked) API.
+      await db.run(
+        `INSERT INTO series_events (id, series_id, event_type, match_id, event_order, points_multiplier) VALUES (?, ?, 'match', ?, 1, 1)`,
+        [uniq('se'), seriesId, m]
+      );
+      const { data } = await parseResponse(await listSeries(createMockRequest('GET', '/api/series?status=complete')));
+      expect(data.series.find((x: any) => x.id === seriesId).champion).toBe('Winner');
+    });
+
+    it('events GET joins name, status, game and date of the linked match', async () => {
+      const m = await insertMatch('battle');
+      await addEv({ event_type: 'match', match_id: m, points_multiplier: 1.5 });
+      const { data } = await parseResponse(await listEvents(createMockRequest('GET', 'x'), createRouteParams({ seriesId })));
+      expect(data.events).toHaveLength(1);
+      expect(data.events[0]).toMatchObject({
+        match_id: m, name: 'M', status: 'battle', game_id: game.id, points_multiplier: 1.5,
+      });
+      expect(data.events[0].start_date).toBeTruthy();
+    });
+
+    it('standings include per-event points after the multiplier, null where the player did not play', async () => {
+      const db = getTestDb();
+      await db.run(`UPDATE series SET scoring_config = ? WHERE id = ?`, [JSON.stringify({ match_win_points: 3, match_loss_points: 1 }), seriesId]);
+      const makeDuel = async (winner: string, loser: string) => {
+        const m = await insertMatch('complete');
+        const a = uniq('mt'); const b = uniq('mt');
+        await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order) VALUES (?, ?, 'A', 0)`, [a, m]);
+        await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order) VALUES (?, ?, 'B', 1)`, [b, m]);
+        await db.run(`INSERT INTO match_participants (id, match_id, user_id, username, team_id) VALUES (?, ?, ?, ?, ?)`, [uniq('mp'), m, winner, winner, a]);
+        await db.run(`INSERT INTO match_participants (id, match_id, user_id, username, team_id) VALUES (?, ?, ?, ?, ?)`, [uniq('mp'), m, loser, loser, b]);
+        // Standalone match winners come from game placements (see determineMatchWinner).
+        const g = uniq('mg');
+        await db.run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, 'completed')`, [g, m]);
+        await db.run(`INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, is_winner) VALUES (?, ?, 'team', ?, 1)`, [uniq('pl'), g, a]);
+        return m;
+      };
+      const m1 = await makeDuel('alice', 'bob');
+      const m2 = await makeDuel('carol', 'alice');
+      const e1 = (await addEv({ event_type: 'match', match_id: m1 })).data.id;
+      const e2 = (await addEv({ event_type: 'match', match_id: m2, points_multiplier: 2 })).data.id;
+
+      const { data } = await parseResponse(await getStandings(createMockRequest('GET', 'x'), createRouteParams({ seriesId })));
+      const byName = (n: string) => data.standings.find((r: any) => r.username === n);
+      expect(byName('alice').events).toEqual([{ series_event_id: e1, points: 3 }, { series_event_id: e2, points: 2 }]);
+      expect(byName('alice').total_points).toBe(5);
+      expect(byName('bob').events).toEqual([{ series_event_id: e1, points: 1 }, { series_event_id: e2, points: null }]);
+      expect(byName('carol').events).toEqual([{ series_event_id: e1, points: null }, { series_event_id: e2, points: 6 }]);
+    });
+
+    it('membership lookup finds series for a match directly or through its tournament', async () => {
+      const db = getTestDb();
+      const direct = await insertMatch('created');
+      await addEv({ event_type: 'match', match_id: direct, points_multiplier: 1.5 });
+      const t = uniq('t_mem');
+      await db.run(`INSERT INTO tournaments (id, name, game_id, format, status, rounds_per_match) VALUES (?, 'T', ?, 'single-elimination', 'battle', 1)`, [t, game.id]);
+      const tMatch = await insertMatch('battle', t);
+      await addEv({ event_type: 'tournament', tournament_id: t, points_multiplier: 2 });
+
+      const d = await parseResponse(await listSeries(createMockRequest('GET', `/api/series?match_id=${direct}`)));
+      expect(d.data.memberships).toEqual([expect.objectContaining({ series_id: seriesId, series_name: 'Hardening', points_multiplier: 1.5, via: 'direct' })]);
+
+      const v = await parseResponse(await listSeries(createMockRequest('GET', `/api/series?match_id=${tMatch}`)));
+      expect(v.data.memberships).toEqual([expect.objectContaining({ series_id: seriesId, points_multiplier: 2, via: 'tournament' })]);
+
+      const tr = await parseResponse(await listSeries(createMockRequest('GET', `/api/series?tournament_id=${t}`)));
+      expect(tr.data.memberships).toHaveLength(1);
+
+      const none = await parseResponse(await listSeries(createMockRequest('GET', '/api/series?match_id=nope')));
+      expect(none.data.memberships).toEqual([]);
+    });
+  });
 });

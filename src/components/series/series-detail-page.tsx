@@ -1,108 +1,65 @@
 'use client'
 
-import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
-  Container,
-  Stack,
-  Group,
-  Text,
-  Badge,
-  Button,
-  Card,
-  Table,
-  Loader,
-  Center,
-  Alert,
-  Anchor,
-  Tabs,
-  ActionIcon,
-  Modal,
-  Select,
-  NumberInput,
-  Divider,
+  Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
-import {
-  IconTimeline,
-  IconAlertCircle,
-  IconPlus,
-  IconTrash,
-  IconEdit,
-  IconTrophy,
-  IconSwords,
-  IconMedal,
-} from '@tabler/icons-react';
-import { PageHeader } from '@/components/PageHeader';
-import { showError, showSuccess } from '@/lib/notifications';
-import { parseDbTimestamp } from '@/lib/utils/dates';
+import { modals } from '@mantine/modals';
+import { IconAlertCircle } from '@tabler/icons-react';
+import { logger } from '@/lib/logger/client';
+import { notificationHelper } from '@/lib/notifications';
+import { SeriesInfoPanel } from './SeriesInfoPanel';
+import { SeriesContentPanel } from './SeriesContentPanel';
+import { AddSeriesEventModal, EditSeriesEventModal } from './series-event-modals';
+import type { SeriesSummary, SeriesEventDetail, SeriesStanding } from './series-shared';
 
-interface SeriesRow {
-  id: string;
-  name: string;
-  description?: string;
-  status: 'created' | 'active' | 'complete' | 'cancelled';
-  start_date?: string;
-  end_date?: string;
-  livestream_link?: string;
-  announcements: boolean;
-  player_notifications: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SeriesEventRow {
-  id: string;
-  series_id: string;
-  event_type: 'match' | 'tournament';
-  match_id?: string;
-  tournament_id?: string;
-  event_order: number;
-  event_date?: string;
-  points_multiplier: number;
-}
-
-interface StandingRow {
-  rank: number;
-  username: string;
-  user_id: string;
-  total_points: number;
-  events_played: number;
-}
-
-interface MatchOption { id: string; name: string; }
-interface TournamentOption { id: string; name: string; }
-
-const STATUS_COLOR: Record<SeriesRow['status'], string> = {
-  created: 'gray',
-  active: 'green',
-  complete: 'blue',
-  cancelled: 'red',
+const TRANSITION_MESSAGES: Record<string, { loading: string; success: string }> = {
+  active: { loading: 'Activating series...', success: 'Series activated!' },
+  complete: { loading: 'Completing series...', success: 'Series completed!' },
+  cancelled: { loading: 'Cancelling series...', success: 'Series cancelled' },
 };
+
+function DetailSkeleton(): JSX.Element {
+  return (
+    <div className="container mx-auto py-6 px-2">
+      <Stack gap="lg">
+        <Group gap="xs">
+          <Skeleton height={16} width={80} />
+          <Skeleton height={16} width={140} />
+        </Group>
+        <Grid gap="lg">
+          <Grid.Col span={{ base: 12, md: 4 }}>
+            <Stack gap="md">
+              <Skeleton height={340} radius="md" />
+              <Skeleton height={260} radius="md" />
+              <Skeleton height={120} radius="md" />
+            </Stack>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 8 }}>
+            <Stack gap="md">
+              <Group justify="center"><Skeleton height={36} width={260} radius="xl" /></Group>
+              {[1, 2, 3].map(i => <Skeleton key={i} height={96} radius="md" />)}
+            </Stack>
+          </Grid.Col>
+        </Grid>
+      </Stack>
+    </div>
+  );
+}
 
 export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Element {
   const router = useRouter();
-  const [series, setSeries] = useState<SeriesRow | null>(null);
-  const [events, setEvents] = useState<SeriesEventRow[]>([]);
-  const [standings, setStandings] = useState<StandingRow[]>([]);
+  const [series, setSeries] = useState<SeriesSummary | null>(null);
+  const [events, setEvents] = useState<SeriesEventDetail[]>([]);
+  const [standings, setStandings] = useState<SeriesStanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [addEventOpened, { open: openAddEvent, close: closeAddEvent }] = useDisclosure(false);
-
-  const [editingEvent, setEditingEvent] = useState<SeriesEventRow | null>(null);
-  const [editMultiplier, setEditMultiplier] = useState<number | string>(1);
-  const [editOrder, setEditOrder] = useState<number | string>(1);
-  const [editSaving, setEditSaving] = useState(false);
-
-  const [addEventType, setAddEventType] = useState<'match' | 'tournament'>('match');
-  const [addEventId, setAddEventId] = useState<string>('');
-  const [addEventMultiplier, setAddEventMultiplier] = useState<number | string>(1);
-  const [activeTab, setActiveTab] = useState<string>('events');
-  const [addingSaving, setAddingSaving] = useState(false);
-  const [matchOptions, setMatchOptions] = useState<MatchOption[]>([]);
-  const [tournamentOptions, setTournamentOptions] = useState<TournamentOption[]>([]);
+  const [addEventOpen, setAddEventOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<SeriesEventDetail | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(30);
 
   const fetchData = useCallback(async () => {
     try {
@@ -111,12 +68,10 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
         fetch(`/api/series/${seriesId}/events`),
         fetch(`/api/series/${seriesId}/standings`),
       ]);
-
       if (!seriesRes.ok) {
         setError(seriesRes.status === 404 ? 'Series not found' : 'Failed to load series');
         return;
       }
-
       setError(null);
       setSeries((await seriesRes.json()).series);
       if (eventsRes.ok) setEvents((await eventsRes.json()).events ?? []);
@@ -129,427 +84,186 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
     }
   }, [seriesId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const fetchOptions = useCallback(async () => {
-    try {
-      const [matchRes, tournamentRes] = await Promise.all([
-        fetch('/api/matches?status=created&status=gather&status=assign&status=battle&status=complete&exclude_tournament=true'),
-        fetch('/api/tournaments'),
-      ]);
-      if (matchRes.ok) {
-        const data = await matchRes.json();
-        setMatchOptions((data.matches ?? data ?? []).map((m: MatchOption) => ({ id: m.id, name: m.name })));
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch('/api/settings/ui');
+        if (res.ok) setRefreshInterval((await res.json()).auto_refresh_interval_seconds || 30);
+      } catch (err) {
+        logger.error('Error fetching UI settings:', err);
       }
-      if (tournamentRes.ok) {
-        const data = await tournamentRes.json();
-        setTournamentOptions((data.tournaments ?? data ?? []).map((t: TournamentOption) => ({ id: t.id, name: t.name })));
-      }
-    } catch (err) {
-      logger.error('Error fetching options:', err);
-    }
+    };
+    void loadSettings();
   }, []);
 
-  const handleOpenAddEvent = () => {
-    setAddEventType('match');
-    setAddEventId('');
-    setAddEventMultiplier(1);
-    fetchOptions();
-    openAddEvent();
-  };
+  // Auto-refresh while the series is running so event progress and standings stay live.
+  const isActive = series?.status === 'active';
+  useEffect(() => {
+    if (!isActive) return undefined;
+    const id = setInterval(() => { void fetchData(); }, refreshInterval * 1000);
+    return () => clearInterval(id);
+  }, [isActive, refreshInterval, fetchData]);
 
-  const handleAddEvent = async () => {
-    if (!addEventId) { showError('Please select an event'); return; }
-    const multiplier = typeof addEventMultiplier === 'number' ? addEventMultiplier : Number(addEventMultiplier);
-    if (addEventMultiplier === '' || !Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 10) {
-      showError('Points multiplier must be a number between 0.1 and 10');
-      return;
-    }
-    setAddingSaving(true);
+  const transition = useCallback(async (status: string) => {
+    const msgs = TRANSITION_MESSAGES[status];
+    const nid = `series-transition-${seriesId}`;
+    notificationHelper.loading({ id: nid, message: msgs.loading });
     try {
-      const res = await fetch(`/api/series/${seriesId}/events`, {
+      const res = await fetch(`/api/series/${seriesId}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event_type: addEventType,
-          match_id: addEventType === 'match' ? addEventId : undefined,
-          tournament_id: addEventType === 'tournament' ? addEventId : undefined,
-          points_multiplier: multiplier,
-        }),
+        body: JSON.stringify({ status }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showError(data.error ?? 'Failed to add event');
+        notificationHelper.update(nid, { type: 'error', message: data.error ?? 'Failed to update series status' });
         return;
       }
-      showSuccess('Event added to series');
-      closeAddEvent();
-      fetchData();
+      notificationHelper.update(nid, { type: 'success', message: msgs.success });
+      await fetchData();
     } catch (err) {
-      logger.error('Error adding event:', err);
-      showError('An error occurred');
-    } finally {
-      setAddingSaving(false);
+      logger.error('Error transitioning series:', err);
+      notificationHelper.update(nid, { type: 'error', message: 'An error occurred while updating the series' });
     }
+  }, [seriesId, fetchData]);
+
+  const confirmComplete = () => {
+    const unfinished = events.filter(e => e.status !== 'complete' && e.status !== 'cancelled').length;
+    modals.openConfirmModal({
+      title: 'Complete Series',
+      children: (
+        <Stack gap="sm">
+          <Text size="sm">Mark &quot;{series?.name}&quot; as complete? Standings will be final.</Text>
+          {unfinished > 0 && (
+            <Text size="sm" c="orange">
+              {unfinished} {unfinished === 1 ? 'event hasn\'t' : 'events haven\'t'} finished yet and won&apos;t count.
+            </Text>
+          )}
+        </Stack>
+      ),
+      labels: { confirm: 'Complete Series', cancel: 'Back' },
+      confirmProps: { color: 'blue' },
+      onConfirm: () => { void transition('complete'); },
+    });
   };
 
-  const handleOpenEditEvent = (ev: SeriesEventRow) => {
-    setEditingEvent(ev);
-    setEditMultiplier(ev.points_multiplier);
-    setEditOrder(ev.event_order);
+  const confirmCancel = () => {
+    modals.openConfirmModal({
+      title: 'Cancel Series',
+      children: (
+        <Text size="sm">
+          Cancel &quot;{series?.name}&quot;? This cannot be undone. Its matches and tournaments are not affected.
+        </Text>
+      ),
+      labels: { confirm: 'Cancel Series', cancel: 'Back' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => { void transition('cancelled'); },
+    });
   };
 
-  const handleSaveEvent = async () => {
-    if (!editingEvent) return;
-    const multiplier = typeof editMultiplier === 'number' ? editMultiplier : Number(editMultiplier);
-    const order = typeof editOrder === 'number' ? editOrder : Number(editOrder);
-    if (editMultiplier === '' || !Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 10) {
-      showError('Points multiplier must be a number between 0.1 and 10');
-      return;
-    }
-    if (editOrder === '' || !Number.isInteger(order) || order < 1) {
-      showError('Order must be a whole number of 1 or more');
-      return;
-    }
-
-    // Only send what changed
-    const changes: Record<string, number> = {};
-    if (multiplier !== editingEvent.points_multiplier) changes.points_multiplier = multiplier;
-    if (order !== editingEvent.event_order) changes.event_order = order;
-    if (Object.keys(changes).length === 0) { setEditingEvent(null); return; }
-
-    setEditSaving(true);
-    try {
-      const res = await fetch(`/api/series/${seriesId}/events/${editingEvent.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(changes),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showError(data.error ?? 'Failed to update event');
-        return;
-      }
-      const data = await res.json().catch(() => ({}));
-      showSuccess(data.swapped_with ? 'Event updated (swapped places with the event that had that number)' : 'Event updated');
-      setEditingEvent(null);
-      fetchData();
-    } catch (err) {
-      logger.error('Error updating event:', err);
-      showError('An error occurred');
-    } finally {
-      setEditSaving(false);
-    }
+  const confirmRemoveEvent = (ev: SeriesEventDetail) => {
+    modals.openConfirmModal({
+      title: 'Remove Event',
+      children: (
+        <Text size="sm">
+          Remove &quot;{ev.name ?? `Event #${ev.event_order}`}&quot; from this series? Its points will no longer count.
+          The {ev.event_type} itself is not deleted.
+        </Text>
+      ),
+      labels: { confirm: 'Remove Event', cancel: 'Back' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        const nid = `series-remove-event-${ev.id}`;
+        notificationHelper.loading({ id: nid, message: 'Removing event...' });
+        try {
+          const res = await fetch(`/api/series/${seriesId}/events/${ev.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            notificationHelper.update(nid, { type: 'success', message: 'Event removed' });
+            await fetchData();
+          } else {
+            const data = await res.json().catch(() => ({}));
+            notificationHelper.update(nid, { type: 'error', message: data.error ?? 'Failed to remove event' });
+          }
+        } catch (err) {
+          logger.error('Error removing series event:', err);
+          notificationHelper.update(nid, { type: 'error', message: 'An error occurred while removing the event' });
+        }
+      },
+    });
   };
 
-  const handleRemoveEvent = async (eventId: string) => {
-    if (!window.confirm('Remove this event from the series? Its points will no longer count.')) return;
-    try {
-      const res = await fetch(`/api/series/${seriesId}/events/${eventId}`, { method: 'DELETE' });
-      if (res.ok) {
-        showSuccess('Event removed');
-        fetchData();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showError(data.error ?? 'Failed to remove event');
-      }
-    } catch (err) {
-      logger.error('Error removing event:', err);
-      showError('An error occurred');
-    }
-  };
-
-  if (loading && !series) {
-    return (
-      <Container>
-        <Center style={{ minHeight: 400 }}>
-          <Loader size="lg" />
-        </Center>
-      </Container>
-    );
-  }
+  if (loading && !series) return <DetailSkeleton />;
 
   if (error || !series) {
     return (
-      <Container size="md" py="xl">
+      <div className="container mx-auto py-6 px-2">
         <Stack>
           <Alert color="red" icon={<IconAlertCircle size={16} />}>{error ?? 'Series not found'}</Alert>
-          <Anchor onClick={() => router.push('/series')} style={{ cursor: 'pointer' }}>← Back to Series</Anchor>
+          <Anchor component={Link} href="/series">← Back to Series</Anchor>
         </Stack>
-      </Container>
+      </div>
     );
   }
 
-  const eventsLocked = series.status === 'complete' || series.status === 'cancelled';
-  // Multipliers and order shape the standings, so they lock once the series starts.
-  const eventsEditable = series.status === 'created';
-
-  const eventOptions = addEventType === 'match'
-    ? matchOptions.map(m => ({ value: m.id, label: m.name }))
-    : tournamentOptions.map(t => ({ value: t.id, label: t.name }));
+  const isHistory = series.status === 'complete' || series.status === 'cancelled';
+  const parentTitle = isHistory ? 'Series History' : 'Series';
+  const parentHref = isHistory ? '/series/history' : '/series';
 
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="lg">
-        <PageHeader
-          icon={IconTimeline}
-          title={series.name}
-          subtitle={series.description ?? 'Championship Series'}
-          breadcrumbs={[{ title: 'Series', href: '/series' }]}
-          action={
-            <Group gap="xs">
-              <Badge color={STATUS_COLOR[series.status]} variant="light">{series.status}</Badge>
-              <Button
-                size="xs"
-                variant="outline"
-                leftSection={<IconEdit size={14} />}
-                onClick={() => router.push(`/series/${seriesId}/edit`)}
-              >
-                Edit
-              </Button>
-            </Group>
-          }
-        />
-
-        {series.livestream_link && (
-          <Text size="sm">
-            🎥 Livestream:{' '}
-            <Anchor href={series.livestream_link} target="_blank" rel="noopener noreferrer">
-              {series.livestream_link}
-            </Anchor>
-          </Text>
-        )}
-
-        {(series.start_date || series.end_date) && (
-          <Group gap="xs">
-            {series.start_date && (
-              <Text size="sm" c="dimmed">
-                Starts: {parseDbTimestamp(series.start_date)?.toLocaleDateString()}
-              </Text>
-            )}
-            {series.end_date && (
-              <Text size="sm" c="dimmed">
-                → Ends: {parseDbTimestamp(series.end_date)?.toLocaleDateString()}
-              </Text>
-            )}
-          </Group>
-        )}
-
-        <Tabs value={activeTab} onChange={(v) => setActiveTab(v ?? 'events')}>
-          <Tabs.List>
-            <Tabs.Tab value="events" leftSection={<IconSwords size={14} />}>Events ({events.length})</Tabs.Tab>
-            <Tabs.Tab value="standings" leftSection={<IconMedal size={14} />}>Standings ({standings.length})</Tabs.Tab>
-          </Tabs.List>
-
-          <Tabs.Panel value="events" pt="md">
-            <Stack gap="md">
-              <Group justify="flex-end">
-                <Button
-                  size="sm"
-                  leftSection={<IconPlus size={14} />}
-                  onClick={handleOpenAddEvent}
-                  disabled={eventsLocked}
-                >
-                  Add Event
-                </Button>
-              </Group>
-
-              {events.length > 0 && !eventsEditable && (
-                <Text size="xs" c="dimmed" ta="right">
-                  Multipliers and order are locked once the series starts.
-                </Text>
-              )}
-
-              {events.length === 0 ? (
-                <Card withBorder p="xl" ta="center">
-                  <Text c="dimmed">No events added yet. Add matches or tournaments to this series.</Text>
-                </Card>
-              ) : (
-                <Table striped>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>#</Table.Th>
-                      <Table.Th>Type</Table.Th>
-                      <Table.Th>ID</Table.Th>
-                      <Table.Th>Date</Table.Th>
-                      <Table.Th>Multiplier</Table.Th>
-                      <Table.Th></Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {events.map((ev) => (
-                      <Table.Tr key={ev.id}>
-                        <Table.Td>{ev.event_order}</Table.Td>
-                        <Table.Td>
-                          <Badge variant="light" color={ev.event_type === 'match' ? 'blue' : 'violet'} size="sm">
-                            {ev.event_type}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>
-                          <Anchor
-                            size="sm"
-                            onClick={() => router.push(ev.event_type === 'match' ? `/matches/${ev.match_id}` : `/tournaments/${ev.tournament_id}`)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {ev.match_id ?? ev.tournament_id}
-                          </Anchor>
-                        </Table.Td>
-                        <Table.Td>
-                          {ev.event_date ? (parseDbTimestamp(ev.event_date)?.toLocaleDateString() ?? '—') : '—'}
-                        </Table.Td>
-                        <Table.Td>×{ev.points_multiplier}</Table.Td>
-                        <Table.Td>
-                          <Group gap={4} wrap="nowrap" justify="flex-end">
-                            <ActionIcon
-                              variant="subtle"
-                              size="sm"
-                              disabled={!eventsEditable}
-                              title={eventsEditable ? 'Edit multiplier and order' : 'Events can only be edited before the series starts'}
-                              aria-label="Edit event"
-                              onClick={() => handleOpenEditEvent(ev)}
-                            >
-                              <IconEdit size={14} />
-                            </ActionIcon>
-                            <ActionIcon
-                              color="red"
-                              variant="subtle"
-                              size="sm"
-                              disabled={eventsLocked}
-                              aria-label="Remove event"
-                              onClick={() => handleRemoveEvent(ev.id)}
-                            >
-                              <IconTrash size={14} />
-                            </ActionIcon>
-                          </Group>
-                        </Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              )}
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="standings" pt="md">
-            {standings.length === 0 ? (
-              <Card withBorder p="xl" ta="center">
-                <Text c="dimmed">No standings yet. Add events and complete matches to see standings.</Text>
-              </Card>
-            ) : (
-              <Table striped>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Rank</Table.Th>
-                    <Table.Th>Player</Table.Th>
-                    <Table.Th>Points</Table.Th>
-                    <Table.Th>Events Played</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {standings.map((row) => (
-                    <Table.Tr key={row.user_id}>
-                      <Table.Td>
-                        <Group gap="xs">
-                          {row.rank === 1 && <IconTrophy size={16} color="gold" />}
-                          {row.rank === 2 && <IconTrophy size={16} color="silver" />}
-                          {row.rank === 3 && <IconTrophy size={16} color="#cd7f32" />}
-                          <Text fw={row.rank <= 3 ? 700 : 400}>#{row.rank}</Text>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td><Text fw={500}>{row.username}</Text></Table.Td>
-                      <Table.Td><Text fw={700}>{row.total_points.toFixed(1)}</Text></Table.Td>
-                      <Table.Td>{row.events_played}</Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
-          </Tabs.Panel>
-        </Tabs>
-      </Stack>
-
-      <Modal
-        opened={editingEvent !== null}
-        onClose={() => setEditingEvent(null)}
-        title="Edit Event"
+    <div className="container mx-auto py-6 pl-2 pr-2">
+      <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
+        <Anchor size="sm" c="dimmed" component={Link} href={parentHref}>{parentTitle}</Anchor>
+        <Text size="sm">{series.name}</Text>
+      </Breadcrumbs>
+      <Anchor
+        component={Link}
+        href={parentHref}
         size="sm"
+        c="dimmed"
+        hiddenFrom="sm"
+        style={{ display: 'block', marginBottom: '0.5rem', marginLeft: '0.5rem' }}
       >
-        <Stack gap="md">
-          <NumberInput
-            label="Points Multiplier"
-            description="Points from this event are multiplied by this value"
-            value={editMultiplier}
-            onChange={setEditMultiplier}
-            min={0.1}
-            max={10}
-            step={0.5}
-            decimalScale={2}
-            allowDecimal
-          />
-          <NumberInput
-            label="Order"
-            description="If another event already has this number, the two swap places"
-            value={editOrder}
-            onChange={setEditOrder}
-            min={1}
-            step={1}
-            allowDecimal={false}
-          />
-          <Divider />
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setEditingEvent(null)} disabled={editSaving}>Cancel</Button>
-            <Button onClick={handleSaveEvent} loading={editSaving}>Save</Button>
-          </Group>
-        </Stack>
-      </Modal>
+        ← {parentTitle}
+      </Anchor>
 
-      <Modal
-        opened={addEventOpened}
-        onClose={closeAddEvent}
-        title="Add Event to Series"
-        size="md"
-      >
-        <Stack gap="md">
-          <Select
-            label="Event Type"
-            data={[
-              { value: 'match', label: 'Match' },
-              { value: 'tournament', label: 'Tournament' },
-            ]}
-            value={addEventType}
-            onChange={(v) => { setAddEventType(v as 'match' | 'tournament'); setAddEventId(''); }}
+      <Grid gap="lg">
+        <Grid.Col span={{ base: 12, md: 4 }} pl={{ base: 'md', md: 0 }}>
+          <SeriesInfoPanel
+            series={series}
+            onActivate={() => { void transition('active'); }}
+            onAddEvent={() => setAddEventOpen(true)}
+            onEdit={() => router.push(`/series/${seriesId}/edit`)}
+            onComplete={confirmComplete}
+            onCancel={confirmCancel}
           />
-
-          <Select
-            label={addEventType === 'match' ? 'Select Match' : 'Select Tournament'}
-            placeholder={`Search ${addEventType}s...`}
-            data={eventOptions}
-            value={addEventId || null}
-            onChange={(v) => setAddEventId(v ?? '')}
-            searchable
-            nothingFoundMessage={`No ${addEventType}s found`}
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 8 }} pr={{ base: 'md', md: 0 }}>
+          <SeriesContentPanel
+            series={series}
+            events={events}
+            standings={standings}
+            onAddEvent={() => setAddEventOpen(true)}
+            onEditEvent={setEditingEvent}
+            onRemoveEvent={confirmRemoveEvent}
           />
+        </Grid.Col>
+      </Grid>
 
-          <NumberInput
-            label="Points Multiplier"
-            description="Points from this event are multiplied by this value"
-            value={addEventMultiplier}
-            onChange={setAddEventMultiplier}
-            min={0.1}
-            max={10}
-            step={0.5}
-            decimalScale={2}
-            allowDecimal
-          />
-
-          <Divider />
-
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={closeAddEvent} disabled={addingSaving}>Cancel</Button>
-            <Button onClick={handleAddEvent} loading={addingSaving}>Add Event</Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </Container>
+      <AddSeriesEventModal
+        opened={addEventOpen}
+        onClose={() => setAddEventOpen(false)}
+        seriesId={seriesId}
+        events={events}
+        onAdded={() => { void fetchData(); }}
+      />
+      <EditSeriesEventModal
+        seriesId={seriesId}
+        event={editingEvent}
+        onClose={() => setEditingEvent(null)}
+        onSaved={() => { void fetchData(); }}
+      />
+    </div>
   );
 }

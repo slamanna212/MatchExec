@@ -8,7 +8,16 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/logger/client', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 const showError = vi.fn();
 const showSuccess = vi.fn();
-vi.mock('@/lib/notifications', () => ({ showError: (m: string) => showError(m), showSuccess: (m: string) => showSuccess(m) }));
+// The page reports results through notificationHelper.loading/update; route the final
+// update to showError/showSuccess so assertions stay simple.
+vi.mock('@/lib/notifications', () => ({
+  showError: (m: string) => showError(m),
+  showSuccess: (m: string) => showSuccess(m),
+  notificationHelper: {
+    loading: vi.fn(),
+    update: (_id: string, o: { type: string; message: string }) => (o.type === 'error' ? showError(o.message) : showSuccess(o.message)),
+  },
+}));
 
 import { SeriesDetailPage } from '@/components/series/series-detail-page';
 
@@ -19,6 +28,8 @@ beforeEach(() => {
     addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
   })) as unknown as typeof window.matchMedia;
   (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  // These tests exercise the Events tab; started series otherwise open on Standings.
+  localStorage.setItem('series_tab_s1', 'events');
 });
 
 const roots: Root[] = [];
@@ -38,9 +49,10 @@ type Status = 'created' | 'active' | 'complete' | 'cancelled';
 
 function stubApi(status: Status, patchResponse: { ok: boolean; body: unknown } = { ok: true, body: { event: {}, swapped_with: null } }) {
   const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+  const game = { game_id: 'g1', game_name: 'Game', game_icon: null, game_color: '#ff0000', game_cover: null };
   const events = [
-    { id: 'e1', series_id: 's1', event_type: 'match', match_id: 'm1', event_order: 1, points_multiplier: 1 },
-    { id: 'e2', series_id: 's1', event_type: 'tournament', tournament_id: 't1', event_order: 2, points_multiplier: 2 },
+    { id: 'e1', series_id: 's1', event_type: 'match', match_id: 'm1', event_order: 1, points_multiplier: 1, name: 'Opener', status: 'created', event_image_url: null, start_date: null, ...game },
+    { id: 'e2', series_id: 's1', event_type: 'tournament', tournament_id: 't1', event_order: 2, points_multiplier: 2, name: 'Finals', status: 'created', event_image_url: null, start_date: null, ...game },
   ];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
@@ -52,6 +64,8 @@ function stubApi(status: Status, patchResponse: { ok: boolean; body: unknown } =
     return json({ series: {
       id: 's1', name: 'Season', status, announcements: true, player_notifications: true,
       created_at: '2026-01-01 00:00:00', updated_at: '2026-01-01 00:00:00',
+      event_count: 2, completed_event_count: 0, participant_count: 0,
+      next_event: null, last_event_game: null, series_game: null, champion: null,
     } });
   }));
   return calls;
@@ -71,6 +85,8 @@ async function renderPage(): Promise<HTMLDivElement> {
 }
 
 const editButtons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit event"]'));
+// Edit uses aria-disabled/data-disabled (not the disabled attribute) so its tooltip can explain why.
+const isEditDisabled = (b: HTMLButtonElement) => b.getAttribute('aria-disabled') === 'true';
 const removeButtons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button[aria-label="Remove event"]'));
 const buttonByText = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent?.trim() === text);
 
@@ -87,14 +103,14 @@ describe('SeriesDetailPage event editing', () => {
     stubApi('created');
     await renderPage();
     expect(editButtons()).toHaveLength(2);
-    expect(editButtons().every(b => !b.disabled)).toBe(true);
+    expect(editButtons().every(b => !isEditDisabled(b))).toBe(true);
     expect(document.body.textContent).not.toContain('locked once the series starts');
   });
 
   it.each(['active', 'complete', 'cancelled'] as const)('disables editing (and says why) when the series is %s', async (status) => {
     stubApi(status);
     await renderPage();
-    expect(editButtons().every(b => b.disabled)).toBe(true);
+    expect(editButtons().every(isEditDisabled)).toBe(true);
     expect(document.body.textContent).toContain('locked once the series starts');
   });
 
@@ -152,9 +168,10 @@ describe('SeriesDetailPage event editing', () => {
     await act(async () => { editButtons()[0].click(); });
     const [multiplier] = Array.from(document.querySelectorAll<HTMLInputElement>('.mantine-NumberInput-input'));
     await typeInto(multiplier, '50');
+    expect(buttonByText('Save')!.disabled).toBe(true);
     await act(async () => { buttonByText('Save')!.click(); });
     expect(calls.some(c => c.method === 'PATCH')).toBe(false);
-    expect(showError).toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Must be between 0.1 and 10');
     expect(document.body.textContent).toContain('Edit Event'); // stays open for correction
   });
 

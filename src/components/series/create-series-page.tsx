@@ -1,93 +1,145 @@
 'use client'
 
-import { logger } from '@/lib/logger/client';
-import { useState } from 'react';
-import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useMemo, useEffect } from 'react';
+import type { JSX, ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Container, Stack, Button, Stepper, Group, Text, TextInput, Divider } from '@mantine/core';
 import {
-  Container,
-  Stack,
-  TextInput,
-  Textarea,
-  Button,
-  Group,
-  Switch,
-  Text,
-  Divider,
-} from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
-import { IconTimeline, IconArrowLeft } from '@tabler/icons-react';
+  IconTimeline, IconArrowLeft, IconInfoCircle, IconBell, IconCalculator,
+  IconListDetails, IconListCheck, IconSearch,
+} from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
-import { showError, showSuccess } from '@/lib/notifications';
-import { ScoringConfigEditor } from './scoring-config-editor';
-import type { SeriesScoringConfig } from '@/lib/series';
+import { logger } from '@/lib/logger/client';
+import { notificationHelper, showError } from '@/lib/notifications';
+import {
+  useSeriesForm, buildSeriesPayload, SeriesDetailsFields, SeriesNotificationsFields,
+  SeriesScoringFields, SeriesFormCard,
+} from './series-form';
+import type { PickedEvent, SeriesFormData } from './series-form';
+import {
+  useEventCandidates, filterCandidates, EventPickerList, EventPickerRow, EventTypeBadge, candidateKey,
+} from './event-picker';
+import { formatMultiplier, formatShortDate, formatPoints } from './series-shared';
 
-interface SeriesFormData {
-  name: string;
-  description: string;
-  start_date: Date | null;
-  end_date: Date | null;
-  livestream_link: string;
-  announcements: boolean;
-  player_notifications: boolean;
-  scoring_config: SeriesScoringConfig;
-}
+const STEPS = [
+  { label: 'Details', icon: IconInfoCircle },
+  { label: 'Notifications', icon: IconBell },
+  { label: 'Scoring', icon: IconCalculator },
+  { label: 'Events', icon: IconListDetails },
+  { label: 'Review', icon: IconListCheck },
+] as const;
+
+const DEFAULT_MULTIPLIER: Record<'match' | 'tournament', number> = { match: 1, tournament: 1.5 };
 
 export function CreateSeriesPage(): JSX.Element {
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<SeriesFormData>({
-    name: '',
-    description: '',
-    start_date: null,
-    end_date: null,
-    livestream_link: '',
-    announcements: true,
-    player_notifications: true,
-    scoring_config: {},
-  });
+  const searchParams = useSearchParams();
+  const rawStep = Number.parseInt(searchParams.get('step') ?? '1', 10);
+  const step = Number.isInteger(rawStep) && rawStep >= 1 && rawStep <= STEPS.length ? rawStep : 1;
 
-  const update = <K extends keyof SeriesFormData>(key: K, value: SeriesFormData[K]) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+  const { form, update, clear, pickedEvents, setPickedEvents } = useSeriesForm();
+  const [submitting, setSubmitting] = useState<'create' | 'activate' | null>(null);
+
+  const canProceed = (s: number) => (s === 1 ? form.name.trim().length > 0 : true);
+
+  // A direct link to a later step (or a cleared form) without a name goes back to Details.
+  const missingName = step > 1 && !canProceed(1);
+  useEffect(() => {
+    if (missingName) router.replace('/series/create?step=1');
+  }, [missingName, router]);
+
+  const goTo = (s: number) => {
+    // Never skip past step 1 without a name (e.g. clicking a later stepper step).
+    const target = s > 1 && !canProceed(1) ? 1 : s;
+    router.push(`/series/create?step=${target}`);
   };
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) {
+  const handleCancel = () => {
+    clear();
+    router.push('/series');
+  };
+
+  const handleBack = () => (step === 1 ? handleCancel() : goTo(step - 1));
+
+  const handleCreate = async (activate: boolean) => {
+    if (!canProceed(1)) {
       showError('Series name is required');
+      goTo(1);
       return;
     }
+    setSubmitting(activate ? 'activate' : 'create');
+    const nid = 'series-create';
+    notificationHelper.loading({ id: nid, message: 'Creating series...' });
 
-    setSaving(true);
     try {
       const res = await fetch('/api/series', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          description: form.description.trim() || undefined,
-          start_date: form.start_date?.toISOString() ?? undefined,
-          end_date: form.end_date?.toISOString() ?? undefined,
-          livestream_link: form.livestream_link.trim() || undefined,
-          announcements: form.announcements,
-          player_notifications: form.player_notifications,
-          scoring_config: form.scoring_config,
-        }),
+        body: JSON.stringify(buildSeriesPayload(form)),
       });
-
       if (!res.ok) {
-        const err = await res.json();
-        showError(err.error ?? 'Failed to create series');
+        const err = await res.json().catch(() => ({}));
+        notificationHelper.update(nid, { type: 'error', message: err.error ?? 'Failed to create series' });
         return;
       }
+      const { id } = await res.json() as { id: string };
 
-      const data = await res.json();
-      showSuccess('Series created!');
-      router.push(`/series/${data.id}`);
-    } catch (error) {
-      logger.error('Error creating series:', error);
-      showError('An error occurred while creating the series');
+      // Add picked events one by one, in the order they were picked. The series already
+      // exists at this point, so a failure is reported and the user lands on the series page.
+      const failed: string[] = [];
+      for (const ev of Object.values(pickedEvents)) {
+        try {
+          const evRes = await fetch(`/api/series/${id}/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event_type: ev.type,
+              ...(ev.type === 'match' ? { match_id: ev.id } : { tournament_id: ev.id }),
+              points_multiplier: ev.multiplier,
+            }),
+          });
+          if (!evRes.ok) {
+            const err = await evRes.json().catch(() => ({}));
+            failed.push(`${ev.name}${err.error ? ` (${err.error})` : ''}`);
+          }
+        } catch (err) {
+          logger.error('Error adding series event:', err);
+          failed.push(ev.name);
+        }
+      }
+
+      if (failed.length > 0) {
+        notificationHelper.update(nid, {
+          type: 'warning',
+          title: 'Series created with problems',
+          message: `Couldn't add: ${failed.join(', ')}.${activate ? ' The series was not activated.' : ''}`,
+        });
+      } else if (activate) {
+        const tRes = await fetch(`/api/series/${id}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'active' }),
+        });
+        if (tRes.ok) {
+          notificationHelper.update(nid, { type: 'success', message: 'Series created and activated!' });
+        } else {
+          const err = await tRes.json().catch(() => ({}));
+          notificationHelper.update(nid, {
+            type: 'warning',
+            message: `Series created, but activation failed: ${err.error ?? 'unknown error'}`,
+          });
+        }
+      } else {
+        notificationHelper.update(nid, { type: 'success', message: 'Series created!' });
+      }
+
+      clear();
+      router.push(`/series/${id}`);
+    } catch (err) {
+      logger.error('Error creating series:', err);
+      notificationHelper.update(nid, { type: 'error', message: 'An error occurred while creating the series' });
     } finally {
-      setSaving(false);
+      setSubmitting(null);
     }
   };
 
@@ -99,91 +151,159 @@ export function CreateSeriesPage(): JSX.Element {
           title="Create Series"
           subtitle="Set up a new multi-event championship"
           breadcrumbs={[{ title: 'Series', href: '/series' }]}
+          action={
+            <Button variant="outline" leftSection={<IconArrowLeft size={16} />} onClick={handleBack}>
+              Back
+            </Button>
+          }
         />
 
-        <TextInput
-          label="Series Name"
-          placeholder="e.g. Spring 2026 Championship"
-          required
-          value={form.name}
-          onChange={(e) => update('name', e.currentTarget.value)}
-        />
+        <Stepper active={step - 1} onStepClick={(i) => goTo(i + 1)} size="sm">
+          {STEPS.map(({ label, icon: Icon }) => (
+            <Stepper.Step key={label} label={label} icon={<Icon size={18} />} />
+          ))}
+        </Stepper>
 
-        <Textarea
-          label="Description"
-          placeholder="Describe this series..."
-          value={form.description}
-          onChange={(e) => update('description', e.currentTarget.value)}
-          autosize
-          minRows={3}
-        />
-
-        <Group grow>
-          <DatePickerInput
-            label="Start Date"
-            placeholder="Pick start date"
-            value={form.start_date}
-            onChange={(v) => setForm(prev => ({ ...prev, start_date: v as Date | null }))}
-            clearable
-          />
-          <DatePickerInput
-            label="End Date"
-            placeholder="Pick end date"
-            value={form.end_date}
-            onChange={(v) => setForm(prev => ({ ...prev, end_date: v as Date | null }))}
-            clearable
-            minDate={form.start_date ?? undefined}
-          />
-        </Group>
-
-        <TextInput
-          label="Livestream Link"
-          placeholder="https://twitch.tv/..."
-          value={form.livestream_link}
-          onChange={(e) => update('livestream_link', e.currentTarget.value)}
-        />
-
-        <Divider />
-
-        <Text fw={500} size="sm">Notifications</Text>
-
-        <Switch
-          label="Discord Announcements"
-          description="Post announcements to Discord when series status changes"
-          checked={form.announcements}
-          onChange={(e) => update('announcements', e.currentTarget.checked)}
-        />
-
-        <Switch
-          label="Player Notifications"
-          description="Send DMs to participants for series events"
-          checked={form.player_notifications}
-          onChange={(e) => update('player_notifications', e.currentTarget.checked)}
-        />
-
-        <Divider />
-
-        <ScoringConfigEditor
-          value={form.scoring_config}
-          onChange={(v) => update('scoring_config', v)}
-        />
-
-        <Divider />
+        {step === 1 && <SeriesDetailsFields form={form} update={update} />}
+        {step === 2 && <SeriesNotificationsFields form={form} update={update} />}
+        {step === 3 && <SeriesScoringFields form={form} update={update} />}
+        {step === 4 && <EventsStep picked={pickedEvents} setPicked={setPickedEvents} />}
+        {step === 5 && <ReviewStep form={form} picked={pickedEvents} />}
 
         <Group justify="space-between">
-          <Button
-            variant="outline"
-            leftSection={<IconArrowLeft size={14} />}
-            onClick={() => router.push('/series')}
-            disabled={saving}
-          >
-            Cancel
+          <Button variant="outline" onClick={handleBack} disabled={submitting !== null}>
+            {step === 1 ? 'Cancel' : 'Back'}
           </Button>
-          <Button onClick={handleSubmit} loading={saving}>
-            Create Series
-          </Button>
+          {step < STEPS.length ? (
+            <Button onClick={() => goTo(step + 1)} disabled={!canProceed(step)}>
+              Next: {STEPS[step].label}
+            </Button>
+          ) : (
+            <Group gap="sm">
+              <Button
+                variant="outline"
+                onClick={() => handleCreate(false)}
+                loading={submitting === 'create'}
+                disabled={submitting !== null}
+              >
+                Create Series
+              </Button>
+              <Button
+                onClick={() => handleCreate(true)}
+                loading={submitting === 'activate'}
+                disabled={submitting !== null}
+              >
+                Create &amp; Activate
+              </Button>
+            </Group>
+          )}
         </Group>
       </Stack>
     </Container>
+  );
+}
+
+function EventsStep({
+  picked,
+  setPicked,
+}: {
+  picked: Record<string, PickedEvent>;
+  setPicked: (updater: (prev: Record<string, PickedEvent>) => Record<string, PickedEvent>) => void;
+}): JSX.Element {
+  const { candidates, loading } = useEventCandidates();
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => filterCandidates(candidates, search), [candidates, search]);
+
+  return (
+    <SeriesFormCard title="Events (optional)">
+      <Text size="sm" c="dimmed" mt={-8}>
+        Add existing matches and tournaments now, or later from the series page.
+      </Text>
+      <TextInput
+        placeholder="Search matches and tournaments..."
+        leftSection={<IconSearch size={14} />}
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+      />
+      <EventPickerList
+        candidates={filtered}
+        loading={loading}
+        maxHeight={420}
+        emptyText={search ? 'No events match your search' : 'No matches or tournaments available'}
+        renderRow={(c) => {
+          const key = candidateKey(c);
+          const isPicked = key in picked;
+          return (
+            <EventPickerRow
+              key={key}
+              candidate={c}
+              selected={isPicked}
+              onClick={() => setPicked(prev => {
+                const next = { ...prev };
+                if (isPicked) delete next[key];
+                else next[key] = { type: c.type, id: c.id, name: c.name, multiplier: DEFAULT_MULTIPLIER[c.type] };
+                return next;
+              })}
+              extra={
+                <Group gap={6} wrap="nowrap" visibleFrom="xs">
+                  <EventTypeBadge type={c.type} />
+                  <Text size="xs" ff="monospace" fw={700} c="violet">{formatMultiplier(DEFAULT_MULTIPLIER[c.type])}</Text>
+                </Group>
+              }
+            />
+          );
+        }}
+      />
+      {Object.keys(picked).length > 0 && (
+        <Text size="xs" c="dimmed">
+          {Object.keys(picked).length} selected · added in the order picked · multipliers can be changed until the series starts
+        </Text>
+      )}
+    </SeriesFormCard>
+  );
+}
+
+function ReviewRow({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+  return (
+    <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+      <Text size="sm" fw={500} c="dimmed" style={{ flexShrink: 0 }}>{label}:</Text>
+      <Text size="sm" ta="right" style={{ wordBreak: 'break-word' }}>{children}</Text>
+    </Group>
+  );
+}
+
+function ReviewStep({ form, picked }: { form: SeriesFormData; picked: Record<string, PickedEvent> }): JSX.Element {
+  const start = form.start_date ? formatShortDate(`${form.start_date}T00:00:00`) : null;
+  const end = form.end_date ? formatShortDate(`${form.end_date}T00:00:00`) : null;
+  const sc = form.scoring_config;
+  const placements = sc.tournament_position_points ?? [];
+  const events = Object.values(picked);
+
+  return (
+    <SeriesFormCard title="Review">
+      <Stack gap="sm">
+        <ReviewRow label="Name">{form.name.trim() || '—'}</ReviewRow>
+        <ReviewRow label="Dates">{start || end ? `${start ?? '?'} → ${end ?? '?'}` : '—'}</ReviewRow>
+        <ReviewRow label="Livestream">{form.livestream_link.trim() || '—'}</ReviewRow>
+        <ReviewRow label="Announcements">{form.announcements ? 'Enabled' : 'Disabled'}</ReviewRow>
+        <ReviewRow label="Player Notifications">{form.player_notifications ? 'Enabled' : 'Disabled'}</ReviewRow>
+        <Divider />
+        <ReviewRow label="Match win / loss">
+          {formatPoints(sc.match_win_points ?? 0)} / {formatPoints(sc.match_loss_points ?? 0)} pts
+        </ReviewRow>
+        <ReviewRow label="Placement points">
+          {placements.length > 0 ? placements.map(formatPoints).join(' · ') : '—'}
+        </ReviewRow>
+        <ReviewRow label="Position matches">
+          {sc.position_event_use_event_spread !== false ? 'Use their own point spread' : 'Win / loss points'}
+        </ReviewRow>
+        <Divider />
+        <ReviewRow label="Events">
+          {events.length === 0
+            ? 'None yet'
+            : events.map((e, i) => `#${i + 1} ${e.name} ${formatMultiplier(e.multiplier)}`).join(', ')}
+        </ReviewRow>
+      </Stack>
+    </SeriesFormCard>
   );
 }

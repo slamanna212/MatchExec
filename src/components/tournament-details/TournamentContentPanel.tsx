@@ -9,7 +9,6 @@ import {
   Text,
   Badge,
   Card,
-  SimpleGrid,
   Avatar,
   Divider,
   Skeleton,
@@ -22,8 +21,8 @@ import type { TournamentWithGameDetails, TournamentTeam, TournamentTeamMember } 
 import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
 import { EmptyState } from '../EmptyState';
-import { SectionLabel } from '../SectionLabel';
 import { LeaderboardView, type CumulativeStanding } from '../tournament/leaderboard-view';
+import { RankedTable } from '../shared/RankedTable';
 import classes from '../gradient-segmented-control.module.css';
 
 // Use shared type as local alias
@@ -62,6 +61,11 @@ function isCumulativeStanding(s: TeamStanding | CumulativeStanding): s is Cumula
   return 'participant_id' in s;
 }
 
+/** Adds a 1-based rank in API order (same numbering as the previous card list). */
+function rankTeamStandings(list: TeamStanding[]): (TeamStanding & { rank: number })[] {
+  return list.map((t, i) => ({ ...t, rank: i + 1 }));
+}
+
 interface TournamentContentPanelProps {
   tournament: TournamentWithGame;
   teams: TeamWithMembers[];
@@ -74,22 +78,14 @@ interface TournamentContentPanelProps {
   onStartAllMatches: (matchIds: string[]) => Promise<void>;
 }
 
-const getTeamCardStyles = (teamIndex: number) => {
-  const colors = [
-    { backgroundColor: 'var(--mantine-color-blue-2)', borderColor: 'var(--mantine-color-blue-4)' },
-    { backgroundColor: 'var(--mantine-color-red-2)', borderColor: 'var(--mantine-color-red-4)' },
-    { backgroundColor: 'var(--mantine-color-green-2)', borderColor: 'var(--mantine-color-green-4)' },
-    { backgroundColor: 'var(--mantine-color-purple-2)', borderColor: 'var(--mantine-color-purple-4)' },
-    { backgroundColor: 'var(--mantine-color-orange-2)', borderColor: 'var(--mantine-color-orange-4)' },
-    { backgroundColor: 'var(--mantine-color-teal-2)', borderColor: 'var(--mantine-color-teal-4)' }
-  ];
-  return colors[teamIndex % colors.length] || { backgroundColor: 'var(--mantine-color-gray-2)', borderColor: 'var(--mantine-color-gray-4)' };
-};
+const TEAM_COLORS = ['blue', 'red', 'green', 'grape', 'orange', 'teal'];
+const teamColor = (teamIndex: number): string => TEAM_COLORS[teamIndex % TEAM_COLORS.length];
 
-const getTeamBadgeColor = (teamIndex: number) => {
-  const colors = ['orange', 'cyan', 'yellow', 'grape', 'lime', 'indigo'];
-  return colors[teamIndex % colors.length] || 'dark';
-};
+const TEAM_GRID_STYLE = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+  gap: 'var(--mantine-spacing-md)',
+} as const;
 
 export function TournamentContentPanel({
   tournament,
@@ -108,6 +104,7 @@ export function TournamentContentPanel({
   // each participant is a solo team, and it is the only place to see/manage
   // who is playing.
   const isCumulative = tournament.format === 'cumulative-points';
+  const teamStandings = rankTeamStandings(standings.filter((s): s is TeamStanding => !isCumulativeStanding(s)));
   const defaultTab = isCumulative ? 'standings' : 'teams';
 
   const [activeTab, setActiveTab] = useState<'teams' | 'bracket' | 'standings' | 'control'>(() => {
@@ -162,9 +159,9 @@ export function TournamentContentPanel({
       {activeTab === 'teams' && (
         <Stack gap="md">
           {loading ? (
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <div style={TEAM_GRID_STYLE}>
               {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} withBorder p="md" style={{ minHeight: '200px' }}>
+                <Card key={i} withBorder radius="md" p="md" style={{ minHeight: '200px' }}>
                   <Stack gap="sm">
                     <Group>
                       <Skeleton height={20} width={20} />
@@ -183,31 +180,32 @@ export function TournamentContentPanel({
                   </Stack>
                 </Card>
               ))}
-            </SimpleGrid>
+            </div>
           ) : teams.length > 0 ? (
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <div style={TEAM_GRID_STYLE}>
               {teams.map((team, teamIndex) => {
-                const teamStyles = getTeamCardStyles(teamIndex);
-                const badgeColor = getTeamBadgeColor(teamIndex);
+                const color = teamColor(teamIndex);
+                const memberCount = team.members?.length || 0;
 
                 return (
                   <Card
                     key={team.id}
                     withBorder
+                    radius="md"
                     p="md"
-                    style={{
-                      height: '100%',
-                      minHeight: '200px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      borderLeft: `4px solid ${teamStyles.borderColor}`
-                    }}
+                    style={{ height: '100%', minHeight: '200px', display: 'flex', flexDirection: 'column' }}
                   >
-                    <Group mb="sm">
-                      <IconTrophy size="1.2rem" color={teamStyles.borderColor} />
+                    <Group mb="sm" gap="sm" wrap="nowrap">
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                          backgroundColor: `var(--mantine-color-${color}-6)`,
+                        }}
+                      />
                       <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
-                      <Badge size="sm" variant="filled" color={badgeColor}>
-                        {team.members?.length || 0} members
+                      <Badge size="sm" variant="light" color="gray" style={{ flexShrink: 0 }}>
+                        {memberCount} {memberCount === 1 ? 'member' : 'members'}
                       </Badge>
                     </Group>
                     <Divider mb="sm" opacity={0.7} />
@@ -216,17 +214,17 @@ export function TournamentContentPanel({
                       {team.members && team.members.length > 0 ? (
                         <Stack gap="xs">
                           {team.members.map((member, memberIndex) => (
-                            <Group key={member.id} gap="sm" justify="space-between">
-                              <Group gap="sm">
+                            <Group key={member.id} gap="sm" justify="space-between" wrap="nowrap">
+                              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
                                 <Avatar
                                   size="sm"
                                   src={member.avatar_url || null}
-                                  color={badgeColor}
-                                  variant={member.avatar_url ? undefined : 'filled'}
+                                  color={color}
+                                  variant="filled"
                                 >
                                   {!member.avatar_url && (memberIndex + 1)}
                                 </Avatar>
-                                <Text size="sm">{member.username}</Text>
+                                <Text size="sm" truncate>{member.username}</Text>
                                 {member.discord_user_id && (
                                   <ActionIcon
                                     component="a"
@@ -254,7 +252,7 @@ export function TournamentContentPanel({
                   </Card>
                 );
               })}
-            </SimpleGrid>
+            </div>
           ) : (
             <Card withBorder>
               <EmptyState
@@ -288,66 +286,40 @@ export function TournamentContentPanel({
       {activeTab === 'standings' && (
         <Stack gap="md">
           {loading ? (
-            <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
+            <Stack gap="xs">
               {Array.from({ length: 5 }).map((_, i) => (
-                <Card key={i} withBorder p="md">
-                  <Group justify="space-between">
-                    <Group gap="md">
-                      <Skeleton height={40} width={40} circle />
-                      <Stack gap={4}>
-                        <Skeleton height={14} width={120} />
-                        <Skeleton height={12} width={80} />
-                      </Stack>
-                    </Group>
-                    <Group gap="lg">
-                      <Skeleton height={40} width={40} />
-                      <Skeleton height={40} width={40} />
-                    </Group>
-                  </Group>
-                </Card>
+                <Skeleton key={i} height={52} radius="md" />
               ))}
             </Stack>
           ) : isCumulative ? (
             <LeaderboardView standings={standings.filter(isCumulativeStanding)} />
-          ) : standings.length > 0 ? (
-            <Stack gap="xs" style={{ width: '80%', margin: '0 auto' }}>
-              {(standings.filter((s): s is TeamStanding => !isCumulativeStanding(s))).map((team, index) => (
-                <Card
-                  key={team.team_id}
-                  withBorder
-                  p="md"
-                  style={{
-                    borderLeft: index === 0 ? '4px solid var(--mantine-color-yellow-5)' : undefined
-                  }}
-                >
-                  <Group justify="space-between" wrap="nowrap">
-                    <Group gap="md">
-                      <Avatar size="md" color={index === 0 ? 'yellow' : 'blue'} variant="filled">
-                        {index + 1}
-                      </Avatar>
-                      <div>
-                        <Text fw={500} size="sm">{team.team_name}</Text>
-                        <Text size="xs" c="dimmed">
-                          {team.matches_played} {team.matches_played === 1 ? 'match' : 'matches'} played
-                        </Text>
-                      </div>
-                    </Group>
-                    <Group gap="lg">
-                      <div style={{ textAlign: 'center' }}>
-                        <SectionLabel>Wins</SectionLabel>
-                        <Text size="lg" fw={700} c="green">{team.wins}</Text>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <SectionLabel>Losses</SectionLabel>
-                        <Text size="lg" fw={700} c="red">{team.losses}</Text>
-                      </div>
-                    </Group>
-                  </Group>
-                </Card>
-              ))}
-            </Stack>
+          ) : teamStandings.length > 0 ? (
+            <RankedTable
+              rows={teamStandings}
+              getKey={(t) => t.team_id}
+              getRank={(t) => t.rank}
+              primaryHeader="Team"
+              renderPrimary={(t) => (
+                <>
+                  <Text fw={500} size="sm" truncate>{t.team_name}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t.matches_played} {t.matches_played === 1 ? 'match' : 'matches'} played
+                  </Text>
+                </>
+              )}
+              columns={[
+                {
+                  key: 'wins', header: 'Wins', width: '64px', align: 'center',
+                  render: (t) => <Text size="lg" fw={700} c="green">{t.wins}</Text>,
+                },
+                {
+                  key: 'losses', header: 'Losses', width: '64px', align: 'center',
+                  render: (t) => <Text size="lg" fw={700} c="red">{t.losses}</Text>,
+                },
+              ]}
+            />
           ) : (
-            <Card withBorder>
+            <Card withBorder radius="md">
               <EmptyState
                 icon={IconTrophy}
                 title="No standings yet"

@@ -4,6 +4,7 @@ import {
   validateSeriesDates, validateSeriesGameId,
 } from '@/lib/series';
 import type { UpdateSeriesInput } from '@/lib/series';
+import { getSeriesSummary } from '@/lib/series-summary';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 
@@ -13,7 +14,7 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const { seriesId } = await params;
-    const series = await getSeriesById(seriesId);
+    const series = await getSeriesSummary(seriesId);
     if (!series) return apiError('Series not found', 404);
     return apiOk({ series });
   } catch (error) {

@@ -1,0 +1,23 @@
+.row {
+  display: grid;
+  align-items: center;
+  column-gap: var(--mantine-spacing-sm);
+  padding: 10px 20px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.header {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.leader {
+  background-color: light-dark(rgba(250, 176, 5, 0.08), rgba(250, 176, 5, 0.06));
+}
+
+.scroller {
+  overflow-x: auto;
+}
