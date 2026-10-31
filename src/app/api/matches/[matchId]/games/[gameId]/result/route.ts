@@ -224,12 +224,15 @@ export async function POST(
     const match = await db.get<{ status: string }>('SELECT status FROM matches WHERE id = ?', [matchId]);
     if (!match) return apiError('Match not found', 404);
 
-    const game = await db.get<{ id: string }>(
-      'SELECT id FROM match_games WHERE id = ? AND match_id = ?', [gameId, matchId]
+    const game = await db.get<{ id: string; status: string }>(
+      'SELECT id, status FROM match_games WHERE id = ? AND match_id = ?', [gameId, matchId]
     );
     if (!game) return apiError('Game not found for this match', 404);
 
     const rescore = (body as { rescore?: unknown }).rescore === true;
+    if (game.status === 'completed' && !rescore) {
+      return apiError('This map is already scored; pass rescore: true to correct its result', 409);
+    }
     if (match.status === 'complete') {
       if (!rescore) {
         return apiError('Match is already complete; pass rescore: true to correct a result', 400);

@@ -15,7 +15,43 @@ import type { GameResult, TeamPlacement, ParticipantPlacement } from './types/sc
  * Returns 0 if position is not in the config
  */
 export function getPointsForPosition(position: number, config: PositionScoringConfig): number {
-  return config.pointsPerPosition[position.toString()] ?? 0;
+  return config?.pointsPerPosition?.[position.toString()] ?? 0;
+}
+
+/**
+ * Points spread used when neither the match, its tournament, nor the game defines one
+ * (F1-style top 10). Without it every Position result would award 0 and tie.
+ */
+export const DEFAULT_POSITION_SPREAD: Record<string, number> = {
+  '1': 25, '2': 18, '3': 15, '4': 12, '5': 10, '6': 8, '7': 6, '8': 4, '9': 2, '10': 1,
+};
+
+/**
+ * Parse a stored spread into a PositionScoringConfig. Accepts the
+ * `{ type, pointsPerPosition }` form (games, tournaments) and the flat
+ * `{ "1": 25, ... }` form (per-match override from the create form). Missing or
+ * malformed input falls back to DEFAULT_POSITION_SPREAD.
+ */
+export function parsePositionScoringConfig(raw: string | null | undefined): PositionScoringConfig {
+  const fallback: PositionScoringConfig = { type: 'Position', pointsPerPosition: DEFAULT_POSITION_SPREAD };
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return fallback;
+    const record = parsed as Record<string, unknown>;
+    const spread = (record.pointsPerPosition ?? record) as Record<string, unknown>;
+    const entries = Object.entries(spread);
+    const valid = typeof spread === 'object' && spread !== null && entries.length > 0 &&
+      entries.every(([pos, pts]) => /^[1-9]\d*$/.test(pos) && typeof pts === 'number' && Number.isFinite(pts));
+    if (!valid) {
+      logger.error('Malformed position scoring spread, using default spread');
+      return fallback;
+    }
+    return { type: 'Position', pointsPerPosition: spread as Record<string, number> };
+  } catch {
+    logger.error('Unparseable position scoring spread, using default spread');
+    return fallback;
+  }
 }
 
 /**
@@ -43,13 +79,7 @@ export async function getPointsForPositionByMatchId(position: number, matchId: s
     [matchId]
   );
   const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
-  if (!raw) return 0;
-  try {
-    const config = JSON.parse(raw) as PositionScoringConfig;
-    return getPointsForPosition(position, config);
-  } catch {
-    return 0;
-  }
+  return getPointsForPosition(position, parsePositionScoringConfig(raw));
 }
 
 /**
@@ -78,18 +108,7 @@ export async function calculatePositionPoints(
     );
 
     const raw = row?.position_scoring_override ?? row?.tournament_scoring_override ?? row?.scoring_config;
-    if (!raw) {
-      logger.warning('No scoring config found, defaulting to 0 points for all positions');
-      return Object.keys(positionResults).reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>);
-    }
-
-    let config: PositionScoringConfig;
-    try {
-      config = JSON.parse(raw) as PositionScoringConfig;
-    } catch {
-      logger.error('Malformed scoring_config, defaulting to 0 points for all positions');
-      return Object.keys(positionResults).reduce((acc, id) => { acc[id] = 0; return acc; }, {} as Record<string, number>);
-    }
+    const config = parsePositionScoringConfig(raw);
 
     const pointsAwarded: Record<string, number> = {};
     for (const [participantId, position] of Object.entries(positionResults)) {
@@ -568,11 +587,17 @@ async function savePlacementsForNormal(
     `SELECT id FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC`,
     [matchId]
   );
+  // With exactly two teams the loser is unambiguous, so a loserScore is kept even
+  // when the caller didn't name loserTeamId. With 3+ teams it can't be attributed.
+  const impliedLoserId = !loserTeamId && !draw && winnerTeamId && teams.length === 2
+    ? teams.find(t => t.id !== winnerTeamId)?.id
+    : undefined;
+  const effectiveLoserId = loserTeamId ?? impliedLoserId;
   for (const team of teams) {
     const isWinner = !draw && team.id === winnerTeamId;
     const score = isWinner
       ? (winnerScore ?? null)
-      : (loserTeamId && team.id === loserTeamId ? (loserScore ?? null) : null);
+      : (effectiveLoserId && team.id === effectiveLoserId ? (loserScore ?? null) : null);
     await db.run(
       `INSERT INTO match_game_placements
        (id, match_game_id, entity_type, entity_id, position, score, is_winner)
@@ -580,6 +605,19 @@ async function savePlacementsForNormal(
       [genPlacementId(), matchGameId, team.id, draw || isWinner ? 1 : 2, score, isWinner ? 1 : 0]
     );
   }
+
+  // Mirror the first two teams' scores into the legacy score_a / score_b columns.
+  await db.run(
+    `UPDATE match_games SET
+       score_a = COALESCE((SELECT p.score FROM match_game_placements p
+                           JOIN match_teams t ON t.id = p.entity_id
+                           WHERE p.match_game_id = ? AND p.entity_type = 'team' AND t.team_order = 0), 0),
+       score_b = COALESCE((SELECT p.score FROM match_game_placements p
+                           JOIN match_teams t ON t.id = p.entity_id
+                           WHERE p.match_game_id = ? AND p.entity_type = 'team' AND t.team_order = 1), 0)
+     WHERE id = ?`,
+    [matchGameId, matchGameId, matchGameId]
+  );
 }
 
 async function savePlacementsForFfa(

@@ -8,6 +8,7 @@ import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   validateMatchRequest,
   prepareMatchData,
+  resolveModeFromMaps,
   insertMatchToDatabase,
   parseMatchResponse,
   type MatchRequestBody
@@ -112,7 +113,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const db = await getDbInstance();
 
     // Prepare match data
-    const preparedData = await prepareMatchData(body, db);
+    const mode = await resolveModeFromMaps(db, body.gameId, body.maps);
+    if (mode.error) {
+      return apiError(mode.error, 400);
+    }
+    const preparedData = await prepareMatchData(body, db, mode.modeId);
 
     // Insert match into database
     await insertMatchToDatabase(db, body, preparedData);

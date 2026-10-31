@@ -4,7 +4,7 @@ import { getDbInstance } from '../../../lib/database-init';
 import type { Tournament } from '@/shared/types';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/lib/database/connection';
-import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
+import { validateMaxLength, validateNumberRange, validateEnum, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import { apiError, apiOk } from '@/lib/api-response';
 
@@ -49,6 +49,8 @@ function validateTournamentBody(body: Partial<TournamentBody>): string | null {
   ]) {
     if (!check.valid) return check.error;
   }
+  const overrideError = validatePositionScoringOverrideJson(body.positionScoringOverride);
+  if (overrideError) return overrideError;
 
   return null;
 }

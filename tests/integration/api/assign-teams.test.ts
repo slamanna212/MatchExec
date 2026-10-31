@@ -174,7 +174,7 @@ describe('assign-teams / setup routes', () => {
   });
 
   it('validateMatchRequest bounds teamCount', () => {
-    const base = { name: 'x', gameId: 'g' };
+    const base = { name: 'x', gameId: 'g', startDate: new Date().toISOString() };
     expect(validateMatchRequest({ ...base, teamCount: 1 }).valid).toBe(false);
     expect(validateMatchRequest({ ...base, teamCount: 17 }).valid).toBe(false);
     expect(validateMatchRequest({ ...base, teamCount: 4 }).valid).toBe(true);

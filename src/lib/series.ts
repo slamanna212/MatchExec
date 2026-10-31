@@ -654,10 +654,12 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
     }
   }
 
-  return Array.from(totals.entries())
+  const sorted = Array.from(totals.entries())
     .map(([user_id, data]) => ({ user_id, username: data.username, total_points: data.total_points, events_played: data.events_played.size }))
-    .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username))
-    .map((entry, idx) => ({ rank: idx + 1, ...entry }));
+    .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username));
+  // Players tied on points share a rank (same convention as tournament standings).
+  const ranks = tieAwareRanks(sorted.map(e => e.total_points));
+  return sorted.map((entry, idx) => ({ rank: ranks[idx] + 1, ...entry }));
 }
 
 /** Parses a JSON object body; returns null for invalid JSON or non-object bodies. */
@@ -709,6 +711,10 @@ export async function deleteMatchDependents(db: Db, matchId: string): Promise<vo
     'DELETE FROM match_game_placements WHERE match_game_id IN (SELECT id FROM match_games WHERE match_id = ?)',
     [matchId]
   );
+  await db.run('DELETE FROM match_games WHERE match_id = ?', [matchId]);
+  await db.run('DELETE FROM match_participants WHERE match_id = ?', [matchId]);
+  await db.run('DELETE FROM match_player_stats WHERE match_id = ?', [matchId]);
   await db.run('DELETE FROM match_teams WHERE match_id = ?', [matchId]);
+  await db.run('DELETE FROM tournament_matches WHERE match_id = ?', [matchId]);
   await db.run('DELETE FROM series_events WHERE match_id = ?', [matchId]);
 }

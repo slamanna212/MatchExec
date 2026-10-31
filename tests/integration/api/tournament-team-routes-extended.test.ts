@@ -181,6 +181,11 @@ describe('Tournament Teams Routes — Extended', () => {
         [teamId, tournamentId]
       );
 
+      await db.run(
+        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username) VALUES (?, ?, 'u1', 'd1', 'EchoPlayer')`,
+        [`tp-${teamId}`, tournamentId]
+      );
+
       const req = makeJsonRequest({
         teams: [{ teamId, members: [{ userId: 'u1', username: 'EchoPlayer', isCaptain: true }] }],
       }, 'PUT') as any;
@@ -195,6 +200,62 @@ describe('Tournament Teams Routes — Extended', () => {
       );
       expect(member?.username).toBe('EchoPlayer');
       expect(member?.is_captain).toBe(1);
+    });
+  });
+
+  describe('PUT member validation', () => {
+    async function seedTeam(name: string) {
+      const db = getTestDb();
+      const teamId = `team-${name}-${Date.now()}-${Math.random()}`;
+      await db.run(`INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, ?)`, [teamId, tournamentId, name]);
+      return teamId;
+    }
+
+    it('rejects a member who is not a participant of this tournament, and changes nothing', async () => {
+      const db = getTestDb();
+      const teamId = await seedTeam('Ghosts');
+      await db.run(
+        `INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username) VALUES (?, ?, 'old', 'd', 'Old')`,
+        [`m-${teamId}`, teamId]
+      );
+      const res = await assignTeams(makeJsonRequest({
+        teams: [{ teamId, members: [{ userId: 'not-signed-up', username: 'Ghost' }] }],
+      }, 'PUT') as any, createRouteParams({ tournamentId }));
+      expect(res.status).toBe(400);
+      const members = await db.all<{ user_id: string }>(`SELECT user_id FROM tournament_team_members WHERE team_id = ?`, [teamId]);
+      expect(members.map(m => m.user_id)).toEqual(['old']); // existing assignment untouched
+    });
+
+    it('rejects a participant listed on two teams', async () => {
+      const db = getTestDb();
+      const a = await seedTeam('A');
+      const b = await seedTeam('B');
+      await db.run(
+        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username) VALUES (?, ?, 'dup', 'dd', 'Dup')`,
+        [`tp-dup-${a}`, tournamentId]
+      );
+      const res = await assignTeams(makeJsonRequest({
+        teams: [
+          { teamId: a, members: [{ userId: 'dup', username: 'Dup' }] },
+          { teamId: b, members: [{ userId: 'dup', username: 'Dup' }] },
+        ],
+      }, 'PUT') as any, createRouteParams({ tournamentId }));
+      expect(res.status).toBe(400);
+    });
+
+    it('stores the participant discord_user_id on the member', async () => {
+      const db = getTestDb();
+      const teamId = await seedTeam('Known');
+      await db.run(
+        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username) VALUES (?, ?, 'known', 'discord-known', 'Known')`,
+        [`tp-known-${teamId}`, tournamentId]
+      );
+      const res = await assignTeams(makeJsonRequest({
+        teams: [{ teamId, members: [{ userId: 'known', username: 'Known' }] }],
+      }, 'PUT') as any, createRouteParams({ tournamentId }));
+      expect(res.status).toBe(200);
+      const m = await db.get<{ discord_user_id: string }>(`SELECT discord_user_id FROM tournament_team_members WHERE team_id = ?`, [teamId]);
+      expect(m?.discord_user_id).toBe('discord-known');
     });
   });
 
