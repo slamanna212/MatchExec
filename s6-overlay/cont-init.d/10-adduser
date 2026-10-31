@@ -36,9 +36,9 @@ chown -R abc:abc /app/app_data
 mkdir -p /app/logs
 chown -R abc:abc /app/logs
 
-# Ensure npm cache directory has correct permissions
-mkdir -p /home/abc/.npm
-chown -R abc:abc /home/abc/.npm 2>/dev/null || true
+# Ensure pnpm cache directory has correct permissions
+mkdir -p /home/abc/.cache/pnpm
+chown -R abc:abc /home/abc/.cache/pnpm 2>/dev/null || true
 
 # Set permissions only on data directories (not the entire app)
 chown -R abc:abc /app/app_data /app/logs

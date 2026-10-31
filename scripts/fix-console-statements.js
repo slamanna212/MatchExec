@@ -11,7 +11,7 @@ const { execSync } = require('child_process');
 // Get files with console errors from ESLint
 function getFilesWithConsoleErrors() {
   try {
-    execSync('npm run lint', { stdio: 'pipe' });
+    execSync('pnpm run lint', { stdio: 'pipe' });
     return [];
   } catch (error) {
     const output = error.stdout?.toString() || '';
@@ -171,7 +171,7 @@ console.log(`\n✓ Processed ${processedCount} files`);
 console.log('\nRunning ESLint to verify fixes...');
 
 try {
-  execSync('npm run lint', { stdio: 'inherit' });
+  execSync('pnpm run lint', { stdio: 'inherit' });
   console.log('\n✓ All console errors fixed!');
 } catch (error) {
   console.log('\n⚠ Some issues remain - review output above');

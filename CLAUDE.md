@@ -21,27 +21,27 @@ This project uses a multi-process architecture with different process managers f
 
 ### Prerequisites
 - Node.js 18+
-- npm
+- pnpm (pinned via `packageManager`; enable with `corepack enable`)
 - PM2 (installed as dependency)
 
 ### Setup
 ```bash
-npm install
+pnpm install
 ```
 
 ### Running in Development
 ```bash
 # Start all processes with hot reload
-npm run dev:all
+pnpm run dev:all
 
 # View logs from all processes
-npm run dev:logs
+pnpm run dev:logs
 
 # Stop all processes
-npm run dev:stop
+pnpm run dev:stop
 
 # Restart all processes
-npm run dev:restart
+pnpm run dev:restart
 ```
 
 ## Debugging Workflow
@@ -61,7 +61,7 @@ This workflow is strongly preferred over extensive autonomous exploration with n
 
 ```bash
 # View recent logs from all processes
-npm run dev:logs | tail -100
+pnpm run dev:logs | tail -100
 
 # Check Discord bot logs
 tail -50 ./app_data/data/logs/discord-bot.log
@@ -70,16 +70,16 @@ tail -50 ./app_data/data/logs/discord-bot.log
 tail -50 ./app_data/data/logs/scheduler.log
 
 # Check PM2 process status
-npx pm2 status
+pnpm exec pm2 status
 
 # Query database directly
 sqlite3 ./app_data/data/matchexec.db "SELECT * FROM matches ORDER BY id DESC LIMIT 5;"
 
 # Check for errors in logs
-npm run dev:logs | grep -i error
+pnpm run dev:logs | grep -i error
 
 # Monitor logs in real-time
-npm run dev:logs --lines 0
+pnpm run dev:logs --lines 0
 ```
 
 ### Example Interaction
@@ -87,7 +87,7 @@ npm run dev:logs --lines 0
 **User**: "Match creation is broken, getting a 500 error"
 
 **Claude**: "Can you run these commands and paste the output?
-1. `npm run dev:logs | grep -A 5 'error'`
+1. `pnpm run dev:logs | grep -A 5 'error'`
 2. `tail -50 ./app_data/data/logs/discord-bot.log`
 3. Check browser console for any errors"
 
@@ -125,7 +125,7 @@ The container uses s6-overlay v3 to manage processes:
 
 When a Discord bot or scheduler process needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
 
-1. **Add the package to `package.json`** as a normal dependency (Dependabot/npm update manages versions here)
+1. **Add the package to `package.json`** as a normal dependency (Dependabot/pnpm update manages versions here)
 2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs` or `esbuild.scheduler.config.mjs`)
 3. **Add the package name** to the `PROCESS_DEPS` array in `scripts/collect-process-deps.mjs`
 
@@ -166,7 +166,9 @@ docker run --rm -p 3000:3000 --env-file .env matchexec:test
 │   │   ├── index.ts              # Main bot implementation
 │   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
 │   └── scheduler/                # Cron scheduler process
-├── migrations/                   # Database migrations (27 files; 019-022 scoring rewrite, 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions, 027 backfill matches.mode_id, 028 name backfilled tournament match_teams; there is no 023)
+├── lib/db/                       # (Postgres migration, WIP) Drizzle schema (schema/*.ts), pool/db module, migrate.ts, seed.ts, system-status.ts
+├── drizzle/                      # (Postgres migration, WIP) generated Drizzle SQL migrations (0000_baseline.sql); `pnpm db:generate` / `pnpm db:migrate`
+├── migrations/legacy-sqlite/     # SQLite migrations (still used by the current runtime; later only by the SQLite importer). Database migrations (27 files; 019-022 scoring rewrite, 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions, 027 backfill matches.mode_id, 028 name backfilled tournament match_teams; there is no 023)
 ├── data/games/                   # Game data (6 games with modes/maps)
 ├── s6-overlay/                   # Docker init system config
 └── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
@@ -212,13 +214,13 @@ Database migrations and seeding use `scripts/migrate-background.ts`, which provi
 
 ```bash
 # Run migrations and seeding manually
-npm run migrate
+pnpm run migrate
 
 # Development (PM2 runs migrate-background.ts as a oneshot process)
-npm run dev:all
+pnpm run dev:all
 
 # Production with PM2 (runs migrate-background.ts then starts processes)
-npm run prod:start
+pnpm run prod:start
 
 # Docker (s6-overlay runs migrate-background.ts as a oneshot service)
 docker run matchexec
@@ -248,9 +250,9 @@ Individual processes only connect to the database - migrations run once at start
 
 The project uses a unified PM2 configuration in `ecosystem.config.js` that adapts based on the `NODE_ENV` environment variable:
 
-- **Development mode**: Set `NODE_ENV=development` (done automatically by `npm run dev:all`)
+- **Development mode**: Set `NODE_ENV=development` (done automatically by `pnpm run dev:all`)
   - Process names get `-dev` suffix
-  - Web app runs with `npm run dev` for hot reload
+  - Web app runs with `pnpm run dev` for hot reload
   - Discord bot and scheduler watch for file changes
 - **Production mode**: Default when `NODE_ENV` is not set or set to `production`
   - Process names have no suffix
@@ -407,10 +409,10 @@ The logger automatically reloads the level from the database every 5 seconds (ca
 
 ### Running Tests
 ```bash
-npm run test              # Run all tests
-npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests only
-npm run test:coverage     # With coverage report
+pnpm run test              # Run all tests
+pnpm run test:unit         # Unit tests only
+pnpm run test:integration  # Integration tests only
+pnpm run test:coverage     # With coverage report
 ```
 
 ### Test Structure
@@ -491,16 +493,16 @@ tests/
 ## Scripts
 
 **Development**:
-- `npm run dev:all` - Start all processes (web + bot + scheduler) with PM2
-- `npm run dev:logs` - View logs from all processes
-- `npm run dev:stop/restart` - Control PM2 processes
+- `pnpm run dev:all` - Start all processes (web + bot + scheduler) with PM2
+- `pnpm run dev:logs` - View logs from all processes
+- `pnpm run dev:stop/restart` - Control PM2 processes
 
 **Production**:
-- `npm run prod:start` - Start with PM2
+- `pnpm run prod:start` - Start with PM2
 - `docker build -t matchexec .` - Build Docker container
 
 **Utilities**:
-- `npm run migrate` - Run migrations/seeding manually
-- `npm run build` - Build Next.js app
-- `npm run lint` - ESLint check
-- `npm run version:patch/minor/major` - Bump version
+- `pnpm run migrate` - Run migrations/seeding manually
+- `pnpm run build` - Build Next.js app
+- `pnpm run lint` - ESLint check
+- `pnpm run version:patch/minor/major` - Bump version

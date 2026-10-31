@@ -31,7 +31,7 @@ type UmzugLogger = Record<'debug' | 'info' | 'error' | 'warn', (msg: unknown) =>
 
 export function createMigrationRunner(
   db: Database,
-  migrationsDir = path.join(process.cwd(), 'migrations'),
+  migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite'),
   logger: UmzugLogger | undefined = console
 ): Umzug {
   return new Umzug({

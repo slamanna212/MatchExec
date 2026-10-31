@@ -7,16 +7,16 @@
  * Usage: node scripts/collect-process-deps.mjs <output-dir>
  *
  * Only package NAMES are listed here — versions come from the main node_modules
- * (managed by package.json + package-lock.json, compatible with Dependabot).
+ * (managed by package.json + pnpm-lock.yaml, compatible with Dependabot).
+ * Works with pnpm's symlinked node_modules by following real paths.
  */
 
-import { cpSync, existsSync, readFileSync, readdirSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { cpSync, existsSync, readFileSync, realpathSync, mkdirSync } from 'fs';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const NODE_MODULES = join(ROOT, 'node_modules');
 
 // Top-level packages needed by processes at runtime.
 // These are packages marked as 'external' in esbuild configs
@@ -41,90 +41,103 @@ if (!outDir) {
   process.exit(1);
 }
 
-const collected = new Set();
+// Real (symlink-resolved) package directory -> output locations it was copied to.
+const placed = new Map();
+let packageCount = 0;
 
 /**
- * Collect a package and all its transitive dependencies.
- * Handles both top-level and nested node_modules (packages that bundle
- * their own versions of dependencies).
+ * Resolve a dependency the way Node does: walk up from `fromDir` looking for
+ * node_modules/<name>. With pnpm, `fromDir` is a package's REAL path inside
+ * node_modules/.pnpm/<pkg>@<ver>/node_modules/, so its dependencies are found
+ * as siblings in that virtual-store directory. Returns the real path or null.
  */
-function collectPackage(name) {
-  if (collected.has(name)) return;
-  collected.add(name);
+function resolveDep(name, fromDir) {
+  let dir = fromDir;
+  for (;;) {
+    const candidate = join(dir, 'node_modules', name);
+    if (existsSync(candidate)) return realpathSync(candidate);
+    // Inside a virtual store the package itself sits at <...>/node_modules/<name>;
+    // siblings live in that same node_modules directory.
+    if (basename(dir) === 'node_modules') {
+      const sibling = join(dir, name);
+      if (existsSync(sibling)) return realpathSync(sibling);
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
 
-  const pkgDir = join(NODE_MODULES, name);
-  if (!existsSync(pkgDir)) {
-    console.warn(`  ⚠ Package not found: ${name} (may be optional)`);
+/**
+ * Collect a package and all its transitive dependencies into a flat layout.
+ * `fromDir` is the real directory of the requiring package (or ROOT) and
+ * `parentDest` is where that package was copied. If a different version of
+ * `name` already occupies the top-level slot, the package is nested inside
+ * the parent's own node_modules so Node resolution still finds the right one.
+ */
+function collectPackage(name, fromDir, parentDest, optional) {
+  const realDir = resolveDep(name, fromDir);
+  if (!realDir) {
+    console.warn(`  ⚠ Package not found: ${name} (${optional ? 'optional' : 'may be optional'})`);
     return;
   }
 
-  // Copy the package directory (includes any nested node_modules)
-  const dest = join(outDir, name);
-  mkdirSync(dirname(dest), { recursive: true });
-  cpSync(pkgDir, dest, { recursive: true });
+  const topDest = join(outDir, name);
+  const nestedDest = parentDest ? join(parentDest, 'node_modules', name) : null;
+  const seen = placed.get(realDir) ?? [];
 
-  // Trace deps from this package's package.json
-  traceDepsFrom(pkgDir);
-
-  // Also trace deps from any nested node_modules packages,
-  // since their dependencies resolve from the top-level node_modules
-  const nestedNM = join(pkgDir, 'node_modules');
-  if (existsSync(nestedNM)) {
-    scanNestedNodeModules(nestedNM);
+  let dest;
+  if (seen.includes(topDest)) return;
+  if (nestedDest && seen.includes(nestedDest)) return;
+  if (!existsSync(topDest)) {
+    dest = topDest;
+  } else if (nestedDest) {
+    dest = nestedDest;
+  } else {
+    console.warn(`  ⚠ Version conflict for top-level ${name}, keeping first copy`);
+    return;
   }
+
+  seen.push(dest);
+  placed.set(realDir, seen);
+  packageCount++;
+
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(realDir, dest, { recursive: true, dereference: true });
+
+  traceDepsFrom(realDir, dest);
 }
 
 /**
  * Read a package.json and collect all its dependencies/optionalDependencies.
  */
-function traceDepsFrom(pkgDir) {
-  const pkgJsonPath = join(pkgDir, 'package.json');
+function traceDepsFrom(realDir, dest) {
+  const pkgJsonPath = join(realDir, 'package.json');
   if (!existsSync(pkgJsonPath)) return;
 
   try {
     const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-    const deps = {
-      ...pkg.dependencies,
-      ...pkg.optionalDependencies,
-    };
-    for (const dep of Object.keys(deps)) {
-      collectPackage(dep);
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      collectPackage(dep, realDir, dest, false);
+    }
+    for (const dep of Object.keys(pkg.optionalDependencies ?? {})) {
+      collectPackage(dep, realDir, dest, true);
     }
   } catch {
     // If we can't read package.json, skip tracing
   }
 }
 
-/**
- * Scan a nested node_modules directory and trace deps from each package inside.
- * These nested packages are already copied (they live inside their parent),
- * but their own deps may resolve from the top-level node_modules.
- */
-function scanNestedNodeModules(nestedNM) {
-  try {
-    const entries = readdirSync(nestedNM);
-    for (const entry of entries) {
-      if (entry.startsWith('.')) continue;
-      if (entry.startsWith('@')) {
-        // Scoped package — read one level deeper
-        const scopeDir = join(nestedNM, entry);
-        for (const scopedPkg of readdirSync(scopeDir)) {
-          traceDepsFrom(join(scopeDir, scopedPkg));
-        }
-      } else {
-        traceDepsFrom(join(nestedNM, entry));
-      }
-    }
-  } catch {
-    // Ignore errors reading nested node_modules
-  }
-}
-
 console.log('Collecting process dependencies...');
 mkdirSync(outDir, { recursive: true });
 
+// Some entries (e.g. @discordjs/rest, tslib) are only transitive deps. pnpm does not
+// hoist those to the root node_modules, so fall back to resolving them from discord.js.
+const discordJsDir = resolveDep('discord.js', ROOT);
+
 for (const dep of PROCESS_DEPS) {
-  collectPackage(dep);
+  const base = resolveDep(dep, ROOT) ? ROOT : (discordJsDir ?? ROOT);
+  collectPackage(dep, base, null, false);
 }
 
-console.log(`✓ Collected ${collected.size} packages to ${outDir}`);
+console.log(`✓ Collected ${packageCount} packages to ${outDir}`);

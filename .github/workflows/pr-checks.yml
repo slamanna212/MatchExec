@@ -13,19 +13,20 @@ jobs:
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
+          cache: 'pnpm'
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Run ESLint
         id: eslint
-        run: npm run lint
+        run: pnpm run lint
         continue-on-error: true
       - name: Run TypeScript check
         id: typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
         continue-on-error: true
       - name: Write job summary
         if: always()
@@ -51,14 +52,15 @@ jobs:
     needs: [helm-version-sync]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
+          cache: 'pnpm'
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Run unit tests with coverage
-        run: npx vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/unit.junit.xml
+        run: pnpm exec vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/unit.junit.xml
       - name: Upload coverage
         uses: codecov/codecov-action@v6
         with:
@@ -78,14 +80,15 @@ jobs:
     needs: [helm-version-sync]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
+          cache: 'pnpm'
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Run integration tests
-        run: npx vitest run tests/integration --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/integration.junit.xml
+        run: pnpm exec vitest run tests/integration --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/integration.junit.xml
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/test-results-action@v1
@@ -225,15 +228,16 @@ jobs:
     needs: [test, integration-test]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
+          cache: 'pnpm'
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Build Next.js application
         id: build
-        run: npm run build
+        run: pnpm run build
         continue-on-error: true
       - name: Write job summary
         if: always()

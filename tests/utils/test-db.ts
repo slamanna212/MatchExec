@@ -208,7 +208,7 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
   // The schema issue with matches.map_id referencing game_maps was fixed in migration 018.
 
   // Run migrations
-  const migrationsDir = path.join(process.cwd(), 'migrations');
+  const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
   const migrationFiles = fs.readdirSync(migrationsDir)
     .filter(f => f.endsWith('.sql'))
     .sort();

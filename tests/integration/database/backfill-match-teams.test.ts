@@ -4,7 +4,7 @@ import path from 'path';
 import { Database } from '../../../lib/database/connection';
 
 /**
- * Dedicated test for migrations/021_backfill_match_teams.sql — specifically
+ * Dedicated test for migrations/legacy-sqlite/021_backfill_match_teams.sql — specifically
  * the "orphaned mode_id" case: a match whose mode_id no longer resolves to a
  * game_modes row (e.g. the mode was renamed/removed in a later data
  * re-seed). The backfill must infer the real scoring_type from the match's
@@ -34,7 +34,7 @@ describe('Migration 021 — match_teams backfill', () => {
     const db = new Database(testDbPath);
     await db.connect();
 
-    const migrationsDir = path.join(process.cwd(), 'migrations');
+    const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
     const migrationFiles = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
     // Run everything up to (but not including) 021 — we drive 021 manually per test.
     for (const file of migrationFiles) {
@@ -46,7 +46,7 @@ describe('Migration 021 — match_teams backfill', () => {
   }
 
   async function run021(db: Database): Promise<void> {
-    const sql = fs.readFileSync(path.join(process.cwd(), 'migrations', '021_backfill_match_teams.sql'), 'utf-8');
+    const sql = fs.readFileSync(path.join(process.cwd(), 'migrations', 'legacy-sqlite', '021_backfill_match_teams.sql'), 'utf-8');
     await db.exec(sql);
   }
 
@@ -175,7 +175,7 @@ describe('Migration 021 — match_teams backfill', () => {
                   VALUES ('tmatch', 't1', 1, 'winners', 'tt_a', 'tt_b', 1)`);
 
     await run021(db);
-    const sql028 = fs.readFileSync(path.join(process.cwd(), 'migrations', '028_name_backfilled_tournament_teams.sql'), 'utf-8');
+    const sql028 = fs.readFileSync(path.join(process.cwd(), 'migrations', 'legacy-sqlite', '028_name_backfilled_tournament_teams.sql'), 'utf-8');
     await db.exec(sql028);
     await db.exec(sql028); // idempotent
 

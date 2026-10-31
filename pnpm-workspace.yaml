@@ -1,0 +1,14 @@
+# Refuse packages published in the last 7 days (minutes)
+minimumReleaseAge: 10080
+
+# pnpm blocks dependency install scripts by default; list what genuinely needs them.
+allowBuilds:
+  esbuild: true
+  sqlite3: true       # native addon (prebuilt download or node-gyp)
+  bufferutil: true    # optional ws native addon
+  sharp: false        # prebuilt binaries come via optional deps
+  unrs-resolver: false # prebuilt binaries come via optional deps
+
+# eslint-plugin-react-hooks 7.1.x adds React-Compiler rules that fail on existing Next code (26 errors); hold at 7.0.1 until Stage 3/4.
+overrides:
+  eslint-plugin-react-hooks: 7.0.1

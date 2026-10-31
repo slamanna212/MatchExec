@@ -32,7 +32,7 @@ describe('Database Migrations', () => {
     await db.connect();
 
     try {
-      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
       const migrationFiles = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();
@@ -153,7 +153,7 @@ describe('Database Migrations', () => {
     await db.connect();
 
     try {
-      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
       const runner = createMigrationRunner(db, migrationsDir, undefined);
 
       await runner.up(); // First pass: applies all migrations, records in tracking table
@@ -183,7 +183,7 @@ describe('Database Migrations', () => {
     await db.connect();
 
     try {
-      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
       const migrationFiles = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();
@@ -218,7 +218,7 @@ describe('Database Migrations', () => {
     await db.connect();
 
     try {
-      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
       const allFiles = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();
@@ -343,7 +343,7 @@ describe('Database Migrations', () => {
     await db.connect();
 
     try {
-      const migrationsDir = path.join(process.cwd(), 'migrations');
+      const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
       const migrationFiles = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();

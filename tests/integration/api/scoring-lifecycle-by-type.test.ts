@@ -171,7 +171,7 @@ describe('Scoring lifecycle by scoring_type', () => {
          VALUES ('legacy-2', ?, NULL, 'Legacy no maps', datetime('now'), datetime('now'), 'created', NULL)`,
         [gameId]
       );
-      const sql = fs.readFileSync(path.join(process.cwd(), 'migrations', '027_backfill_match_mode_id.sql'), 'utf8');
+      const sql = fs.readFileSync(path.join(process.cwd(), 'migrations', 'legacy-sqlite', '027_backfill_match_mode_id.sql'), 'utf8');
       await db.exec(sql);
       expect((await matchRow('legacy-1'))?.mode_id).toBe(modeId);
       expect((await matchRow('legacy-2'))?.mode_id).toBeNull();

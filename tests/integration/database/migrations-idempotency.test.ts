@@ -28,7 +28,7 @@ async function teardown(db: Database, dbPath: string) {
   }
 }
 
-const migrationsDir = path.join(process.cwd(), 'migrations');
+const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
 
 describe('Database Migrations — idempotency extended', () => {
   const openedDbs: Array<{ db: Database; dbPath: string }> = [];

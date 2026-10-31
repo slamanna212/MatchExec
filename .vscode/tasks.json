@@ -4,7 +4,7 @@
     {
       "label": "Start Dev Server",
       "type": "shell",
-      "command": "npm run dev:all",
+      "command": "pnpm run dev:all",
       "group": "build",
       "isBackground": true,
       "problemMatcher": []
@@ -12,21 +12,21 @@
     {
       "label": "Restart Dev Server",
       "type": "shell",
-      "command": "npm run dev:restart",
+      "command": "pnpm run dev:restart",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Stop Dev Server",
       "type": "shell",
-      "command": "npm run dev:stop",
+      "command": "pnpm run dev:stop",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "View Dev Logs",
       "type": "shell",
-      "command": "npm run dev:logs",
+      "command": "pnpm run dev:logs",
       "group": "build",
       "isBackground": true,
       "problemMatcher": []
@@ -34,21 +34,21 @@
     {
       "label": "Install Dependencies",
       "type": "shell",
-      "command": "npm install",
+      "command": "pnpm install",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Lint Code",
       "type": "shell",
-      "command": "npm run lint",
+      "command": "pnpm run lint",
       "group": "build",
       "problemMatcher": ["$eslint-stylish"]
     },
     {
       "label": "Run All Tests",
       "type": "shell",
-      "command": "npm run test",
+      "command": "pnpm run test",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -58,7 +58,7 @@
     {
       "label": "Run Tests (Watch Mode)",
       "type": "shell",
-      "command": "npm run test:watch",
+      "command": "pnpm run test:watch",
       "group": "test",
       "isBackground": true,
       "problemMatcher": []
@@ -66,35 +66,35 @@
     {
       "label": "Run Tests with UI",
       "type": "shell",
-      "command": "npm run test:ui",
+      "command": "pnpm run test:ui",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Run Unit Tests Only",
       "type": "shell",
-      "command": "npm run test:unit",
+      "command": "pnpm run test:unit",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Run Integration Tests",
       "type": "shell",
-      "command": "npm run test:integration",
+      "command": "pnpm run test:integration",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Run Tests with Coverage",
       "type": "shell",
-      "command": "npm run test:coverage",
+      "command": "pnpm run test:coverage",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Run Tests for Current File",
       "type": "shell",
-      "command": "npx vitest run ${relativeFile}",
+      "command": "pnpm exec vitest run ${relativeFile}",
       "group": "test",
       "problemMatcher": []
     },

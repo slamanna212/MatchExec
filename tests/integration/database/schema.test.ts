@@ -23,7 +23,7 @@ describe('Database Schema Validation', () => {
     db = new Database(testDbPath);
     await db.connect();
 
-    const migrationsDir = path.join(process.cwd(), 'migrations');
+    const migrationsDir = path.join(process.cwd(), 'migrations', 'legacy-sqlite');
     const migrationFiles = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort();

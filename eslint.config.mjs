@@ -86,6 +86,8 @@ const eslintConfig = [
       "lib/database/status.ts",
       "lib/database/ready-checker.ts",
       "lib/database/migrations.ts",
+      "lib/db/migrate.ts",
+      "lib/db/seed.ts",
       "migrations/**/*.{js,ts}",
       "src/lib/logger/base.ts"
     ],

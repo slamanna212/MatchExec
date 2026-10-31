@@ -6,9 +6,15 @@ WORKDIR /app
 # Install build dependencies for native modules
 RUN apk add --no-cache python3 py3-setuptools make g++ git
 
-# Copy package files and install all dependencies
-COPY package*.json ./
-RUN npm ci
+# Enable pnpm via Corepack (version pinned by "packageManager" in package.json)
+COPY package.json ./
+RUN corepack enable && corepack install
+
+# Fetch dependencies into the pnpm store (cached until the lockfile changes),
+# then install from the store without network access
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm fetch
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --offline
 
 # Copy source code files in order of change frequency (least to most likely to change)
 COPY shared ./shared
@@ -23,10 +29,10 @@ COPY ecosystem.config.js next.config.ts tailwind.config.ts postcss.config.mjs ts
 COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrator.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
 
 # Build Next.js app and bundle processes
-RUN npm run build
+RUN pnpm run build
 
 # Prune dev dependencies while we still have build tools (needed for native modules on ARM)
-RUN npm prune --omit=dev
+RUN pnpm prune --prod
 
 # Collect only the process-specific deps (and their transitive deps) from node_modules
 RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
@@ -84,7 +90,7 @@ COPY --from=builder /app/scripts ./scripts
 COPY --chmod=755 scripts/run-migrations.sh ./scripts/
 
 # Copy package files for reference
-COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 
 # Copy process-specific dependencies (auto-collected with transitive deps)
 COPY --from=builder /tmp/process-deps/node_modules ./node_modules/

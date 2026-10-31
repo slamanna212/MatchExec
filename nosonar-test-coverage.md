@@ -99,7 +99,7 @@ Tests:
 
 After writing all files, run:
 ```bash
-npm run test
+pnpm run test
 ```
 
 All 883+ existing tests should still pass, plus ~20 new ones.
