@@ -273,6 +273,73 @@ export async function removeSeriesEvent(eventId: string, seriesId?: string): Pro
   return (result?.changes ?? 0) > 0;
 }
 
+export interface UpdateSeriesEventInput {
+  points_multiplier?: number;
+  event_order?: number;
+  /** null clears the date. */
+  event_date?: string | null;
+}
+
+export type UpdateSeriesEventResult =
+  | { event: SeriesEventRow; swappedWith?: string }
+  | { error: string; status: 404 | 409 };
+
+/**
+ * Edits an event's multiplier, order and/or date. Moving an event to an order another event
+ * already holds swaps the two (orders are unique per series, and "move here" is what a reorder
+ * means). When `requireSeriesStatus` is given it is re-checked inside the transaction, so a
+ * concurrent status change (e.g. the series starting) can't let an edit through.
+ */
+export async function updateSeriesEvent(
+  seriesId: string,
+  eventId: string,
+  updates: UpdateSeriesEventInput,
+  options: { requireSeriesStatus?: string } = {}
+): Promise<UpdateSeriesEventResult> {
+  const db = await getDbInstance();
+
+  return withTransaction(db, async () => {
+    if (options.requireSeriesStatus) {
+      const current = await db.get<{ status: string }>('SELECT status FROM series WHERE id = ?', [seriesId]);
+      if (current?.status !== options.requireSeriesStatus) {
+        return {
+          error: `Events can only be edited before the series starts (series is ${current?.status ?? 'missing'})`,
+          status: 409 as const,
+        };
+      }
+    }
+    const event = await db.get<SeriesEventRow>(
+      'SELECT * FROM series_events WHERE id = ? AND series_id = ?', [eventId, seriesId]
+    );
+    if (!event) return { error: 'Event not found in this series', status: 404 as const };
+
+    let swappedWith: string | undefined;
+    if (updates.event_order !== undefined && updates.event_order !== event.event_order) {
+      const occupant = await db.get<{ id: string }>(
+        'SELECT id FROM series_events WHERE series_id = ? AND event_order = ?', [seriesId, updates.event_order]
+      );
+      if (occupant) {
+        // park the occupant on a value no real event uses (orders are positive) while we swap
+        await db.run('UPDATE series_events SET event_order = -1 WHERE id = ?', [occupant.id]);
+        await db.run('UPDATE series_events SET event_order = ? WHERE id = ?', [updates.event_order, eventId]);
+        await db.run('UPDATE series_events SET event_order = ? WHERE id = ?', [event.event_order, occupant.id]);
+        swappedWith = occupant.id;
+      } else {
+        await db.run('UPDATE series_events SET event_order = ? WHERE id = ?', [updates.event_order, eventId]);
+      }
+    }
+    if (updates.points_multiplier !== undefined) {
+      await db.run('UPDATE series_events SET points_multiplier = ? WHERE id = ?', [updates.points_multiplier, eventId]);
+    }
+    if (updates.event_date !== undefined) {
+      await db.run('UPDATE series_events SET event_date = ? WHERE id = ?', [updates.event_date, eventId]);
+    }
+
+    const updated = await db.get<SeriesEventRow>('SELECT * FROM series_events WHERE id = ?', [eventId]);
+    return { event: updated as SeriesEventRow, swappedWith };
+  });
+}
+
 export function validatePointsMultiplier(value: unknown): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 10) {
     return 'points_multiplier must be a number greater than 0 and at most 10';
@@ -320,16 +387,31 @@ export async function checkSeriesEventTarget(seriesId: string, input: AddSeriesE
   const db = await getDbInstance();
   if (input.event_type === 'match') {
     if (input.tournament_id) return { error: 'tournament_id must not be set for match events', status: 400 };
-    const m = await db.get<{ id: string }>('SELECT id FROM matches WHERE id = ?', [input.match_id]);
+    const m = await db.get<{ id: string; tournament_id: string | null }>('SELECT id, tournament_id FROM matches WHERE id = ?', [input.match_id]);
     if (!m) return { error: 'Match not found', status: 400 };
     const dup = await db.get<{ id: string }>('SELECT id FROM series_events WHERE series_id = ? AND match_id = ?', [seriesId, input.match_id]);
     if (dup) return { error: 'Match is already part of this series', status: 409 };
+    if (m.tournament_id) {
+      const viaTournament = await db.get<{ id: string }>(
+        'SELECT id FROM series_events WHERE series_id = ? AND tournament_id = ?', [seriesId, m.tournament_id]
+      );
+      if (viaTournament) {
+        return { error: 'This match belongs to a tournament that is already part of this series; adding it would count it twice', status: 409 };
+      }
+    }
   } else {
     if (input.match_id) return { error: 'match_id must not be set for tournament events', status: 400 };
     const t = await db.get<{ id: string }>('SELECT id FROM tournaments WHERE id = ?', [input.tournament_id]);
     if (!t) return { error: 'Tournament not found', status: 400 };
     const dup = await db.get<{ id: string }>('SELECT id FROM series_events WHERE series_id = ? AND tournament_id = ?', [seriesId, input.tournament_id]);
     if (dup) return { error: 'Tournament is already part of this series', status: 409 };
+    const viaMatch = await db.get<{ id: string }>(
+      `SELECT se.id FROM series_events se JOIN matches m ON m.id = se.match_id
+       WHERE se.series_id = ? AND m.tournament_id = ?`, [seriesId, input.tournament_id]
+    );
+    if (viaMatch) {
+      return { error: 'One of this tournament\'s matches is already part of this series; adding the tournament would count it twice', status: 409 };
+    }
   }
   return null;
 }
@@ -641,6 +723,7 @@ export async function getSeriesStandings(seriesId: string): Promise<Array<{
   const totals = new Map<string, { username: string; total_points: number; events_played: Set<string> }>();
   const addPoints: AddPoints = (key, username, points, eventId) => {
     const entry = totals.get(key) ?? { username, total_points: 0, events_played: new Set<string>() };
+    entry.username = username; // events are scored in order, so the latest name wins
     entry.total_points += points;
     entry.events_played.add(eventId);
     totals.set(key, entry);
@@ -678,6 +761,26 @@ const NULLABLE_STRING_FIELDS = [
   'guild_id', 'channel_id', 'livestream_link',
 ] as const;
 
+/** Each date must be parseable, and the end must not be before the start. Null/undefined are fine. */
+export function validateSeriesDates(start: unknown, end: unknown): string | null {
+  const parse = (v: unknown): number | null => (typeof v === 'string' && v !== '' ? Date.parse(v) : null);
+  const s = parse(start);
+  const e = parse(end);
+  if (s !== null && Number.isNaN(s)) return 'start_date must be a valid date';
+  if (e !== null && Number.isNaN(e)) return 'end_date must be a valid date';
+  if (s !== null && e !== null && e < s) return 'end_date must not be before start_date';
+  return null;
+}
+
+/** game_id, when given, must be an existing game. Returns an error message or null. */
+export async function validateSeriesGameId(gameId: unknown): Promise<string | null> {
+  if (gameId === undefined || gameId === null || gameId === '') return null;
+  if (typeof gameId !== 'string') return 'game_id must be a string';
+  const db = await getDbInstance();
+  const game = await db.get<{ id: string }>('SELECT id FROM games WHERE id = ?', [gameId]);
+  return game ? null : 'game_id does not match an existing game';
+}
+
 /**
  * Validates a series create/update body. Returns an error message or null.
  * For updates (`partial`), name may be omitted but must be a non-empty string
@@ -694,6 +797,8 @@ export function validateSeriesBody(body: Record<string, unknown>, partial: boole
   for (const f of ['announcements', 'player_notifications'] as const) {
     if (body[f] !== undefined && typeof body[f] !== 'boolean') return `${f} must be a boolean`;
   }
+  const dateError = validateSeriesDates(body.start_date, body.end_date);
+  if (dateError) return dateError;
   if (body.scoring_config !== undefined && !(partial && body.scoring_config === null)) {
     const err = validateScoringConfig(body.scoring_config);
     if (err) return err;

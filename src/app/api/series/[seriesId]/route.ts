@@ -1,5 +1,8 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { getSeriesById, updateSeries, deleteSeries, readJsonObject, validateSeriesBody } from '@/lib/series';
+import {
+  getSeriesById, updateSeries, deleteSeries, readJsonObject, validateSeriesBody,
+  validateSeriesDates, validateSeriesGameId,
+} from '@/lib/series';
 import type { UpdateSeriesInput } from '@/lib/series';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
@@ -31,6 +34,14 @@ export async function PATCH(
     if (!body) return apiError('Invalid JSON body', 400);
     const validationError = validateSeriesBody(body, true);
     if (validationError) return apiError(validationError, 400);
+    // A partial update can move only one end of the range, so check it against the stored value.
+    const dateError = validateSeriesDates(
+      body.start_date === undefined ? series.start_date : body.start_date,
+      body.end_date === undefined ? series.end_date : body.end_date
+    );
+    if (dateError) return apiError(dateError, 400);
+    const gameError = await validateSeriesGameId(body.game_id);
+    if (gameError) return apiError(gameError, 400);
     // Status changes must go through POST /transition, which validates the
     // move is legal (e.g. can't jump from 'created' straight to 'complete',
     // can't un-complete a finished series). Silently dropping it here rather

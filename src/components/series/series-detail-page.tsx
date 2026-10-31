@@ -91,6 +91,11 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   const [error, setError] = useState<string | null>(null);
   const [addEventOpened, { open: openAddEvent, close: closeAddEvent }] = useDisclosure(false);
 
+  const [editingEvent, setEditingEvent] = useState<SeriesEventRow | null>(null);
+  const [editMultiplier, setEditMultiplier] = useState<number | string>(1);
+  const [editOrder, setEditOrder] = useState<number | string>(1);
+  const [editSaving, setEditSaving] = useState(false);
+
   const [addEventType, setAddEventType] = useState<'match' | 'tournament'>('match');
   const [addEventId, setAddEventId] = useState<string>('');
   const [addEventMultiplier, setAddEventMultiplier] = useState<number | string>(1);
@@ -188,6 +193,55 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
     }
   };
 
+  const handleOpenEditEvent = (ev: SeriesEventRow) => {
+    setEditingEvent(ev);
+    setEditMultiplier(ev.points_multiplier);
+    setEditOrder(ev.event_order);
+  };
+
+  const handleSaveEvent = async () => {
+    if (!editingEvent) return;
+    const multiplier = typeof editMultiplier === 'number' ? editMultiplier : Number(editMultiplier);
+    const order = typeof editOrder === 'number' ? editOrder : Number(editOrder);
+    if (editMultiplier === '' || !Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 10) {
+      showError('Points multiplier must be a number between 0.1 and 10');
+      return;
+    }
+    if (editOrder === '' || !Number.isInteger(order) || order < 1) {
+      showError('Order must be a whole number of 1 or more');
+      return;
+    }
+
+    // Only send what changed
+    const changes: Record<string, number> = {};
+    if (multiplier !== editingEvent.points_multiplier) changes.points_multiplier = multiplier;
+    if (order !== editingEvent.event_order) changes.event_order = order;
+    if (Object.keys(changes).length === 0) { setEditingEvent(null); return; }
+
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/series/${seriesId}/events/${editingEvent.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error ?? 'Failed to update event');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      showSuccess(data.swapped_with ? 'Event updated (swapped places with the event that had that number)' : 'Event updated');
+      setEditingEvent(null);
+      fetchData();
+    } catch (err) {
+      logger.error('Error updating event:', err);
+      showError('An error occurred');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleRemoveEvent = async (eventId: string) => {
     if (!window.confirm('Remove this event from the series? Its points will no longer count.')) return;
     try {
@@ -227,6 +281,8 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   }
 
   const eventsLocked = series.status === 'complete' || series.status === 'cancelled';
+  // Multipliers and order shape the standings, so they lock once the series starts.
+  const eventsEditable = series.status === 'created';
 
   const eventOptions = addEventType === 'match'
     ? matchOptions.map(m => ({ value: m.id, label: m.name }))
@@ -298,6 +354,12 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                 </Button>
               </Group>
 
+              {events.length > 0 && !eventsEditable && (
+                <Text size="xs" c="dimmed" ta="right">
+                  Multipliers and order are locked once the series starts.
+                </Text>
+              )}
+
               {events.length === 0 ? (
                 <Card withBorder p="xl" ta="center">
                   <Text c="dimmed">No events added yet. Add matches or tournaments to this series.</Text>
@@ -337,15 +399,28 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                         </Table.Td>
                         <Table.Td>×{ev.points_multiplier}</Table.Td>
                         <Table.Td>
-                          <ActionIcon
-                            color="red"
-                            variant="subtle"
-                            size="sm"
-                            disabled={eventsLocked}
-                            onClick={() => handleRemoveEvent(ev.id)}
-                          >
-                            <IconTrash size={14} />
-                          </ActionIcon>
+                          <Group gap={4} wrap="nowrap" justify="flex-end">
+                            <ActionIcon
+                              variant="subtle"
+                              size="sm"
+                              disabled={!eventsEditable}
+                              title={eventsEditable ? 'Edit multiplier and order' : 'Events can only be edited before the series starts'}
+                              aria-label="Edit event"
+                              onClick={() => handleOpenEditEvent(ev)}
+                            >
+                              <IconEdit size={14} />
+                            </ActionIcon>
+                            <ActionIcon
+                              color="red"
+                              variant="subtle"
+                              size="sm"
+                              disabled={eventsLocked}
+                              aria-label="Remove event"
+                              onClick={() => handleRemoveEvent(ev.id)}
+                            >
+                              <IconTrash size={14} />
+                            </ActionIcon>
+                          </Group>
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -392,6 +467,41 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           </Tabs.Panel>
         </Tabs>
       </Stack>
+
+      <Modal
+        opened={editingEvent !== null}
+        onClose={() => setEditingEvent(null)}
+        title="Edit Event"
+        size="sm"
+      >
+        <Stack gap="md">
+          <NumberInput
+            label="Points Multiplier"
+            description="Points from this event are multiplied by this value"
+            value={editMultiplier}
+            onChange={setEditMultiplier}
+            min={0.1}
+            max={10}
+            step={0.5}
+            decimalScale={2}
+            allowDecimal
+          />
+          <NumberInput
+            label="Order"
+            description="If another event already has this number, the two swap places"
+            value={editOrder}
+            onChange={setEditOrder}
+            min={1}
+            step={1}
+            allowDecimal={false}
+          />
+          <Divider />
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setEditingEvent(null)} disabled={editSaving}>Cancel</Button>
+            <Button onClick={handleSaveEvent} loading={editSaving}>Save</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={addEventOpened}

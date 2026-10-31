@@ -56,6 +56,9 @@ export async function POST(
     if (body.event_date !== undefined && body.event_date !== null && typeof body.event_date !== 'string') {
       return apiError('event_date must be a string', 400);
     }
+    if (typeof body.event_date === 'string' && Number.isNaN(Date.parse(body.event_date))) {
+      return apiError('event_date must be a valid date', 400);
+    }
 
     const input: AddSeriesEventInput = {
       event_type,
