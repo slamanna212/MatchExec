@@ -14,6 +14,7 @@ import {
   type MatchRequestBody
 } from './helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { MATCH_SERIES_JSON_SQL, parseSeriesRefs } from '@/lib/series';
 
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -33,7 +34,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       SELECT m.*, g.name as game_name, g.icon_url as game_icon, g.max_signups as max_participants, g.color as game_color, g.map_codes_supported,
              t.name as tournament_name, tm.round as tournament_round, tm.bracket_type as tournament_bracket_type,
              gm.name as map_name,
-             COUNT(DISTINCT mp.id) as participant_count
+             COUNT(DISTINCT mp.id) as participant_count,
+             ${MATCH_SERIES_JSON_SQL} as series_json
       FROM matches m
       LEFT JOIN games g ON m.game_id = g.id
       LEFT JOIN tournament_matches tm ON m.id = tm.match_id
@@ -72,10 +74,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         maps = safeJSONParse(mapsString, maps);
       }
 
+      const { series_json: seriesJson, ...rest } = match as MatchDbRow & { series_json?: string };
       return {
-        ...match,
+        ...rest,
         maps,
-        map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {})
+        map_codes: safeJSONParse(typeof match.map_codes === 'string' ? match.map_codes : null, {}),
+        series: parseSeriesRefs(seriesJson),
       };
     });
 
@@ -87,7 +91,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const totalParticipants = (matches as Array<MatchDbRow & { participant_count?: number }>).reduce(
       (sum, m) => sum + (m.participant_count || 0), 0
     );
-    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}"`;
+    // Series membership changes don't touch matches.updated_at, so fold it in
+    const seriesLinks = parsedMatches.reduce((sum, m) => sum + m.series.length, 0);
+    const etag = `"${parsedMatches.length}:${maxUpdatedAt}:${totalParticipants}:${seriesLinks}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new NextResponse(null, { status: 304, headers: { ETag: etag } });

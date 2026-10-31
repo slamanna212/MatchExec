@@ -7,6 +7,7 @@ import type { Database } from '@/lib/database/connection';
 import { validateMaxLength, validateNumberRange, validateEnum, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { TOURNAMENT_SERIES_JSON_SQL, parseSeriesRefs } from '@/lib/series';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 
@@ -154,7 +155,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             SELECT 1 FROM tournament_matches tm WHERE tm.tournament_id = t.id
           ) THEN 1
           ELSE 0
-        END as has_bracket
+        END as has_bracket,
+        ${TOURNAMENT_SERIES_JSON_SQL} as series_json
       FROM tournaments t
       LEFT JOIN games g ON t.game_id = g.id
       LEFT JOIN tournament_participants tp ON t.id = tp.tournament_id
@@ -178,14 +180,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       params.push(limit, offset);
     }
 
-    const tournaments = await db.all<TournamentDbRow>(query, params);
+    const tournaments = (await db.all<TournamentDbRow & { series_json?: string }>(query, params))
+      .map(({ series_json: seriesJson, ...t }) => ({ ...t, series: parseSeriesRefs(seriesJson) }));
 
     // Compute ETag for efficient polling
     const maxUpdatedAt = tournaments.reduce(
       (max, t) => { const val = String(t.updated_at); return val > max ? val : max; },
       ''
     );
-    const etag = `"${tournaments.length}:${maxUpdatedAt}"`;
+    // Series membership changes don't touch tournaments.updated_at, so fold it in
+    const seriesLinks = tournaments.reduce((sum, t) => sum + t.series.length, 0);
+    const etag = `"${tournaments.length}:${maxUpdatedAt}:${seriesLinks}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     if (limit === null && ifNoneMatch === etag) {
       return new NextResponse(null, { status: 304, headers: { ETag: etag } });

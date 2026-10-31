@@ -839,3 +839,35 @@ export async function deleteMatchDependents(db: Db, matchId: string): Promise<vo
   await db.run('DELETE FROM tournament_matches WHERE match_id = ?', [matchId]);
   await db.run('DELETE FROM series_events WHERE match_id = ?', [matchId]);
 }
+
+/**
+ * SQL column expressions yielding a JSON array of `{ id, name }` for every
+ * series an entity belongs to, for list endpoints (cards link back to the
+ * series). A match also inherits the series its tournament is part of.
+ * Always '[]' (never NULL) when there are none — parse with parseSeriesRefs.
+ */
+export const MATCH_SERIES_JSON_SQL = `(
+  SELECT json_group_array(json_object('id', s.id, 'name', s.name))
+  FROM series s
+  WHERE s.id IN (
+    SELECT se.series_id FROM series_events se
+    WHERE se.match_id = m.id
+       OR (m.tournament_id IS NOT NULL AND se.tournament_id = m.tournament_id)
+  )
+)`;
+
+export const TOURNAMENT_SERIES_JSON_SQL = `(
+  SELECT json_group_array(json_object('id', s.id, 'name', s.name))
+  FROM series s
+  WHERE s.id IN (SELECT se.series_id FROM series_events se WHERE se.tournament_id = t.id)
+)`;
+
+export function parseSeriesRefs(raw: unknown): Array<{ id: string; name: string }> {
+  if (typeof raw !== 'string' || raw === '') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(s => s && typeof s.id === 'string') : [];
+  } catch {
+    return [];
+  }
+}

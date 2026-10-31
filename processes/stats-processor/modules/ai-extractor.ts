@@ -74,15 +74,8 @@ export class AIExtractor {
 
       // Load settings
       const settings = await this.db.get(
-        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key, ai_processor_version FROM stats_settings WHERE id = 1'
+        'SELECT ai_providers_config, ai_api_key, ai_model, google_api_key, openrouter_api_key FROM stats_settings WHERE id = 1'
       );
-
-      // ai_processor_version is the rollback switch for the scoring_type-aware
-      // extraction prompt: 'legacy' forces the pre-rewrite mode-blind (always
-      // blue/red, no position extraction) behavior if the new prompts turn out
-      // to produce worse extractions for some game/mode combination.
-      const processorVersion: string = settings?.ai_processor_version ?? 'v2';
-      const effectiveScoringType = processorVersion === 'legacy' ? 'Normal' : scoringType;
 
       const providersConfig = settings?.ai_providers_config
         ? JSON.parse(settings.ai_providers_config)
@@ -107,7 +100,7 @@ export class AIExtractor {
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
 
       // Build prompt and try providers in order with fallback
-      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, effectiveScoringType);
+      const prompt = this.buildPrompt(statDefs, game?.name || match.game_id, submission.team_side, game?.ai_screenshot_notes, scoringType);
       let rawResponse: string | null = null;
       let bestFallback: { response: string; minConfidence: number } | null = null;
       let lastError: Error | null = null;
@@ -167,7 +160,7 @@ export class AIExtractor {
       // Resolve team_side ('blue'/'red') to the match's real match_teams.id
       // (team_order 0/1) — team_id is the new authoritative FK that replaces
       // team_side's role; team_side is kept for legacy display only.
-      const teamIdBySide = effectiveScoringType === 'Normal'
+      const teamIdBySide = scoringType === 'Normal'
         ? await this.resolveNormalTeamIds(submission.match_id)
         : null;
 
@@ -195,7 +188,7 @@ export class AIExtractor {
 
       // Store extracted positions for FFA/Position modes as a suggestion only
       // (pre-fills the Position scoring UI; an admin must confirm).
-      if (effectiveScoringType !== 'Normal' && extractionResult.playerPositions) {
+      if (scoringType !== 'Normal' && extractionResult.playerPositions) {
         await this.storeSuggestedPositions(
           submissionId,
           submission.match_id,

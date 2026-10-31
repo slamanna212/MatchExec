@@ -158,4 +158,34 @@ describe('Migration 021 — match_teams backfill', () => {
 
     await db.close();
   });
+  it('028 names backfilled tournament match teams after the tournament teams', async () => {
+    const db = await freshMigratedDb();
+    await db.run(`INSERT INTO games (id, name) VALUES ('game1', 'Game One')`);
+    await db.run(`INSERT INTO game_modes (id, game_id, name, scoring_type) VALUES ('m1', 'game1', 'Mode', 'Normal')`);
+    await db.run(`INSERT INTO tournaments (id, name, format, status, game_id, rounds_per_match, ruleset)
+                  VALUES ('t1', 'Cup', 'single-elimination', 'battle', 'game1', 1, 'casual')`);
+    await db.run(`INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES ('tt_a', 't1', 'Aces'), ('tt_b', 't1', 'Bears')`);
+    for (const id of ['tmatch', 'solo']) {
+      await db.run(`
+        INSERT INTO matches (id, name, game_id, mode_id, status, start_date, start_time, tournament_id)
+        VALUES (?, ?, 'game1', 'm1', 'battle', datetime('now'), datetime('now'), ?)
+      `, [id, id, id === 'tmatch' ? 't1' : null]);
+    }
+    await db.run(`INSERT INTO tournament_matches (match_id, tournament_id, round, bracket_type, team1_id, team2_id, match_order)
+                  VALUES ('tmatch', 't1', 1, 'winners', 'tt_a', 'tt_b', 1)`);
+
+    await run021(db);
+    const sql028 = fs.readFileSync(path.join(process.cwd(), 'migrations', '028_name_backfilled_tournament_teams.sql'), 'utf-8');
+    await db.exec(sql028);
+    await db.exec(sql028); // idempotent
+
+    const names = async (matchId: string) => (await db.all<{ team_name: string }>(
+      `SELECT team_name FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order`, [matchId]
+    )).map(r => r.team_name);
+    expect(await names('tmatch')).toEqual(['Aces', 'Bears']);
+    // standalone matches keep Blue/Red
+    expect(await names('solo')).toEqual(['Blue', 'Red']);
+
+    await db.close();
+  });
 });

@@ -166,7 +166,7 @@ docker run --rm -p 3000:3000 --env-file .env matchexec:test
 │   │   ├── index.ts              # Main bot implementation
 │   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
 │   └── scheduler/                # Cron scheduler process
-├── migrations/                   # Database migrations (27 files; 019-022 scoring rewrite, 023 ai_processor_version (default 'v2'), 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions, 027 backfill matches.mode_id)
+├── migrations/                   # Database migrations (27 files; 019-022 scoring rewrite, 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions, 027 backfill matches.mode_id, 028 name backfilled tournament match_teams; there is no 023)
 ├── data/games/                   # Game data (6 games with modes/maps)
 ├── s6-overlay/                   # Docker init system config
 └── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
@@ -469,7 +469,7 @@ tests/
 ### Known Issues
 - **DB isolation (fixed)**: `setupTestDatabase()` in `tests/utils/test-db.ts` calls `setDbForTesting()` so `getTestDb()` and `getDbInstance()` share one connection; API route tests see data inserted via `getTestDb()`.
 - **FK schema mismatch**: Enabling `PRAGMA foreign_keys=ON` in tests reveals that the `matches` table has a malformed FK reference to `game_maps`. This must be fixed in migrations before FK constraints can be enabled in tests.
-- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `028_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
+- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `029_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
 
 ### Writing Tests
 - Use `getTestDb()` for direct DB operations in tests
