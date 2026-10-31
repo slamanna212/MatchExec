@@ -12,6 +12,8 @@ Each phase is shippable on its own. Phase 1 can ship while still on SQLite.
 
 **Guiding rule: clean rewrites, no compatibility layers.** No adapter that mounts old Next-style handlers onto Hono, no `db.run/get/all` wrapper over Postgres, no `?`-placeholder translation, no type-parser tricks to make Postgres look like SQLite. Every route is rewritten as a native Hono handler, and every query is rewritten in Drizzle. The only code that touches SQLite after v0.10 is the one-time importer, which is a data-migration tool rather than a runtime layer.
 
+**Review note (2026-10-31):** The architecture is reasonable, but several safety assumptions below need revision before implementation. See **Review notes: live updates and migration safety** at the end of this document, particularly the corrections to importer rollback, queue transactions, restore coordination, and `pg_upgrade --link` rollback.
+
 ---
 
 ## Current state (what the code actually looks like)
@@ -539,3 +541,81 @@ aio:
 2. Auto-backup defaults: 04:00 daily, keep 14 daily + 4 weekly. OK?
 3. Should restoring a **legacy `.db` backup** stay supported forever, or only for the 0.10.x line?
 4. Keep PM2 for local dev, or switch dev to a simple `concurrently` script now that web is just Vite + a Node server? (PM2 still works fine; this is taste.)
+
+---
+
+## Review notes: live updates and migration safety
+
+**Reviewed:** 2026-10-31. These notes record the design review and proposed changes; they are not a claim that the safeguards have been implemented. Where they identify a contradiction in the earlier phases, resolve it before implementing that phase.
+
+### Overall assessment and scope
+
+The target architecture is reasonable. Separating Vite/Hono from the database migration, sharing domain functions across processes, passing transaction handles explicitly, and retaining durable queue tables are sound choices. Embedded Postgres and small blobs in the database are defensible for the all-in-one deployment.
+
+The main concern is the number of changes bundled into v0.10, especially automatic import and restore. Ship and stabilize Phase 1 first, then treat import/restore reliability as a central PostgreSQL release milestone.
+
+Keep Phase 1 focused on behaviour parity. Native Hono handlers do not require changing endpoint contracts at the same time. New validation must preserve accepted inputs and error behaviour, or be treated as a separate deliberate change. Typed-client adoption and broader cleanup can follow in separate changes when they would otherwise complicate parity verification.
+
+### Live updates should survive the framework change
+
+The current browser update mechanism is polling, not a Next.js-specific push mechanism:
+
+- Match pages periodically fetch match state, participants, reminders, and games.
+- Tournament and series pages periodically refetch their data during active phases.
+- The activity feed polls every 15 seconds.
+- The Discord bot polls queues every 3 seconds and reloads settings every 30 seconds.
+
+Vite/Hono can preserve these mechanisms. Keep endpoint paths, response contracts, configured polling intervals, active-phase conditions, and post-mutation refetch behaviour intact. Explicitly check API cache behaviour so polling does not return stale responses. The main risks are accidental contract changes and worker races, rather than removing Next.js.
+
+Add these acceptance checks to Phase 1, repeat them after Phase 3, and repeat the relevant checks with two web replicas in Phase 6:
+
+- [ ] Make a change through Discord and verify it appears in two open browser sessions within the existing polling window, allowing for request/processing time.
+- [ ] Submit scores and verify match results, tournament/series standings, and relevant feed events update without a manual reload.
+- [ ] Verify configured refresh intervals, active/completed phase behaviour, and immediate refetches after UI mutations.
+- [ ] Restart a worker with pending work and verify eventual processing without lost jobs or unintended duplicate effects.
+- [ ] In split mode, verify requests served by different web replicas see the same committed data and uploaded images.
+
+Keep `LISTEN/NOTIFY` optional. If added, use it to wake workers that read durable queue tables, retaining polling/reconnect recovery.
+
+### Required correction: importer atomicity and restart behaviour (§3.7)
+
+The importer currently proposes committing each table/batch independently, then rolling everything back if final verification fails. Earlier committed batches cannot be rolled back. A partial import also conflicts with the startup condition that core tables must be empty.
+
+Choose and document one recoverable design before implementation:
+
+- One transaction for the complete import, if the expected dataset size makes that practical; or
+- Import into a disposable staging database/schema, validate it, then perform a controlled promotion before services start.
+
+Define recovery after interruption at every step, including verification, completion-marker updates, and renaming the legacy file. A retry must not silently skip an incomplete import or duplicate imported data. Preserve a consistent source backup and prevent legacy writers from changing it during migration.
+
+### Required correction: data preservation and rollback claims (§3.2, §3.7, rollout safeguards)
+
+Do not default to silently skipping orphan rows or replacing invalid JSON with null. Add a preflight report and explicit repair rules for known issues; unexpected corruption should fail migration with actionable diagnostics. Any permitted lossy repair must be visible and deliberate.
+
+Verification should check important relationships and representative computed results, including standings, as well as row counts. Matching counts alone do not establish equivalent behaviour.
+
+Re-pinning to v0.9.x and restoring the preserved SQLite file returns to the **pre-migration state**. It does not preserve writes made after PostgreSQL goes live. State this limitation explicitly in the rollback instructions and distinguish failed-first-boot recovery from rollback after accepting new writes.
+
+### Required correction: queue inserts belong in the business transaction (§3.4)
+
+Reverse the recommendation to keep Discord queue inserts outside transactions. A business-state change and the durable queue work caused by that change should commit together, using the same transaction handle. Otherwise, a crash between the two writes can leave changed state without its queued notification, or queued work for a change that failed.
+
+Actual Discord/network calls belong outside the database transaction, after the worker claims committed work. If notifications are added later, PostgreSQL delivers transactional `NOTIFY` events after commit: [PostgreSQL NOTIFY documentation](https://www.postgresql.org/docs/current/sql-notify.html).
+
+### Worker concurrency needs an explicit contract (§3.4, §3.8, §6)
+
+Review operations outside the existing 21 transaction sites too. For example, the current stats workers mark jobs as processing without a conditional pending-state claim and a check that the claim succeeded. One replica alone does not prevent overlapping timer executions or cover every deployment failure.
+
+Define atomic job claiming, retries, recovery of abandoned work, and protection against duplicate external effects. Exercise these behaviours with real PostgreSQL connections in concurrency tests. Keep the existing PGlite/real-Postgres test split, but do not rely on in-process tests alone to establish multi-process correctness.
+
+### Required correction: restore must drain active work (§5.2)
+
+A maintenance flag checked on the next worker tick does not stop work already running. Before restoring, stop accepting writes and new jobs, drain active requests/jobs, and coordinate all web and worker processes. Specify failure handling if a process cannot quiesce.
+
+Prefer restoring into a fresh target, applying migrations, and validating before a controlled switch where practical. Maintenance coordination must remain effective while the target database is unavailable or being replaced; a flag stored only inside the database being restored needs an explicit solution. Resume services only after successful validation.
+
+### Required correction: `pg_upgrade --link` is not an independent rollback copy (§4.3)
+
+After the new cluster starts, shared data files can make the old cluster unsafe to restart. Keeping the old directory as `postgres.pg18.bak` does not establish a safe rollback path. The proposed automatic fallback must not start an old cluster whose files may have been changed by the new one.
+
+Require a verified independent backup or an appropriate copy/clone strategy before promising automatic rollback. Retaining version detection now is useful; the future major-upgrade procedure should be validated separately before shipping. See [PostgreSQL pg_upgrade documentation](https://www.postgresql.org/docs/18/pgupgrade.html).
