@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Enable version updates for npm
+  # npm ecosystem (Dependabot updates pnpm-lock.yaml through it)
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -9,6 +9,13 @@ updates:
       time: "09:00"
     target-branch: "dev"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+    ignore:
+      # typescript-eslint supports TypeScript <6.1 only (typescript-eslint#10940); TS 7 breaks `pnpm lint`.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       # Group all patch updates together
       patch-updates:
@@ -16,24 +23,52 @@ updates:
           - "*"
         update-types:
           - "patch"
-      # Group Mantine UI updates
+      # Mantine UI
       mantine:
         patterns:
           - "@mantine/*"
         update-types:
           - "minor"
           - "patch"
-      # Group Next.js and React updates
-      nextjs-react:
+      # React and React Router
+      react:
         patterns:
-          - "next"
           - "react"
           - "react-dom"
-          - "eslint-config-next"
+          - "react-router"
+          - "@types/react*"
         update-types:
           - "minor"
           - "patch"
-      # Group Discord.js updates
+      # Vite
+      vite:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "@tailwindcss/vite"
+        update-types:
+          - "minor"
+          - "patch"
+      # Hono
+      hono:
+        patterns:
+          - "hono"
+          - "@hono/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Drizzle and Postgres drivers
+      drizzle-pg:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "pg"
+          - "@types/pg"
+          - "@electric-sql/pglite"
+        update-types:
+          - "minor"
+          - "patch"
+      # Discord.js
       discord:
         patterns:
           - "discord.js"
@@ -41,14 +76,14 @@ updates:
         update-types:
           - "minor"
           - "patch"
-      # Group TypeScript type definitions
+      # TypeScript type definitions
       typescript-types:
         patterns:
           - "@types/*"
         update-types:
           - "minor"
           - "patch"
-      # Group Tailwind CSS updates
+      # Tailwind CSS
       tailwind:
         patterns:
           - "tailwindcss"
@@ -56,11 +91,20 @@ updates:
         update-types:
           - "minor"
           - "patch"
-      # Group ESLint updates
+      # ESLint
       eslint:
         patterns:
           - "eslint*"
           - "@eslint/*"
+          - "typescript-eslint"
+        update-types:
+          - "minor"
+          - "patch"
+      # Vitest
+      testing:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
         update-types:
           - "minor"
           - "patch"
@@ -72,8 +116,8 @@ updates:
     labels:
       - "dependencies"
       - "automated"
-    
-  # Enable version updates for GitHub Actions
+
+  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -82,6 +126,8 @@ updates:
       time: "09:00"
     target-branch: "dev"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     assignees:
       - "slamanna212"
     commit-message:
@@ -92,7 +138,7 @@ updates:
       - "dependencies"
       - "automated"
 
-  # Enable version updates for Docker
+  # Docker (Dockerfile base images)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -101,6 +147,13 @@ updates:
       time: "09:00"
     target-branch: "dev"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    ignore:
+      # A Postgres major bump needs the dump/restore procedure (plan 7.3), not a PR.
+      - dependency-name: "postgres"
+        update-types:
+          - "version-update:semver-major"
     assignees:
       - "slamanna212"
     commit-message:

@@ -9,7 +9,7 @@ await esbuild.build({
   entryPoints: [join(__dirname, 'processes/stats-processor/index.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node24',
+  target: 'node26',
   format: 'cjs',
   outfile: join(__dirname, 'dist/stats-processor.js'),
   external: [

@@ -4,7 +4,6 @@ minimumReleaseAge: 10080
 # pnpm blocks dependency install scripts by default; list what genuinely needs them.
 allowBuilds:
   esbuild: true
-  sqlite3: true       # native addon (prebuilt download or node-gyp)
   bufferutil: true    # optional ws native addon
   sharp: false        # prebuilt binaries come via optional deps
   unrs-resolver: false # prebuilt binaries come via optional deps

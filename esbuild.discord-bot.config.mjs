@@ -9,7 +9,7 @@ await esbuild.build({
   entryPoints: [join(__dirname, 'processes/discord-bot/index.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node24',
+  target: 'node26',
   format: 'cjs',
   outfile: join(__dirname, 'dist/discord-bot.js'),
   external: [

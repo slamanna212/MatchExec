@@ -1,5 +1,5 @@
 # Builder stage - uses TARGETPLATFORM by default for correct musl binaries
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -8,7 +8,8 @@ RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 # Enable pnpm via Corepack (version pinned by "packageManager" in package.json)
 COPY package.json ./
-RUN corepack enable && corepack install
+# Node 25+ no longer bundles Corepack, so install it first
+RUN npm install -g corepack && corepack enable && corepack install
 
 # Fetch dependencies into the pnpm store (cached until the lockfile changes),
 # then install from the store without network access
@@ -21,14 +22,15 @@ COPY shared ./shared
 COPY lib ./lib
 COPY data ./data
 COPY migrations ./migrations
+COPY drizzle ./drizzle
 COPY scripts ./scripts
 COPY processes ./processes
 COPY src ./src
 COPY public ./public
-COPY ecosystem.config.js next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json ./
+COPY ecosystem.config.js vite.config.mts tsconfig.json ./
 COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrate.config.mjs esbuild.server.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
 
-# Build Next.js app and bundle processes
+# Build the Vite client (dist/client), the Hono server and the process bundles
 RUN pnpm run build
 
 # Prune dev dependencies while we still have build tools (needed for native modules on ARM)
@@ -37,7 +39,7 @@ RUN pnpm prune --prod
 # Collect only the process-specific deps (and their transitive deps) from node_modules
 RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
 
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 # Install required packages for s6-overlay and runtime
@@ -51,7 +53,7 @@ RUN apk add --no-cache \
     ffmpeg
 
 # Install s6-overlay
-ARG S6_OVERLAY_VERSION=3.2.0.3
+ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG S6_OVERLAY_ARCH=x86_64
 
 RUN curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" | tar -C / -Jxpf - && \
@@ -68,14 +70,13 @@ ENV S6_VERBOSITY=2
 RUN addgroup -g 1001 abc && \
     adduser -u 1001 -G abc -h /config -s /bin/bash -D abc
 
-# Copy built Next.js application (includes minimal node_modules)
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=abc:abc /app/.next/standalone ./
-COPY --from=builder --chown=abc:abc /app/.next/static ./.next/static
-RUN chmod -R a-w /app/public /app/.next/static
-
-# Copy bundled process files (optimized with esbuild)
+# Copy bundled server + processes + Vite client (dist/client), built by esbuild/vite
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+RUN chmod -R a-w /app/public /app/dist/client
+
+# Drizzle SQL migrations (applied by dist/migrate.js)
+COPY --from=builder /app/drizzle ./drizzle
 
 # Copy runtime dependencies and application files (needed by processes and migrations)
 COPY --from=builder /app/lib ./lib

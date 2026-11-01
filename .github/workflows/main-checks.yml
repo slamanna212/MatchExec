@@ -12,11 +12,11 @@ jobs:
     name: Full Test Suite
     runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -42,7 +42,7 @@ jobs:
     runs-on: ${{ contains(fromJSON('["slamanna212", "dependabot[bot]"]'), github.actor) && 'rapture-matchexec' || 'ubuntu-latest' }}
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18-alpine
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -55,32 +55,32 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run the full suite against postgres:18 (TEST_DATABASE_URL)
+      - name: Run the full suite against postgres:18-alpine (TEST_DATABASE_URL)
         run: pnpm exec vitest run --reporter=default --reporter=github-actions
 
   # [DEFERRED - UI REFACTOR] Uncomment after frontend redesign is complete
   # e2e-tests:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: pnpm/action-setup@v4
-  #     - uses: actions/setup-node@v4
+  #     - uses: actions/checkout@v7
+  #     - uses: pnpm/action-setup@v6
+  #     - uses: actions/setup-node@v7
   #       with:
-  #         node-version: '24'
+  #         node-version: '26'
   #         cache: 'pnpm'
   #     - run: pnpm install --frozen-lockfile
   #     - run: pnpm exec playwright install --with-deps chromium
   #     - run: pnpm run build
   #     - run: pnpm run test:e2e
-  #     - uses: actions/upload-artifact@v4
+  #     - uses: actions/upload-artifact@v7
   #       if: failure()
   #       with:
   #         name: playwright-report

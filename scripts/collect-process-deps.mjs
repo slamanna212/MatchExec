@@ -20,7 +20,7 @@ const ROOT = join(__dirname, '..');
 
 // Top-level packages needed by processes at runtime.
 // These are packages marked as 'external' in esbuild configs
-// that are NOT already provided by Next.js standalone output.
+// that are NOT bundled into dist/server.js (the web server bundle).
 const PROCESS_DEPS = [
   '@napi-rs/canvas',
   'discord.js',
