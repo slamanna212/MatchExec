@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { Card, Text, Select, Grid, Group, Button } from '@mantine/core';

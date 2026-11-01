@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Checkbox, Button, Group, Divider } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';

@@ -4,15 +4,14 @@
  *   runMigrations()    : take a Postgres advisory lock, (pre-upgrade dump hook), apply Drizzle migrations, seed.
  *   waitForSchema()    : non-migrate services poll until the migrations table holds the latest migration.
  *
- * CLI: `pnpm db:migrate` (tsx lib/db/migrate.ts).
+ * CLI: `pnpm db:migrate` (tsx lib/db/migrate-cli.ts); the production bundle is dist/migrate.js (same entrypoint).
  */
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate as migrateNodePg } from 'drizzle-orm/node-postgres/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import type { Pool } from 'pg';
-import { getPool, resolveDatabaseUrl, schema, type Db } from './index';
+import { getPool, schema, type Db } from './index';
 import { seedDatabase, type SeedOptions } from './seed';
 import { setSystemStatus } from './system-status';
 
@@ -164,26 +163,4 @@ export async function waitForSchema(options: WaitForSchemaOptions = {}): Promise
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(Math.round(delay * 1.5), maxDelay);
   }
-}
-
-
-async function main(): Promise<void> {
-  resolveDatabaseUrl(); // fail fast with a clear message
-  try {
-    await runMigrations();
-  } finally {
-    const { closeDb } = await import('./index');
-    await closeDb();
-  }
-}
-
-const isMain = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
-  main().then(
-    () => process.exit(0),
-    (err) => {
-      console.error('[migrate] failed:', err);
-      process.exit(1);
-    },
-  );
 }

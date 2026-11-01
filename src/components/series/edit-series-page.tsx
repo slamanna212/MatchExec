@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { Container, Stack, Button, Group, Loader, Center, Alert } from '@mantine/core';
 import { IconTimeline, IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
@@ -17,7 +15,7 @@ import { parseScoringConfig } from './series-shared';
 import type { SeriesSummary } from './series-shared';
 
 export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +71,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
         return;
       }
       notificationHelper.update(nid, { type: 'success', message: 'Series updated' });
-      router.push(`/series/${seriesId}`);
+      navigate(`/series/${seriesId}`);
     } catch (err) {
       logger.error('Error saving series:', err);
       notificationHelper.update(nid, { type: 'error', message: 'An error occurred while saving' });
@@ -94,7 +92,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
     );
   }
 
-  const backToDetail = () => router.push(`/series/${seriesId}`);
+  const backToDetail = () => navigate(`/series/${seriesId}`);
 
   return (
     <Container size="md" py="xl">

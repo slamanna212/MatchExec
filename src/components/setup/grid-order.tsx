@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, type JSX } from 'react';
 import { Stack, Text, Card, Avatar, Group, ActionIcon, Badge } from '@mantine/core';
 import { IconGripVertical, IconArrowUp, IconArrowDown } from '@tabler/icons-react';

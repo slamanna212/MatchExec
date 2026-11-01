@@ -4,11 +4,6 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
 
-vi.mock('next/image', () => ({
-  default: ({ src, alt }: { src: string; alt: string }) =>
-    React.createElement('img', { src, alt }),
-}));
-
 vi.mock('@/lib/logger/client', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
 }));

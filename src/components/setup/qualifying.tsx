@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, type JSX } from 'react';
 import { Stack, Text, NumberInput, Table, Avatar, Group } from '@mantine/core';
 import { IconStopwatch } from '@tabler/icons-react';

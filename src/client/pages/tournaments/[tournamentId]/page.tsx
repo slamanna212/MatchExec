@@ -1,0 +1,581 @@
+import { logger } from '@/lib/logger/client';
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
+import {
+  Skeleton,
+  Container,
+  Text,
+  Center,
+  Stack,
+  Grid,
+  Card,
+  Group,
+  Breadcrumbs,
+  Anchor
+} from '@mantine/core';
+import { modals } from '@mantine/modals';
+import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import { TournamentInfoPanel } from '@/components/tournament-details/TournamentInfoPanel';
+import { TournamentContentPanel } from '@/components/tournament-details/TournamentContentPanel';
+import type { CumulativeStanding } from '@/components/tournament/leaderboard-view';
+import { showError, notificationHelper } from '@/lib/notifications';
+import { parseDbTimestamp } from '@/lib/utils/dates';
+
+interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
+  game_name?: string;
+  game_icon?: string;
+  game_color?: string;
+  participant_count?: number;
+  event_image_url?: string;
+  created_at: string;
+  updated_at: string;
+  start_time?: string;
+  teams?: TeamWithMembers[];
+}
+
+interface TeamWithMembers extends TournamentTeam {
+  members: TournamentTeamMember[];
+}
+
+interface BracketMatch {
+  id: string;
+  round: number;
+  bracket_type: 'winners' | 'losers' | 'final';
+  team1?: { id: string; name: string };
+  team2?: { id: string; name: string };
+  winner?: string;
+  status: 'pending' | 'ongoing' | 'complete';
+  rawStatus: string;
+  match_order: number;
+}
+
+interface BracketAssignment {
+  position: number;
+  teamId: string;
+}
+
+interface TeamStanding {
+  team_id: string;
+  team_name: string;
+  matches_played: number;
+  wins: number;
+  losses: number;
+}
+
+export default function TournamentPage() {
+  const { tournamentId } = useParams() as { tournamentId: string };
+  const navigate = useNavigate();
+  const [tournament, setTournament] = useState<TournamentWithGame | null>(null);
+  const [teams, setTeams] = useState<TeamWithMembers[]>([]);
+  const [matches, setMatches] = useState<BracketMatch[]>([]);
+  const [standings, setStandings] = useState<(TeamStanding | CumulativeStanding)[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(30);
+
+  const hasBracket = matches.length > 0;
+
+  // Fetch matches
+  const fetchMatches = useCallback(async (silent = false) => {
+    if (!silent) setContentLoading(true);
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/matches`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatches(data.matches || []);
+      }
+    } catch (err) {
+      logger.error('Error fetching tournament matches:', err);
+    } finally {
+      if (!silent) setContentLoading(false);
+    }
+  }, [tournamentId]);
+
+  // Fetch standings
+  const fetchStandings = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/standings`);
+      if (response.ok) {
+        const data = await response.json();
+        setStandings(data.standings || []);
+      }
+    } catch (err) {
+      logger.error('Error fetching tournament standings:', err);
+    }
+  }, [tournamentId]);
+
+  // Fetch tournament data (includes teams)
+  const fetchTournament = useCallback(async (_silent = false) => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTournament(data);
+        setTeams(data.teams || []);
+      }
+    } catch (err) {
+      logger.error('Error fetching tournament:', err);
+    }
+  }, [tournamentId]);
+
+  // Fetch UI settings
+  useEffect(() => {
+    const fetchUISettings = async () => {
+      try {
+        const response = await fetch('/api/settings/ui');
+        if (response.ok) {
+          const uiSettings = await response.json();
+          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
+        }
+      } catch (err) {
+        logger.error('Error fetching UI settings:', err);
+      }
+    };
+
+    fetchUISettings();
+  }, []);
+
+  // Initial data fetch
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [tournamentRes, matchesRes, standingsRes] = await Promise.all([
+          fetch(`/api/tournaments/${tournamentId}`),
+          fetch(`/api/tournaments/${tournamentId}/matches`),
+          fetch(`/api/tournaments/${tournamentId}/standings`)
+        ]);
+
+        if (!tournamentRes.ok) {
+          setError(tournamentRes.status === 404 ? 'Tournament not found' : 'Failed to load tournament');
+          return;
+        }
+
+        const tournamentData = await tournamentRes.json();
+        setTournament(tournamentData);
+        setTeams(tournamentData.teams || []);
+
+        if (matchesRes.ok) {
+          const matchesData = await matchesRes.json();
+          setMatches(matchesData.matches || []);
+        }
+
+        if (standingsRes.ok) {
+          const standingsData = await standingsRes.json();
+          setStandings(standingsData.standings || []);
+        }
+      } catch (err) {
+        logger.error('Error fetching tournament data:', err);
+        setError('An error occurred while loading the tournament');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [tournamentId]);
+
+  // Auto-refresh during active phases
+  useEffect(() => {
+    if (!tournament || tournament.status === 'complete' || tournament.status === 'created') return undefined;
+
+    const interval = setInterval(() => {
+      fetchTournament(true);
+      fetchMatches(true);
+      if (tournament.status === 'battle') {
+        fetchStandings();
+      }
+    }, refreshInterval * 1000);
+
+    return () => clearInterval(interval);
+  }, [tournament, refreshInterval, fetchTournament, fetchMatches, fetchStandings]);
+
+  // Handle status transition
+  const handleStatusTransition = useCallback(async (newStatus: string) => {
+    if (!tournament) return;
+
+    const notificationId = `tournament-transition-${tournament.id}`;
+    const actionMessages: Record<string, { loading: string; success: string }> = {
+      gather: { loading: 'Opening signups...', success: 'Signups opened successfully!' },
+      assign: { loading: 'Closing signups...', success: 'Signups closed successfully!' },
+      battle: { loading: 'Starting tournament...', success: 'Tournament started successfully!' },
+      complete: { loading: 'Ending tournament...', success: 'Tournament ended successfully!' },
+    };
+
+    const messages = actionMessages[newStatus] || {
+      loading: 'Processing...',
+      success: 'Status updated successfully!'
+    };
+
+    notificationHelper.loading({ id: notificationId, message: messages.loading });
+
+    try {
+      const response = await fetch(`/api/tournaments/${tournament.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus }),
+      });
+
+      if (response.ok) {
+        const updatedTournament = await response.json();
+        setTournament(prev => prev ? { ...prev, ...updatedTournament } : updatedTournament);
+        notificationHelper.update(notificationId, { type: 'success', message: messages.success });
+      } else {
+        const errorData = await response.json();
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          message: errorData.error || 'Failed to update tournament status'
+        });
+      }
+    } catch (err) {
+      logger.error('Error transitioning tournament status:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while updating the tournament status'
+      });
+    }
+  }, [tournament]);
+
+  // Handle delete
+  const handleDelete = useCallback(() => {
+    if (!tournament) return;
+
+    modals.openConfirmModal({
+      title: 'Delete Tournament',
+      children: (
+        <Stack gap="sm">
+          <Text size="sm">
+            Are you sure you want to delete &quot;{tournament.name}&quot;?
+          </Text>
+          {tournament.status === 'battle' && (
+            <Text size="sm" c="orange" fw={500}>
+              ⚠️ This tournament has active matches that will also be deleted.
+            </Text>
+          )}
+          {(tournament.participant_count || 0) > 0 && (
+            <Text size="sm" c="orange" fw={500}>
+              ⚠️ This tournament has {tournament.participant_count} registered participants.
+            </Text>
+          )}
+          <Text size="sm" c="red" fw={500}>This action cannot be undone.</Text>
+        </Stack>
+      ),
+      labels: { confirm: 'Delete Tournament', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/tournaments/${tournament.id}`, { method: 'DELETE' });
+          if (response.ok) {
+            navigate('/tournaments');
+          } else {
+            showError('Failed to delete tournament. Please try again.');
+          }
+        } catch (err) {
+          logger.error('Error deleting tournament:', err);
+          showError('An error occurred while deleting the tournament.');
+        }
+      },
+    });
+  }, [tournament, navigate]);
+
+  // Handle generate bracket
+  const handleGenerateBracket = useCallback(async () => {
+    if (!tournament) return;
+
+    const notificationId = `bracket-generation-${tournament.id}`;
+    notificationHelper.loading({ id: notificationId, message: 'Generating tournament bracket...' });
+
+    try {
+      const response = await fetch(`/api/tournaments/${tournament.id}/generate-matches`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        notificationHelper.update(notificationId, {
+          type: 'success',
+          title: 'Bracket Generated',
+          message: result.message || 'Tournament bracket generated successfully'
+        });
+        await fetchMatches();
+      } else {
+        const errorData = await response.json();
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          title: 'Bracket Generation Failed',
+          message: errorData.error || 'Failed to generate bracket'
+        });
+      }
+    } catch (err) {
+      logger.error('Error generating bracket:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        title: 'Connection Error',
+        message: 'Failed to generate bracket'
+      });
+    }
+  }, [tournament, fetchMatches]);
+
+  // Handle progress tournament
+  const handleProgressTournament = useCallback(async () => {
+    if (!tournament) return;
+
+    try {
+      const response = await fetch(`/api/tournaments/${tournament.id}/progress`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        notificationHelper.success({
+          title: 'Round Advanced',
+          message: result.message
+        });
+        await Promise.all([fetchTournament(), fetchMatches()]);
+      } else {
+        const errorData = await response.json();
+        notificationHelper.error({
+          title: 'Progress Failed',
+          message: errorData.error || 'Failed to progress tournament'
+        });
+      }
+    } catch (err) {
+      logger.error('Error progressing tournament:', err);
+      notificationHelper.error({
+        title: 'Connection Error',
+        message: 'Failed to progress tournament'
+      });
+    }
+  }, [tournament, fetchTournament, fetchMatches]);
+
+  // Handle bracket assignment
+  const handleBracketAssignment = useCallback(async (assignments: BracketAssignment[]) => {
+    if (!tournament) return;
+
+    try {
+      const response = await fetch(`/api/tournaments/${tournament.id}/bracket-assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments })
+      });
+
+      if (!response.ok) {
+        logger.error('Failed to save bracket assignments');
+      }
+    } catch (err) {
+      logger.error('Error saving bracket assignments:', err);
+    }
+  }, [tournament]);
+
+  // Handle starting a single match
+  const handleStartMatch = useCallback(async (matchId: string) => {
+    // If tournament hasn't been started yet, start it (which auto-starts all round-1 matches)
+    if (tournament?.status === 'assign') {
+      await handleStatusTransition('battle');
+      await fetchMatches(true);
+      return;
+    }
+
+    const notificationId = `start-match-${matchId}`;
+    notificationHelper.loading({ id: notificationId, message: 'Starting match...' });
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus: 'battle' }),
+      });
+
+      if (response.ok) {
+        notificationHelper.update(notificationId, { type: 'success', message: 'Match started!' });
+        await fetchMatches(true);
+      } else {
+        const errorData = await response.json();
+        notificationHelper.update(notificationId, {
+          type: 'error',
+          message: errorData.error || 'Failed to start match'
+        });
+      }
+    } catch (err) {
+      logger.error('Error starting match:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while starting the match'
+      });
+    }
+  }, [fetchMatches, tournament, handleStatusTransition]);
+
+  // Handle starting all gather-phase matches at once
+  const handleStartAllMatches = useCallback(async (matchIds: string[]) => {
+    // If tournament hasn't been started yet, start it (which auto-starts all round-1 matches)
+    if (tournament?.status === 'assign') {
+      const notificationId = `start-all-matches-${tournamentId}`;
+      notificationHelper.loading({ id: notificationId, message: 'Starting tournament...' });
+      await handleStatusTransition('battle');
+      notificationHelper.update(notificationId, { type: 'success', message: 'Tournament started and all matches launched!' });
+      await fetchMatches(true);
+      return;
+    }
+
+    const notificationId = `start-all-matches-${tournamentId}`;
+    notificationHelper.loading({ id: notificationId, message: `Starting ${matchIds.length} matches...` });
+
+    try {
+      await Promise.all(matchIds.map(id =>
+        fetch(`/api/matches/${id}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newStatus: 'battle' }),
+        })
+      ));
+      notificationHelper.update(notificationId, { type: 'success', message: 'All matches started!' });
+      await fetchMatches(true);
+    } catch (err) {
+      logger.error('Error starting all matches:', err);
+      notificationHelper.update(notificationId, {
+        type: 'error',
+        message: 'An error occurred while starting matches'
+      });
+    }
+  }, [tournamentId, fetchMatches, tournament, handleStatusTransition]);
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6 px-2">
+        <Stack gap="lg">
+          <Group gap="xs">
+            <Skeleton height={16} width={80} />
+            <Skeleton height={16} width={8} />
+            <Skeleton height={16} width={140} />
+          </Group>
+          <Grid>
+            <Grid.Col span={{ base: 12, md: 4 }}>
+              <Stack gap="md">
+                <Card withBorder padding="lg" shadow="sm">
+                  <Stack gap="md">
+                    <Group>
+                      <Skeleton circle height={50} />
+                      <Stack gap="xs" style={{ flex: 1 }}>
+                        <Skeleton height={20} width="65%" />
+                        <Skeleton height={16} width="45%" />
+                      </Stack>
+                      <Skeleton circle height={60} />
+                    </Group>
+                    <Stack gap="xs">
+                      <Skeleton height={14} width="30%" />
+                      <Skeleton height={14} width="90%" />
+                      <Skeleton height={14} width="70%" />
+                    </Stack>
+                    <Skeleton height={200} radius="md" />
+                  </Stack>
+                </Card>
+                <Card withBorder padding="lg" shadow="sm">
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Skeleton height={14} width="30%" />
+                      <Skeleton height={20} width="35%" radius="xl" />
+                    </Group>
+                    {[35, 30, 25].map((w, i) => (
+                      <Group key={i} justify="space-between">
+                        <Skeleton height={14} width={`${w}%`} />
+                        <Skeleton height={14} width="30%" />
+                      </Group>
+                    ))}
+                  </Stack>
+                </Card>
+                <Card withBorder padding="lg" shadow="sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                    <Skeleton height={36} radius="sm" />
+                  </div>
+                </Card>
+              </Stack>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 8 }}>
+              <Stack gap="md">
+                <Group justify="center">
+                  <Skeleton height={36} width={320} radius="xl" />
+                </Group>
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} height={120} radius="sm" />
+                ))}
+              </Stack>
+            </Grid.Col>
+          </Grid>
+        </Stack>
+      </div>
+    );
+  }
+
+  if (error || !tournament) {
+    return (
+      <Container>
+        <Center style={{ minHeight: '400px' }}>
+          <Stack align="center" gap="md">
+            <Text size="xl" fw={600} c="red">
+              {error || 'Tournament not found'}
+            </Text>
+            <Text size="sm" c="dimmed">
+              The tournament you&apos;re looking for doesn&apos;t exist or has been deleted.
+            </Text>
+          </Stack>
+        </Center>
+      </Container>
+    );
+  }
+
+  const isHistory = tournament.status === 'complete';
+  const parentTitle = isHistory ? 'Tournament History' : 'Tournaments';
+  const parentHref = isHistory ? '/tournaments/history' : '/tournaments';
+
+  return (
+    <div className="container mx-auto py-6 pl-2 pr-2">
+      <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
+        <Anchor size="sm" c="dimmed" component={Link} to={parentHref}>{parentTitle}</Anchor>
+        <Text size="sm">{tournament.name}</Text>
+      </Breadcrumbs>
+      <Anchor
+        component={Link}
+        to={parentHref}
+        size="sm"
+        c="dimmed"
+        hiddenFrom="sm"
+        style={{ display: 'block', marginBottom: '0.5rem', marginLeft: '0.5rem' }}
+      >
+        ← {parentTitle}
+      </Anchor>
+
+      <Grid gap="lg">
+        <Grid.Col span={{ base: 12, md: 4 }} pl={{ base: 'md', md: 0 }}>
+          <TournamentInfoPanel
+            tournament={tournament}
+            hasBracket={hasBracket}
+            parseDbTimestamp={parseDbTimestamp}
+            onAssignTeams={() => navigate(`/tournaments/${tournamentId}/assign`)}
+            onDelete={handleDelete}
+            onEdit={() => navigate(`/tournaments/${tournamentId}/edit`)}
+            onStatusTransition={handleStatusTransition}
+            onGenerateBracket={handleGenerateBracket}
+            onProgressTournament={handleProgressTournament}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 8 }} pr={{ base: 'md', md: 0 }}>
+          <TournamentContentPanel
+            tournament={tournament}
+            teams={teams}
+            matches={matches}
+            standings={standings}
+            loading={contentLoading}
+            onGenerateMatches={handleGenerateBracket}
+            onBracketAssignment={handleBracketAssignment}
+            onStartMatch={handleStartMatch}
+            onStartAllMatches={handleStartAllMatches}
+          />
+        </Grid.Col>
+      </Grid>
+    </div>
+  );
+}

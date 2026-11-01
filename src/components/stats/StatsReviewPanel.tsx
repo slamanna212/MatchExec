@@ -1,5 +1,3 @@
-'use client'
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Stack, Text, Group, Button, Alert, Loader, Tabs, Badge, SimpleGrid } from '@mantine/core';
 import { IconCheck, IconX, IconRefresh, IconRotate } from '@tabler/icons-react';

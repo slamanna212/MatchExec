@@ -3,6 +3,6 @@
 echo "Running database migrations and seeding..."
 
 cd /app
-node dist/migrator.js
+node dist/migrate.js
 
 echo "Database initialization completed"

@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX, ReactNode } from 'react';
 import { Stack, Group, Text, Button, Card, Badge, Image, Divider, Anchor } from '@mantine/core';
 import { StageRing } from '@/components/StageRing';

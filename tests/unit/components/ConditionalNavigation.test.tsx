@@ -3,12 +3,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
+import { MemoryRouter } from 'react-router';
 
 let mockPathname = '/';
-vi.mock('next/navigation', () => ({
-  usePathname: () => mockPathname,
-}));
-
 vi.mock('@/components/navigation', () => ({
   Navigation: ({ children }: { children: React.ReactNode }) =>
     React.createElement('nav', { 'data-testid': 'navigation' }, children),
@@ -20,7 +17,7 @@ function renderWithMantine(element: React.ReactElement): HTMLDivElement {
   const container = document.createElement('div');
   document.body.appendChild(container);
   act(() => {
-    createRoot(container).render(<MantineProvider>{element}</MantineProvider>);
+    createRoot(container).render(<MantineProvider><MemoryRouter initialEntries={[mockPathname]}>{element}</MemoryRouter></MantineProvider>);
   });
   return container;
 }

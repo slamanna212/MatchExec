@@ -1,8 +1,6 @@
-'use client'
-
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { 
   Stack,
   Group,
@@ -65,7 +63,7 @@ export function TournamentBracket({
   isAssignMode = false,
   onBracketAssignment
 }: TournamentBracketProps): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('list');
   const [bracketAssignments, setBracketAssignments] = useState<BracketAssignment[]>([]);
   const [draggedTeam, setDraggedTeam] = useState<string | null>(null);
@@ -173,7 +171,7 @@ export function TournamentBracket({
       key={match.id}
       withBorder
       p="md"
-      onClick={() => router.push(`/matches/${  match.id}`)}
+      onClick={() => navigate(`/matches/${  match.id}`)}
       style={{
         height: '100%',
         minHeight: '120px',

@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Container, Stack, Button, Stepper } from '@mantine/core';
 import { PageHeader } from './PageHeader';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconTrophy, IconUsers, IconListCheck } from '@tabler/icons-react';
@@ -19,8 +17,8 @@ import { TournamentReviewStep } from './create-tournament/TournamentReviewStep';
 import { AnnouncementsStep } from './create-match/AnnouncementsStep';
 
 export function CreateTournamentPage(): JSX.Element {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const currentStep = parseInt(searchParams.get('step') || '1');
 
   const {
@@ -59,7 +57,7 @@ export function CreateTournamentPage(): JSX.Element {
   const navigateToStep = (step: number) => {
     const url = new URL(window.location.href);
     url.searchParams.set('step', step.toString());
-    router.push(url.pathname + url.search);
+    navigate(url.pathname + url.search);
   };
 
   const handleNext = () => {
@@ -69,7 +67,7 @@ export function CreateTournamentPage(): JSX.Element {
   const handleBack = () => {
     if (currentStep === 1) {
       clearFormData();
-      router.push('/tournaments');
+      navigate('/tournaments');
     } else {
       navigateToStep(currentStep - 1);
     }
@@ -186,7 +184,7 @@ export function CreateTournamentPage(): JSX.Element {
 
       clearFormData();
       showSuccess('Tournament created successfully!');
-      router.push('/tournaments');
+      navigate('/tournaments');
 
     } catch (error) {
       logger.error('Error creating tournament:', error);

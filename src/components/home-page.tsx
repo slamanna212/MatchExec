@@ -1,7 +1,5 @@
-'use client'
-
 import { Card, Text, Stack, Group, Button, useMantineColorScheme, SimpleGrid, Table, Badge, Avatar, Skeleton } from '@mantine/core';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { useEffect, useState, useMemo } from 'react';
 import type { JSX } from 'react';
 import { IconTrophy, IconSwords, IconUsers, IconCornerDownRight, IconChevronLeft, IconChevronRight, IconLayoutDashboard } from '@tabler/icons-react';
@@ -216,7 +214,7 @@ function buildMissionControlRows(matches: MatchItem[], tournaments: TournamentIt
 }
 
 export function HomePage(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { colorScheme } = useMantineColorScheme();
   const [stats, setStats] = useState<Stats>({ totalMatches: 0, totalTournaments: 0, totalSignups: 0 });
   const [matches, setMatches] = useState<MatchItem[]>([]);
@@ -338,7 +336,7 @@ export function HomePage(): JSX.Element {
                     <Table.Tr
                       key={row.key}
                       style={{ cursor: 'pointer' }}
-                      onClick={() => router.push(row.navigateTo)}
+                      onClick={() => navigate(row.navigateTo)}
                     >
                       <Table.Td>
                         <Group gap="sm" wrap="nowrap">

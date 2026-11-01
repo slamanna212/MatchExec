@@ -26,7 +26,7 @@ export interface SeriesSummary {
   name: string;
   description?: string | null;
   status: SeriesStatus;
-  scoring_config?: SeriesScoringConfig | string | null;
+  scoring_config?: SeriesScoringConfig | null;
   start_date?: string | null;
   end_date?: string | null;
   event_image_url?: string | null;
@@ -133,16 +133,10 @@ export function formatPoints(p: number): string {
   return Number.isInteger(p) ? String(p) : String(Number(p.toFixed(2)));
 }
 
-/** The API returns scoring_config as an object (jsonb); a JSON string is still accepted. */
-export function parseScoringConfig(raw: SeriesScoringConfig | string | null | undefined): SeriesScoringConfig {
-  if (!raw) return {};
-  if (typeof raw === 'object') return Array.isArray(raw) ? {} : raw;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as SeriesScoringConfig : {};
-  } catch {
-    return {};
-  }
+/** The API returns `scoring_config` as a JSON object (jsonb); anything else means "no config". */
+export function parseScoringConfig(raw: SeriesScoringConfig | null | undefined): SeriesScoringConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return raw;
 }
 
 export function ordinal(n: number): string {

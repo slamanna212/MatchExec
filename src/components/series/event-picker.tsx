@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { Avatar, Badge, Group, Stack, Text, ThemeIcon, UnstyledButton, Loader, Center, ScrollArea } from '@mantine/core';

@@ -1,0 +1,263 @@
+@import "tailwindcss";
+
+html, body {
+  min-height: 100dvh;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Self-hosted @fontsource-variable families (these variables were previously set by next/font) */
+:root {
+  --font-geist-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-outfit: 'Outfit Variable', sans-serif;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Pulsing dot for live/in-progress badges */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.live-pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: currentColor;
+  margin-right: 5px;
+  margin-left: 3px;
+  vertical-align: middle;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* NavLink hover/active — uses stable .navlink-root class assigned in providers.tsx */
+@media (min-width: 62em) {
+  /* Desktop sidebar: purple hover and gradient-active */
+  .navlink-root:hover {
+    background-color: rgba(124, 58, 237, 0.25) !important;
+    border-radius: 8px !important;
+  }
+
+  .navlink-root[data-active="true"] {
+    background: linear-gradient(135deg, rgba(109, 40, 217, 0.7), rgba(76, 29, 149, 0.5)) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(109, 40, 217, 0.3) !important;
+  }
+
+  /* Collapsed sidebar icon buttons */
+  .sidebar-icon-btn:hover {
+    background-color: rgba(124, 58, 237, 0.25) !important;
+    border-radius: 8px !important;
+  }
+}
+
+@media (max-width: 61.99em) {
+  /* Mobile drawer: subtle white highlight; active is transparent (colour comes from text) */
+  .navlink-root:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
+  }
+
+  .navlink-root[data-active="true"] {
+    background-color: transparent !important;
+  }
+}
+
+/* Override Mantine's body background - must come after Mantine styles */
+
+:root[data-mantine-color-scheme='light'] {
+  --mantine-color-body: #e9eaee;
+  --column-bg: #f5f5f7;
+  background-color: #e9eaee;
+}
+
+[data-mantine-color-scheme='light'] body {
+  background-color: #e9eaee !important;
+}
+
+:root[data-mantine-color-scheme='dark'] {
+  --mantine-color-body: #101019;
+  --mantine-color-dark-6: #292933;
+  --mantine-color-dark-4: #3a3a44;
+  --paper-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --column-bg: #1a1a24;
+  background-color: #101019; /* Match body so iOS safe areas blend with page */
+}
+
+/* Dark mode: body is transparent; gradient lives on a fixed pseudo-element
+   so it always covers the full live visual viewport (fixes iOS Safari cutoff).
+   position: fixed on an element tracks the viewport during address bar transitions;
+   background-attachment: fixed does not work on iOS Safari. */
+[data-mantine-color-scheme='dark'] body {
+  background-color: #101019 !important;
+  position: relative;
+}
+
+/* Welcome flow: body must be transparent so iOS Safari reads it as the fallback
+   tint color for the bottom toolbar and renders it as glass (no tint).
+   Same specificity as the rule above, placed after it so it wins by source order. */
+[data-mantine-color-scheme] body.welcome-flow {
+  background-color: transparent !important;
+}
+
+[data-mantine-color-scheme='dark'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: #101019;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(76, 29, 149, 0.18) 0%, transparent 60%);
+}
+
+
+/* Modal backgrounds in dark mode — uses stable .modal-content/.modal-header classes assigned in providers.tsx */
+[data-mantine-color-scheme='dark'] .modal-content,
+[data-mantine-color-scheme='dark'] .modal-header {
+  background-color: #131314;
+}
+
+/* ── Date / Time Picker ──────────────────────────────────────────────── */
+
+/* Popover dropdown container (DateTimePicker) */
+[data-mantine-color-scheme='dark'] .date-picker-dropdown {
+  background-color: #1e1e2e;
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Inline calendar root (DatePicker range in feed-dashboard) */
+[data-mantine-color-scheme='dark'] .date-picker-inline {
+  background-color: #1e1e2e;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: var(--mantine-radius-md);
+  padding: 8px;
+}
+
+/* Weekday column headers (Mo Tu We …) — violet-tinted */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-weekday,
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-weekday {
+  color: rgba(139, 92, 246, 0.75);
+  font-weight: 600;
+}
+
+/* Default day cell */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day,
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day {
+  color: var(--mantine-color-gray-1);
+  border-radius: var(--mantine-radius-sm);
+}
+
+/* Weekend days — subtle violet instead of Mantine's default red */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day[data-weekend],
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-weekend] {
+  color: var(--mantine-color-violet-3);
+}
+
+/* Today — violet border, not red */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day[data-today],
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-today] {
+  border: 1px solid var(--mantine-color-violet-5) !important;
+  color: var(--mantine-color-violet-2);
+}
+
+/* Selected day */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day[data-selected],
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-selected] {
+  background-color: var(--mantine-color-violet-6) !important;
+  color: #fff !important;
+}
+
+/* In-range days (DatePicker type="range") */
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-in-range] {
+  background-color: rgba(124, 58, 237, 0.2) !important;
+  color: var(--mantine-color-gray-1);
+}
+
+/* Outside-month days — very dim */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day[data-outside],
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-outside] {
+  color: rgba(255, 255, 255, 0.18);
+}
+
+/* Disabled days */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-day[data-disabled],
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-day[data-disabled] {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Calendar header level button (month/year label) */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-calendarHeaderLevel,
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-calendarHeaderLevel {
+  color: var(--mantine-color-gray-1);
+  font-weight: 600;
+}
+
+/* Calendar nav arrows */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-calendarHeaderControl,
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-calendarHeaderControl {
+  color: var(--mantine-color-violet-4);
+}
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-calendarHeaderControl:hover,
+[data-mantine-color-scheme='dark'] .mantine-DatePicker-calendarHeaderControl:hover {
+  background-color: rgba(124, 58, 237, 0.2);
+}
+
+/* Time picker wrapper divider */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-timeWrapper {
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+/* Submit (confirm) button — violet */
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-submitButton {
+  background-color: var(--mantine-color-violet-6);
+  color: #fff;
+}
+[data-mantine-color-scheme='dark'] .mantine-DateTimePicker-submitButton:hover {
+  background-color: var(--mantine-color-violet-7);
+}
+
+/* Light mode: fix today/weekend/selected red → violet */
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-day[data-today],
+[data-mantine-color-scheme='light'] .mantine-DatePicker-day[data-today] {
+  border: 1px solid var(--mantine-color-violet-5) !important;
+  color: var(--mantine-color-violet-7);
+}
+
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-day[data-weekend],
+[data-mantine-color-scheme='light'] .mantine-DatePicker-day[data-weekend] {
+  color: var(--mantine-color-violet-6);
+}
+
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-day[data-selected],
+[data-mantine-color-scheme='light'] .mantine-DatePicker-day[data-selected] {
+  background-color: var(--mantine-color-violet-6) !important;
+  color: #fff !important;
+}
+
+[data-mantine-color-scheme='light'] .mantine-DatePicker-day[data-in-range] {
+  background-color: rgba(124, 58, 237, 0.12) !important;
+}
+
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-submitButton {
+  background-color: var(--mantine-color-violet-6);
+  color: #fff;
+}
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-submitButton:hover {
+  background-color: var(--mantine-color-violet-7);
+}
+
+[data-mantine-color-scheme='light'] .mantine-DateTimePicker-calendarHeaderControl,
+[data-mantine-color-scheme='light'] .mantine-DatePicker-calendarHeaderControl {
+  color: var(--mantine-color-violet-6);
+}

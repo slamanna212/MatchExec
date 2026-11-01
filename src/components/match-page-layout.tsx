@@ -1,8 +1,6 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Grid, Breadcrumbs, Anchor, Text } from '@mantine/core';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { MatchInfoPanel } from './match-details/MatchInfoPanel';
 import { MatchContentPanel } from './match-details/MatchContentPanel';
 import type { Match } from '@/shared/types';
@@ -125,12 +123,12 @@ export function MatchPageLayout({
       {showBreadcrumbs && (
         <>
           <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
-            <Anchor size="sm" c="dimmed" component={Link} href={parentHref}>{parentSection}</Anchor>
+            <Anchor size="sm" c="dimmed" component={Link} to={parentHref}>{parentSection}</Anchor>
             <Text size="sm">{match.name}</Text>
           </Breadcrumbs>
           <Anchor
             component={Link}
-            href={parentHref}
+            to={parentHref}
             size="sm"
             c="dimmed"
             hiddenFrom="sm"

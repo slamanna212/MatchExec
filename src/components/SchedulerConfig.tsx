@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import type { JSX } from 'react';
 import { Card, Group, Text, Select, NumberInput, Stack, Alert } from '@mantine/core';

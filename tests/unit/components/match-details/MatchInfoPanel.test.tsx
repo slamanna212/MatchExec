@@ -3,10 +3,7 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-}));
+import { MemoryRouter } from 'react-router';
 
 vi.mock('@mantine/modals', () => ({
   modals: { openConfirmModal: vi.fn() },
@@ -40,7 +37,7 @@ function renderWithMantine(element: React.ReactElement): HTMLDivElement {
   act(() => {
     const root = createRoot(container);
     roots.push(root);
-    root.render(<MantineProvider>{element}</MantineProvider>);
+    root.render(<MantineProvider><MemoryRouter>{element}</MemoryRouter></MantineProvider>);
   });
   return container;
 }

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>MatchExec</title>
+    <meta name="description" content="Discord tournament management bot" />
+    <meta name="apple-mobile-web-app-title" content="MatchExec" />
+    <meta name="theme-color" content="#241459" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/icon0.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon1.png" type="image/png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="/apple-icon.png" />
+    <!-- Same script as Mantine's <ColorSchemeScript defaultColorScheme="dark" />: sets the colour scheme before first paint. -->
+    <script>
+      try {
+        var _colorScheme = window.localStorage.getItem('mantine-color-scheme-value');
+        var colorScheme = _colorScheme === 'light' || _colorScheme === 'dark' || _colorScheme === 'auto' ? _colorScheme : 'dark';
+        var computedColorScheme = colorScheme !== 'auto' ? colorScheme : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-mantine-color-scheme', computedColorScheme);
+      } catch (e) {}
+    </script>
+  </head>
+  <body class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

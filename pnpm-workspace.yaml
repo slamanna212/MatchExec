@@ -8,7 +8,3 @@ allowBuilds:
   bufferutil: true    # optional ws native addon
   sharp: false        # prebuilt binaries come via optional deps
   unrs-resolver: false # prebuilt binaries come via optional deps
-
-# eslint-plugin-react-hooks 7.1.x adds React-Compiler rules that fail on existing Next code (26 errors); hold at 7.0.1 until Stage 3/4.
-overrides:
-  eslint-plugin-react-hooks: 7.0.1

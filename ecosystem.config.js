@@ -7,7 +7,7 @@ module.exports = {
   apps: [
     {
       name: isDev ? 'db-migrator-dev' : 'db-migrator',
-      script: './lib/db/migrate.ts',
+      script: './lib/db/migrate-cli.ts',
       interpreter: 'pnpm',
       interpreter_args: 'exec tsx',
       autorestart: false,

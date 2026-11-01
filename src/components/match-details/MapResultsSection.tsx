@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Stack } from '@mantine/core';
 import { cleanMapId, getMapWinner } from './helpers';

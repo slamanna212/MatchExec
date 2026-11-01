@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Card, Box, Text, Select, Button } from '@mantine/core';
 import type { GameMode, GameMapWithMode } from './useMatchForm';

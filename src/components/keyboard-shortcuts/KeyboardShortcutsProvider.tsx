@@ -1,7 +1,5 @@
-'use client'
-
 import { useHotkeys, useDisclosure } from '@mantine/hooks';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { Modal, Table, Kbd, Text, Stack } from '@mantine/core';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
@@ -37,13 +35,13 @@ const sections = [
 ];
 
 export function KeyboardShortcutsProvider({ children }: KeyboardShortcutsProviderProps): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [opened, { open, close }] = useDisclosure(false);
 
   useHotkeys([
-    ['t', () => router.push('/tournaments')],
-    ['m', () => router.push('/matches')],
-    ['h', () => router.push('/')],
+    ['t', () => navigate('/tournaments')],
+    ['m', () => navigate('/matches')],
+    ['h', () => navigate('/')],
     ['shift+/', open, { usePhysicalKeys: true }],
   ]);
 

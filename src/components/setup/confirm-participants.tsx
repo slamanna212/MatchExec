@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Stack, Text, Card, Avatar, Group, Badge } from '@mantine/core';
 import { IconUserCheck } from '@tabler/icons-react';

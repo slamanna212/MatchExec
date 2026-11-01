@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Container, Stack, ActionIcon, Stepper } from '@mantine/core';
 import { IconArrowLeft, IconDeviceGamepad2, IconCalendar, IconBell, IconMap, IconSwords } from '@tabler/icons-react';
 import { PageHeader } from './PageHeader';
@@ -18,8 +16,8 @@ import { AnnouncementsStep } from './create-match/AnnouncementsStep';
 import { MapConfigurationStep } from './create-match/MapConfigurationStep';
 
 export function CreateMatchPage(): JSX.Element {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const currentStep = parseInt(searchParams.get('step') || '1');
 
   const {
@@ -73,7 +71,7 @@ export function CreateMatchPage(): JSX.Element {
   const navigateToStep = (step: number) => {
     const params = new URLSearchParams();
     params.set('step', step.toString());
-    router.push(`/matches/create?${params.toString()}`);
+    navigate(`/matches/create?${params.toString()}`);
   };
 
   const handleGameSelect = async (gameId: string) => {
@@ -102,7 +100,7 @@ export function CreateMatchPage(): JSX.Element {
       navigateToStep(currentStep - 1);
     } else {
       clearFormData();
-      router.push('/matches');
+      navigate('/matches');
     }
   };
 
@@ -315,7 +313,7 @@ export function CreateMatchPage(): JSX.Element {
 
       clearFormData();
       showSuccess('Match created successfully!');
-      router.push('/matches');
+      navigate('/matches');
 
     } catch (error) {
       if (error instanceof Error && error.message === 'Missing required fields') {

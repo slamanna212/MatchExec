@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { SimpleGrid, Card, Text, Group } from '@mantine/core';
 import type { GameStatDefinition } from '@/shared/types';

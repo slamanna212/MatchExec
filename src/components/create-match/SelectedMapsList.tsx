@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Grid, Card, Box, Group, Stack, Text, ActionIcon } from '@mantine/core';
 import { IconNote, IconX, IconPlus } from '@tabler/icons-react';

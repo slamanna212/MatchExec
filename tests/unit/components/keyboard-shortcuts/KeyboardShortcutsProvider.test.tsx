@@ -1,12 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-}));
+import { MemoryRouter } from 'react-router';
 
 import { KeyboardShortcutsProvider } from '../../../../src/components/keyboard-shortcuts/KeyboardShortcutsProvider';
 
@@ -27,7 +24,7 @@ function renderWithMantine(element: React.ReactElement): HTMLDivElement {
   act(() => {
     const root = createRoot(container);
     roots.push(root);
-    root.render(<MantineProvider>{element}</MantineProvider>);
+    root.render(<MantineProvider><MemoryRouter>{element}</MemoryRouter></MantineProvider>);
   });
   return container;
 }

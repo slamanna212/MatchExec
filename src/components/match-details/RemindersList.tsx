@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Stack, Card, Text, Skeleton } from '@mantine/core';
 import { ReminderCard } from './ReminderCard';

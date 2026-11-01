@@ -1,9 +1,7 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -137,7 +135,7 @@ const TournamentCard = memo(({
             <Text size="xs" c="dimmed">Starts</Text>
             <Text size="sm" fw={500}>
               {tournament.start_time
-                ? parseDbTimestamp(tournament.start_time?.toString())?.toLocaleDateString()
+                ? parseDbTimestamp(tournament.start_time)?.toLocaleDateString()
                 : 'N/A'}
             </Text>
           </Stack>
@@ -187,7 +185,7 @@ function SkeletonCard() {
 }
 
 export function TournamentDashboard(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -265,12 +263,12 @@ export function TournamentDashboard(): JSX.Element {
   }, [refreshInterval, fetchTournaments]);
 
   const handleCreateTournament = () => {
-    router.push('/tournaments/create?step=1');
+    navigate('/tournaments/create?step=1');
   };
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    router.push(`/tournaments/${tournament.id}`);
-  }, [router]);
+    navigate(`/tournaments/${tournament.id}`);
+  }, [navigate]);
 
   const handleStatusTransition = async (tournamentId: string, newStatus: string) => {
     const notificationId = `tournament-transition-${tournamentId}`;

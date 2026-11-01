@@ -1,6 +1,4 @@
-'use client';
-
-import { usePathname } from 'next/navigation';
+import { useLocation } from 'react-router';
 import { Navigation } from '@/components/navigation';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
@@ -14,7 +12,7 @@ interface ConditionalNavigationProps {
  * Hides navigation on welcome flow pages
  */
 export function ConditionalNavigation({ children }: ConditionalNavigationProps): JSX.Element {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const isWelcomePage = pathname.startsWith('/welcome') || pathname.startsWith('/login');
 
   // On welcome pages, render children without Navigation wrapper

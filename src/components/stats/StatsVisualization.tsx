@@ -1,10 +1,8 @@
-'use client'
-
 import { useEffect, useState, useMemo } from 'react';
 import type { JSX } from 'react';
 import { Tabs, Stack, Text, Group, Divider, Skeleton } from '@mantine/core';
 import { IconLayoutGrid, IconMap } from '@tabler/icons-react';
-import type { MatchPlayerStats, GameStatDefinition, ParticipantDbRow, PerMapStatRow } from '@/shared/types';
+import type { MatchPlayerStats, GameStatDefinition, MatchParticipant, PerMapStatRow } from '@/shared/types';
 import { StatCallouts, type PlayerStatEntry } from './StatCallouts';
 import { TeamDonutCharts } from './TeamDonutCharts';
 import { PlayerLeaderboard } from './PlayerLeaderboard';
@@ -34,9 +32,9 @@ function SectionHeader({ label }: { label: string }) {
 
 function buildPlayerEntries(
   rows: Array<{ participant_id: string; stats_json: Record<string, number> }>,
-  participantMap: Map<string, ParticipantDbRow>
+  participantMap: Map<string, MatchParticipant>
 ): PlayerStatEntry[] {
-  const byParticipant = new Map<string, { stats: Record<string, number>; participant: ParticipantDbRow }>();
+  const byParticipant = new Map<string, { stats: Record<string, number>; participant: MatchParticipant }>();
   for (const row of rows) {
     const participant = participantMap.get(row.participant_id);
     if (!participant) continue;
@@ -61,7 +59,7 @@ export function StatsVisualization({ matchId, gameId, games = [] }: Props): JSX.
   const [activeTab, setActiveTab] = useState('overall');
   const [overallStats, setOverallStats] = useState<MatchPlayerStats[]>([]);
   const [perMapStats, setPerMapStats] = useState<PerMapStatRow[]>([]);
-  const [participantMap, setParticipantMap] = useState<Map<string, ParticipantDbRow>>(new Map());
+  const [participantMap, setParticipantMap] = useState<Map<string, MatchParticipant>>(new Map());
   const [statDefs, setStatDefs] = useState<GameStatDefinition[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,12 +67,12 @@ export function StatsVisualization({ matchId, gameId, games = [] }: Props): JSX.
     Promise.all([
       fetch(`/api/matches/${matchId}/stats`).then(r => r.json()) as Promise<MatchPlayerStats[]>,
       fetch(`/api/matches/${matchId}/stats/per-map`).then(r => r.json()).catch(() => []) as Promise<PerMapStatRow[]>,
-      fetch(`/api/matches/${matchId}/participants`).then(r => r.json()) as Promise<{ participants: ParticipantDbRow[] }>,
+      fetch(`/api/matches/${matchId}/participants`).then(r => r.json()) as Promise<{ participants: MatchParticipant[] }>,
       fetch(`/api/games/${gameId}/stats`).then(r => r.json()) as Promise<GameStatDefinition[]>,
     ]).then(([overallData, perMapData, participantsData, defsData]) => {
       setOverallStats(overallData ?? []);
       setPerMapStats(perMapData ?? []);
-      const map = new Map<string, ParticipantDbRow>();
+      const map = new Map<string, MatchParticipant>();
       for (const p of participantsData.participants ?? []) map.set(p.id, p);
       setParticipantMap(map);
       setStatDefs(Array.isArray(defsData) ? defsData : []);

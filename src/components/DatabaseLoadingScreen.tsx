@@ -1,9 +1,6 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { Container, Loader, Text, Stack } from '@mantine/core';
-import Image from 'next/image';
 import { logger } from '@/lib/logger/client';
 
 interface DatabaseStatus {
@@ -58,7 +55,7 @@ export function DatabaseLoadingScreen(): JSX.Element | null {
       justifyContent: 'center'
     }}>
       <Stack align="center" gap="lg">
-        <Image
+        <img
           src="/logo.svg"
           alt="MatchExec Logo"
           width={300}

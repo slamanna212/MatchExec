@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import {
   Stack,
   Group,
@@ -233,7 +231,7 @@ export function MatchContentPanel({
   participantsLoading = false,
   remindersLoading = false
 }: MatchContentPanelProps): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     if (typeof window === 'undefined') return 'participants';
     const saved = localStorage.getItem(`match_tab_${match.id}`);
@@ -318,8 +316,8 @@ export function MatchContentPanel({
             matchGames={matchGames}
             showWinner={match.status === 'battle' || match.status === 'complete'}
             matchInBattle={match.status === 'battle'}
-            onScoring={(gameId) => router.push(`/matches/${match.id}/scoring?gameId=${gameId}`)}
-            onMatchPlayers={showMatchPlayers ? (gameId) => router.push(`/matches/${match.id}/stats/${gameId}`) : undefined}
+            onScoring={(gameId) => navigate(`/matches/${match.id}/scoring?gameId=${gameId}`)}
+            onMatchPlayers={showMatchPlayers ? (gameId) => navigate(`/matches/${match.id}/stats/${gameId}`) : undefined}
           />
         )}
 

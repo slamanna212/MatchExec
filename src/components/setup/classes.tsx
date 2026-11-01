@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, type JSX } from 'react';
 import { Stack, Text, Card, Avatar, Group, Select, Badge } from '@mantine/core';
 

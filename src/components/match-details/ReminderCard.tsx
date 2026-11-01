@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Card, Group, Badge, Text, Stack } from '@mantine/core';
 import { getReminderStatusColor, formatReminderStatus } from './helpers';

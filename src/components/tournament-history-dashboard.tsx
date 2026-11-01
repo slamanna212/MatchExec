@@ -1,9 +1,7 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -166,7 +164,7 @@ function SkeletonCard() {
 const PAGE_SIZE = 12;
 
 export function TournamentHistoryDashboard(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -238,8 +236,8 @@ export function TournamentHistoryDashboard(): JSX.Element {
   }, [tournaments, searchQuery]);
 
   const handleViewDetails = useCallback((tournament: TournamentWithGame) => {
-    router.push(`/tournaments/${tournament.id}`);
-  }, [router]);
+    navigate(`/tournaments/${tournament.id}`);
+  }, [navigate]);
 
   // Animation variants for staggered entrance
   const containerVariants = {

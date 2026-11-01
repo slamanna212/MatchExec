@@ -1,9 +1,7 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -154,7 +152,7 @@ function SkeletonCard() {
 const PAGE_SIZE = 12;
 
 export function MatchHistoryDashboard(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -214,8 +212,8 @@ export function MatchHistoryDashboard(): JSX.Element {
   }, [fetchMatches]);
 
   const handleViewDetails = useCallback((match: MatchWithGame) => {
-    router.push(`/matches/history/${match.id}`);
-  }, [router]);
+    navigate(`/matches/history/${match.id}`);
+  }, [navigate]);
 
   // Filter matches based on search query
   const filteredMatches = useMemo(() => {

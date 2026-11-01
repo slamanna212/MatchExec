@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { RingProgress } from '@mantine/core';
 import { MATCH_FLOW_STEPS, TOURNAMENT_FLOW_STEPS } from '@/shared/types';

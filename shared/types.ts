@@ -10,8 +10,8 @@ export interface Game {
   min_players: number;
   max_players: number;
   icon_url: string;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GameMode {
@@ -22,8 +22,8 @@ export interface GameMode {
   team_size: number;
   max_teams: number;
   scoring_type: 'Normal' | 'FFA' | 'Position';
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GameMap {
@@ -32,8 +32,8 @@ export interface GameMap {
   name: string;
   mode_id?: string;
   image_url?: string;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 // Match-related types
@@ -47,15 +47,15 @@ export interface Match {
   max_participants: number;
   match_format: MatchFormat;
   status: 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
-  start_date?: Date;
-  end_date?: Date;
+  start_date?: string;
+  end_date?: string;
   tournament_id?: string;
   bracket_type?: 'winners' | 'losers' | 'final';
   bracket_round?: number;
   red_team_id?: string;
   blue_team_id?: string;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 // Tournament-related types
@@ -68,8 +68,8 @@ export interface Tournament {
   game_id: string;
   rounds_per_match: number;
   max_participants?: number;
-  start_date?: Date;
-  start_time?: Date;
+  start_date?: string;
+  start_time?: string;
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
   stats_enabled?: boolean;
@@ -78,15 +78,15 @@ export interface Tournament {
   livestream_link?: string;
   /** Per-tournament override of the game's default points spread (an object; the API still accepts a JSON string on write). */
   position_scoring_override?: Record<string, number> | null;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TournamentTeam {
   id: string;
   tournament_id: string;
   team_name: string;
-  created_at: Date;
+  created_at: string;
 }
 
 export interface TournamentTeamMember {
@@ -96,60 +96,8 @@ export interface TournamentTeamMember {
   username: string;
   discord_user_id?: string;
   avatar_url?: string;
-  joined_at: Date;
+  joined_at: string;
   is_captain?: boolean;
-}
-
-// Database row types (includes fields not in the base interface)
-export interface MatchDbRow extends Match {
-  maps?: string; // JSON string in database
-  map_codes?: string; // JSON string storing map codes
-  map_id?: string; // Single map ID for tournament matches
-  event_image_url?: string;
-  rules?: string;
-  rounds?: number;
-  livestream_link?: string;
-  player_notifications?: number; // SQLite stores booleans as integers
-  tournament_allow_match_editing?: number; // SQLite integer from JOIN with tournaments
-}
-
-export interface ParticipantDbRow {
-  id: string;
-  match_id: string;
-  user_id: string;
-  discord_user_id: string;
-  username: string;
-  avatar_url?: string | null; // Discord avatar URL
-  joined_at: Date;
-  signup_data?: string; // JSON string
-  team_assignment?: 'reserve' | 'blue' | 'red';
-  receives_map_codes?: number; // SQLite stores booleans as integers
-}
-
-export interface GameDbRow {
-  id: string;
-  name: string;
-  max_signups?: number;
-  map_codes_supported?: number; // SQLite stores booleans as integers
-  [key: string]: unknown;
-}
-
-export interface DiscordSettingsDbRow {
-  application_id?: string;
-  bot_token?: string;
-  guild_id?: string;
-  announcement_role_id?: string;
-  mention_everyone?: number; // SQLite stores booleans as integers
-  event_duration_minutes?: number;
-  match_reminder_minutes?: number;
-  player_reminder_minutes?: number;
-  announcer_voice?: string;
-  voice_announcements_enabled?: number; // SQLite stores booleans as integers
-  voice_channel_category_id?: string;
-  winner_vote_enabled?: number; // SQLite stores booleans as integers
-  signup_dm_enabled?: number;    // SQLite stores booleans as integers
-  commander_dm_enabled?: number; // SQLite stores booleans as integers
-  [key: string]: unknown;
 }
 
 export interface DiscordChannel {
@@ -207,34 +155,49 @@ export type TournamentFormat = 'single-elimination' | 'double-elimination' | 'cu
 // Tournament status types  
 export type TournamentStatus = 'created' | 'gather' | 'assign' | 'battle' | 'complete' | 'cancelled';
 
+/** A match participant as returned by `GET /api/matches/:id/participants`. */
 export interface MatchParticipant {
   id: string;
-  match_id: string;
+  match_id?: string;
   user_id: string;
+  discord_user_id?: string | null;
   username: string;
   avatar_url?: string | null; // Discord avatar URL
-  joined_at: Date | string;
-  signup_data?: Record<string, unknown>;
+  /** ISO-8601 timestamp. */
+  joined_at: string;
+  signup_data?: Record<string, unknown> | null;
+  team_id?: string | null;
+  receives_map_codes?: boolean;
+  /** Derived from the participant's team: team_order 0 -> 'blue', 1 -> 'red', reserve team -> 'reserve', otherwise null. */
+  team_assignment?: 'blue' | 'red' | 'reserve' | null;
 }
 
+/** One `match_games` row as returned by `GET /api/matches/:id/games` (map/mode fields and the result summary are joined in by the API). */
 export interface MatchGame {
   id: string;
   match_id: string;
   round: number;
-  participant1_id: string;
-  participant2_id: string;
-  winner_id?: string; // 'team1', 'team2', or null
-  participant_winner_id?: string; // For FFA modes: specific participant ID
-  is_ffa_mode: boolean; // True if this is a Free-For-All mode
-  position_results?: string; // JSON: {participantId: position} for Position scoring
-  points_awarded?: string; // JSON: {participantId: points} for Position scoring
-  map_id?: string;
-  mode_id?: string;
+  map_id: string | null;
   status: 'pending' | 'ongoing' | 'completed';
-  scheduled_at?: Date;
-  completed_at?: Date;
-  created_at: Date;
-  updated_at: Date;
+  started_at: string | null;
+  completed_at: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  discord_notified: boolean;
+  map_name?: string;
+  image_url?: string;
+  mode_id?: string;
+  mode_scoring_type?: 'Normal' | 'FFA' | 'Position';
+  /** Result summary derived from `match_game_placements`: 'team1', 'team2' or 'draw' (Normal modes). */
+  winner_id?: string;
+  /** FFA modes: the winning `match_participants.id`. */
+  participant_winner_id?: string;
+  is_ffa_mode: boolean;
+  /** Position modes: JSON string `{participantId: position}`. */
+  position_results?: string;
+  /** Position modes: JSON string `{participantId: points}`. */
+  points_awarded?: string;
 }
 
 // Match game result (used in detail views)
@@ -273,8 +236,8 @@ export interface MatchWithGameDetails extends Omit<Match, 'created_at' | 'update
   livestream_link?: string;
   event_image_url?: string;
   tournament_allow_match_editing?: boolean;
-  stats_enabled?: number;
-  player_notifications?: number;
+  stats_enabled?: boolean;
+  player_notifications?: boolean;
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -297,7 +260,7 @@ export interface TournamentWithGameDetails extends Omit<Tournament, 'created_at'
 export interface DataVersion {
   game_id: string;
   data_version: string;
-  seeded_at: Date;
+  seeded_at: string;
 }
 
 // JSON file format types (for seeding)
@@ -407,8 +370,8 @@ export interface SchedulerSettings {
   match_check_cron: string;
   cleanup_check_cron: string;
   channel_refresh_cron: string;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 // === Scorecard Stats Types ===

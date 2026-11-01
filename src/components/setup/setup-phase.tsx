@@ -1,5 +1,3 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useRef, type JSX } from 'react';
 import { Stack, Loader, Center, Text, Alert } from '@mantine/core';

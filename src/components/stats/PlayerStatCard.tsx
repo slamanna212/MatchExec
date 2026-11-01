@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Card, Text, Badge, Group, Select, Stack, Divider } from '@mantine/core';
 import type { ScorecardPlayerStat, GameStatDefinition } from '@/shared/types';

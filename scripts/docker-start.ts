@@ -34,7 +34,7 @@ async function start(): Promise<void> {
   try {
     // Run database migrations first
     logger.debug('📊 Running database migrations and seeding...');
-    await runCommand('pnpm', ['exec', 'tsx', 'lib/db/migrate.ts']);
+    await runCommand('pnpm', ['exec', 'tsx', 'lib/db/migrate-cli.ts']);
     logger.debug('✅ Database initialization completed');
 
     // Start PM2 processes

@@ -1,8 +1,6 @@
-'use client'
-
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import {
   Stack,
   Group,
@@ -98,7 +96,7 @@ export function TournamentContentPanel({
   onStartMatch,
   onStartAllMatches
 }: TournamentContentPanelProps): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   // Cumulative-points tournaments (FFA/Position) have no bracket, so the
   // Bracket tab is hidden. The Teams tab stays (shown as "Participants") —
   // each participant is a solo team, and it is the only place to see/manage
@@ -367,7 +365,7 @@ export function TournamentContentPanel({
                       withBorder
                       p="md"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => router.push(`/matches/${match.id}`)}
+                      onClick={() => navigate(`/matches/${match.id}`)}
                     >
                       <Group justify="space-between" wrap="nowrap">
                         <Group gap="md">
@@ -394,7 +392,7 @@ export function TournamentContentPanel({
                             variant="light"
                             color="violet"
                             size="sm"
-                            onClick={(e) => { e.stopPropagation(); router.push(`/matches/${match.id}/scoring`); }}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/matches/${match.id}/scoring`); }}
                           >
                             Score
                           </Button>

@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import {
   Stack,
@@ -13,7 +11,7 @@ import {
   Divider,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
 import { SeriesMembershipRow } from '../series/SeriesMembershipRow';
@@ -98,14 +96,14 @@ function MatchDetailsCard({
         <SeriesMembershipRow kind="match" id={match.id} />
         <Group justify="space-between">
           <Text size="sm" fw={500} c="dimmed">Player Notifications:</Text>
-          <Badge variant="light" color={match.player_notifications !== 0 ? 'green' : 'gray'}>
-            {match.player_notifications !== 0 ? 'Enabled' : 'Disabled'}
+          <Badge variant="light" color={match.player_notifications !== false ? 'green' : 'gray'}>
+            {match.player_notifications !== false ? 'Enabled' : 'Disabled'}
           </Badge>
         </Group>
         <Group justify="space-between">
           <Text size="sm" fw={500} c="dimmed">Stats Collection:</Text>
-          <Badge variant="light" color={match.stats_enabled === 1 ? 'green' : 'gray'}>
-            {match.stats_enabled === 1 ? 'Enabled' : 'Disabled'}
+          <Badge variant="light" color={match.stats_enabled === true ? 'green' : 'gray'}>
+            {match.stats_enabled === true ? 'Enabled' : 'Disabled'}
           </Badge>
         </Group>
         {match.livestream_link && (
@@ -159,7 +157,7 @@ function MatchActionsCard({
   onEdit?: () => void;
   onStatusTransition?: (newStatus: string, force?: boolean) => void;
 }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const matchInBattle = match.status === 'battle';
   const ongoingGame = matchGames?.find(g => g.status === 'ongoing');
   const allGamesScored = Boolean(matchGames?.length) && matchGames!.every(g => g.status === 'completed');
@@ -194,7 +192,7 @@ function MatchActionsCard({
             color="violet"
             fullWidth
             disabled={!ongoingGame}
-            onClick={() => ongoingGame && router.push(`/matches/${match.id}/scoring?gameId=${ongoingGame.id}`)}
+            onClick={() => ongoingGame && navigate(`/matches/${match.id}/scoring?gameId=${ongoingGame.id}`)}
           >
             Score Next Map
           </Button>

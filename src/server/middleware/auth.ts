@@ -91,6 +91,17 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * Static files the login page (and the browser chrome) need before there is a session: the Vite bundle under
+ * `/static/`, the web manifest, and image files by extension (the old Next matcher excluded the same set). Never under `/api/`.
+ */
+export const STATIC_ASSET_PREFIX = '/static/';
+const STATIC_ASSET_FILE = /\.(?:svg|png|ico|webp|jpe?g|gif)$/i;
+export function isStaticAssetPath(pathname: string): boolean {
+  if (pathname.startsWith('/api/')) return false;
+  return pathname.startsWith(STATIC_ASSET_PREFIX) || pathname === '/manifest.json' || STATIC_ASSET_FILE.test(pathname);
+}
+
 export function isSecureRequest(c: Context): boolean {
   const proto = c.req.header('x-forwarded-proto');
   return proto ? proto.split(',')[0].trim() === 'https' : new URL(c.req.url).protocol === 'https:';
@@ -106,7 +117,7 @@ export async function isRequestAuthenticated(c: Context): Promise<boolean> {
 export const authGate: MiddlewareHandler = async (c, next) => {
   if (!isAuthEnabled()) return next();
   const { pathname, search } = new URL(c.req.url);
-  if (isPublicPath(pathname)) return next();
+  if (isPublicPath(pathname) || isStaticAssetPath(pathname)) return next();
   if (await isRequestAuthenticated(c)) return next();
   if (pathname.startsWith('/api/')) return c.json({ error: 'Unauthorized' }, 401);
   const url = new URL('/login', c.req.url);

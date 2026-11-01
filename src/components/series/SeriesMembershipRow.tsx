@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { Group, Text, Anchor, Stack } from '@mantine/core';
 import { logger } from '@/lib/logger/client';
 import { formatMultiplier } from './series-shared';
@@ -47,7 +45,7 @@ export function SeriesMembershipRow({ kind, id }: { kind: 'match' | 'tournament'
       <Stack gap={2} align="flex-end" style={{ minWidth: 0 }}>
         {memberships.map(m => (
           <Text key={m.series_event_id} size="sm" ta="right">
-            <Anchor component={Link} href={`/series/${m.series_id}`} size="sm">{m.series_name}</Anchor>
+            <Anchor component={Link} to={`/series/${m.series_id}`} size="sm">{m.series_name}</Anchor>
             {' · '}
             <Text span size="sm" ff="monospace">{formatMultiplier(m.points_multiplier)}</Text>
             {m.via === 'tournament' && <Text span size="xs" c="dimmed"> (via tournament)</Text>}

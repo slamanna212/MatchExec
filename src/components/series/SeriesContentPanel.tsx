@@ -1,8 +1,6 @@
-'use client'
-
 import { useState } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import {
   Stack, Group, Text, Badge, Card, Avatar, SegmentedControl, Button, ActionIcon, Tooltip, Box, Image,
 } from '@mantine/core';
@@ -219,7 +217,7 @@ function SeriesEventCard({
   onEdit: () => void;
   onRemove: () => void;
 }): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const color = event.game_color || SERIES_FALLBACK_COLOR;
   const thumb = event.event_image_url || event.game_cover || '/assets/placeholder-cover.png';
   const date = formatShortDateTime(event.start_date);
@@ -245,7 +243,7 @@ function SeriesEventCard({
         e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = '';
       }}
-      onClick={() => { if (!missing) router.push(eventHref(event)); }}
+      onClick={() => { if (!missing) navigate(eventHref(event)); }}
     >
       <Group gap="md" wrap="nowrap" align="center">
         <Box

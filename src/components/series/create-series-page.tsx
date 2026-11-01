@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useMemo, useEffect } from 'react';
 import type { JSX, ReactNode } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Container, Stack, Button, Stepper, Group, Text, TextInput, Divider } from '@mantine/core';
 import {
   IconTimeline, IconArrowLeft, IconInfoCircle, IconBell, IconCalculator,
@@ -32,8 +30,8 @@ const STEPS = [
 const DEFAULT_MULTIPLIER: Record<'match' | 'tournament', number> = { match: 1, tournament: 1.5 };
 
 export function CreateSeriesPage(): JSX.Element {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const rawStep = Number.parseInt(searchParams.get('step') ?? '1', 10);
   const step = Number.isInteger(rawStep) && rawStep >= 1 && rawStep <= STEPS.length ? rawStep : 1;
 
@@ -45,18 +43,18 @@ export function CreateSeriesPage(): JSX.Element {
   // A direct link to a later step (or a cleared form) without a name goes back to Details.
   const missingName = step > 1 && !canProceed(1);
   useEffect(() => {
-    if (missingName) router.replace('/series/create?step=1');
-  }, [missingName, router]);
+    if (missingName) navigate('/series/create?step=1', { replace: true });
+  }, [missingName, navigate]);
 
   const goTo = (s: number) => {
     // Never skip past step 1 without a name (e.g. clicking a later stepper step).
     const target = s > 1 && !canProceed(1) ? 1 : s;
-    router.push(`/series/create?step=${target}`);
+    navigate(`/series/create?step=${target}`);
   };
 
   const handleCancel = () => {
     clear();
-    router.push('/series');
+    navigate('/series');
   };
 
   const handleBack = () => (step === 1 ? handleCancel() : goTo(step - 1));
@@ -134,7 +132,7 @@ export function CreateSeriesPage(): JSX.Element {
       }
 
       clear();
-      router.push(`/series/${id}`);
+      navigate(`/series/${id}`);
     } catch (err) {
       logger.error('Error creating series:', err);
       notificationHelper.update(nid, { type: 'error', message: 'An error occurred while creating the series' });

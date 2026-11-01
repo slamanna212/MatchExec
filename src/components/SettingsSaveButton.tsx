@@ -1,5 +1,3 @@
-'use client';
-
 import type { JSX } from 'react';
 import { Button, Group } from '@mantine/core';
 

@@ -26,7 +26,7 @@ COPY processes ./processes
 COPY src ./src
 COPY public ./public
 COPY ecosystem.config.js next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json ./
-COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrator.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
+COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrate.config.mjs esbuild.server.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
 
 # Build Next.js app and bundle processes
 RUN pnpm run build

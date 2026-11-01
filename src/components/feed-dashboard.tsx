@@ -1,8 +1,6 @@
-'use client';
-
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import {
   Stack,
   Group,
@@ -83,12 +81,6 @@ const EVENT_ICONS: Record<string, { icon: React.ComponentType<{ size: number }>,
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function parseDbTimestamp(ts: string): Date {
-  return ts.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(ts)
-    ? new Date(ts)
-    : new Date(`${ts}Z`);
-}
-
 function formatDateShort(date: Date | string | null): string {
   if (!date) return '?';
   const d = date instanceof Date ? date : new Date(date);
@@ -96,7 +88,7 @@ function formatDateShort(date: Date | string | null): string {
 }
 
 function formatRelativeTime(timestamp: string): string {
-  const diff = Date.now() - parseDbTimestamp(timestamp).getTime();
+  const diff = Date.now() - new Date(timestamp).getTime();
   const mins = Math.floor(diff / 60_000);
   if (mins < 1)  return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -108,7 +100,7 @@ function formatRelativeTime(timestamp: string): string {
 // ─── FeedEventCard ────────────────────────────────────────────────────────────
 
 function FeedEventCard({ event }: { event: FeedEvent }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -191,7 +183,7 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
                 const dest = matchGameId
                   ? `/matches/${event.match_id}/stats/${matchGameId}`
                   : `/matches/${event.match_id}/stats`;
-                router.push(dest);
+                navigate(dest);
               }}
               className="feed-assign-players-btn"
             >
@@ -204,7 +196,7 @@ function FeedEventCard({ event }: { event: FeedEvent }) {
               size="xs"
               variant="filled"
               color="violet"
-              onClick={() => router.push(navigateTo)}
+              onClick={() => navigate(navigateTo)}
             >
               View
             </Button>

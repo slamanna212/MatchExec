@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Text, Stack, NumberInput, Card, Group, TextInput, Button } from '@mantine/core';
 import type { TournamentFormData } from './useTournamentForm';

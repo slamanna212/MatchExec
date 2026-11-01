@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { apiNotFound, noStore, onError } from './http';
 import { authGate } from './middleware/auth';
 import { welcomeFlow } from './middleware/welcome';
+import { redirectDevPages, serveClientFiles, spaFallback } from './static';
 import { auth } from './routes/auth';
 import { channels } from './routes/channels';
 import { debug } from './routes/debug';
@@ -29,6 +30,7 @@ app.use('/api/*', noStore);
 // excluded image extensions from it, and Discord embeds link straight to these URLs.
 app.route('/uploads', uploads);
 
+app.use('*', redirectDevPages);
 app.use('*', authGate);
 app.use('*', welcomeFlow);
 
@@ -52,7 +54,8 @@ app.route('/api/feed', feed);
 app.route('/api/upload', uploadApi);
 app.route('/api/debug', debug);
 
-// TODO(Stage 3): serveStatic({ root: 'dist/client' }) for hashed assets, /dev/* redirect in
-// production, and the SPA fallback to index.html (no-cache) for unmatched non-API GETs.
+// Static SPA (dist/client) and the index.html fallback for client-side routes. Mounted last so API routers win.
+app.use('*', serveClientFiles);
+app.get('*', spaFallback);
 
 export type AppType = typeof app;

@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Badge } from '@mantine/core';
 import { IconFlame, IconSwords } from '@tabler/icons-react';

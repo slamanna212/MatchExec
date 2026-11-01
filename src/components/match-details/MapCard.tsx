@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Card, Image, Stack, Text, Badge, Group } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';

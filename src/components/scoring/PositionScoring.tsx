@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import { Text, Badge, Alert, Loader, Group, Stack, Select, Button } from '@mantine/core';
@@ -79,7 +77,6 @@ function RaceSidebar({
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && !disabled && onSelect(game.id)}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imageUrl}
                 alt={formatMapName(game.map_id, game.map_name)}
@@ -138,7 +135,6 @@ function MobileRaceList({
             className={styles.mobileRaceItem}
             onClick={() => !disabled && onSelect(game.id)}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
               alt={formatMapName(game.map_id, game.map_name)}

@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import type { JSX, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card, Text, Badge, Group, Stack, Grid, TextInput, Divider, Button, Center, useMantineColorScheme,
@@ -120,7 +118,7 @@ const HistorySeriesCard = memo(({ series, onViewDetails }: { series: SeriesSumma
 HistorySeriesCard.displayName = 'HistorySeriesCard';
 
 export function SeriesHistoryDashboard(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [series, setSeries] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -176,7 +174,7 @@ export function SeriesHistoryDashboard(): JSX.Element {
     );
   }, [series, searchQuery]);
 
-  const handleViewDetails = useCallback((s: SeriesSummary) => router.push(`/series/${s.id}`), [router]);
+  const handleViewDetails = useCallback((s: SeriesSummary) => navigate(`/series/${s.id}`), [navigate]);
 
   const renderBody = (): JSX.Element => {
     if (series.length === 0) {

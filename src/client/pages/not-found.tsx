@@ -1,0 +1,23 @@
+import { Link } from 'react-router';
+import { Container, Title, Text, Button, Group } from '@mantine/core';
+
+export default function NotFound() {
+  return (
+    <Container size="md" style={{ textAlign: 'center', paddingTop: '5rem' }}>
+      <Title order={1} size="h1" mb="md">
+        404 - Page Not Found
+      </Title>
+      <Text size="lg" mb="xl" c="dimmed">
+        The page you&apos;re looking for doesn&apos;t exist.
+      </Text>
+      <Group justify="center">
+        <Button component={Link} to="/" variant="filled">
+          Go Home
+        </Button>
+        <Button component={Link} to="/games" variant="outline">
+          Browse Games
+        </Button>
+      </Group>
+    </Container>
+  );
+}

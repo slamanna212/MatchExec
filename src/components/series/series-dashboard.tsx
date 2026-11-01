@@ -1,8 +1,6 @@
-'use client'
-
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card, Text, Button, Badge, Group, Stack, Grid, TextInput, Skeleton, Avatar, Divider, Image,
@@ -219,7 +217,7 @@ export function SeriesSkeletonCard(): JSX.Element {
 }
 
 export function SeriesDashboard(): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [series, setSeries] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,7 +238,7 @@ export function SeriesDashboard(): JSX.Element {
 
   useEffect(() => { void fetchSeries(); }, [fetchSeries]);
 
-  const handleViewDetails = useCallback((s: SeriesSummary) => router.push(`/series/${s.id}`), [router]);
+  const handleViewDetails = useCallback((s: SeriesSummary) => navigate(`/series/${s.id}`), [navigate]);
 
   const handleAdvance = useCallback(async (s: SeriesSummary) => {
     const next = NEXT_STATUS[s.status];
@@ -283,7 +281,7 @@ export function SeriesDashboard(): JSX.Element {
     );
   }, [series, searchQuery]);
 
-  const goCreate = () => router.push('/series/create?step=1');
+  const goCreate = () => navigate('/series/create?step=1');
 
   const renderBody = (): JSX.Element => {
     if (series.length === 0) {

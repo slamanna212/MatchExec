@@ -1,6 +1,6 @@
 import { Group, ThemeIcon, Title, Text, Breadcrumbs, Anchor, ActionIcon, Tooltip } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import type React from 'react';
 import type { JSX } from 'react';
 import classes from './PageHeader.module.css';
@@ -60,7 +60,7 @@ export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, d
           <Breadcrumbs mb="xs" visibleFrom="sm">
             {breadcrumbs.map((crumb, i) =>
               crumb.href ? (
-                <Anchor key={i} size="sm" component={Link} href={crumb.href}>
+                <Anchor key={i} size="sm" component={Link} to={crumb.href}>
                   {crumb.title}
                 </Anchor>
               ) : (
@@ -74,7 +74,7 @@ export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, d
           {parentCrumb?.href && (
             <Anchor
               component={Link}
-              href={parentCrumb.href}
+              to={parentCrumb.href}
               size="sm"
               mb="xs"
               hiddenFrom="sm"

@@ -1,10 +1,7 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import React, { useState, useEffect, useMemo } from 'react'
 import type { JSX } from 'react';
-import { useRouter, usePathname } from 'next/navigation'
-import Link from 'next/link'
+import { Link, useLocation, useNavigate, type NavigateFunction } from 'react-router';
 import {
   AppShell,
   NavLink,
@@ -60,7 +57,7 @@ interface NavRenderContext {
   iconSize: string;
   fontSize: string | undefined;
   onNavigate?: () => void;
-  router: ReturnType<typeof useRouter>;
+  navigate: NavigateFunction;
   getIcon: (name: string) => React.ComponentType<{ size: string }>;
   desktopCollapsed: boolean;
 }
@@ -86,7 +83,7 @@ function SubNavLink({ link, ctx }: { link: { href: string; label: string; iconNa
       fz={ctx.fontSize}
       onClick={(event) => {
         event.preventDefault();
-        ctx.router.push(link.href);
+        ctx.navigate(link.href);
         ctx.onNavigate?.();
       }}
     />
@@ -104,7 +101,7 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
         <UnstyledButton
           className="sidebar-icon-btn"
           onClick={() => {
-            ctx.router.push(item.href);
+            ctx.navigate(item.href);
             ctx.onNavigate?.();
           }}
           style={{
@@ -138,7 +135,7 @@ function NavItem({ item, ctx }: { item: NavItemData; ctx: NavRenderContext }) {
         fz={ctx.fontSize}
         onClick={(event) => {
           event.preventDefault();
-          ctx.router.push(item.href);
+          ctx.navigate(item.href);
           ctx.onNavigate?.();
         }}
       />
@@ -243,8 +240,8 @@ function LogoutButton({ compact }: { compact?: boolean }): JSX.Element | null {
 export function Navigation({ children }: NavigationProps): JSX.Element {
   const [opened, { toggle }] = useDisclosure(false)
   const { colorScheme, toggleColorScheme } = useMantineColorScheme()
-  const router = useRouter()
-  const pathname = usePathname()
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [mounted, setMounted] = useState(false)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
   const [desktopCollapsed, setDesktopCollapsed] = useState(false)
@@ -278,7 +275,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
   // Append dev-only item at runtime so the static array stays pure
   const navigationItems = useMemo(() => [
     ...STATIC_NAV_ITEMS,
-    ...(process.env.NODE_ENV === 'development' ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
+    ...(import.meta.env.DEV ? [{ label: 'Dev', href: '/dev', iconName: 'code' }] : []),
   ], [])
 
   // Prevent hydration mismatch by not rendering until mounted
@@ -338,7 +335,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
       iconSize: options?.large ? '1.25rem' : '1rem',
       fontSize: options?.large ? '1rem' : undefined,
       onNavigate: options?.onNavigate,
-      router,
+      navigate,
       getIcon,
       desktopCollapsed: options?.collapsed ?? false,
     };
@@ -375,7 +372,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
     >
       <AppShell.Header hiddenFrom="md" withBorder={false} style={{ background: '#241459', zIndex: 301 }}>
         <Group h="100%" px="md">
-          <Link href="/" style={{ display: 'flex' }}>
+          <Link to="/" style={{ display: 'flex' }}>
             <Image
               src="/logo.svg"
               alt="MatchExec Logo"
@@ -443,7 +440,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
               versionInfo.updateAvailable ? (
                 <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="top" withArrow>
                   <div
-                    onClick={() => router.push('/feed')}
+                    onClick={() => navigate('/feed')}
                     style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}
                   >
                     <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02' }}>{versionInfo.version}</span>
@@ -558,7 +555,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
                   versionInfo.updateAvailable ? (
                     <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="top" withArrow>
                       <div
-                        onClick={() => router.push('/feed')}
+                        onClick={() => navigate('/feed')}
                         style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}
                       >
                         <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#f7cc02' }}>{versionInfo.version}</span>
@@ -616,7 +613,7 @@ export function Navigation({ children }: NavigationProps): JSX.Element {
             {desktopCollapsed && versionInfo?.updateAvailable && (
               <Tooltip label={`Update available: ${versionInfo.latestVersion}`} position="right" withArrow>
                 <div
-                  onClick={() => router.push('/feed')}
+                  onClick={() => navigate('/feed')}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '0 auto' }}
                 >
                   <span className="nav-update-badge-dot" />

@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { Card, Stack, TextInput, Textarea, Group, Switch, Text } from '@mantine/core';

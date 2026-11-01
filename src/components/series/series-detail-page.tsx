@@ -1,9 +1,6 @@
-'use client'
-
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Link, useNavigate } from 'react-router';
 import {
   Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs,
 } from '@mantine/core';
@@ -51,7 +48,7 @@ function DetailSkeleton(): JSX.Element {
 }
 
 export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [series, setSeries] = useState<SeriesSummary | null>(null);
   const [events, setEvents] = useState<SeriesEventDetail[]>([]);
   const [standings, setStandings] = useState<SeriesStanding[]>([]);
@@ -201,7 +198,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
       <div className="container mx-auto py-6 px-2">
         <Stack>
           <Alert color="red" icon={<IconAlertCircle size={16} />}>{error ?? 'Series not found'}</Alert>
-          <Anchor component={Link} href="/series">← Back to Series</Anchor>
+          <Anchor component={Link} to="/series">← Back to Series</Anchor>
         </Stack>
       </div>
     );
@@ -214,12 +211,12 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   return (
     <div className="container mx-auto py-6 pl-2 pr-2">
       <Breadcrumbs mb="xs" visibleFrom="sm" style={{ marginLeft: '0.5rem' }}>
-        <Anchor size="sm" c="dimmed" component={Link} href={parentHref}>{parentTitle}</Anchor>
+        <Anchor size="sm" c="dimmed" component={Link} to={parentHref}>{parentTitle}</Anchor>
         <Text size="sm">{series.name}</Text>
       </Breadcrumbs>
       <Anchor
         component={Link}
-        href={parentHref}
+        to={parentHref}
         size="sm"
         c="dimmed"
         hiddenFrom="sm"
@@ -234,7 +231,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
             series={series}
             onActivate={() => { void transition('active'); }}
             onAddEvent={() => setAddEventOpen(true)}
-            onEdit={() => router.push(`/series/${seriesId}/edit`)}
+            onEdit={() => navigate(`/series/${seriesId}/edit`)}
             onComplete={confirmComplete}
             onCancel={confirmCancel}
           />

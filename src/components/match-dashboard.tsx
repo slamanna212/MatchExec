@@ -1,9 +1,7 @@
-'use client'
-
 import { logger } from '@/lib/logger/client';
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import type { JSX } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
   Card,
@@ -237,7 +235,7 @@ function SkeletonCard() {
 }
 
 export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
-  const router = useRouter();
+  const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
@@ -465,13 +463,13 @@ export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
   }, [matches]);
 
   const handleCreateMatch = () => {
-    router.push('/matches/create');
+    navigate('/matches/create');
   };
 
 
   const handleViewDetails = useCallback((match: MatchWithGame) => {
-    router.push(`/matches/${match.id}`);
-  }, [router]);
+    navigate(`/matches/${match.id}`);
+  }, [navigate]);
 
   const handleNextPhase = useCallback(async (match: MatchWithGame) => {
     const next = NEXT_STATUS[match.status];

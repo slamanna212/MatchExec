@@ -1,5 +1,3 @@
-'use client'
-
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { useMotionValue, useTransform, animate } from 'framer-motion';

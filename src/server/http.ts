@@ -55,7 +55,6 @@ export const onError: ErrorHandler = (err, c) => {
 
 export const apiNotFound: NotFoundHandler = (c) => {
   if (c.req.path.startsWith('/api/')) return c.json({ error: 'Not found' }, 404);
-  // TODO(Stage 3): non-API paths fall through to the SPA fallback (index.html) instead of a plain 404.
   return c.text('Not found', 404);
 };
 

@@ -1,7 +1,5 @@
-'use client'
-
 import type { JSX } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { Anchor, Group, Text } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 
@@ -27,7 +25,7 @@ export function SeriesCardLinks({ series }: { series?: SeriesRef[] }): JSX.Eleme
             {i > 0 && ', '}
             <Anchor
               component={Link}
-              href={`/series/${s.id}`}
+              to={`/series/${s.id}`}
               size="xs"
               c="teal"
               fw={500}

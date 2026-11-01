@@ -1,0 +1,190 @@
+import { logger } from '@/lib/logger/client';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import {
+  Container,
+  Stack,
+  Text,
+  Loader,
+  Center,
+  Alert,
+  Button,
+  Group,
+} from '@mantine/core';
+import { IconTrophy, IconAlertCircle } from '@tabler/icons-react';
+import { PageHeader } from '@/components/PageHeader';
+import type { MatchFormat, MatchResult } from '@/shared/types';
+import { FormatBadge } from '@/components/scoring/shared/FormatBadge';
+import { TeamMapScoring } from '@/components/scoring/TeamMapScoring';
+import { FfaMapScoring } from '@/components/scoring/FfaMapScoring';
+import { PositionScoring } from '@/components/scoring/PositionScoring';
+
+interface MatchData {
+  id: string;
+  name: string;
+  game_id: string;
+  match_format?: MatchFormat;
+  status: string;
+  stats_enabled?: boolean;
+}
+
+export default function ScoringPage() {
+  const { matchId } = useParams() as { matchId: string };
+  const [searchParams] = useSearchParams();
+  const initialGameId = searchParams.get('gameId') ?? undefined;
+  const navigate = useNavigate();
+
+  const [match, setMatch] = useState<MatchData | null>(null);
+  const [scoringType, setScoringType] = useState<'Normal' | 'FFA' | 'Position' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        const matchRes = await fetch(`/api/matches/${matchId}`);
+        if (!matchRes.ok) {
+          setError(matchRes.status === 404 ? 'Match not found' : 'Failed to load match');
+          return;
+        }
+        const matchData: MatchData = await matchRes.json();
+        setMatch(matchData);
+
+        const gamesRes = await fetch(`/api/matches/${matchId}/games`);
+        if (!gamesRes.ok) throw new Error('Failed to fetch match games');
+
+        const gamesData = await gamesRes.json();
+        if (gamesData.games && gamesData.games.length > 0) {
+          const firstGame = gamesData.games[0];
+          setScoringType(firstGame.mode_scoring_type || 'Normal');
+        } else {
+          setScoringType('Normal');
+        }
+      } catch (err) {
+        logger.error('Error loading scoring page:', err);
+        setError('An error occurred while loading the scoring interface');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [matchId]);
+
+  const handleResultSubmit = async (result: MatchResult) => {
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/matches/${matchId}/games/${result.gameId}/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result)
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to save result');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAllMapsCompleted = () => {
+    navigate(`/matches/${matchId}`);
+  };
+
+  if (loading) {
+    return (
+      <Container>
+        <Center style={{ minHeight: '400px' }}>
+          <Stack align="center" gap="md">
+            <Loader size="lg" />
+            <Text c="dimmed">Loading scoring interface...</Text>
+          </Stack>
+        </Center>
+      </Container>
+    );
+  }
+
+  if (error || !match) {
+    return (
+      <Container size="md" pt="xs" pb="md">
+        <Stack gap="md">
+          <Alert color="red" icon={<IconAlertCircle size={16} />}>
+            {error || 'Match not found'}
+          </Alert>
+          <Button variant="outline" onClick={() => navigate('/matches')}>
+            Back to Matches
+          </Button>
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (match.status !== 'battle') {
+    return (
+      <Container size="md" pt="xs" pb="md">
+        <Stack gap="md">
+          <Alert color="yellow" icon={<IconAlertCircle size={16} />}>
+            Scoring is only available when the match is in progress (battle status). Current status: {match.status}
+          </Alert>
+          <Button variant="outline" onClick={() => navigate(`/matches/${matchId}`)}>
+            Back to Match
+          </Button>
+        </Stack>
+      </Container>
+    );
+  }
+
+  return (
+    <Container size="lg" pt="xs" pb="md">
+      <Stack gap="lg">
+        <PageHeader
+          icon={IconTrophy}
+          title={match.name}
+          subtitle="Scoring"
+          breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: match.name, href: `/matches/${matchId}` }]}
+          action={<FormatBadge format={match.match_format || 'casual'} />}
+        />
+
+        {scoringType === 'Position' ? (
+          <Stack gap="md">
+            <PositionScoring
+              matchId={matchId}
+              gameType={match.game_id}
+              onResultSubmit={handleResultSubmit}
+              submitting={submitting}
+            />
+            <Group justify="flex-end">
+              <Button variant="outline" onClick={() => navigate(`/matches/${matchId}`)}>
+                Back to Match
+              </Button>
+            </Group>
+          </Stack>
+        ) : scoringType === 'FFA' ? (
+          <FfaMapScoring
+            matchId={matchId}
+            gameType={match.game_id}
+            onResultSubmit={handleResultSubmit}
+            submitting={submitting}
+            onAllMapsCompleted={handleAllMapsCompleted}
+            matchStatsEnabled={match.stats_enabled ?? false}
+            initialGameId={initialGameId}
+          />
+        ) : (
+          <TeamMapScoring
+            matchId={matchId}
+            gameType={match.game_id}
+            onResultSubmit={handleResultSubmit}
+            submitting={submitting}
+            onAllMapsCompleted={handleAllMapsCompleted}
+            matchStatsEnabled={match.stats_enabled ?? false}
+            initialGameId={initialGameId}
+          />
+        )}
+      </Stack>
+    </Container>
+  );
+}

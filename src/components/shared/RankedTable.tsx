@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX, ReactNode } from 'react';
 import { Avatar, Card, Text } from '@mantine/core';
 import { SectionLabel } from '../SectionLabel';

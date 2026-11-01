@@ -3,8 +3,8 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
+import { MemoryRouter } from 'react-router';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/logger/client', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 const showError = vi.fn();
 const showSuccess = vi.fn();
@@ -78,7 +78,7 @@ async function renderPage(): Promise<HTMLDivElement> {
   await act(async () => {
     const root = createRoot(container);
     roots.push(root);
-    root.render(<MantineProvider env="test"><SeriesDetailPage seriesId="s1" /></MantineProvider>);
+    root.render(<MantineProvider env="test"><MemoryRouter><SeriesDetailPage seriesId="s1" /></MemoryRouter></MantineProvider>);
   });
   await act(async () => { await Promise.resolve(); });
   return container;

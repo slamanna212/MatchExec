@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Card, Text, Stack } from '@mantine/core';
 import type { GameStatDefinition } from '@/shared/types';

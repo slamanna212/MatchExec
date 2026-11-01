@@ -1,11 +1,28 @@
-import nextPlugin from "eslint-config-next";
 import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 
 const eslintConfig = [
   {
-    ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "dist/**", "next-env.d.ts"]
+    ignores: ["node_modules/**", "dist/**", "coverage/**"]
   },
-  ...nextPlugin,
+  // TypeScript baseline (replaces the TypeScript part of eslint-config-next)
+  ...tseslint.configs.recommended.map((config) => ({ ...config, files: ["**/*.ts", "**/*.tsx"] })),
+  {
+    // Browser code (Vite SPA): React hooks rules (incl. the React Compiler rules of v7) + Fast Refresh safety
+    files: ["src/client/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
+    rules: {
+      ...reactHooks.configs.flat.recommended.rules,
+      // React Compiler diagnostics (new in eslint-plugin-react-hooks 7.1). The app does not use the compiler and these
+      // flag intentional fetch-on-mount / polling effects (`setLoading(true)` before a fetch), whose behaviour must stay
+      // identical to the Next version, so they are reported as warnings rather than errors. See the migration plan log.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/immutability": "warn",
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }]
+    }
+  },
   {
     // General code quality rules for all files
     files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
@@ -82,6 +99,7 @@ const eslintConfig = [
       "scripts/**/*.{js,ts}",
       "add-test-participants.js",
       "lib/db/migrate.ts",
+      "lib/db/migrate-cli.ts",
       "lib/db/seed.ts",
       "migrations/**/*.{js,ts}",
       "src/lib/logger/base.ts"
@@ -105,7 +123,8 @@ const eslintConfig = [
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off",
-      "@typescript-eslint/naming-convention": "off"
+      "@typescript-eslint/naming-convention": "off",
+      "@typescript-eslint/no-require-imports": "off" // vi.importActual / lazy require() in mocks
     }
   }
 ];

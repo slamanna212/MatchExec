@@ -1,5 +1,3 @@
-'use client'
-
 import type { JSX } from 'react';
 import { Text, Stack, Grid, Card, Avatar, Group, Badge } from '@mantine/core';
 import type { GameWithIcon } from './useMatchForm';
