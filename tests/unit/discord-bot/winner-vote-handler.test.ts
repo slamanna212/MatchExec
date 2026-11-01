@@ -320,7 +320,7 @@ describe('WinnerVoteHandler', () => {
       expect(saveMatchResult).toHaveBeenCalledWith(expect.anything(), 'game-sw', expect.objectContaining({
         matchId: match.id,
         winner: 'team1',
-      }));
+      }), expect.anything());
     });
 
     it('calls saveMatchResult mapping red to team2', async () => {
@@ -333,7 +333,7 @@ describe('WinnerVoteHandler', () => {
       expect(saveMatchResult).toHaveBeenCalledWith(expect.anything(), 'game-sw2', expect.objectContaining({
         matchId: match.id,
         winner: 'team2',
-      }));
+      }), expect.anything());
     });
 
     it('never passes rescore, so it cannot overwrite a result', async () => {

@@ -1,16 +1,11 @@
 import type { Client } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
 import { sendDM } from './dm-builder';
 import { logger } from '../../../src/lib/logger/server';
 import { db as pgDb } from '../../../lib/db';
 import { getGameDisplay, listStatDefinitions } from '../../../src/lib/games';
-import { getMatch, listDmRecipients } from '../../../src/lib/matches';
-
-interface StatsSettingsRow {
-  enabled: number;
-  stats_report_dm_enabled: number;
-}
+import { getMatch } from '../../../src/lib/matches';
+import { getStatsSettings, listUnsentStatReportRows, markStatsDmSent } from '../../../src/lib/stats';
 
 interface MatchInfoRow {
   id: string;
@@ -25,8 +20,8 @@ interface ParticipantStatsRow {
   discord_user_id: string;
   username: string;
   team_assignment: string | null;
-  signup_data: string | null;
-  total_stats_json: string;
+  signup_data: string | Record<string, unknown> | null;
+  total_stats_json: Record<string, number>;
   maps_played: number;
 }
 
@@ -45,14 +40,18 @@ interface GameStatDefinition {
  * Returns the player's primary role from their signup_data JSON.
  * Handles the per-game field name differences.
  */
-export function getPlayerRole(signupData: string | null, gameId: string): string | null {
+export function getPlayerRole(signupData: string | Record<string, unknown> | null, gameId: string): string | null {
   if (!signupData) return null;
 
   let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(signupData) as Record<string, unknown>;
-  } catch {
-    return null;
+  if (typeof signupData === 'string') {
+    try {
+      parsed = JSON.parse(signupData) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else {
+    parsed = signupData;
   }
 
   let rawRole: unknown;
@@ -290,16 +289,11 @@ export function buildStatsEmbed(
 }
 
 export class StatsReportHandler {
-  constructor(
-    private db: Database,
-    private client: Client
-  ) {}
+  constructor(private client: Client) {}
 
   async processMatch(matchId: string): Promise<void> {
     // Check settings
-    const settings = await this.db.get<StatsSettingsRow>(
-      'SELECT enabled, stats_report_dm_enabled FROM stats_settings WHERE id = 1'
-    );
+    const settings = await getStatsSettings(pgDb);
     if (!settings?.enabled || !settings?.stats_report_dm_enabled) {
       logger.debug(`📊 Stats report DMs disabled for match ${matchId}`);
       return;
@@ -323,25 +317,18 @@ export class StatsReportHandler {
       return;
     }
 
-    // Get participants with stats that haven't been DM'd yet
-    // TODO(stats): match_player_stats is still SQLite while participants live in Postgres, so this is two reads.
-    const statRows = await this.db.all<{ participant_id: string; total_stats_json: string; maps_played: number }>(
-      `SELECT participant_id, total_stats_json, maps_played FROM match_player_stats
-       WHERE match_id = ? AND stats_dm_sent = 0 AND total_stats_json IS NOT NULL`,
-      [matchId]
-    );
-    const people = new Map((await listDmRecipients(pgDb, matchId)).map(p => [p.id, p]));
-    const participants: ParticipantStatsRow[] = statRows.flatMap(row => {
-      const p = people.get(row.participant_id);
-      if (!p) return [];
-      return [{
-        participant_id: row.participant_id, discord_user_id: p.discord_user_id, username: p.username,
-        team_assignment: p.team_assignment ?? null, signup_data: p.signup_data ? JSON.stringify(p.signup_data) : null,
-        total_stats_json: row.total_stats_json, maps_played: row.maps_played,
-      }];
-    });
+    // Participants (with a Discord account) whose stats have not been DM'd yet
+    const participants: ParticipantStatsRow[] = (await listUnsentStatReportRows(pgDb, matchId)).map((row) => ({
+      participant_id: row.participant_id,
+      discord_user_id: row.discord_user_id,
+      username: row.username,
+      team_assignment: row.is_reserve ? 'reserve' : row.team_order === 0 ? 'blue' : row.team_order === 1 ? 'red' : null,
+      signup_data: row.signup_data,
+      total_stats_json: row.total_stats_json as Record<string, number>,
+      maps_played: row.maps_played,
+    }));
 
-    if (!participants || participants.length === 0) {
+    if (participants.length === 0) {
       logger.debug(`📊 No participants to DM for match ${matchId} (all sent or no stats)`);
       return;
     }
@@ -350,21 +337,11 @@ export class StatsReportHandler {
 
     for (const participant of participants) {
       try {
-        let totalStats: Record<string, number> = {};
-        try {
-          totalStats = JSON.parse(participant.total_stats_json) as Record<string, number>;
-        } catch {
-          logger.warning(`📊 Could not parse total_stats_json for participant ${participant.participant_id}`);
-        }
-
-        const embed = buildStatsEmbed(participant, totalStats, statDefs, matchInfo);
+        const embed = buildStatsEmbed(participant, participant.total_stats_json ?? {}, statDefs, matchInfo);
         await sendDM(this.client, participant.discord_user_id, embed);
 
         // Mark as sent
-        await this.db.run(
-          'UPDATE match_player_stats SET stats_dm_sent = 1 WHERE match_id = ? AND participant_id = ?',
-          [matchId, participant.participant_id]
-        );
+        await markStatsDmSent(pgDb, matchId, participant.participant_id);
 
         logger.debug(`📊 Stats report DM sent to ${participant.username} (${participant.discord_user_id})`);
       } catch (error) {

@@ -6,7 +6,7 @@ import { tournamentTeams } from '../../../lib/db/schema';
 import type { PositionScoringConfig } from '../../../lib/db/schema/types';
 import { logger } from '@/lib/logger';
 import { enqueueDeletion } from '@/lib/discord-queues';
-import { logFeedEvent } from '@/lib/feed-helpers';
+import { MATCH_ACTION_EVENTS, logFeedEvent, removeFeedEvents } from '@/lib/feed-helpers';
 import { getMode, getModeScoringType } from '@/lib/games';
 import { validateEnum, validateMaxLength, validateNumberRange, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
 import {
@@ -16,6 +16,7 @@ import {
   progressTournament, transitionTournament, updateTournamentDetails, type BracketAssignment, type CreateTournamentInput, type TeamAssignmentInput,
   type UpdateTournamentInput,
 } from '@/lib/tournaments';
+import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
 import { jsonError } from '../http';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
@@ -221,19 +222,18 @@ export const tournaments = new Hono()
     await db.transaction(async (tx) => {
       if (!(await lockTournament(tx, id))) throw new TournamentError('Tournament not found', 404);
       if (await hasActiveMatches(tx, id)) throw new TournamentError('Cannot delete tournament with active matches', 400);
-      for (const matchId of await listTournamentMatchesIds(tx, id)) await enqueueDeletion(tx, matchId);
+      const matchIds = await listTournamentMatchesIds(tx, id);
+      for (const matchId of matchIds) {
+        await enqueueDeletion(tx, matchId);
+        await removeFeedEvents(tx, matchId, MATCH_ACTION_EVENTS); // before the cascade clears the feed's match_id
+      }
       await enqueueDeletion(tx, id);
       await deleteTournament(tx, id);
+      // Uploaded files go with it: the tournament's matches' scorecard / stat images and the event image
+      for (const matchId of matchIds) await deleteBlobsFor(tx, { type: 'match', id: matchId });
+      if (existing.event_image_url) await deleteBlob(tx, existing.event_image_url);
     });
 
-    if (existing.event_image_url) {
-      try {
-        const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/upload/event-image?imageUrl=${encodeURIComponent(existing.event_image_url)}`, { method: 'DELETE' });
-        if (response.ok) logger.debug(`Cleaned up event image for tournament: ${id}`);
-      } catch (error) {
-        logger.error('Error cleaning up event image:', error);
-      }
-    }
     logger.debug(`Tournament deleted: ${id}`);
     return c.json({ success: true });
   }))

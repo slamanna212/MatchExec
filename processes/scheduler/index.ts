@@ -5,7 +5,8 @@ import { createHash } from 'crypto';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
 import { UpdateCheckJob } from './jobs/check-for-update';
-import { logFeedEvent } from '../../src/lib/feed-helpers';
+import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
+import { deleteOrphanedMatchBlobs } from '../../lib/storage';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
 import { db as pgDb, type Executor } from '../../lib/db';
@@ -435,26 +436,21 @@ class MatchExecScheduler {
   private async runFeedCleanup() {
     await this.cleanupStaleScoringNotifications();
     await this.cleanupFeedEvents();
+    await this.cleanupOrphanedUploads();
   }
 
   private async cleanupStaleScoringNotifications() {
     try {
-      const scoringResult = await this.db.run(
-        `DELETE FROM activity_feed
-         WHERE event_type = 'match_scoring_required'
-         AND created_at < datetime('now', '-1 day')`
-      );
-      if ((scoringResult.changes ?? 0) > 0) {
-        logger.info(`🧹 Removed ${scoringResult.changes} stale map scoring notification(s) older than 24 hours`);
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const scoring = await purgeFeedEventsOfType(pgDb, 'match_scoring_required', cutoff);
+      if (scoring > 0) {
+        logger.info(`🧹 Removed ${scoring} stale map scoring notification(s) older than 24 hours`);
       }
 
-      const matchingResult = await this.db.run(
-        `DELETE FROM activity_feed
-         WHERE event_type = 'scorecard_player_matching_required'
-         AND created_at < datetime('now', '-1 day')`
-      );
-      if ((matchingResult.changes ?? 0) > 0) {
-        logger.info(`🧹 Removed ${matchingResult.changes} stale scorecard player matching notification(s) older than 24 hours`);
+      const matching = await purgeFeedEventsOfType(pgDb, 'scorecard_player_matching_required', cutoff);
+      if (matching > 0) {
+        logger.info(`🧹 Removed ${matching} stale scorecard player matching notification(s) older than 24 hours`);
       }
     } catch (error) {
       logger.error('❌ Error cleaning up stale action notifications:', error);
@@ -466,19 +462,26 @@ class MatchExecScheduler {
       const retentionDays = parseInt((await getAppSetting('feed_retention_days')) ?? '180', 10);
       if (isNaN(retentionDays) || retentionDays <= 0) return;
 
-      const result = await this.db.run(
-        `DELETE FROM activity_feed WHERE created_at < datetime('now', '-' || ? || ' days')`,
-        [retentionDays]
-      );
-      if ((result.changes ?? 0) > 0) {
-        logger.info(`🧹 Feed cleanup: deleted ${result.changes} events older than ${retentionDays} days`);
+      const deleted = await purgeFeedEventsOlderThan(pgDb, retentionDays);
+      if (deleted > 0) {
+        logger.info(`🧹 Feed cleanup: deleted ${deleted} events older than ${retentionDays} days`);
       }
     } catch (error) {
       logger.error('❌ Error cleaning up feed events:', error);
     }
   }
 
-
+  /** Uploaded files whose match is gone (deleted directly or through a tournament cascade). */
+  private async cleanupOrphanedUploads() {
+    try {
+      const deleted = await deleteOrphanedMatchBlobs(pgDb);
+      if (deleted > 0) {
+        logger.info(`🧹 Upload cleanup: deleted ${deleted} file(s) belonging to deleted matches`);
+      }
+    } catch (error) {
+      logger.error('❌ Error cleaning up orphaned uploads:', error);
+    }
+  }
 
   private keepAlive() {
     // Keep the process alive and persist heartbeat for health monitoring

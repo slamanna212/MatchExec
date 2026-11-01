@@ -168,8 +168,10 @@ async function recomputeWinnerAfterRescore(ex: Executor, matchId: string): Promi
  * Re-scoring (`result.rescore`) replaces the placements and recomputes a complete match's winner_team without
  * re-firing notification / completion side effects. Activity-feed writes (still SQLite) run after the commit.
  */
-export async function saveMatchResult(ex: Executor, matchGameId: string, result: MatchResult): Promise<void> {
-  const after = new AfterCommit();
+export async function saveMatchResult(ex: Executor, matchGameId: string, result: MatchResult, outerAfter?: AfterCommit): Promise<void> {
+  // A caller that already holds the transaction passes its own AfterCommit and runs it once ITS transaction commits: the
+  // feed writes must not run inside it (they need a lock on the match row that the open transaction holds).
+  const after = outerAfter ?? new AfterCommit();
   try {
     await ex.transaction(async (tx) => {
       await lockMatch(tx, result.matchId);
@@ -217,7 +219,7 @@ export async function saveMatchResult(ex: Executor, matchGameId: string, result:
     if (!(error instanceof GameAlreadyScoredError)) logger.error('Error in saveMatchResult:', error);
     throw error;
   }
-  await after.run();
+  if (!outerAfter) await after.run();
 }
 
 /**

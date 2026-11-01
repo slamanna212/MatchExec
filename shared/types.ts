@@ -438,7 +438,7 @@ export interface ScorecardSubmission {
   ai_raw_response?: string;
   ai_extraction_status: 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
   ai_error_message?: string;
-  ai_processing_log?: string;
+  ai_processing_log?: Array<{ message: string; ts: string }> | null;
   review_status: 'pending' | 'approved' | 'rejected' | 'auto_approved';
   reviewed_at?: string;
   created_at: string;
@@ -453,7 +453,7 @@ export interface ScorecardPlayerStat {
   participant_id?: string;
   extracted_player_name: string;
   team_side?: 'blue' | 'red';
-  stats_json: string;
+  stats_json: Record<string, number>;
   assignment_status: 'unassigned' | 'assigned' | 'confirmed';
   confidence_score?: number;
   created_at: string;
@@ -464,12 +464,19 @@ export interface MatchPlayerStats {
   id: string;
   match_id: string;
   participant_id: string;
-  total_stats_json: string;
+  total_stats_json: Record<string, number>;
   maps_played: number;
   stat_image_url?: string;
   stat_image_sent: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/** One participant's stats on one map (`GET /api/matches/:id/stats/per-map`). */
+export interface PerMapStatRow {
+  match_game_id: string;
+  participant_id: string;
+  stats_json: Record<string, number>;
 }
 
 export interface StatsSettings {

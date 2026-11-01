@@ -1,28 +1,18 @@
 import type { Client, Message } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import { db as pgDb } from '../../../lib/db';
+import { putBlob } from '../../../lib/storage';
 import { countStatDefinitions } from '../../../src/lib/games';
 import { enqueueStatsProcessing } from '../../../src/lib/discord-queues';
-import { getMatch, listDmRecipients, listVotesForGame } from '../../../src/lib/matches';
-import { matchGames } from '../../../lib/db/schema';
-import { and, eq, inArray } from 'drizzle-orm';
-
-interface ScorecardDmRecord {
-  id: string;
-  match_id: string;
-  match_game_id: string;
-  discord_user_id: string;
-  discord_message_id: string;
-  participant_id: string | null;
-  team_side: 'blue' | 'red' | null;
-}
+import { getMatch, hasOngoingGame, listDmRecipients, listVotesForGame } from '../../../src/lib/matches';
+import {
+  createSubmission, findScorecardDm, findSubmissionByDiscordMessage, isStatsEnabled, listScorecardDmGameIds, recordScorecardDm,
+} from '../../../src/lib/stats';
+import { extensionForMime } from '../../../src/lib/uploads';
 
 interface CommanderRecord {
   id: string;
@@ -35,7 +25,6 @@ export class ScorecardHandler {
 
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null
   ) {}
 
@@ -76,11 +65,10 @@ export class ScorecardHandler {
       const user = await this.client.users.fetch(commander.discord_user_id);
       const sentMessage = await user.send({ embeds: [embed] });
 
-      await this.db.run(
-        `INSERT INTO scorecard_dm_messages (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [crypto.randomUUID(), matchId, matchGameId, commander.discord_user_id, sentMessage.id, commander.id, teamSide]
-      );
+      await recordScorecardDm(pgDb, {
+        matchId, matchGameId, discordUserId: commander.discord_user_id, discordMessageId: sentMessage.id,
+        participantId: commander.id, teamSide,
+      });
 
       logger.debug(`📩 Scorecard prompt sent to ${commander.discord_user_id} for match ${matchId}`);
       return true;
@@ -90,30 +78,16 @@ export class ScorecardHandler {
     }
   }
 
-  private async downloadAndSaveScreenshot(
+  /** Download the Discord attachment; returns the bytes and the (normalised) content type. */
+  private async downloadScreenshot(
     attachment: { url: string; contentType: string | null; name: string | null },
-    matchId: string
-  ): Promise<string> {
+  ): Promise<{ buffer: Buffer; contentType: string }> {
     const response = await fetch(attachment.url);
     if (!response.ok) throw new Error('download_failed');
 
     const buffer = Buffer.from(await response.arrayBuffer());
     const contentType = (attachment.contentType?.split(';')[0] ?? 'image/jpeg').trim();
-    const MIME_TO_EXT: Record<string, string> = {
-      'image/jpeg': '.jpg', 'image/png': '.png',
-      'image/webp': '.webp', 'image/gif': '.gif',
-    };
-    const ext = MIME_TO_EXT[contentType] ?? '.jpg';
-
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'scorecards', matchId);
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const filename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${ext}`;
-    fs.writeFileSync(path.join(uploadDir, filename), buffer);
-
-    return `/uploads/scorecards/${matchId}/${filename}`;
+    return { buffer, contentType };
   }
 
   private async checkHeldWinnerVote(matchId: string, matchGameId: string): Promise<void> {
@@ -134,10 +108,7 @@ export class ScorecardHandler {
 
   async sendScorecardPrompts(matchId: string, matchGameId: string, mapName: string): Promise<boolean> {
     try {
-      const statsSettings = await this.db.get<{ enabled: number }>(
-        'SELECT enabled FROM stats_settings WHERE id = 1'
-      );
-      if (!statsSettings?.enabled) return false;
+      if (!(await isStatsEnabled(pgDb))) return false;
 
       const match = await getMatch(pgDb, matchId);
       if (!match) return false;
@@ -162,11 +133,7 @@ export class ScorecardHandler {
     if (!message.reference?.messageId) return;
 
     try {
-      const dmRecord = await this.db.get<ScorecardDmRecord>(
-        `SELECT * FROM scorecard_dm_messages
-         WHERE discord_message_id = ? AND discord_user_id = ?`,
-        [message.reference.messageId, message.author.id]
-      );
+      const dmRecord = await findScorecardDm(pgDb, message.reference.messageId, message.author.id);
 
       if (!dmRecord) return;
 
@@ -174,6 +141,9 @@ export class ScorecardHandler {
         logger.error('Invalid match_id in scorecard DM record');
         return;
       }
+
+      // A reply event can be delivered twice: one submission per Discord message
+      if (await findSubmissionByDiscordMessage(pgDb, message.id)) return;
 
       const imageAttachments = message.attachments.filter(
         (a) => a.contentType?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(a.name || '')
@@ -185,25 +155,31 @@ export class ScorecardHandler {
       }
 
       const attachment = imageAttachments.first()!;
-      let screenshotUrl: string;
+      let download: { buffer: Buffer; contentType: string };
       try {
-        screenshotUrl = await this.downloadAndSaveScreenshot(attachment, dmRecord.match_id);
+        download = await this.downloadScreenshot(attachment);
       } catch {
         await message.reply('Failed to download your screenshot. Please try again.');
         return;
       }
 
       const submissionId = crypto.randomUUID();
+      const filename = `${Date.now()}_${crypto.randomBytes(8).toString('hex')}${extensionForMime(download.contentType)}`;
+      const screenshotUrl = `/uploads/scorecards/${dmRecord.match_id}/${filename}`;
 
-      await this.db.run(
-        `INSERT INTO scorecard_submissions (id, match_id, match_game_id, submitted_by_participant_id, submitted_by_discord_user_id, team_side, screenshot_url, discord_message_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [submissionId, dmRecord.match_id, dmRecord.match_game_id, dmRecord.participant_id,
-         message.author.id, dmRecord.team_side || 'blue', screenshotUrl, message.id]
-      );
-
-      // Queue row lives in Postgres, the submission in SQLite until the stats domain is ported (not one transaction yet)
-      await enqueueStatsProcessing(pgDb, { submissionId, matchId: dmRecord.match_id, matchGameId: dmRecord.match_game_id });
+      // The screenshot, the submission and the extraction job commit together
+      await pgDb.transaction(async (tx) => {
+        await putBlob(tx, {
+          path: screenshotUrl, kind: 'scorecard', contentType: download.contentType, data: download.buffer, filename,
+          owner: { type: 'match', id: dmRecord.match_id },
+        });
+        await createSubmission(tx, {
+          id: submissionId, matchId: dmRecord.match_id, matchGameId: dmRecord.match_game_id, teamSide: dmRecord.team_side || 'blue',
+          screenshotUrl, submittedByParticipantId: dmRecord.participant_id, submittedByDiscordUserId: message.author.id,
+          discordMessageId: message.id,
+        });
+        await enqueueStatsProcessing(tx, { submissionId, matchId: dmRecord.match_id, matchGameId: dmRecord.match_game_id });
+      });
 
       await message.reply('✅ Screenshot received! Processing stats...');
       logger.debug(`📸 Scorecard screenshot received from ${message.author.id} for match ${dmRecord.match_id}`);
@@ -219,14 +195,8 @@ export class ScorecardHandler {
   async handleNonReplyDM(message: Message): Promise<void> {
     try {
       // Check if user has any pending scorecard DM records
-      // TODO(stats): scorecard_dm_messages is still SQLite; the game status lives in Postgres, so this is two reads.
-      const dmRows = await this.db.all<{ match_game_id: string }>(
-        'SELECT match_game_id FROM scorecard_dm_messages WHERE discord_user_id = ?',
-        [message.author.id]
-      );
-      const gameIds = [...new Set(dmRows.map(r => r.match_game_id))];
-      const pendingRecord = gameIds.length === 0 ? undefined : (await pgDb.select({ id: matchGames.id }).from(matchGames)
-        .where(and(inArray(matchGames.id, gameIds), eq(matchGames.status, 'ongoing'))).limit(1))[0];
+      const gameIds = await listScorecardDmGameIds(pgDb, message.author.id);
+      const pendingRecord = await hasOngoingGame(pgDb, gameIds);
 
       if (pendingRecord) {
         await message.reply(

@@ -1,7 +1,7 @@
 /** match_games: per-map rows (initialisation, listing, notes) and the scoring-type lookup for a game. */
-import { and, asc, desc, eq, gt, inArray, isNotNull, lte, min, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lte, min, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, scorecardSubmissions } from '../../../lib/db/schema';
+import { matchGamePlacements, matchGames, matchParticipants, matchTeams, matches } from '../../../lib/db/schema';
 import { logger } from '../logger';
 import { cleanMapId } from '../utils/map-utils';
 import { getMap, getMapModeScoringType, getModeScoringType, listMapsWithModeScoring, type MapWithModeScoring } from '../games';
@@ -244,6 +244,14 @@ export async function getOngoingGame(ex: Executor, matchId: string): Promise<{ i
   return row;
 }
 
+/** True when any of these maps is currently being played (used to nudge DM users who message instead of replying). */
+export async function hasOngoingGame(ex: Executor, matchGameIds: readonly string[]): Promise<boolean> {
+  if (matchGameIds.length === 0) return false;
+  const [row] = await ex.select({ id: matchGames.id }).from(matchGames)
+    .where(and(inArray(matchGames.id, [...matchGameIds]), eq(matchGames.status, 'ongoing'))).limit(1);
+  return !!row;
+}
+
 export async function getMatchGame(ex: Executor, matchGameId: string): Promise<MatchGameRow | undefined> {
   const [row] = await ex.select().from(matchGames).where(eq(matchGames.id, matchGameId));
   return row;
@@ -260,28 +268,6 @@ export async function listParticipantNames(ex: Executor, ids: readonly string[])
   const rows = await ex.select({ id: matchParticipants.id, username: matchParticipants.username, discord_user_id: matchParticipants.discord_user_id })
     .from(matchParticipants).where(inArray(matchParticipants.id, [...ids]));
   return new Map(rows.map((r) => [r.id, r]));
-}
-
-// TODO(stats): scorecard_submissions belongs to Stage 2 item 8; this one read serves the scoring UI's suggestions.
-/** Latest approved submission's AI-suggested finishing order for a game (participantId -> position), or null. */
-export async function getSuggestedPositions(ex: Executor, matchId: string, matchGameId: string): Promise<Record<string, number> | null> {
-  const rows = await ex.select({ suggested_positions: scorecardSubmissions.suggested_positions }).from(scorecardSubmissions)
-    .where(and(
-      eq(scorecardSubmissions.match_id, matchId), eq(scorecardSubmissions.match_game_id, matchGameId),
-      inArray(scorecardSubmissions.review_status, ['approved', 'auto_approved']), isNotNull(scorecardSubmissions.suggested_positions),
-    ))
-    .orderBy(desc(scorecardSubmissions.created_at), desc(scorecardSubmissions.id));
-  for (const row of rows) {
-    // Stored data came from AI output, so it is re-checked before being handed to the UI.
-    const parsed = row.suggested_positions;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-    const out: Record<string, number> = {};
-    for (const [participantId, position] of Object.entries(parsed)) {
-      if (typeof position === 'number' && Number.isInteger(position) && position >= 1) out[participantId] = position;
-    }
-    if (Object.keys(out).length > 0) return out;
-  }
-  return null;
 }
 
 /** How many of a match's games have had their Discord map notification queued (stats-enabled matches hold them). */

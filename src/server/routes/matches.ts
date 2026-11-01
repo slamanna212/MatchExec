@@ -10,15 +10,17 @@ import { MATCH_FLOW_STEPS } from '@/shared/types';
 import { enqueueDeletion, enqueueMatchEdit } from '@/lib/discord-queues';
 import { processMatchAnnouncements } from '@/lib/reminder-helpers';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
-import { logFeedEvent, deleteFeedEvents } from '@/lib/feed-helpers';
+import { logFeedEvent, removeFeedEvents, MATCH_ACTION_EVENTS } from '@/lib/feed-helpers';
 import {
   AssignTeamsError, GameAlreadyScoredError, MatchTransitionError, ResultError, SetupStatusError, assignTeams, createMatchFromRequest,
   createMatchTeams, deleteMatch, getGameResult, getMapCodes, getMapNotes, getMatch, getMatchDetail, getMatchEditContext,
   getMatchGameInMatch, getMatchGames, getMatchGamesWithResults, getMatchResult, getMatchScoringType, getMatchTeams, getMatchWithGame,
-  getSuggestedPositions, initializeMatchGames, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
+  initializeMatchGames, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
   matchExists, saveMapNote, saveSetup, setMapCodes, submitGameResult, transitionMatch, updateMatchDetails, validateMatchRequest,
   getOverallMatchScore, resolveWinnerEntity, isKnownStatus, type MatchRequestBody,
 } from '@/lib/matches';
+import { getSuggestedPositions } from '@/lib/stats';
+import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
 import { jsonError } from '../http';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
@@ -157,18 +159,14 @@ export const matches = new Hono()
       // match is gone). Child rows cascade; voice channels are cleaned up by the scheduler when it detects orphans.
       await db.transaction(async (tx) => {
         await enqueueDeletion(tx, matchId);
+        // Action items for the match go first: once the row is gone the feed's FK clears match_id and they could no longer be found
+        await removeFeedEvents(tx, matchId, MATCH_ACTION_EVENTS);
         await deleteMatch(tx, matchId);
+        // Uploaded files go with the match: its scorecard / stat images and the event image
+        await deleteBlobsFor(tx, { type: 'match', id: matchId });
+        if (existing.event_image_url) await deleteBlob(tx, existing.event_image_url);
       });
 
-      if (existing.event_image_url) {
-        try {
-          const response = await fetch(`${process.env.PUBLIC_URL || 'http://localhost:3000'}/api/upload/event-image?imageUrl=${encodeURIComponent(existing.event_image_url)}`, { method: 'DELETE' });
-          if (response.ok) logger.debug(`Cleaned up event image for match: ${matchId}`);
-        } catch (error) {
-          logger.error('Error cleaning up event image:', error);
-        }
-      }
-      await deleteFeedEvents(matchId, ['match_scoring_required']);
       return c.json({ success: true });
     } catch (error) {
       logger.error('Error deleting match:', error);

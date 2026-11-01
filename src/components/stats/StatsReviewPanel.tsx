@@ -76,9 +76,7 @@ export function StatsReviewPanel({ matchId, gameId, matchGameId }: StatsReviewPa
           const fresh = await res.json() as SubmissionWithStats[];
 
           for (const sub of fresh) {
-            const log: Array<{ message: string; ts: string }> = sub.ai_processing_log
-              ? JSON.parse(sub.ai_processing_log) as Array<{ message: string; ts: string }>
-              : [];
+            const log: Array<{ message: string; ts: string }> = sub.ai_processing_log ?? [];
             const seen = shownLogCount.current[sub.id] ?? 0;
             for (let i = seen; i < log.length; i++) {
               showInfo(log[i].message, 'AI Processing');

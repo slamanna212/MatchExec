@@ -22,7 +22,7 @@ import type { MatchResult, PositionScoringConfig } from '@/shared/types';
 import { logFeedEvent } from '@/lib/feed-helpers';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
-vi.mock('@/lib/feed-helpers', () => ({ logFeedEvent: vi.fn(), deleteFeedEvents: vi.fn() }));
+vi.mock('@/lib/feed-helpers', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/feed-helpers')>()), logFeedEvent: vi.fn(), deleteFeedEvents: vi.fn() }));
 
 setupPgTestFile();
 const pg = () => getPgTestDb();

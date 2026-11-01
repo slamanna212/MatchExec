@@ -4,8 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import type { JSX } from 'react';
 import { Tabs, Stack, Text, Group, Divider, Skeleton } from '@mantine/core';
 import { IconLayoutGrid, IconMap } from '@tabler/icons-react';
-import type { MatchPlayerStats, GameStatDefinition, ParticipantDbRow } from '@/shared/types';
-import type { PerMapStatRow } from '@/app/api/matches/[matchId]/stats/per-map/route';
+import type { MatchPlayerStats, GameStatDefinition, ParticipantDbRow, PerMapStatRow } from '@/shared/types';
 import { StatCallouts, type PlayerStatEntry } from './StatCallouts';
 import { TeamDonutCharts } from './TeamDonutCharts';
 import { PlayerLeaderboard } from './PlayerLeaderboard';
@@ -34,15 +33,14 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 function buildPlayerEntries(
-  rows: Array<{ participant_id: string; stats_json: string }>,
+  rows: Array<{ participant_id: string; stats_json: Record<string, number> }>,
   participantMap: Map<string, ParticipantDbRow>
 ): PlayerStatEntry[] {
   const byParticipant = new Map<string, { stats: Record<string, number>; participant: ParticipantDbRow }>();
   for (const row of rows) {
     const participant = participantMap.get(row.participant_id);
     if (!participant) continue;
-    let stats: Record<string, number> = {};
-    try { stats = JSON.parse(row.stats_json) as Record<string, number>; } catch { /**/ }
+    const stats: Record<string, number> = row.stats_json ?? {};
     if (!byParticipant.has(row.participant_id)) {
       byParticipant.set(row.participant_id, { stats: {}, participant });
     }

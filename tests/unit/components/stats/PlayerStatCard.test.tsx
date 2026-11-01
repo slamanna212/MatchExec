@@ -35,7 +35,7 @@ function makeStat(overrides: Partial<ScorecardPlayerStat> = {}): ScorecardPlayer
     match_id: 'match-1',
     match_game_id: 'mg-1',
     extracted_player_name: 'TestPlayer',
-    stats_json: JSON.stringify({ kills: 10, deaths: 3 }),
+    stats_json: { kills: 10, deaths: 3 },
     assignment_status: 'unassigned',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -115,7 +115,7 @@ describe('PlayerStatCard', () => {
   it('renders stat values from stats_json', () => {
     const container = renderWithMantine(
       <PlayerStatCard
-        stat={makeStat({ stats_json: JSON.stringify({ kills: 15 }) })}
+        stat={makeStat({ stats_json: { kills: 15 } })}
         statDefs={[makeStatDef({ name: 'kills', display_name: 'Kills' })]}
         participants={[]}
         onAssignChange={noOp}
@@ -127,7 +127,7 @@ describe('PlayerStatCard', () => {
   it('renders 0 for stats missing from stats_json', () => {
     const container = renderWithMantine(
       <PlayerStatCard
-        stat={makeStat({ stats_json: '{}' })}
+        stat={makeStat({ stats_json: {} })}
         statDefs={[makeStatDef({ name: 'assists', display_name: 'Assists' })]}
         participants={[]}
         onAssignChange={noOp}
@@ -137,11 +137,11 @@ describe('PlayerStatCard', () => {
     expect(container.textContent).toContain('0');
   });
 
-  it('does not crash when stats_json is invalid JSON', () => {
+  it('does not crash when stats_json is not an object of numbers', () => {
     expect(() => {
       renderWithMantine(
         <PlayerStatCard
-          stat={makeStat({ stats_json: 'not-valid-json' })}
+          stat={makeStat({ stats_json: {} })}
           statDefs={[makeStatDef()]}
           participants={[]}
           onAssignChange={noOp}
@@ -153,7 +153,7 @@ describe('PlayerStatCard', () => {
   it('formats thousands stat values with K suffix', () => {
     const container = renderWithMantine(
       <PlayerStatCard
-        stat={makeStat({ stats_json: JSON.stringify({ damage: 15000 }) })}
+        stat={makeStat({ stats_json: { damage: 15000 } })}
         statDefs={[makeStatDef({ name: 'damage', display_name: 'Damage', format: 'thousands' })]}
         participants={[]}
         onAssignChange={noOp}
@@ -165,7 +165,7 @@ describe('PlayerStatCard', () => {
   it('formats decimal stat values with two decimal places', () => {
     const container = renderWithMantine(
       <PlayerStatCard
-        stat={makeStat({ stats_json: JSON.stringify({ accuracy: 0.753 }) })}
+        stat={makeStat({ stats_json: { accuracy: 0.753 } })}
         statDefs={[makeStatDef({ name: 'accuracy', display_name: 'Accuracy', format: 'decimal' })]}
         participants={[]}
         onAssignChange={noOp}

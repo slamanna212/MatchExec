@@ -3,9 +3,9 @@
  * commits together with the state change that caused it. Failures here are non-critical for the scoring flow and are
  * handled by the callers (`bestEffort`).
  */
-import { and, asc, count, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { matchGames, matchParticipants, matchTeams, matches, scorecardSubmissions, statsSettings } from '../../../lib/db/schema';
+import { matchGames, matchParticipants, matchTeams, matches } from '../../../lib/db/schema';
 import { logger } from '../logger';
 import {
   enqueueDeletion, enqueueMapCode, enqueueMatchWinner, enqueueScoreNotification, enqueueScorecardPrompt, enqueueStatsImage,
@@ -13,6 +13,7 @@ import {
 } from '../discord-queues';
 import { countStatDefinitions, findMapByIdOrName, gameSupportsMapCodes } from '../games';
 import { getDiscordSettings } from '../settings';
+import { countApprovedSubmissions, countUnfinalizedSubmissions, isStatsEnabled } from '../stats';
 import { teamLabelForOrder } from '../scoring/winners';
 import type { MatchResult } from '@/shared/types';
 import { countCommanders } from './participants';
@@ -189,14 +190,8 @@ export async function queueMatchWinnerNotification(ex: Executor, matchId: string
   logger.debug(`Match winner notification queued: ${winningTeamName} (${winner}) for ${matchData.name} (${team1Score}-${team2Score})`);
 }
 
-// TODO(stats): stats_settings / scorecard_submissions belong to Stage 2 item 8; only these tiny reads live here.
-async function statsEnabled(ex: Executor): Promise<boolean> {
-  const [row] = await ex.select({ enabled: statsSettings.enabled }).from(statsSettings).where(eq(statsSettings.id, 1));
-  return !!row?.enabled;
-}
-
 export async function queueScorecardPrompts(ex: Executor, matchId: string, matchGameId: string, mapName: string): Promise<void> {
-  if (!(await statsEnabled(ex))) return;
+  if (!(await isStatsEnabled(ex))) return;
   const [match] = await ex.select({ game_id: matches.game_id }).from(matches).where(eq(matches.id, matchId));
   if (!match || (await countStatDefinitions(ex, match.game_id)) === 0) return;
   await enqueueScorecardPrompt(ex, { matchId, matchGameId, mapName });
@@ -217,18 +212,15 @@ export async function queueWinnerVote(ex: Executor, matchId: string, matchGameId
 }
 
 export async function queueStatsAggregation(ex: Executor, matchId: string): Promise<void> {
-  if (!(await statsEnabled(ex))) return;
-  const [row] = await ex.select({ cnt: count() }).from(scorecardSubmissions)
-    .where(and(eq(scorecardSubmissions.match_id, matchId), inArray(scorecardSubmissions.review_status, ['approved', 'auto_approved'])));
-  if (!row || row.cnt === 0) return;
+  if (!(await isStatsEnabled(ex))) return;
+  if ((await countApprovedSubmissions(ex, matchId)) === 0) return;
   await enqueueStatsImage(ex, matchId);
 }
 
 export async function queueStatsReportDMs(ex: Executor, matchId: string): Promise<void> {
-  const [pending] = await ex.select({ cnt: count() }).from(scorecardSubmissions)
-    .where(and(eq(scorecardSubmissions.match_id, matchId), notInArray(scorecardSubmissions.review_status, ['approved', 'rejected', 'auto_approved'])));
-  if (pending && pending.cnt > 0) {
-    logger.debug(`Stats report DMs deferred for match ${matchId} - ${pending.cnt} submission(s) still pending review`);
+  const pending = await countUnfinalizedSubmissions(ex, matchId);
+  if (pending > 0) {
+    logger.debug(`Stats report DMs deferred for match ${matchId} - ${pending} submission(s) still pending review`);
     return;
   }
   await enqueueStatsReport(ex, matchId);

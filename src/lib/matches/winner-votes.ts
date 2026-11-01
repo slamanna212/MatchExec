@@ -1,10 +1,12 @@
 /** Commander winner votes (`discord_winner_vote_messages`): DM prompts, reaction votes and submitting the consensus. */
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '../../../lib/db';
-import { discordWinnerVoteMessages, matchGames, matchParticipants, matchTeams, matches, scorecardSubmissions } from '../../../lib/db/schema';
+import { discordWinnerVoteMessages, matchGames, matchParticipants, matchTeams, matches } from '../../../lib/db/schema';
 import { logger } from '../logger';
 import { countStatDefinitions } from '../games';
+import { hasSubmissionForGame } from '../stats/scorecards';
 import { lockMatch } from './teams';
+import { AfterCommit } from './effects';
 import { saveMatchResult, GameAlreadyScoredError } from './results';
 
 export type VoteRow = typeof discordWinnerVoteMessages.$inferSelect;
@@ -52,13 +54,11 @@ export async function listVotesForGame(ex: Executor, matchGameId: string): Promi
   return ex.select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.match_game_id, matchGameId)).orderBy(asc(discordWinnerVoteMessages.created_at), asc(discordWinnerVoteMessages.id));
 }
 
-// TODO(stats): scorecard_submissions belongs to Stage 2 item 8.
 /** True when the match requires a scorecard for this game and none has been submitted yet. */
 export async function isScorecardRequiredButMissing(ex: Executor, matchId: string, matchGameId: string): Promise<boolean> {
   const [match] = await ex.select({ stats_enabled: matches.stats_enabled, game_id: matches.game_id }).from(matches).where(eq(matches.id, matchId));
   if (!match?.stats_enabled || (await countStatDefinitions(ex, match.game_id)) === 0) return false;
-  const [submission] = await ex.select({ id: scorecardSubmissions.id }).from(scorecardSubmissions).where(eq(scorecardSubmissions.match_game_id, matchGameId)).limit(1);
-  return !submission;
+  return !(await hasSubmissionForGame(ex, matchGameId));
 }
 
 /**
@@ -67,17 +67,20 @@ export async function isScorecardRequiredButMissing(ex: Executor, matchId: strin
  * under the match row lock, which also closes the race with a web submission. Returns whether a result was saved.
  */
 export async function submitVoteWinner(matchId: string, matchGameId: string, winner: TeamSide): Promise<boolean> {
+  const after = new AfterCommit();
   try {
-    return await db.transaction(async (tx) => {
+    const saved = await db.transaction(async (tx) => {
       const match = await lockMatch(tx, matchId);
       const [game] = await tx.select({ status: matchGames.status }).from(matchGames).where(and(eq(matchGames.id, matchGameId), eq(matchGames.match_id, matchId)));
       if (match?.status !== 'battle' || !game || game.status === 'completed') {
         logger.info(`Winner vote for game ${matchGameId} ignored: game already scored or match not in battle`);
         return false;
       }
-      await saveMatchResult(tx, matchGameId, { matchId, gameId: matchGameId, winner: winner === 'blue' ? 'team1' : 'team2', completedAt: new Date() });
+      await saveMatchResult(tx, matchGameId, { matchId, gameId: matchGameId, winner: winner === 'blue' ? 'team1' : 'team2', completedAt: new Date() }, after);
       return true;
     });
+    await after.run(); // activity-feed writes, after the commit
+    return saved;
   } catch (error) {
     if (error instanceof GameAlreadyScoredError) {
       logger.info(`Winner vote for game ${matchGameId} ignored: game was scored concurrently`);

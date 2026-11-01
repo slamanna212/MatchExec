@@ -35,10 +35,7 @@ function formatStatValue(value: number, format?: string): string {
 }
 
 export function PlayerStatCard({ stat, statDefs, participants, onAssignChange }: PlayerStatCardProps): JSX.Element {
-  let statsObj: Record<string, number> = {};
-  try {
-    statsObj = JSON.parse(stat.stats_json) as Record<string, number>;
-  } catch { /* skip */ }
+  const statsObj: Record<string, number> = stat.stats_json ?? {};
 
   const groupedMap = new Map<string, { value: string; label: string }[]>();
   for (const p of [...participants].sort((a, b) => a.username.localeCompare(b.username))) {

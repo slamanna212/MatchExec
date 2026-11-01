@@ -11,6 +11,7 @@ import { getMatchGameInMatch, getScoringTypeForGame } from './games';
 import { saveMatchResult } from './results';
 import { getTournamentRescoreBlocker } from './scoreboard';
 import { lockMatch } from './teams';
+import { AfterCommit } from './effects';
 
 type ResultBody = (SaveResultBody | MatchResult) & { rescore?: boolean; draw?: boolean };
 
@@ -138,7 +139,8 @@ export async function buildResult(ex: Executor, matchId: string, gameId: string,
  * Throws ResultError (400/404/409) or GameAlreadyScoredError.
  */
 export async function submitGameResult(matchId: string, gameId: string, body: ResultBody): Promise<string> {
-  return db.transaction(async (tx) => {
+  const after = new AfterCommit();
+  const message = await db.transaction(async (tx) => {
     const match = await lockMatch(tx, matchId);
     if (!match) throw new ResultError('Match not found', 404);
     const game = await getMatchGameInMatch(tx, matchId, gameId);
@@ -155,8 +157,10 @@ export async function submitGameResult(matchId: string, gameId: string, body: Re
     }
 
     const { result, message } = await buildResult(tx, matchId, gameId, body);
-    await saveMatchResult(tx, gameId, result);
+    await saveMatchResult(tx, gameId, result, after);
     return message;
   });
+  await after.run(); // activity-feed writes, after the commit
+  return message;
 }
 

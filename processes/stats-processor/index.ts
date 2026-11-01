@@ -1,15 +1,13 @@
-import type { StatsDb } from './modules/db-types';
-import { waitForDatabaseReady } from '../../lib/database';
 import { logger } from '../../src/lib/logger/server';
 import { setAppSetting } from '../../src/lib/settings';
 import { db as pgDb } from '../../lib/db';
+import { waitForSystemReady } from '../../lib/db/system-status';
 import { claimJobs, makeWorkerId, nonOverlapping, releaseJob, resetAbandonedClaims } from '../../src/lib/discord-queues';
 import { AIExtractor } from './modules/ai-extractor';
 import { StatImageGenerator } from './modules/stat-image-generator';
 
 class StatsProcessor {
   private isRunning = false;
-  private db!: StatsDb;
   private aiExtractor: AIExtractor | null = null;
   private imageGenerator: StatImageGenerator | null = null;
   private intervals: ReturnType<typeof setInterval>[] = [];
@@ -29,12 +27,12 @@ class StatsProcessor {
 
     try {
       logger.debug('⏳ Waiting for database to be ready...');
-      this.db = await waitForDatabaseReady();
+      await waitForSystemReady();
 
       this.isRunning = true;
 
-      this.aiExtractor = new AIExtractor(this.db);
-      this.imageGenerator = new StatImageGenerator(this.db);
+      this.aiExtractor = new AIExtractor(pgDb);
+      this.imageGenerator = new StatImageGenerator(pgDb);
 
       // Send initial heartbeat
       try {

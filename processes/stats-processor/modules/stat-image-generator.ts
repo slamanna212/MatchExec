@@ -1,13 +1,12 @@
-import type { StatsDb } from './db-types';
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { GameStatDefinition } from '../../../shared/types';
 import { db as pgDb, type Executor } from '../../../lib/db';
+import { putBlob } from '../../../lib/storage';
 import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
-import { getMatch, getMatchTeams, listParticipants } from '../../../src/lib/matches';
+import { getMatch, lockMatch } from '../../../src/lib/matches';
+import { aggregateMatchStats, listStatImageRows, setStatImageUrl } from '../../../src/lib/stats';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -22,72 +21,51 @@ function resolveTeamColor(stat: { team_assignment?: unknown; team_color?: unknow
   return '#8a6fd8';
 }
 
-export class StatImageGenerator {
-  private db: StatsDb;
+const sideOf = (team: { team_order: number | null; is_reserve: boolean | null }): string | null =>
+  team.team_order === null ? null : team.is_reserve ? 'reserve' : team.team_order === 0 ? 'blue' : team.team_order === 1 ? 'red' : null;
 
-  /** `db` is the legacy SQLite connection; `queueDb` holds stats_image_queue. */
-  constructor(db: unknown, private queueDb: Executor = pgDb) {
-    this.db = db as StatsDb;
-  }
+export class StatImageGenerator {
+  /** `ex` holds the stats tables, matches / participants and the stats_image_queue (tests inject their own). */
+  constructor(private ex: Executor = pgDb) {}
 
   async generateMatchStatImages(queueId: string, matchId: string): Promise<void> {
     try {
       // The queue row was claimed (status 'processing') by the stats-processor before this call
 
-      // Aggregate stats first
-      await this.aggregateStats(matchId);
-
-      // Load aggregated stats
-      // TODO(stats): match_player_stats is still SQLite while participants / teams live in Postgres, so this is two reads.
-      const statRows = await this.db.all('SELECT * FROM match_player_stats WHERE match_id = ?', [matchId]);
-      const people = new Map((await listParticipants(pgDb, matchId)).map(p => [p.id, p]));
-      const teamsById = new Map((await getMatchTeams(pgDb, matchId)).map(t => [t.id, t]));
-      const sideOf = (t?: { team_order: number; is_reserve: boolean }) =>
-        !t ? null : t.is_reserve ? 'reserve' : t.team_order === 0 ? 'blue' : t.team_order === 1 ? 'red' : null;
-      const matchStats = statRows.flatMap((mps: Record<string, any>) => {
-        const person = people.get(mps.participant_id);
-        if (!person) return [];
-        const team = person.team_id ? teamsById.get(person.team_id) : undefined;
-        return [{ ...mps, username: person.username, team_assignment: sideOf(team), team_color: team?.team_color ?? null, team_name: team?.team_name ?? null } as Record<string, any>];
+      // Aggregate stats first (under the match lock, so it cannot interleave with a review's aggregation)
+      await this.ex.transaction(async (tx) => {
+        await lockMatch(tx, matchId);
+        await aggregateMatchStats(tx, matchId);
       });
 
-      if (!matchStats || matchStats.length === 0) {
-        await completeJob(this.queueDb, 'statsImage', queueId);
+      // Load aggregated stats with each player's name and team
+      const matchStats = (await listStatImageRows(this.ex, matchId)).map((row) => ({
+        ...row,
+        team_assignment: sideOf(row),
+      })) as Array<Record<string, any>>;
+
+      if (matchStats.length === 0) {
+        await completeJob(this.ex, 'statsImage', queueId);
         return;
       }
 
       // Load game stat definitions + scoring_type (Normal shows a Team column;
       // FFA/Position have no meaningful team_assignment, so that column and
       // its blue/red coloring would be nonsensical for them).
-      const match = await getMatch(pgDb, matchId);
-      const scoringType: string = (match?.mode_id ? await getModeScoringType(pgDb, match.game_id, match.mode_id) : undefined) ?? 'Normal';
-      const statDefs = match ? await listStatDefinitions(pgDb, match.game_id) as GameStatDefinition[] : [];
-
-      // Ensure output dir exists
-      const outputDir = path.join(process.cwd(), 'public', 'uploads', 'stats', matchId);
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
+      const match = await getMatch(this.ex, matchId);
+      const scoringType: string = (match?.mode_id ? await getModeScoringType(this.ex, match.game_id, match.mode_id) : undefined) ?? 'Normal';
+      const statDefs = match ? await listStatDefinitions(this.ex, match.game_id) as GameStatDefinition[] : [];
 
       try {
         // Generate team stat image
-        const teamImagePath = await this.generateTeamStatImage(matchId, matchStats, statDefs, outputDir, scoringType);
+        const teamImagePath = await this.generateTeamStatImage(matchId, matchStats, statDefs, scoringType);
         logger.debug(`🖼️ Generated team stat image: ${teamImagePath}`);
 
         // Generate individual player images
         for (const playerStat of matchStats) {
-          const playerImagePath = await this.generatePlayerStatImage(
-            matchId,
-            playerStat,
-            statDefs,
-            outputDir,
-            scoringType
-          );
+          const playerImagePath = await this.generatePlayerStatImage(matchId, playerStat, statDefs, scoringType);
           if (playerImagePath) {
-            await this.db.run(
-              `UPDATE match_player_stats SET stat_image_url = ? WHERE id = ?`,
-              [playerImagePath, playerStat.id]
-            );
+            await setStatImageUrl(this.ex, playerStat.id, playerImagePath);
           }
         }
       } catch (imageError) {
@@ -95,65 +73,28 @@ export class StatImageGenerator {
         // Don't fail — just mark as completed without images
       }
 
-      await completeJob(this.queueDb, 'statsImage', queueId);
+      await completeJob(this.ex, 'statsImage', queueId);
 
       logger.debug(`✅ Stat image generation completed for match ${matchId}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`❌ Image generation failed for match ${matchId}:`, message);
       // Back to 'pending' with backoff while attempts remain, otherwise 'failed'
-      await failJob(this.queueDb, 'statsImage', queueId, message);
+      await failJob(this.ex, 'statsImage', queueId, message);
     }
   }
 
-  private async aggregateStats(matchId: string): Promise<void> {
-    const playerStats = await this.db.all(
-      `SELECT sps.* FROM scorecard_player_stats sps
-       JOIN scorecard_submissions ss ON ss.id = sps.submission_id
-       WHERE sps.match_id = ? AND ss.review_status IN ('approved', 'auto_approved')
-       AND sps.participant_id IS NOT NULL`,
-      [matchId]
-    );
-
-    if (!playerStats || playerStats.length === 0) return;
-
-    const participantStats = new Map<string, { totalStats: Record<string, number>; mapsPlayed: Set<string> }>();
-
-    for (const stat of playerStats) {
-      if (!stat.participant_id) continue;
-      if (!participantStats.has(stat.participant_id)) {
-        participantStats.set(stat.participant_id, { totalStats: {}, mapsPlayed: new Set() });
-      }
-      const entry = participantStats.get(stat.participant_id)!;
-      entry.mapsPlayed.add(stat.match_game_id);
-      try {
-        const stats = JSON.parse(stat.stats_json) as Record<string, number>;
-        for (const [key, value] of Object.entries(stats)) {
-          if (typeof value === 'number') {
-            entry.totalStats[key] = (entry.totalStats[key] || 0) + value;
-          }
-        }
-      } catch { /* skip */ }
-    }
-
-    for (const [participantId, data] of participantStats.entries()) {
-      const id = crypto.randomUUID();
-      await this.db.run(
-        `INSERT INTO match_player_stats (id, match_id, participant_id, total_stats_json, maps_played)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(match_id, participant_id) DO UPDATE SET
-           total_stats_json = excluded.total_stats_json,
-           maps_played = excluded.maps_played`,
-        [id, matchId, participantId, JSON.stringify(data.totalStats), data.mapsPlayed.size]
-      );
-    }
+  /** Store a rendered image as a blob (same URL shape as before; regenerating replaces the file). */
+  private async saveImage(matchId: string, filename: string, data: Buffer): Promise<string> {
+    const imageUrl = `/uploads/stats/${matchId}/${filename}`;
+    await putBlob(this.ex, { path: imageUrl, kind: 'stat-image', contentType: 'image/png', data, filename, owner: { type: 'match', id: matchId } });
+    return imageUrl;
   }
 
   private async generateTeamStatImage(
     matchId: string,
     matchStats: unknown[],
     statDefs: GameStatDefinition[],
-    outputDir: string,
     scoringType = 'Normal'
   ): Promise<string | null> {
     try {
@@ -215,8 +156,7 @@ export class StatImageGenerator {
           ctx.fillText(String(stat.team_assignment || stat.team_name || '').toUpperCase().slice(0, 12), 200, y + 10);
         }
 
-        let statsObj: Record<string, number> = {};
-        try { statsObj = JSON.parse(String(stat.total_stats_json || '{}')); } catch { /* skip */ }
+        const statsObj = (stat.total_stats_json ?? {}) as Record<string, number>;
 
         ctx.fillStyle = '#ffffff';
         primaryStats.forEach((s, j) => {
@@ -239,10 +179,7 @@ export class StatImageGenerator {
       ctx.textAlign = 'center';
       ctx.fillText('MatchExec', width / 2, height - 10);
 
-      const imagePath = path.join(outputDir, 'team.png');
-      const imageUrl = `/uploads/stats/${matchId}/team.png`;
-      fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
-      return imageUrl;
+      return await this.saveImage(matchId, 'team.png', canvas.toBuffer('image/png'));
     } catch {
       return null;
     }
@@ -252,7 +189,6 @@ export class StatImageGenerator {
     matchId: string,
     playerStat: Record<string, unknown>,
     statDefs: GameStatDefinition[],
-    outputDir: string,
     scoringType = 'Normal'
   ): Promise<string | null> {
     try {
@@ -281,8 +217,7 @@ export class StatImageGenerator {
       ctx.fillText(String(playerStat.username || 'Unknown Player'), width / 2, 40);
 
       // Stats grid
-      let statsObj: Record<string, number> = {};
-      try { statsObj = JSON.parse(String(playerStat.total_stats_json || '{}')); } catch { /* skip */ }
+      const statsObj = (playerStat.total_stats_json ?? {}) as Record<string, number>;
 
       const cols = 3;
       const colWidth = width / cols;
@@ -324,10 +259,7 @@ export class StatImageGenerator {
 
       const participantId = String(playerStat.participant_id || crypto.randomUUID());
       const filename = `${participantId}.png`;
-      const imagePath = path.join(outputDir, filename);
-      const imageUrl = `/uploads/stats/${matchId}/${filename}`;
-      fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
-      return imageUrl;
+      return await this.saveImage(matchId, filename, canvas.toBuffer('image/png'));
     } catch {
       return null;
     }
