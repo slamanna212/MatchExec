@@ -21,7 +21,7 @@
     "dev:logs": "pnpm exec pm2 logs",
     "typecheck": "pnpm exec tsc --noEmit --project tsconfig.json",
     "test": "vitest run",
-    "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:postgres@127.0.0.1:55432/postgres} vitest run tests/integration/server /pg-",
+    "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:postgres@127.0.0.1:55432/postgres} vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",

@@ -12,7 +12,6 @@ import {
   ActionRowBuilder,
   ButtonStyle
 } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import {
@@ -42,7 +41,6 @@ import { getMapNotes, getMatch, listMatchGameStatuses } from '../../../src/lib/m
 export class AnnouncementHandler {
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null
   ) {}
 
@@ -160,10 +158,8 @@ export class AnnouncementHandler {
     try {
       // Check if this is a tournament match
       let isTournamentMatch = false;
-      if (this.db) {
-        const matchData = await getMatch(pgDb, eventData.id);
-        isTournamentMatch = !!matchData?.tournament_id;
-      }
+      const matchData = await getMatch(pgDb, eventData.id);
+      isTournamentMatch = !!matchData?.tournament_id;
 
       const { embed, attachment } = await this.createEventEmbedWithAttachment(
         eventData.name,
@@ -221,7 +217,7 @@ export class AnnouncementHandler {
 
       // Get map notes if matchId is provided
       const mapNotes: Record<string, string> = {};
-      if (matchId && this.db) {
+      if (matchId) {
         try {
           Object.assign(mapNotes, await getMapNotes(pgDb, matchId));
         } catch (error) {
@@ -308,20 +304,18 @@ export class AnnouncementHandler {
     let gameName = gameId;
     let gameColor = type === 'competitive' ? 0xff6b35 : 0x4caf50;
 
-    if (this.db) {
-      try {
-        const gameData = await getGameDisplay(pgDb, gameId);
+    try {
+      const gameData = await getGameDisplay(pgDb, gameId);
 
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            const colorHex = gameData.color.replace('#', '');
-            gameColor = parseInt(colorHex, 16);
-          }
+      if (gameData) {
+        gameName = gameData.name;
+        if (gameData.color) {
+          const colorHex = gameData.color.replace('#', '');
+          gameColor = parseInt(colorHex, 16);
         }
-      } catch (error) {
-        logger.error('Error fetching game data:', error);
       }
+    } catch (error) {
+      logger.error('Error fetching game data:', error);
     }
 
     return { gameName, gameColor };
@@ -365,9 +359,6 @@ export class AnnouncementHandler {
   }
 
   private async buildMapDisplay(maps: string[], gameId: string): Promise<string> {
-    if (!this.db) {
-      return `${maps.length} map${maps.length > 1 ? 's' : ''} selected - See thread for details`;
-    }
 
     try {
       const mapNames: string[] = [];
@@ -582,7 +573,6 @@ export class AnnouncementHandler {
   }
 
   private async createMapEmbed(gameId: string, mapIdentifier: string, mapNumber?: number, mapNote?: string): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder } | null> {
-    if (!this.db) return null;
 
     try {
       const baseMapId = cleanMapId(mapIdentifier);
@@ -715,7 +705,7 @@ export class AnnouncementHandler {
    * Fetch game data for reminder embed
    */
   private async fetchReminderGameData(gameId: string, gameName?: string): Promise<{ gameName: string; gameColor: number }> {
-    if (!this.db || gameName) {
+    if (gameName) {
       return {
         gameName: gameName || gameId,
         gameColor: 0x3498db
@@ -761,7 +751,6 @@ export class AnnouncementHandler {
    * Try to add original announcement link to reminder
    */
   private async addOriginalAnnouncementLink(embed: EmbedBuilder, matchId: string): Promise<void> {
-    if (!this.db) return;
 
     try {
       const originalMessage = await getAnnouncementMessage(pgDb, matchId);
@@ -950,14 +939,6 @@ export class AnnouncementHandler {
   }
 
   private async fetchMatchStartDataSafe(eventData: any) {
-    if (!this.db) {
-      return {
-        gameName: eventData.game_id,
-        gameColor: 0xe74c3c,
-        blueTeamVoiceChannel: null,
-        redTeamVoiceChannel: null
-      };
-    }
 
     return await fetchMatchStartData(eventData.id, eventData.game_id);
   }
@@ -977,7 +958,7 @@ export class AnnouncementHandler {
   }
 
   private async addMapsFieldIfNeeded(embed: EmbedBuilder, eventData: any): Promise<void> {
-    const hasMaps = eventData.maps && eventData.maps.length > 0 && this.db;
+    const hasMaps = eventData.maps && eventData.maps.length > 0;
     if (!hasMaps) return;
 
     const mapList = await buildMapListField(eventData.maps, eventData.game_id);
@@ -985,7 +966,6 @@ export class AnnouncementHandler {
   }
 
   private async addTeamFieldsIfNeeded(embed: EmbedBuilder, eventData: any, matchData: any): Promise<void> {
-    if (!this.db) return;
 
     // Try new match_teams-based rendering first
     const teamRows = await fetchMatchTeamRows(eventData.id);
@@ -1104,7 +1084,6 @@ export class AnnouncementHandler {
   }
 
   private async addMatchLinkIfNeeded(embed: EmbedBuilder, eventData: any): Promise<void> {
-    if (!this.db) return;
 
     const matchLink = await getMatchLink(eventData.id, this.client);
     if (!matchLink) return;
@@ -1237,10 +1216,6 @@ export class AnnouncementHandler {
     let totalMaps = 0;
     let team1Name: string | undefined;
     let team2Name: string | undefined;
-
-    if (!this.db) {
-      return { gameName, gameColor, mapName, mapImageUrl, mapNote, totalMaps };
-    }
 
     try {
       // Get game data and team names
@@ -1465,26 +1440,24 @@ export class AnnouncementHandler {
     let team1Name: string | undefined;
     let team2Name: string | undefined;
 
-    if (this.db) {
-      try {
-        const gameData = await getGameDisplay(pgDb, gameId);
+    try {
+      const gameData = await getGameDisplay(pgDb, gameId);
 
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
-          }
+      if (gameData) {
+        gameName = gameData.name;
+        if (gameData.color) {
+          gameColor = parseInt(gameData.color.replace('#', ''), 16);
         }
-
-        const matchData = await getMatch(pgDb, matchId);
-
-        if (matchData) {
-          team1Name = matchData.team1_name ?? undefined;
-          team2Name = matchData.team2_name ?? undefined;
-        }
-      } catch (error) {
-        logger.error('Error fetching game data for match winner notification:', error);
       }
+
+      const matchData = await getMatch(pgDb, matchId);
+
+      if (matchData) {
+        team1Name = matchData.team1_name ?? undefined;
+        team2Name = matchData.team2_name ?? undefined;
+      }
+    } catch (error) {
+      logger.error('Error fetching game data for match winner notification:', error);
     }
 
     return { gameName, gameColor, team1Name, team2Name };
@@ -1530,7 +1503,6 @@ export class AnnouncementHandler {
    * Get link to original match announcement
    */
   private async getOriginalMatchLink(matchId: string): Promise<string | null> {
-    if (!this.db) return null;
 
     try {
       const originalMessage = await getAnnouncementMessage(pgDb, matchId);
@@ -1702,19 +1674,17 @@ export class AnnouncementHandler {
     let gameColor = 0xffd700; // Gold color for tournament winners
     let attachment: AttachmentBuilder | undefined;
 
-    if (this.db) {
-      try {
-        const gameData = await getGameDisplay(pgDb, tournamentData.gameId);
+    try {
+      const gameData = await getGameDisplay(pgDb, tournamentData.gameId);
 
-        if (gameData) {
-          gameName = gameData.name;
-          if (gameData.color) {
-            gameColor = parseInt(gameData.color.replace('#', ''), 16);
-          }
+      if (gameData) {
+        gameName = gameData.name;
+        if (gameData.color) {
+          gameColor = parseInt(gameData.color.replace('#', ''), 16);
         }
-      } catch (error) {
-        logger.error('Error fetching game data for tournament winner:', error);
       }
+    } catch (error) {
+      logger.error('Error fetching game data for tournament winner:', error);
     }
 
     const embed = new EmbedBuilder()

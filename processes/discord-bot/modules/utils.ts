@@ -1,5 +1,4 @@
 import * as path from 'path';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { db as pgDb } from '../../../lib/db';
@@ -22,8 +21,6 @@ export function safePublicPath(imageUrl: string): string | null {
 }
 
 export class Utils {
-  constructor(private db: Database) {}
-
   async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates'): Promise<DiscordChannel[]> {
     try {
       const channels = await listChannelsForNotification(pgDb, notificationType);

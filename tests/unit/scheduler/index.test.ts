@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getTestDb } from '../../utils/test-db';
-import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
-
-vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq, count } from 'drizzle-orm';
+import { setAppSetting } from '../../../src/lib/settings';
+import { updateSchedulerCrons } from '../../../src/lib/settings';
+import { discordHealthAlertQueue, discordMatchStartQueue, healthAlertsSent, matches } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -13,10 +14,6 @@ vi.mock('../../../src/lib/logger/server', () => ({
     error: vi.fn(),
     critical: vi.fn(),
   },
-}));
-
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn(),
 }));
 
 vi.mock('node-cron', () => ({
@@ -45,24 +42,21 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
   logFeedEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+setupPgTestFile();
+
 describe('MatchExecScheduler', () => {
   let scheduler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
   beforeEach(async () => {
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
     vi.clearAllMocks();
-    resetSettingsStore();
 
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
-    // Inject test DB directly to bypass start()
-    (scheduler as any)._db = db;
   });
 
   // ─── checkMatchStartTimes ─────────────────────────────────────────────────
@@ -72,12 +66,12 @@ describe('MatchExecScheduler', () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
       const match = await createMatch(game.id, mode.id, {
         status: 'assign',
-        start_date: pastDate.toISOString(),
+        start_date: pastDate,
       });
 
       await (scheduler as any).checkMatchStartTimes();
 
-      const updated = await db.get(`SELECT status FROM matches WHERE id = ?`, [match.id]);
+      const updated = (await getPgTestDb().select().from(matches).where(eq(matches.id, match.id)))[0];
       expect(updated.status).toBe('battle');
     });
 
@@ -85,12 +79,12 @@ describe('MatchExecScheduler', () => {
       const futureDate = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
       const match = await createMatch(game.id, mode.id, {
         status: 'assign',
-        start_date: futureDate.toISOString(),
+        start_date: futureDate,
       });
 
       await (scheduler as any).checkMatchStartTimes();
 
-      const unchanged = await db.get(`SELECT status FROM matches WHERE id = ?`, [match.id]);
+      const unchanged = (await getPgTestDb().select().from(matches).where(eq(matches.id, match.id)))[0];
       expect(unchanged.status).toBe('assign');
     });
 
@@ -98,12 +92,12 @@ describe('MatchExecScheduler', () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
         status: 'battle',
-        start_date: pastDate.toISOString(),
+        start_date: pastDate,
       });
 
       await (scheduler as any).checkMatchStartTimes();
 
-      const unchanged = await db.get(`SELECT status FROM matches WHERE id = ?`, [match.id]);
+      const unchanged = (await getPgTestDb().select().from(matches).where(eq(matches.id, match.id)))[0];
       expect(unchanged.status).toBe('battle');
     });
 
@@ -111,15 +105,12 @@ describe('MatchExecScheduler', () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
         status: 'assign',
-        start_date: pastDate.toISOString(),
+        start_date: pastDate,
       });
 
       await (scheduler as any).checkMatchStartTimes();
 
-      const notification = await db.get(
-        `SELECT * FROM discord_match_start_queue WHERE match_id = ?`,
-        [match.id]
-      );
+      const [notification] = await getPgTestDb().select().from(discordMatchStartQueue).where(eq(discordMatchStartQueue.match_id, match.id));
       expect(notification).toBeDefined();
       expect(notification.status).toBe('pending');
     });
@@ -129,31 +120,23 @@ describe('MatchExecScheduler', () => {
 
   describe('handleMatchCompletion', () => {
     it('auto-completes matches that have been in battle for over 24 hours', async () => {
-      // Use direct INSERT with explicit updated_at instead of createMatch+UPDATE,
-      // because a AFTER UPDATE trigger on matches always overwrites updated_at to CURRENT_TIMESTAMP.
-      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-      const startDate = new Date().toISOString();
-      const matchId = `match_old_battle_${Date.now()}`;
-      await db.run(
-        `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, player_notifications, created_at, updated_at)
-         VALUES (?, ?, ?, 'Old Battle Match', ?, ?, 'battle', 'competitive', 3, 1, ?, ?)`,
-        [matchId, game.id, mode.id, startDate, startDate, startDate, oldUpdatedAt]
-      );
+      // Insert with an explicit old updated_at (a later UPDATE would bump it).
+      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const matchId = (await createMatch(game.id, mode.id, { status: 'battle', created_at: oldUpdatedAt, updated_at: oldUpdatedAt })).id;
 
       await (scheduler as any).handleMatchCompletion();
 
-      const updated = await db.get(`SELECT status FROM matches WHERE id = ?`, [matchId]);
+      const updated = (await getPgTestDb().select().from(matches).where(eq(matches.id, matchId)))[0];
       expect(updated.status).toBe('complete');
     });
 
     it('does not auto-complete matches that have been in battle for less than 24 hours', async () => {
-      // createMatch uses INSERT with updated_at = CURRENT_TIMESTAMP (now) — no trigger fires on INSERT,
-      // so the match is treated as recently updated and must NOT be auto-completed.
+      // createMatch inserts with updated_at = now, so the match is treated as recently updated and must NOT be auto-completed.
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
 
       await (scheduler as any).handleMatchCompletion();
 
-      const unchanged = await db.get(`SELECT status FROM matches WHERE id = ?`, [match.id]);
+      const unchanged = (await getPgTestDb().select().from(matches).where(eq(matches.id, match.id)))[0];
       expect(unchanged.status).toBe('battle');
     });
   });
@@ -174,7 +157,7 @@ describe('MatchExecScheduler', () => {
     });
 
     it('reads cron settings from the database when available', async () => {
-      settingsStore.scheduler = { id: 1, match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' };
+      await updateSchedulerCrons({ match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
 
       const cronModule = await import('node-cron');
       const mockSchedule = cronModule.schedule as ReturnType<typeof vi.fn>;
@@ -194,65 +177,57 @@ describe('MatchExecScheduler', () => {
     it('returns early when no heartbeat record exists in DB', async () => {
       await (scheduler as any).checkDiscordBotHeartbeat();
 
-      const row = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      const row = (await getPgTestDb().select().from(discordHealthAlertQueue).limit(1))[0];
       expect(row).toBeUndefined();
     });
 
     it('returns early when heartbeat is recent (< 10 minutes old)', async () => {
       const recentHeartbeat = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago
-      settingsStore.app.set('discord_bot_last_heartbeat', recentHeartbeat);
+      await setAppSetting('discord_bot_last_heartbeat', recentHeartbeat);
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
-      const row = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      const row = (await getPgTestDb().select().from(discordHealthAlertQueue).limit(1))[0];
       expect(row).toBeUndefined();
     });
 
     it('queues a health alert and updates rate-limit when heartbeat is stale', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString(); // 15 min ago
-      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
+      await setAppSetting('discord_bot_last_heartbeat', staleHeartbeat);
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
-      const alertRow = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      const alertRow = (await getPgTestDb().select().from(discordHealthAlertQueue).limit(1))[0];
       expect(alertRow).toBeDefined();
       expect(alertRow.id).toMatch(/^health_alert_/);
       expect(alertRow.severity).toBe('critical');
       expect(alertRow.status).toBe('pending');
 
-      const rateLimitRow = await db.get(
-        `SELECT * FROM health_alerts_sent WHERE alert_type = 'discord_bot_heartbeat_missing'`
-      );
+      const [rateLimitRow] = await getPgTestDb().select().from(healthAlertsSent).where(eq(healthAlertsSent.alert_type, 'discord_bot_heartbeat_missing'));
       expect(rateLimitRow).toBeDefined();
     });
 
     it('skips when within rate-limit window (< 1 hour since last alert)', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
-      const recentAlert = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 min ago
-      await db.run(
-        `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,
-        [recentAlert]
-      );
+      await setAppSetting('discord_bot_last_heartbeat', staleHeartbeat);
+      const recentAlert = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+      await getPgTestDb().insert(healthAlertsSent).values({ alert_type: 'discord_bot_heartbeat_missing', last_sent_at: recentAlert });
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
-      const count = await db.get(`SELECT COUNT(*) as cnt FROM discord_health_alert_queue`);
-      expect(count.cnt).toBe(0);
+      const [{ n }] = await getPgTestDb().select({ n: count() }).from(discordHealthAlertQueue);
+      expect(n).toBe(0);
     });
 
     it('queues a new alert when rate-limit window has expired (> 1 hour since last alert)', async () => {
       const staleHeartbeat = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      settingsStore.app.set('discord_bot_last_heartbeat', staleHeartbeat);
-      const expiredAlert = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
-      await db.run(
-        `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('discord_bot_heartbeat_missing', ?)`,
-        [expiredAlert]
-      );
+      await setAppSetting('discord_bot_last_heartbeat', staleHeartbeat);
+      const expiredAlert = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
+      await getPgTestDb().insert(healthAlertsSent).values({ alert_type: 'discord_bot_heartbeat_missing', last_sent_at: expiredAlert });
 
       await (scheduler as any).checkDiscordBotHeartbeat();
 
-      const alertRow = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
+      const alertRow = (await getPgTestDb().select().from(discordHealthAlertQueue).limit(1))[0];
       expect(alertRow).toBeDefined();
       expect(alertRow.severity).toBe('critical');
     });

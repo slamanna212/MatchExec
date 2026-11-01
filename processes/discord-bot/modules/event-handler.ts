@@ -8,7 +8,6 @@ import {
   GuildScheduledEventPrivacyLevel,
   GuildScheduledEventEntityType
 } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { safePublicPath } from './utils';
@@ -18,7 +17,6 @@ import { getGameName } from '../../../src/lib/games';
 export class EventHandler {
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null
   ) {}
 
@@ -26,7 +24,6 @@ export class EventHandler {
    * Fetch game name from database
    */
   private async fetchGameName(gameId: string): Promise<string> {
-    if (!this.db) return gameId;
 
     try {
       return (await getGameName(pgDb, gameId)) ?? gameId;

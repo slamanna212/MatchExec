@@ -15,19 +15,21 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
 }));
 
 import { HealthMonitor } from '../../../processes/discord-bot/modules/health-monitor';
-import { getTestDb } from '../../utils/test-db';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { healthAlertsSent } from '../../../lib/db/schema';
+
+setupPgTestFile();
 
 describe('HealthMonitor', () => {
-  let db: any;
   let mockAnnouncementHandler: any;
   let monitor: HealthMonitor;
 
   beforeEach(async () => {
-    db = getTestDb();
     mockAnnouncementHandler = {
       postHealthAlert: vi.fn().mockResolvedValue(undefined),
     };
-    monitor = new HealthMonitor(db as any, mockAnnouncementHandler as any);
+    monitor = new HealthMonitor(mockAnnouncementHandler as any);
   });
 
   afterEach(() => {
@@ -66,10 +68,7 @@ describe('HealthMonitor', () => {
 
     it('skips alert when rate-limited (sent within 1 hour)', async () => {
       // Insert a recent rate limit entry
-      await db.run(`
-        INSERT INTO health_alerts_sent (alert_type, last_sent_at)
-        VALUES ('rate_limited_alert', CURRENT_TIMESTAMP)
-      `);
+      await getPgTestDb().insert(healthAlertsSent).values({ alert_type: 'rate_limited_alert', last_sent_at: new Date() });
 
       await monitor.reportHealthIssue({
         type: 'rate_limited_alert',
@@ -83,11 +82,8 @@ describe('HealthMonitor', () => {
 
     it('sends alert when rate limit has expired (> 1 hour ago)', async () => {
       // Insert an old rate limit entry (2 hours ago) using ISO timestamp so JS can parse it
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      await db.run(
-        `INSERT INTO health_alerts_sent (alert_type, last_sent_at) VALUES ('old_alert', ?)`,
-        [twoHoursAgo]
-      );
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      await getPgTestDb().insert(healthAlertsSent).values({ alert_type: 'old_alert', last_sent_at: twoHoursAgo });
 
       await monitor.reportHealthIssue({
         type: 'old_alert',
@@ -107,10 +103,7 @@ describe('HealthMonitor', () => {
         description: 'Test',
       });
 
-      const entry = await db.get(
-        'SELECT * FROM health_alerts_sent WHERE alert_type = ?',
-        ['test_rate_update']
-      );
+      const [entry] = await getPgTestDb().select().from(healthAlertsSent).where(eq(healthAlertsSent.alert_type, 'test_rate_update'));
       expect(entry).toBeDefined();
       expect(entry.alert_type).toBe('test_rate_update');
     });

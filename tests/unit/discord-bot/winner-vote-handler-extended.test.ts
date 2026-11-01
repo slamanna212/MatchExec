@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch, createMatchParticipant } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq, inArray } from 'drizzle-orm';
+import { discordWinnerVoteMessages, matchParticipants, matchTeams } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch, createMatchGame, createMatchParticipant } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -26,11 +28,11 @@ vi.mock('@/lib/matches/results', () => ({
  
 let WinnerVoteHandler: any;
 
+setupPgTestFile();
+
 describe('WinnerVoteHandler — Extended', () => {
    
   let handler: any;
-   
-  let db: any;
    
   let game: any;
    
@@ -43,7 +45,6 @@ describe('WinnerVoteHandler — Extended', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -55,23 +56,17 @@ describe('WinnerVoteHandler — Extended', () => {
   });
 
   async function insertVote(id: string, matchId: string, matchGameId: string, userId: string, votedFor: string | null) {
-    await db.run(
-      `INSERT INTO discord_winner_vote_messages
-         (id, match_id, match_game_id, discord_user_id, discord_message_id, voted_for)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, matchId, matchGameId, userId, `msg-${id}`, votedFor]
-    );
+    await createMatchGame(matchId, { id: matchGameId });
+    await getPgTestDb().insert(discordWinnerVoteMessages).values({ id, match_id: matchId, match_game_id: matchGameId, discord_user_id: userId, discord_message_id: `msg-${id}`, voted_for: votedFor as 'blue' | 'red' | null });
   }
 
   describe('sendWinnerVotePrompts — extended', () => {
     it('sends to red team commander and records team_side=red', async () => {
       const match = await createMatch(game.id, mode.id);
       const p = await createMatchParticipant(match.id, 'disc-red-cmd', 'RedCommander');
-      await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-red-x', ?, 'Red', 1, 0)`, [match.id]);
-      await db.run(
-        `UPDATE match_participants SET receives_map_codes=1, team_id='t-red-x' WHERE id=?`,
-        [p.id]
-      );
+      await createMatchGame(match.id, { id: 'gid-red' });
+      await getPgTestDb().insert(matchTeams).values({ id: 't-red-x', match_id: match.id, team_name: 'Red', team_order: 1, is_reserve: false });
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true, team_id: 't-red-x' }).where(eq(matchParticipants.id, p.id));
 
       const mockMsg = { id: 'msg-red-cmd', react: vi.fn().mockResolvedValue(undefined) };
       const mockUser = { send: vi.fn().mockResolvedValue(mockMsg) };
@@ -80,10 +75,7 @@ describe('WinnerVoteHandler — Extended', () => {
       const result = await handler.sendWinnerVotePrompts(match.id, 'gid-red', 'Ilios');
 
       expect(result).toBe(true);
-      const row = await db.get(
-        `SELECT team_side FROM discord_winner_vote_messages WHERE discord_message_id=?`,
-        ['msg-red-cmd']
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.discord_message_id, 'msg-red-cmd'));
       expect(row?.team_side).toBe('red');
     });
 
@@ -91,11 +83,9 @@ describe('WinnerVoteHandler — Extended', () => {
       const match = await createMatch(game.id, mode.id);
       const p1 = await createMatchParticipant(match.id, 'disc-fail-cmd', 'FailCmd');
       const p2 = await createMatchParticipant(match.id, 'disc-ok-cmd', 'OkCmd');
-      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
-      await db.run(
-        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id IN (?,?)`,
-        [p1.id, p2.id]
-      );
+      await createMatchGame(match.id, { id: 'gid-mixed' });
+      await getPgTestDb().insert(matchTeams).values({ id: 't-blue-x', match_id: match.id, team_name: 'Blue', team_order: 0, is_reserve: false });
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true, team_id: 't-blue-x' }).where(inArray(matchParticipants.id, [p1.id, p2.id]));
 
       const failUser = { send: vi.fn().mockRejectedValue(new Error('Cannot DM')) };
       const okMsg = { id: 'msg-ok-cmd', react: vi.fn().mockResolvedValue(undefined) };
@@ -111,11 +101,9 @@ describe('WinnerVoteHandler — Extended', () => {
     it('returns false when all DMs fail', async () => {
       const match = await createMatch(game.id, mode.id);
       const p = await createMatchParticipant(match.id, 'disc-allfail', 'AllFail');
-      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
-      await db.run(
-        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id=?`,
-        [p.id]
-      );
+      await createMatchGame(match.id, { id: 'gid-allfail' });
+      await getPgTestDb().insert(matchTeams).values({ id: 't-blue-x', match_id: match.id, team_name: 'Blue', team_order: 0, is_reserve: false });
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true, team_id: 't-blue-x' }).where(eq(matchParticipants.id, p.id));
 
       const failUser = { send: vi.fn().mockRejectedValue(new Error('Cannot DM')) };
       mockDiscordClient.users.fetch = vi.fn().mockResolvedValue(failUser);
@@ -135,9 +123,7 @@ describe('WinnerVoteHandler — Extended', () => {
         { id: 'user-rr' }
       );
 
-      const row = await db.get(
-        `SELECT voted_for FROM discord_winner_vote_messages WHERE id='vr-ext1'`
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.id, 'vr-ext1'));
       expect(row?.voted_for).toBe('red');
     });
 
@@ -151,9 +137,7 @@ describe('WinnerVoteHandler — Extended', () => {
         { id: 'user-not-registered' }
       );
 
-      const row = await db.get(
-        `SELECT voted_for FROM discord_winner_vote_messages WHERE id='vr-ext2'`
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.id, 'vr-ext2'));
       // vote should still be null (unregistered user ignored)
       expect(row?.voted_for).toBeNull();
     });
@@ -167,9 +151,7 @@ describe('WinnerVoteHandler — Extended', () => {
         { id: 'user-voted' }
       );
 
-      const row = await db.get(
-        `SELECT voted_for FROM discord_winner_vote_messages WHERE id='vr-ext3'`
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.id, 'vr-ext3'));
       expect(row?.voted_for).toBe('blue');
     });
   });

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 import { db as pgDb } from '../../../lib/db';
-import { discordAnnouncementQueue } from '../../../lib/db/schema';
+import { and, eq } from 'drizzle-orm';
+import { discordAnnouncementQueue, matches } from '../../../lib/db/schema';
+
+const queuedFor = (matchId?: string) => pgDb.select().from(discordAnnouncementQueue)
+  .where(matchId ? and(eq(discordAnnouncementQueue.match_id, matchId), eq(discordAnnouncementQueue.announcement_type, 'timed')) : eq(discordAnnouncementQueue.announcement_type, 'timed'));
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -14,9 +18,6 @@ vi.mock('../../../src/lib/logger/server', () => ({
   },
 }));
 
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn(),
-}));
 
 vi.mock('node-cron', () => ({
   schedule: vi.fn(() => ({ stop: vi.fn() })),
@@ -40,14 +41,14 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
   logFeedEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+setupPgTestFile();
+
 describe('MatchExecScheduler — timed announcements extended', () => {
   let scheduler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
   beforeEach(async () => {
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -55,7 +56,6 @@ describe('MatchExecScheduler — timed announcements extended', () => {
 
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
-    (scheduler as any).db = db;
   });
 
   describe('parseAnnouncementsField', () => {
@@ -126,18 +126,14 @@ describe('MatchExecScheduler — timed announcements extended', () => {
     it('re-queues an announcement when the existing entry has failed status', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
       const announcementObj = { id: 'requeue-2h', value: 2, unit: 'hours' };
 
       // Pre-insert a FAILED entry — this should NOT block re-queuing
-      await db.run(
-        `INSERT INTO discord_announcement_queue (id, match_id, status, announcement_type, announcement_data)
-         VALUES ('failed-entry', ?, 'failed', 'timed', ?)`,
-        [match.id, JSON.stringify(announcementObj)]
-      );
+      await pgDb.insert(discordAnnouncementQueue).values({ id: 'failed-entry', match_id: match.id, status: 'failed', announcement_type: 'timed', announcement_data: announcementObj });
 
       await (scheduler as any).processMatchAnnouncements({
         id: match.id,
@@ -146,10 +142,7 @@ describe('MatchExecScheduler — timed announcements extended', () => {
         announcements: JSON.stringify([announcementObj]),
       });
 
-      const rows = await db.all(
-        `SELECT id, status FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const rows = await queuedFor(match.id);
 
       // Should have both the failed entry and the new pending entry
       expect(rows).toHaveLength(2);
@@ -163,7 +156,7 @@ describe('MatchExecScheduler — timed announcements extended', () => {
     it('queues multiple distinct announcements for the same match', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -179,10 +172,7 @@ describe('MatchExecScheduler — timed announcements extended', () => {
         announcements: JSON.stringify(announcements),
       });
 
-      const rows = await db.all(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const rows = await queuedFor(match.id);
 
       expect(rows).toHaveLength(2);
     });
@@ -190,7 +180,7 @@ describe('MatchExecScheduler — timed announcements extended', () => {
     it('queues only the non-duplicate when one of two announcements already exists', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -220,38 +210,28 @@ describe('MatchExecScheduler — timed announcements extended', () => {
     it('does not process matches with battle status', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'battle',
       });
-      await db.run(
-        `UPDATE matches SET announcements = ? WHERE id = ?`,
-        [JSON.stringify([{ id: 'battle-ann', value: 2, unit: 'hours' }]), match.id]
-      );
+      await pgDb.update(matches).set({ announcements: [{ id: 'battle-ann', value: 2, unit: 'hours' }] }).where(eq(matches.id, match.id));
 
       await (scheduler as any).handleTimedAnnouncements();
 
-      const rows = await db.all(
-        `SELECT id FROM discord_announcement_queue WHERE announcement_type = 'timed'`
-      );
+      const rows = await queuedFor();
       expect(rows).toHaveLength(0);
     });
 
     it('does not process matches with complete status', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'complete',
       });
-      await db.run(
-        `UPDATE matches SET announcements = ? WHERE id = ?`,
-        [JSON.stringify([{ id: 'complete-ann', value: 2, unit: 'hours' }]), match.id]
-      );
+      await pgDb.update(matches).set({ announcements: [{ id: 'complete-ann', value: 2, unit: 'hours' }] }).where(eq(matches.id, match.id));
 
       await (scheduler as any).handleTimedAnnouncements();
 
-      const rows = await db.all(
-        `SELECT id FROM discord_announcement_queue WHERE announcement_type = 'timed'`
-      );
+      const rows = await queuedFor();
       expect(rows).toHaveLength(0);
     });
 
@@ -260,20 +240,15 @@ describe('MatchExecScheduler — timed announcements extended', () => {
 
       for (const status of ['created', 'gather', 'assign'] as const) {
         const m = await createMatch(game.id, mode.id, {
-          start_date: startDate.toISOString(),
+          start_date: startDate,
           status,
         });
-        await db.run(
-          `UPDATE matches SET announcements = ? WHERE id = ?`,
-          [JSON.stringify([{ id: `ann-${status}`, value: 2, unit: 'hours' }]), m.id]
-        );
+        await pgDb.update(matches).set({ announcements: [{ id: `ann-${status}`, value: 2, unit: 'hours' }] }).where(eq(matches.id, m.id));
       }
 
       await (scheduler as any).handleTimedAnnouncements();
 
-      const rows = await db.all(
-        `SELECT id FROM discord_announcement_queue WHERE announcement_type = 'timed'`
-      );
+      const rows = await queuedFor();
       expect(rows).toHaveLength(3);
     });
   });

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 import { db as pgDb } from '../../../lib/db';
+import { and, eq } from 'drizzle-orm';
 import { discordAnnouncementQueue } from '../../../lib/db/schema';
+
+const queuedFor = (matchId?: string) => pgDb.select().from(discordAnnouncementQueue)
+  .where(matchId ? and(eq(discordAnnouncementQueue.match_id, matchId), eq(discordAnnouncementQueue.announcement_type, 'timed')) : eq(discordAnnouncementQueue.announcement_type, 'timed'));
 
 // Mock logger to prevent database access during import
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -15,10 +19,6 @@ vi.mock('../../../src/lib/logger/server', () => ({
   },
 }));
 
-// Mock waitForDatabaseReady so the scheduler doesn't try to connect on import
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn(),
-}));
 
 // Mock node-cron so scheduled tasks don't actually start
 vi.mock('node-cron', () => ({
@@ -33,14 +33,14 @@ vi.mock('../../../processes/scheduler/jobs/update-avatars', () => ({
   })),
 }));
 
+setupPgTestFile();
+
 describe('MatchExecScheduler — timed announcements', () => {
   let scheduler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
   beforeEach(async () => {
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -48,8 +48,6 @@ describe('MatchExecScheduler — timed announcements', () => {
     // Import scheduler after mocks are set up
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
-    // Inject the test DB directly so we skip start()
-    (scheduler as any).db = db;
   });
 
   describe('processMatchAnnouncements', () => {
@@ -57,7 +55,7 @@ describe('MatchExecScheduler — timed announcements', () => {
       // Match starts in 3 hours; "2 hours before" announcement fires in 1 hour (within look-ahead)
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -71,11 +69,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         announcements,
       });
 
-      const queued = await db.get(
-        `SELECT id, match_id, announcement_type, scheduled_for FROM discord_announcement_queue
-         WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const queued = (await queuedFor(match.id))[0];
 
       expect(queued).not.toBeUndefined();
       expect(queued.announcement_type).toBe('timed');
@@ -86,7 +80,7 @@ describe('MatchExecScheduler — timed announcements', () => {
       // Match starts in 10 minutes; "15-minute before" announcement fired 5 minutes ago
       const startDate = new Date(Date.now() + 10 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'gather',
       });
 
@@ -99,10 +93,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         announcements,
       });
 
-      const queued = await db.get(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const queued = (await queuedFor(match.id))[0];
 
       expect(queued).not.toBeUndefined();
     });
@@ -111,7 +102,7 @@ describe('MatchExecScheduler — timed announcements', () => {
       // Match starts in 10 hours; "3-hour before" announcement fires in 7 hours — beyond 2-hour look-ahead
       const startDate = new Date(Date.now() + 10 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -124,10 +115,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         announcements,
       });
 
-      const queued = await db.get(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const queued = (await queuedFor(match.id))[0];
 
       expect(queued).toBeUndefined();
     });
@@ -136,7 +124,7 @@ describe('MatchExecScheduler — timed announcements', () => {
       // Match starts in 5 minutes; "1-hour before" announcement was 55 minutes ago — beyond catch-up window
       const startDate = new Date(Date.now() + 5 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'gather',
       });
 
@@ -149,10 +137,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         announcements,
       });
 
-      const queued = await db.get(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const queued = (await queuedFor(match.id))[0];
 
       expect(queued).toBeUndefined();
     });
@@ -160,7 +145,7 @@ describe('MatchExecScheduler — timed announcements', () => {
     it('should not re-queue an already queued announcement (deduplication)', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -176,10 +161,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         announcements: JSON.stringify([announcementObj]),
       });
 
-      const rows = await db.all(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const rows = await queuedFor(match.id);
 
       // Should still be exactly one entry
       expect(rows).toHaveLength(1);
@@ -189,7 +171,7 @@ describe('MatchExecScheduler — timed announcements', () => {
     it('should handle invalid JSON in announcements field gracefully', async () => {
       const startDate = new Date(Date.now() + 3 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
         status: 'created',
       });
 
@@ -202,10 +184,7 @@ describe('MatchExecScheduler — timed announcements', () => {
         })
       ).resolves.not.toThrow();
 
-      const queued = await db.get(
-        `SELECT id FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const queued = (await queuedFor(match.id))[0];
       expect(queued).toBeUndefined();
     });
   });
@@ -214,7 +193,7 @@ describe('MatchExecScheduler — timed announcements', () => {
     it('should store scheduled_for timestamp in the queue entry', async () => {
       const startDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
-        start_date: startDate.toISOString(),
+        start_date: startDate,
       });
 
       const announcement = { id: 'test-1h', value: 1, unit: 'hours' };

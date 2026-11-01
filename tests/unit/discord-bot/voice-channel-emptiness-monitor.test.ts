@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { createMatch, seedBasicTestData } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { autoVoiceChannels } from '../../../lib/db/schema';
+import { createMatch, seedBasicTestData } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -21,8 +23,9 @@ type MockVoiceChannel = {
   delete: ReturnType<typeof vi.fn>;
 };
 
+setupPgTestFile();
+
 describe('VoiceChannelEmptinessMonitor', () => {
-  let db: any;
   let monitor: VoiceChannelEmptinessMonitor;
   let channelMap: Map<string, MockVoiceChannel>;
   let fetchErrorIds: Set<string>;
@@ -41,16 +44,11 @@ describe('VoiceChannelEmptinessMonitor', () => {
   };
 
   const insertTrackedChannel = async (matchId: string, channelId: string, teamName: string) => {
-    await db.run(
-      `INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name)
-       VALUES (?, ?, ?, ?)`,
-      [`avc_${matchId}_${channelId}`, matchId, channelId, teamName]
-    );
+    await getPgTestDb().insert(autoVoiceChannels).values({ id: `avc_${matchId}_${channelId}`, match_id: matchId, channel_id: channelId, team_name: teamName });
   };
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
 
     channelMap = new Map<string, MockVoiceChannel>();
     fetchErrorIds = new Set<string>();
@@ -81,7 +79,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
 
     await monitor.runCheck();
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(2);
     expect(blue.delete).not.toHaveBeenCalled();
     expect(red.delete).not.toHaveBeenCalled();
@@ -100,7 +98,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     await monitor.runCheck();
     await monitor.runCheck();
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(0);
     expect(blue.delete).toHaveBeenCalledTimes(1);
     expect(red.delete).toHaveBeenCalledTimes(1);
@@ -124,7 +122,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     blue.members.size = 0;
     await monitor.runCheck(); // count = 1, should not delete yet
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(2);
     expect(blue.delete).not.toHaveBeenCalled();
     expect(red.delete).not.toHaveBeenCalled();
@@ -143,7 +141,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     await monitor.runCheck();
     await monitor.runCheck();
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(2);
     expect(blue.delete).not.toHaveBeenCalled();
     expect(red.delete).not.toHaveBeenCalled();
@@ -163,7 +161,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     await monitor.runCheck();
     await monitor.runCheck();
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(0);
     expect(existing.delete).toHaveBeenCalledTimes(1);
   });
@@ -177,7 +175,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
 
     await monitor.runCheck(); // count = 1
 
-    await db.run('DELETE FROM auto_voice_channels WHERE match_id = ?', [match.id]);
+    await getPgTestDb().delete(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     await monitor.runCheck(); // should clear stale counter state
 
     const secondChannel = createVoiceChannel('voice-prune-2', 0);
@@ -185,13 +183,13 @@ describe('VoiceChannelEmptinessMonitor', () => {
 
     await monitor.runCheck(); // should be treated as first empty cycle again
 
-    let rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    let rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(1);
     expect(secondChannel.delete).not.toHaveBeenCalled();
 
     await monitor.runCheck();
 
-    rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(0);
     expect(secondChannel.delete).toHaveBeenCalledTimes(1);
   });
@@ -207,7 +205,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     await monitor.runCheck();
     await monitor.runCheck();
 
-    const rows = await db.all(`SELECT channel_id FROM auto_voice_channels WHERE match_id = ?`, [match.id]);
+    const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
     expect(rows).toHaveLength(1);
     expect(channel.delete).not.toHaveBeenCalled();
   });

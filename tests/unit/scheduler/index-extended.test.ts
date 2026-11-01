@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getTestDb } from '../../utils/test-db';
-import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
 import { db as pgDb } from '../../../lib/db';
+import { matches } from '../../../lib/db/schema';
 import { discordReminderQueue } from '../../../lib/db/schema';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
-
-vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
+import { seedBasicTestData, createMatch, createDiscordSettings, createMatchGame } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -15,10 +14,6 @@ vi.mock('../../../src/lib/logger/server', () => ({
     error: vi.fn(),
     critical: vi.fn(),
   },
-}));
-
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn(),
 }));
 
 vi.mock('node-cron', () => ({
@@ -43,71 +38,49 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
   logFeedEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+setupPgTestFile();
+
 describe('MatchExecScheduler — extended', () => {
   let scheduler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
   beforeEach(async () => {
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
     vi.clearAllMocks();
-    resetSettingsStore();
 
     const { MatchExecScheduler } = await import('../../../processes/scheduler/index');
     scheduler = new MatchExecScheduler();
-    (scheduler as any)._db = db;
   });
 
   // ─── handleMatchCompletion — maps not scored ──────────────────────────────
 
   describe('handleMatchCompletion — unscored maps', () => {
     it('does not auto-complete a match with unscored game maps', async () => {
-      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-      const startDate = new Date().toISOString();
-      const matchId = `match_unscored_${Date.now()}`;
-      await db.run(
-        `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, player_notifications, created_at, updated_at)
-         VALUES (?, ?, ?, 'Unscored Match', ?, ?, 'battle', 'competitive', 3, 1, ?, ?)`,
-        [matchId, game.id, mode.id, startDate, startDate, startDate, oldUpdatedAt]
-      );
+      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const matchId = (await createMatch(game.id, mode.id, { name: 'Unscored Match', status: 'battle', created_at: oldUpdatedAt, updated_at: oldUpdatedAt })).id;
 
       // Add an unscored map game
-      await db.run(
-        `INSERT INTO match_games (id, match_id, map_id, round, status, created_at, updated_at)
-         VALUES ('mg-unscored', ?, 'some-map', 1, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [matchId]
-      );
+      await createMatchGame(matchId, { id: 'mg-unscored', map_id: 'some-map', round: 1, status: 'pending' });
 
       await (scheduler as any).handleMatchCompletion();
 
-      const row = await db.get(`SELECT status FROM matches WHERE id = ?`, [matchId]);
+      const [row] = await getPgTestDb().select().from(matches).where(eq(matches.id, matchId));
       expect(row.status).toBe('battle');
     });
 
     it('auto-completes a match in battle for 24+ hours when all maps are scored', async () => {
-      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-      const startDate = new Date().toISOString();
-      const matchId = `match_all_scored_${Date.now()}`;
-      await db.run(
-        `INSERT INTO matches (id, game_id, mode_id, name, start_date, start_time, status, match_format, rounds, player_notifications, created_at, updated_at)
-         VALUES (?, ?, ?, 'All Scored Match', ?, ?, 'battle', 'competitive', 3, 1, ?, ?)`,
-        [matchId, game.id, mode.id, startDate, startDate, startDate, oldUpdatedAt]
-      );
+      const oldUpdatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      const matchId = (await createMatch(game.id, mode.id, { name: 'All Scored Match', status: 'battle', created_at: oldUpdatedAt, updated_at: oldUpdatedAt })).id;
 
       // Add a scored map game
-      await db.run(
-        `INSERT INTO match_games (id, match_id, map_id, round, status, created_at, updated_at)
-         VALUES ('mg-scored', ?, 'some-map', 1, 'completed', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [matchId]
-      );
+      await createMatchGame(matchId, { id: 'mg-scored', map_id: 'some-map', round: 1, status: 'completed' });
 
       await (scheduler as any).handleMatchCompletion();
 
-      const row = await db.get(`SELECT status FROM matches WHERE id = ?`, [matchId]);
+      const [row] = await getPgTestDb().select().from(matches).where(eq(matches.id, matchId));
       expect(row.status).toBe('complete');
     });
   });
@@ -118,36 +91,33 @@ describe('MatchExecScheduler — extended', () => {
     it('skips gracefully when no discord settings exist', async () => {
       await (scheduler as any).queueMatchReminders();
 
-      const rows = await db.all(`SELECT id FROM discord_reminder_queue`);
+      const rows = await getPgTestDb().select().from(discordReminderQueue);
       expect(rows).toHaveLength(0);
     });
 
     it('queues a reminder for an upcoming match', async () => {
-      settingsStore.discord = { guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 };
+      await createDiscordSettings({ guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 });
 
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
       const match = await createMatch(game.id, mode.id, {
         status: 'created',
-        start_date: futureDate.toISOString(),
+        start_date: futureDate,
       });
 
       await (scheduler as any).queueMatchReminders();
 
-      const row = await db.get(
-        `SELECT id, match_id, status FROM discord_reminder_queue WHERE match_id = ?`,
-        [match.id]
-      );
+      const [row] = await getPgTestDb().select().from(discordReminderQueue).where(eq(discordReminderQueue.match_id, match.id));
       expect(row).toBeDefined();
       expect(row.status).toBe('pending');
     });
 
     it('does not re-queue a reminder already in the queue', async () => {
-      settingsStore.discord = { guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 };
+      await createDiscordSettings({ guild_id: 'guild-1', bot_token: 'token', match_reminder_minutes: 30 });
 
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const match = await createMatch(game.id, mode.id, {
         status: 'created',
-        start_date: futureDate.toISOString(),
+        start_date: futureDate,
       });
 
       // Pre-insert an existing reminder

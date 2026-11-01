@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { matchVoiceAlternation, voices } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -47,11 +49,12 @@ let VoiceHandler: any;
  
 let createAudioPlayer: any;
 
+setupPgTestFile();
+
 describe('VoiceHandler — Extended', () => {
    
   let voiceHandler: any;
    
-  let db: any;
    
   let game: any;
    
@@ -67,19 +70,14 @@ describe('VoiceHandler — Extended', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
 
-    await db.run(
-      `INSERT INTO voices (id, name, path, created_at) VALUES (?, ?, ?, datetime('now'))`,
-      ['voice-ext-1', 'Ext Voice', 'public/voices/ext-voice']
-    );
+    await getPgTestDb().insert(voices).values({ id: 'voice-ext-1', name: 'Ext Voice', path: 'public/voices/ext-voice' });
 
     voiceHandler = new VoiceHandler(
       mockDiscordClient,
-      db,
       { guild_id: 'guild-ext', voice_announcements_enabled: true, announcer_voice: 'voice-ext-1' }
     );
   });
@@ -158,22 +156,14 @@ describe('VoiceHandler — Extended', () => {
 
     it('returns red after blue was set as first team', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(
-        `INSERT INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
-         VALUES (?, 'blue', 'blue', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchVoiceAlternation).values({ match_id: match.id, current_team: 'blue', last_first_team: 'blue' });
       const result = await voiceHandler.getNextFirstTeam(match.id);
       expect(result).toBe('red');
     });
 
     it('returns blue after red was set as first team', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(
-        `INSERT INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
-         VALUES (?, 'red', 'red', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchVoiceAlternation).values({ match_id: match.id, current_team: 'red', last_first_team: 'red' });
       const result = await voiceHandler.getNextFirstTeam(match.id);
       expect(result).toBe('blue');
     });
@@ -184,10 +174,7 @@ describe('VoiceHandler — Extended', () => {
       const match = await createMatch(game.id, mode.id);
       await voiceHandler.updateFirstTeam(match.id, 'blue');
 
-      const row = await db.get(
-        `SELECT last_first_team FROM match_voice_alternation WHERE match_id=?`,
-        [match.id]
-      );
+      const [row] = await getPgTestDb().select().from(matchVoiceAlternation).where(eq(matchVoiceAlternation.match_id, match.id));
       expect(row?.last_first_team).toBe('blue');
     });
 
@@ -196,10 +183,7 @@ describe('VoiceHandler — Extended', () => {
       await voiceHandler.updateFirstTeam(match.id, 'red');
       await voiceHandler.updateFirstTeam(match.id, 'blue');
 
-      const row = await db.get(
-        `SELECT last_first_team FROM match_voice_alternation WHERE match_id=?`,
-        [match.id]
-      );
+      const [row] = await getPgTestDb().select().from(matchVoiceAlternation).where(eq(matchVoiceAlternation.match_id, match.id));
       expect(row?.last_first_team).toBe('blue');
     });
   });

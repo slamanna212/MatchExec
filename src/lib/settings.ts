@@ -129,3 +129,15 @@ export async function updateSchedulerCrons(
 export async function listVoices(ex: Executor = defaultDb): Promise<Array<{ id: string; name: string; path: string }>> {
   return ex.select({ id: voices.id, name: voices.name, path: voices.path }).from(voices).orderBy(asc(voices.name));
 }
+
+/** Any voice (used as the fallback announcer voice), lowest name first. */
+export async function getFallbackVoice(ex: Executor = defaultDb): Promise<{ id: string; name: string } | undefined> {
+  const [row] = await ex.select({ id: voices.id, name: voices.name }).from(voices).orderBy(asc(voices.name)).limit(1);
+  return row;
+}
+
+/** Directory path of one voice's audio files, or undefined when the voice does not exist. */
+export async function getVoicePath(id: string, ex: Executor = defaultDb): Promise<string | undefined> {
+  const [row] = await ex.select({ path: voices.path }).from(voices).where(eq(voices.id, id)).limit(1);
+  return row?.path;
+}

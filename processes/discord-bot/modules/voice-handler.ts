@@ -11,8 +11,8 @@ import {
 } from '@discordjs/voice';
 import type { Client, VoiceBasedChannel } from 'discord.js';
 import { ChannelType } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
+import { getFallbackVoice, getVoicePath } from '../../../src/lib/settings';
 import { logger } from '../../../src/lib/logger/server';
 import { db as pgDb } from '../../../lib/db';
 import { listTeamVoiceChannelIds, nextFirstTeam, recordFirstTeam } from '../../../src/lib/matches';
@@ -25,7 +25,6 @@ export class VoiceHandler {
 
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null
   ) {
     // Sweep stale map entries once per hour to prevent unbounded growth
@@ -93,9 +92,8 @@ export class VoiceHandler {
   }
 
   private async resolveFallbackVoice(): Promise<string | null> {
-    if (!this.db) return null;
     try {
-      const voice = await this.db.get<{ id: string; name: string }>('SELECT id, name FROM voices LIMIT 1');
+      const voice = await getFallbackVoice();
       if (voice) { logger.debug(`🔧 Using fallback voice: ${voice.name} (${voice.id})`); return voice.id; }
       logger.error('❌ No voices available in database');
       return null;
@@ -144,20 +142,17 @@ export class VoiceHandler {
 
   private async getAudioFilePath(voiceId: string, audioType: string, lineNumber?: number): Promise<string | null> {
     try {
-      if (!this.db) return null;
 
       // Get voice path from database
-      const voice = await this.db.get<{ path: string }>(`
-        SELECT path FROM voices WHERE id = ?
-      `, [voiceId]);
+      const voicePath = await getVoicePath(voiceId);
 
-      if (!voice) {
+      if (voicePath === undefined) {
         logger.error(`❌ Voice not found: ${voiceId}`);
         return null;
       }
 
       // Remove leading slash from voice path if present (e.g., "/public/..." -> "public/...")
-      const cleanVoicePath = voice.path.startsWith('/') ? voice.path.substring(1) : voice.path;
+      const cleanVoicePath = voicePath.startsWith('/') ? voicePath.substring(1) : voicePath;
       const appRoot = process.cwd();
       const resolvedVoiceDir = path.resolve(appRoot, cleanVoicePath);
       if (!resolvedVoiceDir.startsWith(appRoot + path.sep)) {

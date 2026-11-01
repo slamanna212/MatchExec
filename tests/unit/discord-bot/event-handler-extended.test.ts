@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -29,9 +29,10 @@ vi.mock('discord.js', () => ({
 
 import { EventHandler } from '../../../processes/discord-bot/modules/event-handler';
 
+setupPgTestFile();
+
 describe('EventHandler — Extended', () => {
    
-  let db: any;
    
   let game: any;
    
@@ -51,7 +52,6 @@ describe('EventHandler — Extended', () => {
   beforeEach(async () => {
     const data = await seedBasicTestData();
     game = data.game;
-    db = getTestDb();
     vi.clearAllMocks();
 
     mockGuild = {
@@ -67,7 +67,7 @@ describe('EventHandler — Extended', () => {
       },
     };
 
-    handler = new EventHandler(mockClient, db, settings as never);
+    handler = new EventHandler(mockClient, settings as never);
   });
 
   afterEach(() => {
@@ -131,7 +131,7 @@ describe('EventHandler — Extended', () => {
     });
 
     it('returns null when settings is null', () => {
-      const handlerNoSettings = new EventHandler(mockClient, db, null);
+      const handlerNoSettings = new EventHandler(mockClient, null);
       // guild_id would be '' so guilds.cache.get returns undefined
       mockClient.guilds.cache.get.mockReturnValue(null);
       return expect(

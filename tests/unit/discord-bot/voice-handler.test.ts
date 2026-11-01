@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { matchTeams, matchVoiceAlternation, voices } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 
 // Mock the logger to prevent database access during import
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -73,9 +75,10 @@ vi.mock('fs', () => {
 let VoiceHandler: any;
 let createAudioPlayer: any;
 
+setupPgTestFile();
+
 describe('VoiceHandler', () => {
   let voiceHandler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
@@ -91,16 +94,12 @@ describe('VoiceHandler', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
 
     // Create a voice in the database
-    await db.run(`
-      INSERT INTO voices (id, name, path, created_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `, ['voice-1', 'Test Voice', 'public/voices/test-voice']);
+    await getPgTestDb().insert(voices).values({ id: 'voice-1', name: 'Test Voice', path: 'public/voices/test-voice' });
 
     const settings = {
       guild_id: 'guild-123',
@@ -110,7 +109,6 @@ describe('VoiceHandler', () => {
 
     voiceHandler = new VoiceHandler(
       mockDiscordClient as any,
-      db,
       settings as any
     );
   });
@@ -379,16 +377,14 @@ describe('VoiceHandler', () => {
 
     it('announces in every match_teams voice channel (deduped) and rotates the first team', async () => {
       const match = await createMatch(game.id, mode.id);
-      const insert = (id: string, order: number, channel: string | null, reserve = 0) => db.run(
-        `INSERT INTO match_teams (id, match_id, team_name, team_color, team_order, is_reserve, voice_channel_id)
-         VALUES (?, ?, ?, '#fff', ?, ?, ?)`,
-        [id, match.id, `Team ${order}`, order, reserve, channel]
+      const insert = (id: string, order: number, channel: string | null, reserve = false) => getPgTestDb().insert(matchTeams).values(
+        { id, match_id: match.id, team_name: `Team ${order}`, team_color: '#fff', team_order: order, is_reserve: reserve, voice_channel_id: channel }
       );
       await insert('vt-1', 0, 'chan-a');
       await insert('vt-2', 1, 'chan-b');
       await insert('vt-3', 2, 'chan-c');
       await insert('vt-4', 3, 'chan-c'); // shared channel is announced once
-      await insert('vt-res', 99, 'chan-reserve', 1);
+      await insert('vt-res', 99, 'chan-reserve', true);
 
       const spy = vi.spyOn(voiceHandler, 'playVoiceAnnouncement').mockResolvedValue(true);
 
@@ -444,10 +440,7 @@ describe('VoiceHandler', () => {
       const match = await createMatch(game.id, mode.id);
 
       // Set last first team as blue
-      await db.run(`
-        INSERT INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
-        VALUES (?, 'blue', 'blue', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [match.id]);
+      await getPgTestDb().insert(matchVoiceAlternation).values({ match_id: match.id, current_team: 'blue', last_first_team: 'blue' });
 
       const nextTeam = await voiceHandler.getNextFirstTeam(match.id);
 
@@ -459,10 +452,7 @@ describe('VoiceHandler', () => {
       const match = await createMatch(game.id, mode.id);
 
       // Set last first team as red
-      await db.run(`
-        INSERT INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
-        VALUES (?, 'red', 'red', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [match.id]);
+      await getPgTestDb().insert(matchVoiceAlternation).values({ match_id: match.id, current_team: 'red', last_first_team: 'red' });
 
       const nextTeam = await voiceHandler.getNextFirstTeam(match.id);
 
@@ -476,9 +466,7 @@ describe('VoiceHandler', () => {
 
       await voiceHandler.updateFirstTeam(match.id, 'red');
 
-      const record = await db.get(`
-        SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
-      `, [match.id]);
+      const [record] = await getPgTestDb().select().from(matchVoiceAlternation).where(eq(matchVoiceAlternation.match_id, match.id));
 
       expect(record.last_first_team).toBe('red');
     });
@@ -492,9 +480,7 @@ describe('VoiceHandler', () => {
       // Update to red
       await voiceHandler.updateFirstTeam(match.id, 'red');
 
-      const record = await db.get(`
-        SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
-      `, [match.id]);
+      const [record] = await getPgTestDb().select().from(matchVoiceAlternation).where(eq(matchVoiceAlternation.match_id, match.id));
 
       expect(record.last_first_team).toBe('red');
     });

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch, createMatchParticipant } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { discordWinnerVoteMessages, gameStatDefinitions, matchParticipants, matchTeams, matches, scorecardSubmissions } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch, createMatchGame, createMatchParticipant } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -31,9 +33,10 @@ vi.mock('@/lib/matches/results', () => ({
 
 let WinnerVoteHandler: any;
 
+setupPgTestFile();
+
 describe('WinnerVoteHandler', () => {
   let handler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
@@ -44,7 +47,6 @@ describe('WinnerVoteHandler', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -74,11 +76,9 @@ describe('WinnerVoteHandler', () => {
     it('returns true and inserts vote records when commanders receive DMs successfully', async () => {
       const match = await createMatch(game.id, mode.id);
       const participant = await createMatchParticipant(match.id, 'discord-blue-1', 'BlueCommander');
-      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
-      await db.run(
-        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id = ?`,
-        [participant.id]
-      );
+      await createMatchGame(match.id, { id: 'game-1' });
+      await getPgTestDb().insert(matchTeams).values({ id: 't-blue-x', match_id: match.id, team_name: 'Blue', team_order: 0, is_reserve: false });
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true, team_id: 't-blue-x' }).where(eq(matchParticipants.id, participant.id));
 
       const mockMessage = { id: 'msg-sent-1', react: vi.fn().mockResolvedValue(undefined) };
       const mockUser = { send: vi.fn().mockResolvedValue(mockMessage) };
@@ -91,10 +91,7 @@ describe('WinnerVoteHandler', () => {
       expect(mockMessage.react).toHaveBeenCalledWith('🔵');
       expect(mockMessage.react).toHaveBeenCalledWith('🔴');
 
-      const voteRow = await db.get(
-        `SELECT * FROM discord_winner_vote_messages WHERE discord_message_id = ?`,
-        ['msg-sent-1']
-      );
+      const [voteRow] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.discord_message_id, 'msg-sent-1'));
       expect(voteRow).toBeTruthy();
       expect(voteRow.match_id).toBe(match.id);
       expect(voteRow.team_side).toBe('blue');
@@ -104,8 +101,9 @@ describe('WinnerVoteHandler', () => {
       const match = await createMatch(game.id, mode.id);
       const p1 = await createMatchParticipant(match.id, 'discord-ok', 'OK');
       const p2 = await createMatchParticipant(match.id, 'discord-fail', 'Fail');
-      await db.run(`UPDATE match_participants SET receives_map_codes = 1 WHERE id = ?`, [p1.id]);
-      await db.run(`UPDATE match_participants SET receives_map_codes = 1 WHERE id = ?`, [p2.id]);
+      await createMatchGame(match.id, { id: 'game-1' });
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true }).where(eq(matchParticipants.id, p1.id));
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true }).where(eq(matchParticipants.id, p2.id));
 
       const mockMessage = { id: 'msg-ok', react: vi.fn().mockResolvedValue(undefined) };
       mockDiscordClient.users.fetch = vi.fn()
@@ -123,7 +121,7 @@ describe('WinnerVoteHandler', () => {
     it('ignores non-target emoji', async () => {
       const reaction = { emoji: { name: '👍' }, message: { id: 'msg-1' } };
       await handler.handleReaction(reaction as any, { id: 'user-1' } as any);
-      const rows = await db.all(`SELECT * FROM discord_winner_vote_messages`);
+      const rows = await getPgTestDb().select().from(discordWinnerVoteMessages);
       expect(rows).toHaveLength(0);
     });
 
@@ -131,47 +129,32 @@ describe('WinnerVoteHandler', () => {
       const match = await createMatch(game.id, mode.id);
       const reaction = { emoji: { name: '🔵' }, message: { id: 'nonexistent-msg' } };
       await handler.handleReaction(reaction as any, { id: 'user-1' } as any);
-      const row = await db.get(
-        `SELECT * FROM discord_winner_vote_messages WHERE match_id = ?`,
-        [match.id]
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.match_id, match.id));
       expect(row).toBeUndefined();
     });
 
     it('does not double-count a reaction when commander has already voted', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(
-        `INSERT INTO discord_winner_vote_messages
-           (id, match_id, match_game_id, discord_user_id, discord_message_id, voted_for)
-         VALUES ('vr1', ?, 'game-1', 'user-1', 'msg-already-voted', 'blue')`,
-        [match.id]
-      );
+      await createMatchGame(match.id, { id: 'game-1' });
+      await getPgTestDb().insert(discordWinnerVoteMessages).values({ id: 'vr1', match_id: match.id, match_game_id: 'game-1', discord_user_id: 'user-1', discord_message_id: 'msg-already-voted', voted_for: 'blue' });
 
       const reaction = { emoji: { name: '🔴' }, message: { id: 'msg-already-voted' } };
       await handler.handleReaction(reaction as any, { id: 'user-1' } as any);
 
-      const row = await db.get(
-        `SELECT voted_for FROM discord_winner_vote_messages WHERE id = 'vr1'`
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.id, 'vr1'));
       expect(row.voted_for).toBe('blue');
     });
 
     it('records vote and calls evaluateVotes on a valid unvoted reaction', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(
-        `INSERT INTO discord_winner_vote_messages
-           (id, match_id, match_game_id, discord_user_id, discord_message_id, voted_for)
-         VALUES ('vr2', ?, 'game-1', 'user-2', 'msg-unvoted', NULL)`,
-        [match.id]
-      );
+      await createMatchGame(match.id, { id: 'game-1' });
+      await getPgTestDb().insert(discordWinnerVoteMessages).values({ id: 'vr2', match_id: match.id, match_game_id: 'game-1', discord_user_id: 'user-2', discord_message_id: 'msg-unvoted', voted_for: null });
 
       const evaluateSpy = vi.spyOn(handler as any, 'evaluateVotes').mockResolvedValue(undefined);
       const reaction = { emoji: { name: '🔵' }, message: { id: 'msg-unvoted' } };
       await handler.handleReaction(reaction as any, { id: 'user-2' } as any);
 
-      const row = await db.get(
-        `SELECT voted_for FROM discord_winner_vote_messages WHERE id = 'vr2'`
-      );
+      const [row] = await getPgTestDb().select().from(discordWinnerVoteMessages).where(eq(discordWinnerVoteMessages.id, 'vr2'));
       expect(row.voted_for).toBe('blue');
       expect(evaluateSpy).toHaveBeenCalledWith(match.id, 'game-1');
     });
@@ -194,12 +177,8 @@ describe('WinnerVoteHandler', () => {
     });
 
     async function insertVote(id: string, matchGameId: string, discordUserId: string, votedFor: string | null) {
-      await db.run(
-        `INSERT INTO discord_winner_vote_messages
-           (id, match_id, match_game_id, discord_user_id, discord_message_id, voted_for)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, match.id, matchGameId, discordUserId, `msg-${id}`, votedFor]
-      );
+      await createMatchGame(match.id, { id: matchGameId });
+      await getPgTestDb().insert(discordWinnerVoteMessages).values({ id, match_id: match.id, match_game_id: matchGameId, discord_user_id: discordUserId, discord_message_id: `msg-${id}`, voted_for: votedFor as 'blue' | 'red' | null });
     }
 
     it('calls submitWinner when all commanders voted the same (consensus)', async () => {
@@ -270,35 +249,25 @@ describe('WinnerVoteHandler', () => {
 
     it('returns false when stats_enabled=1 but no stat definitions exist', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET stats_enabled = 1 WHERE id = ?`, [match.id]);
+      await getPgTestDb().update(matches).set({ stats_enabled: true }).where(eq(matches.id, match.id));
       const result = await (handler as any).checkStatsGate(match.id, 'game-1');
       expect(result).toBe(false);
     });
 
     it('returns true when stats_enabled=1, stat defs exist, and no submission for this game', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET stats_enabled = 1 WHERE id = ?`, [match.id]);
-      await db.run(
-        `INSERT INTO game_stat_definitions (id, game_id, name, display_name) VALUES (?, ?, ?, ?)`,
-        ['stat-def-1', game.id, 'kills', 'Kills']
-      );
+      await getPgTestDb().update(matches).set({ stats_enabled: true }).where(eq(matches.id, match.id));
+      await getPgTestDb().insert(gameStatDefinitions).values({ id: 'stat-def-1', game_id: game.id, name: 'kills', display_name: 'Kills' });
       const result = await (handler as any).checkStatsGate(match.id, 'game-no-sub');
       expect(result).toBe(true);
     });
 
     it('returns false when stats_enabled=1, stat defs exist, and a submission already exists', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET stats_enabled = 1 WHERE id = ?`, [match.id]);
-      await db.run(
-        `INSERT INTO game_stat_definitions (id, game_id, name, display_name) VALUES (?, ?, ?, ?)`,
-        ['stat-def-2', game.id, 'deaths', 'Deaths']
-      );
-      await db.run(
-        `INSERT INTO scorecard_submissions
-           (id, match_id, match_game_id, team_side, screenshot_url)
-         VALUES ('sub-existing', ?, 'game-has-sub', 'blue', 'http://example.com/img.png')`,
-        [match.id]
-      );
+      await getPgTestDb().update(matches).set({ stats_enabled: true }).where(eq(matches.id, match.id));
+      await getPgTestDb().insert(gameStatDefinitions).values({ id: 'stat-def-2', game_id: game.id, name: 'deaths', display_name: 'Deaths' });
+      await createMatchGame(match.id, { id: 'game-has-sub' });
+      await getPgTestDb().insert(scorecardSubmissions).values({ id: 'sub-existing', match_id: match.id, match_game_id: 'game-has-sub', team_side: 'blue', screenshot_url: 'http://example.com/img.png' });
       const result = await (handler as any).checkStatsGate(match.id, 'game-has-sub');
       expect(result).toBe(false);
     });
@@ -307,8 +276,8 @@ describe('WinnerVoteHandler', () => {
   // ─── submitWinner ───────────────────────────────────────────────────────────
 
   describe('submitWinner', () => {
-    const addGame = (matchId: string, id: string, status = 'ongoing') =>
-      db.run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, ?)`, [id, matchId, status]);
+    const addGame = (matchId: string, id: string, status: 'pending' | 'ongoing' | 'completed' = 'ongoing') =>
+      createMatchGame(matchId, { id, round: 1, status });
 
     it('calls saveMatchResult mapping blue to team1', async () => {
       const { saveMatchResult } = await import('@/lib/matches/results');

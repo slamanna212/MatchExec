@@ -1,5 +1,4 @@
-import { waitForDatabaseReady } from '../../lib/database';
-import type { Database } from '../../lib/database/connection';
+import { waitForSystemReady } from '../../lib/db/system-status';
 import * as cron from 'node-cron';
 import { createHash } from 'crypto';
 import { logger } from '../../src/lib/logger/server';
@@ -8,8 +7,9 @@ import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
+import { getHealthAlertLastSent, markHealthAlertSent } from '../../src/lib/health-alerts';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
-import { db as pgDb, type Executor } from '../../lib/db';
+import { db as pgDb, closeDb, type Executor } from '../../lib/db';
 import {
   areAllGamesCompleted, casMatchStatus, listMatchesDueToStart, listMatchesForPlayerReminders, listMatchesWithAnnouncements,
   listMatchGameStatuses, listStaleBattleMatches, listUpcomingMatches,
@@ -41,22 +41,10 @@ interface AnnouncementItem {
 
 class MatchExecScheduler {
   private isRunning = false;
-  private _db: Database | null = null;
   private cronJobs: cron.ScheduledTask[] = [];
   private avatarUpdateJob: AvatarUpdateJob | null = null;
   private updateCheckJob: UpdateCheckJob | null = null;
   private leaderLock: LeaderLock | null = null;
-
-  /** Returns the database connection, throwing if it has not been initialised yet. */
-  private get db(): Database {
-    if (!this._db) throw new Error('Database not initialised — call start() first');
-    return this._db;
-  }
-
-  /** Allows tests to inject a mock database without calling start(). */
-  private set db(value: Database) {
-    this._db = value;
-  }
 
   async start() {
     logger.debug('🕐 Starting MatchExec Scheduler...');
@@ -64,7 +52,7 @@ class MatchExecScheduler {
     try {
       // Wait for database to be ready (migrated and seeded)
       logger.debug('⏳ Waiting for database to be ready...');
-      this._db = await waitForDatabaseReady();
+      await waitForSystemReady();
 
       // Exactly one scheduler per database: hold a Postgres advisory lock for the life of the process (exits if held)
       this.leaderLock = await requireLeaderLock('scheduler', { log: (message) => logger.critical(message) });
@@ -527,13 +515,10 @@ class MatchExecScheduler {
       if (timeSinceHeartbeat <= DISCORD_BOT_TIMEOUT_THRESHOLD) return;
 
       // Rate limit: check if we already sent this alert recently
-      const rateLimitRow = await this.db.get<{ last_sent_at: string }>(
-        'SELECT last_sent_at FROM health_alerts_sent WHERE alert_type = ?',
-        [ALERT_TYPE]
-      );
+      const lastSentAt = await getHealthAlertLastSent(ALERT_TYPE);
 
-      if (rateLimitRow?.last_sent_at) {
-        const timeSinceLastAlert = now.getTime() - new Date(rateLimitRow.last_sent_at).getTime();
+      if (lastSentAt) {
+        const timeSinceLastAlert = now.getTime() - lastSentAt.getTime();
         if (timeSinceLastAlert <= RATE_LIMIT_WINDOW) {
           logger.debug(`Discord bot health alert rate-limited: ${ALERT_TYPE}`);
           return;
@@ -556,12 +541,7 @@ class MatchExecScheduler {
       await enqueueHealthAlert(pgDb, { severity: 'critical', title, description });
 
       // Update rate limit
-      await this.db.run(
-        `INSERT INTO health_alerts_sent (alert_type, last_sent_at)
-         VALUES (?, CURRENT_TIMESTAMP)
-         ON CONFLICT(alert_type) DO UPDATE SET last_sent_at = CURRENT_TIMESTAMP`,
-        [ALERT_TYPE]
-      );
+      await markHealthAlertSent(ALERT_TYPE);
 
       logger.info(`Discord bot health alert queued: ${title}`);
     } catch (error) {
@@ -581,13 +561,11 @@ class MatchExecScheduler {
     this.leaderLock = null;
 
     // Close database connection
-    if (this._db) {
-      try {
-        await this._db.close();
-        logger.info('✅ Database connection closed');
-      } catch (error) {
-        logger.error('Error closing database connection:', error);
-      }
+    try {
+      await closeDb();
+      logger.info('✅ Database connection closed');
+    } catch (error) {
+      logger.error('Error closing database connection:', error);
     }
 
     logger.info('✅ Scheduler shutdown complete');

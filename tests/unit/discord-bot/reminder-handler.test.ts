@@ -27,11 +27,12 @@ vi.mock('discord.js', () => ({
 }));
 
 import { ReminderHandler } from '../../../processes/discord-bot/modules/reminder-handler';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch, createMatchParticipant } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch, createMatchParticipant, createDiscordChannel, createDiscordSettings } from '../../utils/pg-fixtures';
+
+setupPgTestFile();
 
 describe('ReminderHandler', () => {
-  let db: any;
   let game: any;
   let mode: any;
   let mockClient: any;
@@ -41,7 +42,6 @@ describe('ReminderHandler', () => {
     const data = await seedBasicTestData();
     game = data.game;
     mode = data.mode;
-    db = getTestDb();
     vi.clearAllMocks();
 
     mockClient = {
@@ -59,7 +59,7 @@ describe('ReminderHandler', () => {
       },
     };
 
-    handler = new ReminderHandler(mockClient as any, db as any, null);
+    handler = new ReminderHandler(mockClient as any, null);
   });
 
   describe('sendPlayerReminders', () => {
@@ -131,13 +131,8 @@ describe('ReminderHandler', () => {
 
     it('returns false when match not found and channels exist', async () => {
       mockClient.isReady.mockReturnValue(true);
-      await db.run(`
-        INSERT INTO discord_settings (id, guild_id, bot_token) VALUES (1, 'guild-123', 'token-abc')
-      `);
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, type, channel_type, send_signup_updates)
-        VALUES ('ch-1', 'guild-123', 'dc-111', 'general', 0, 'text', 1)
-      `);
+      await createDiscordSettings({ guild_id: 'guild-123', bot_token: 'token-abc' });
+      await createDiscordChannel({ id: 'ch-1', guild_id: 'guild-123', discord_channel_id: 'dc-111', name: 'general', send_signup_updates: true });
 
       mockClient.channels.fetch.mockResolvedValue({
         isTextBased: vi.fn().mockReturnValue(true),

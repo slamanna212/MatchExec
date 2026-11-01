@@ -7,7 +7,6 @@ import { isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import fs from 'fs';
 import path from 'path';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { getAnyDiscordSettings } from '../../../src/lib/settings';
 import type { AnnouncementHandler } from './announcement-handler';
@@ -286,7 +285,6 @@ export class QueueProcessor {
 
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null,
     private announcementHandler: AnnouncementHandler | null,
     private reminderHandler: ReminderHandler | null,
@@ -335,7 +333,7 @@ export class QueueProcessor {
   }
 
   async processAnnouncementQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const due = or(isNull(discordAnnouncementQueue.scheduled_for), lte(discordAnnouncementQueue.scheduled_for, sql`now()`));
@@ -587,7 +585,6 @@ export class QueueProcessor {
    * Process deletion for a single match
    */
   private async processSingleDeletion(deletion: QueueRow<'deletion'>): Promise<void> {
-    if (!this.db) return;
 
     const matchId = deletion.match_id;
 
@@ -607,7 +604,7 @@ export class QueueProcessor {
   }
 
   async processDeletionQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const deletions = await this.claim('deletion', 10);
@@ -648,7 +645,7 @@ export class QueueProcessor {
   }
 
   async processStatusUpdateQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const updates = await this.claim('statusUpdate', 5);
@@ -717,7 +714,7 @@ export class QueueProcessor {
   }
 
   async processReminderQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const reminders = await this.claim('reminder', 5, lte(discordReminderQueue.reminder_time, sql`now()`));
@@ -770,7 +767,7 @@ export class QueueProcessor {
   }
 
   async processPlayerReminderQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const playerReminders = await this.claim('playerReminder', 5, lte(discordPlayerReminderQueue.reminder_time, sql`now()`));
@@ -789,7 +786,7 @@ export class QueueProcessor {
   }
 
   async processDiscordBotRequests() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       // Clean up old completed/failed requests older than 1 hour
@@ -832,7 +829,7 @@ export class QueueProcessor {
   }
 
   async processScoreNotificationQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const scoreNotifications = await this.claim('scoreNotification', 5);
@@ -938,7 +935,7 @@ export class QueueProcessor {
   }
 
   async processVoiceAnnouncementQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       // Finished rows are kept for an hour, then removed
@@ -975,7 +972,7 @@ export class QueueProcessor {
   }
 
   async processMapCodeQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const mapCodes = await this.claim('mapCode', 5);
@@ -994,7 +991,7 @@ export class QueueProcessor {
   }
 
   async processMatchWinnerNotificationQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const winnerNotifications = await this.claim('matchWinner', 5);
@@ -1269,7 +1266,7 @@ export class QueueProcessor {
   }
 
   async processMatchEditQueue() {
-    if (!this.client.isReady() || !this.db) return;
+    if (!this.client.isReady()) return;
 
     try {
       const edits = await this.claim('matchEdit', 5);
@@ -1328,7 +1325,7 @@ export class QueueProcessor {
   }
 
   async processStatsReportQueue() {
-    if (!this.client.isReady() || !this.db || !this.statsReportHandler) return;
+    if (!this.client.isReady() || !this.statsReportHandler) return;
 
     try {
       const pending = await this.claim('statsReport', 3);
@@ -1348,7 +1345,7 @@ export class QueueProcessor {
   }
 
   async processHealthAlertQueue() {
-    if (!this.client.isReady() || !this.db || !this.announcementHandler) return;
+    if (!this.client.isReady() || !this.announcementHandler) return;
 
     try {
       const pending = await this.claim('healthAlert', 5);
@@ -1379,7 +1376,7 @@ export class QueueProcessor {
   }
 
   async processScorecardPromptQueue() {
-    if (!this.client.isReady() || !this.db || !this.scorecardHandler) return;
+    if (!this.client.isReady() || !this.scorecardHandler) return;
 
     try {
       const pending = await this.claim('scorecardPrompt', 5);
@@ -1411,7 +1408,7 @@ export class QueueProcessor {
   }
 
   async processWinnerVoteQueue() {
-    if (!this.client.isReady() || !this.db || !this.winnerVoteHandler) return;
+    if (!this.client.isReady() || !this.winnerVoteHandler) return;
 
     try {
       const pending = await this.claim('winnerVote', 5);
@@ -1445,7 +1442,7 @@ export class QueueProcessor {
   }
 
   private async updateMatchMessagesForSignupClosure(matchId: string): Promise<boolean> {
-    if (!this.client.isReady() || !this.db) {
+    if (!this.client.isReady()) {
       return false;
     }
 
@@ -1571,7 +1568,7 @@ export class QueueProcessor {
   }
 
   private async updateTournamentMessagesForSignupClosure(tournamentId: string): Promise<boolean> {
-    if (!this.client.isReady() || !this.db) {
+    if (!this.client.isReady()) {
       return false;
     }
 

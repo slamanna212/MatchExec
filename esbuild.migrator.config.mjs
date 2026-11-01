@@ -13,12 +13,6 @@ await esbuild.build({
   format: 'cjs',
   outfile: join(__dirname, 'dist/migrator.js'),
   external: [
-    // Native modules
-    'sqlite3',
-
-    // Complex internal requires
-    'umzug',
-
     // Node.js built-ins (automatically external, but explicit for clarity)
     'fs',
     'path',

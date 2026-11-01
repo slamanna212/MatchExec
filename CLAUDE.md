@@ -261,8 +261,8 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 
 ## Conventions
 
-- **Transactions**: use `withTransaction` from `@/lib/transaction` (implementation in `lib/database/transaction.ts`) for multi-statement writes.
-- **Foreign keys are NOT enforced** (`PRAGMA foreign_keys` off), so deletes must clean up child rows explicitly.
+- **Transactions**: `db.transaction(async (tx) => ...)` from `lib/db`; pass `tx` explicitly as the first argument of domain functions (`Executor` type).
+- **Foreign keys are enforced** by Postgres (cascade / set null as declared in `lib/db/schema`).
 - **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/matches/scoreboard.ts`.
 
 ## Authentication (opt-in)
@@ -405,7 +405,7 @@ The logger automatically reloads the level from the database every 5 seconds (ca
 ### Test Framework
 - **Vitest** with `pool: 'forks'` and `fileParallelism: true`
 - Config: `vitest.config.ts`
-- Setup files: `tests/vitest-mocks.ts`, `tests/setup.ts`
+- Setup file: `tests/setup.ts` (no database setup: every test that needs Postgres calls `setupPgTestFile()` from `tests/utils/pg-test-db.ts`; PGlite by default, real Postgres when `TEST_DATABASE_URL` is set; `pnpm test:pg` runs the whole suite against Postgres 18)
 
 ### Running Tests
 ```bash
@@ -418,14 +418,12 @@ pnpm run test:coverage     # With coverage report
 ### Test Structure
 ```
 tests/
-├── setup.ts                          # Global beforeAll/afterEach/afterAll hooks
-├── vitest-mocks.ts                   # Empty (mocks must be in each test file)
+├── setup.ts                          # React act() flag only
 ├── utils/
-│   ├── test-db.ts                    # TestDatabase wrapper with promise+callback API
-│   ├── fixtures.ts                   # seedBasicTestData(), createMatch(), createTournament()
-│   └── api-helpers.ts                # createMockRequest(), parseResponse(), createRouteParams()
+│   ├── pg-test-db.ts                 # setupPgTestFile(), getPgTestDb() (PGlite or TEST_DATABASE_URL)
+│   ├── pg-fixtures.ts                # seedBasicTestData(), createMatch(), createTournament(), ... (Drizzle)
+│   └── app-request.ts                # appRequest(): call the Hono app in-process
 ├── mocks/
-│   ├── database.ts                   # getMockDbInstance() / resetMockDbInstance()
 │   └── discord.ts                    # mockDiscordClient, createMockChannel()
 ├── unit/
 │   ├── validation.test.ts            # validateRequiredFields, safeJSONParse/Stringify
@@ -470,8 +468,7 @@ tests/
 | `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |
 
 ### Known Issues
-- **DB isolation (fixed)**: `setupTestDatabase()` in `tests/utils/test-db.ts` calls `setDbForTesting()` so `getTestDb()` and `getDbInstance()` share one connection; API route tests see data inserted via `getTestDb()`.
-- **FK schema mismatch**: Enabling `PRAGMA foreign_keys=ON` in tests reveals that the `matches` table has a malformed FK reference to `game_maps`. This must be fixed in migrations before FK constraints can be enabled in tests.
+- **DB isolation**: `setupPgTestFile()` injects the per-file Postgres database into `lib/db` (`setDbForTesting`), so Hono routes, domain modules and processes share the connection the test seeds through `getPgTestDb()`.
 - **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `029_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
 
 ### Writing Tests

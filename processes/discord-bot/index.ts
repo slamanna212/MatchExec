@@ -1,7 +1,6 @@
 import type { ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import { waitForDatabaseReady } from '../../lib/database';
-import type { Database } from '../../lib/database';
+import { waitForSystemReady } from '../../lib/db/system-status';
 import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
 import { logger } from '../../src/lib/logger/server';
@@ -21,14 +20,13 @@ import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
 import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
-import { db as pgDb } from '../../lib/db';
+import { db as pgDb, closeDb } from '../../lib/db';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
 import { nonOverlapping } from '../../src/lib/discord-queues';
 import { listGames } from '../../src/lib/games';
 
 class MatchExecBot {
   private client: Client;
-  private db: Database | null = null;
   private settings: DiscordSettings | null = null;
   private isReady = false;
 
@@ -157,8 +155,6 @@ class MatchExecBot {
   }
 
   private async checkWelcomeFlowCompleted(): Promise<boolean> {
-    if (!this.db) return false;
-
     try {
       return (await getAppSetting('welcome_flow_completed')) === 'true';
     } catch (error) {
@@ -195,7 +191,7 @@ class MatchExecBot {
   private async initialize() {
     try {
       // Wait for database to be ready (migrations should be run separately)
-      this.db = await waitForDatabaseReady();
+      await waitForSystemReady();
 
       // Exactly one bot per database: hold a Postgres advisory lock for the life of the process (exits if held)
       this.leaderLock ??= await requireLeaderLock('discord-bot', { log: (message) => logger.critical(message) });
@@ -220,10 +216,10 @@ class MatchExecBot {
       await this.preloadSignupForms();
 
       // Initialize modules
-      this.voiceHandler = new VoiceHandler(this.client, this.db, this.settings);
-      this.eventHandler = new EventHandler(this.client, this.db, this.settings);
-      this.announcementHandler = new AnnouncementHandler(this.client, this.db, this.settings);
-      this.reminderHandler = new ReminderHandler(this.client, this.db, this.settings);
+      this.voiceHandler = new VoiceHandler(this.client, this.settings);
+      this.eventHandler = new EventHandler(this.client, this.settings);
+      this.announcementHandler = new AnnouncementHandler(this.client, this.settings);
+      this.reminderHandler = new ReminderHandler(this.client, this.settings);
       this.interactionHandler = new InteractionHandler(
         this.client,
         this.settings,
@@ -231,7 +227,6 @@ class MatchExecBot {
       );
       this.queueProcessor = new QueueProcessor(
         this.client,
-        this.db,
         this.settings,
         this.announcementHandler,
         this.reminderHandler,
@@ -245,7 +240,7 @@ class MatchExecBot {
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
       this.statsReportHandler = new StatsReportHandler(this.client);
       this.queueProcessor.setStatsReportHandler(this.statsReportHandler);
-      this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
+      this.healthMonitor = new HealthMonitor(this.announcementHandler);
       this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client);
 
 
@@ -274,7 +269,7 @@ class MatchExecBot {
   private startPeriodicTasks() {
     // Settings reload every 30 seconds
     setInterval(async () => {
-      if (this.settingsManager && this.db) {
+      if (this.settingsManager) {
         const newSettings = await this.settingsManager.loadSettings();
         if (newSettings) {
           this.settings = newSettings;
@@ -292,7 +287,7 @@ class MatchExecBot {
 
     // Discord bot heartbeat every 5 minutes
     setInterval(async () => {
-      if (this.db && this.isReady) {
+      if (this.isReady) {
         try {
           const now = new Date().toISOString();
           await setAppSetting('discord_bot_last_heartbeat', now);
@@ -426,17 +421,15 @@ class MatchExecBot {
       this.client.destroy();
     }
 
-    // Close database connection
-    if (this.db) {
-      try {
-        await this.db.close();
-        logger.info('✅ Database connection closed');
-      } catch (error) {
-        logger.error('Error closing database connection:', error);
-      }
-    }
-
     await this.leaderLock?.release();
+
+    // Close database connection
+    try {
+      await closeDb();
+      logger.info('✅ Database connection closed');
+    } catch (error) {
+      logger.error('Error closing database connection:', error);
+    }
 
     logger.info('✅ Discord bot shutdown complete');
     process.exit(0);

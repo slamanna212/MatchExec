@@ -27,11 +27,12 @@ vi.mock('discord.js', () => ({
 }));
 
 import { EventHandler } from '../../../processes/discord-bot/modules/event-handler';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData } from '../../utils/pg-fixtures';
+
+setupPgTestFile();
 
 describe('EventHandler', () => {
-  let db: any;
   let game: any;
   let mockClient: any;
   let mockGuild: any;
@@ -44,7 +45,6 @@ describe('EventHandler', () => {
   beforeEach(async () => {
     const data = await seedBasicTestData();
     game = data.game;
-    db = getTestDb();
     vi.clearAllMocks();
 
     mockGuild = {
@@ -62,7 +62,7 @@ describe('EventHandler', () => {
       },
     };
 
-    handler = new EventHandler(mockClient as any, db as any, settings as any);
+    handler = new EventHandler(mockClient as any, settings as any);
   });
 
   describe('createDiscordEvent', () => {

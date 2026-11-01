@@ -38,10 +38,13 @@ import {
   attachEventImage,
   type Participant,
 } from '../../../processes/discord-bot/modules/announcement-helpers';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
+import { discordMatchMessages, matchParticipants, matchTeams } from '../../../lib/db/schema';
 
 // Pure function tests — no DB needed
+setupPgTestFile();
+
 describe('buildTeamFieldValue', () => {
   it('formats participants with discord mentions', () => {
     const participants: Participant[] = [
@@ -160,18 +163,16 @@ describe('fetchTeamAssignments', () => {
 
   it('categorizes participants by team assignment', async () => {
     const match = await createMatch(game.id, mode.id);
-    await getTestDb().run(
-      `INSERT INTO match_teams (id, match_id, team_name, team_order, is_reserve)
-       VALUES ('t-blue', ?, 'Blue', 0, 0), ('t-red', ?, 'Red', 1, 0), ('t-res', ?, 'Reserve', 99, 1)`,
-      [match.id, match.id, match.id]
-    );
-    await getTestDb().run(
-      `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, team_id)
-       VALUES ('p1', ?, 'u1', 'd1', 'BluePlayer', 't-blue'),
-              ('p2', ?, 'u2', 'd2', 'RedPlayer', 't-red'),
-              ('p3', ?, 'u3', 'd3', 'ReservePlayer', NULL)`,
-      [match.id, match.id, match.id]
-    );
+    await getPgTestDb().insert(matchTeams).values([
+      { id: 't-blue', match_id: match.id, team_name: 'Blue', team_order: 0, is_reserve: false },
+      { id: 't-red', match_id: match.id, team_name: 'Red', team_order: 1, is_reserve: false },
+      { id: 't-res', match_id: match.id, team_name: 'Reserve', team_order: 99, is_reserve: true },
+    ]);
+    await getPgTestDb().insert(matchParticipants).values([
+      { id: 'p1', match_id: match.id, user_id: 'u1', discord_user_id: 'd1', username: 'BluePlayer', team_id: 't-blue' },
+      { id: 'p2', match_id: match.id, user_id: 'u2', discord_user_id: 'd2', username: 'RedPlayer', team_id: 't-red' },
+      { id: 'p3', match_id: match.id, user_id: 'u3', discord_user_id: 'd3', username: 'ReservePlayer', team_id: null },
+    ]);
 
     const result = await fetchTeamAssignments(match.id);
     expect(result.blueTeam).toHaveLength(1);
@@ -200,10 +201,7 @@ describe('getMatchLink', () => {
 
   it('returns link when announcement message and guild exist', async () => {
     const match = await createMatch(game.id, mode.id);
-    await getTestDb().run(`
-      INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, message_type)
-      VALUES ('msg1', ?, 'msg-123', 'ch-456', 'announcement')
-    `, [match.id]);
+    await getPgTestDb().insert(discordMatchMessages).values({ id: 'msg1', match_id: match.id, message_id: 'msg-123', channel_id: 'ch-456', message_type: 'announcement' });
 
     const mockClient = {
       guilds: { cache: { first: () => ({ id: 'guild-789' }) } }

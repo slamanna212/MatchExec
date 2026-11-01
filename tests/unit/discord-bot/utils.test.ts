@@ -11,18 +11,18 @@ vi.mock('../../../src/lib/logger/server', () => ({
 }));
 
 import { Utils } from '../../../processes/discord-bot/modules/utils';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { createDiscordChannel, createDiscordSettings, seedBasicTestData } from '../../utils/pg-fixtures';
+
+setupPgTestFile();
 
 describe('Utils', () => {
-  let db: any;
   let utils: Utils;
 
   beforeEach(async () => {
     await seedBasicTestData();
-    db = getTestDb();
     vi.clearAllMocks();
-    utils = new Utils(db as any);
+    utils = new Utils();
   });
 
   // ─── parseGameColor ───────────────────────────────────────────────────────────
@@ -106,11 +106,8 @@ describe('Utils', () => {
     });
 
     it('returns channels with matching notification type enabled', async () => {
-      await db.run(`INSERT OR IGNORE INTO discord_settings (id, guild_id, bot_token) VALUES (1, 'g1', 'tok')`);
-      await db.run(
-        `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, type, channel_type, send_announcements)
-         VALUES ('ch-1', 'g1', 'dc-1', 'announce', 0, 'text', 1)`
-      );
+      await createDiscordSettings({ guild_id: 'g1' });
+      await createDiscordChannel({ id: 'ch-1', guild_id: 'g1', discord_channel_id: 'dc-1', name: 'announce', send_announcements: true });
 
       const result = await utils.getChannelsForNotificationType('announcements');
       expect(result.length).toBeGreaterThan(0);
@@ -118,11 +115,8 @@ describe('Utils', () => {
     });
 
     it('filters correctly - only returns channels with that type enabled', async () => {
-      await db.run(`INSERT OR IGNORE INTO discord_settings (id, guild_id, bot_token) VALUES (1, 'g1', 'tok')`);
-      await db.run(
-        `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, type, channel_type, send_announcements, send_reminders)
-         VALUES ('ch-2', 'g1', 'dc-2', 'reminders', 0, 'text', 0, 1)`
-      );
+      await createDiscordSettings({ guild_id: 'g1' });
+      await createDiscordChannel({ id: 'ch-2', guild_id: 'g1', discord_channel_id: 'dc-2', name: 'reminders', send_announcements: false, send_reminders: true });
 
       const annResult = await utils.getChannelsForNotificationType('announcements');
       const reminderResult = await utils.getChannelsForNotificationType('reminders');

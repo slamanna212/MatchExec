@@ -153,7 +153,6 @@ const files = execSync('find src lib -name "*.ts" -o -name "*.tsx"', { encoding:
   .filter(Boolean)
   .filter(f => !f.includes('node_modules'))
   .filter(f => !f.includes('.next'))
-  .filter(f => !f.includes('database-init.ts')) // Skip excepted files
   .filter(f => !f.includes('logger/base.ts'));
 
 let processedCount = 0;

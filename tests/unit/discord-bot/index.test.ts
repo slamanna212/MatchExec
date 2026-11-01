@@ -44,14 +44,8 @@ vi.mock('discord.js', () => ({
 }));
 
 // Mock database — resolve immediately so the IIFE bot.start() doesn't hang
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn().mockResolvedValue({
-    connect: vi.fn(),
-    run: vi.fn().mockResolvedValue(undefined),
-    get: vi.fn().mockResolvedValue(null),
-    all: vi.fn().mockResolvedValue([]),
-    close: vi.fn().mockResolvedValue(undefined),
-  }),
+vi.mock('../../../lib/db/system-status', () => ({
+  waitForSystemReady: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock all bot modules so they don't try to connect to Discord or DB

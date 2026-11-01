@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks, createMockChannel } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch, createDiscordChannel, createDiscordSettings, createTournament } from '../../utils/pg-fixtures';
+import { eq } from 'drizzle-orm';
+import { discordChannels, matches } from '../../../lib/db/schema';
 
 // Mock the logger to prevent database access during import
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -68,9 +70,10 @@ vi.mock('fs', () => {
 // Import AnnouncementHandler dynamically in tests
 let AnnouncementHandler: any;
 
+setupPgTestFile();
+
 describe('AnnouncementHandler', () => {
   let announcementHandler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
@@ -82,22 +85,15 @@ describe('AnnouncementHandler', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
 
     // Insert Discord settings first (required for foreign key)
-    await db.run(`
-      INSERT INTO discord_settings (guild_id, bot_token, announcements_channel_id)
-      VALUES (?, ?, ?)
-    `, ['guild-123', 'test-bot-token', 'channel-123']);
+    await createDiscordSettings({ guild_id: 'guild-123', bot_token: 'test-bot-token', announcements_channel_id: 'channel-123' });
 
     // Add discord_channels for announcements
-    await db.run(`
-      INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_announcements)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, ['channel-1', 'guild-123', 'channel-123', 'announcements', 'announcements', 0, 'text', 1]);
+    await createDiscordChannel({ id: 'channel-1', guild_id: 'guild-123', discord_channel_id: 'channel-123', name: 'announcements', channel_name: 'announcements', send_announcements: true });
 
     const settings = {
       guild_id: 'guild-123',
@@ -108,7 +104,6 @@ describe('AnnouncementHandler', () => {
 
     announcementHandler = new AnnouncementHandler(
       mockDiscordClient as any,
-      db,
       settings as any
     );
   });
@@ -166,14 +161,11 @@ describe('AnnouncementHandler', () => {
 
     it('should not include signup button for tournament matches', async () => {
       // Create tournament
-      await db.run(`
-        INSERT INTO tournaments (id, name, game_id, format, status, rounds_per_match, created_at)
-        VALUES (?, 'Test Tournament', ?, 'single-elimination', 'created', 3, datetime('now'))
-      `, ['tournament-1', game.id]);
+      await createTournament(game.id, { id: 'tournament-1' });
 
       // Create tournament match
       const match = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET tournament_id = ? WHERE id = ?`, ['tournament-1', match.id]);
+      await getPgTestDb().update(matches).set({ tournament_id: 'tournament-1' }).where(eq(matches.id, match.id));
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -297,10 +289,7 @@ describe('AnnouncementHandler', () => {
   describe('postTimedReminder', () => {
     it('should post timed reminder to reminder channels', async () => {
       // Add reminder channel
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_reminders)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['reminder-channel-1', 'guild-123', 'reminder-channel-123', 'reminders', 'reminders', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'reminder-channel-1', guild_id: 'guild-123', discord_channel_id: 'reminder-channel-123', name: 'reminders', channel_name: 'reminders', send_reminders: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -328,7 +317,7 @@ describe('AnnouncementHandler', () => {
 
     it('should not send reminder when no channels configured', async () => {
       // Remove reminder channels
-      await db.run(`DELETE FROM discord_channels WHERE send_reminders = 1`);
+      await getPgTestDb().delete(discordChannels).where(eq(discordChannels.send_reminders, true));
 
       const eventData = {
         id: 'match-123',
@@ -348,10 +337,7 @@ describe('AnnouncementHandler', () => {
   describe('postMatchStartAnnouncement', () => {
     it('should post match start announcement', async () => {
       // Add match_start channel
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['match-start-channel-1', 'guild-123', 'match-start-channel-123', 'match-start', 'match-start', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'match-start-channel-1', guild_id: 'guild-123', discord_channel_id: 'match-start-channel-123', name: 'match-start', channel_name: 'match-start', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -379,10 +365,7 @@ describe('AnnouncementHandler', () => {
   describe('postMapScoreNotification', () => {
     it('should post map score notification', async () => {
       // Add match_start channel (used for live updates)
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['live-channel-1', 'guild-123', 'live-channel-123', 'live-updates', 'live-updates', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'live-channel-1', guild_id: 'guild-123', discord_channel_id: 'live-channel-123', name: 'live-updates', channel_name: 'live-updates', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -410,10 +393,7 @@ describe('AnnouncementHandler', () => {
   describe('postMatchWinnerNotification', () => {
     it('should post match winner notification', async () => {
       // Add live update channel
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['live-channel-2', 'guild-123', 'live-channel-456', 'live-updates', 'live-updates', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'live-channel-2', guild_id: 'guild-123', discord_channel_id: 'live-channel-456', name: 'live-updates', channel_name: 'live-updates', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -439,10 +419,7 @@ describe('AnnouncementHandler', () => {
     });
 
     it('should handle tie scenarios', async () => {
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['live-channel-3', 'guild-123', 'live-channel-789', 'live-updates', 'live-updates', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'live-channel-3', guild_id: 'guild-123', discord_channel_id: 'live-channel-789', name: 'live-updates', channel_name: 'live-updates', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -525,10 +502,7 @@ describe('AnnouncementHandler', () => {
 
   describe('postTournamentWinnerNotification', () => {
     it('should post tournament winner notification', async () => {
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['live-channel-4', 'guild-123', 'live-channel-999', 'live-updates', 'live-updates', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'live-channel-4', guild_id: 'guild-123', discord_channel_id: 'live-channel-999', name: 'live-updates', channel_name: 'live-updates', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -553,10 +527,7 @@ describe('AnnouncementHandler', () => {
 
   describe('postHealthAlert', () => {
     it('should post critical health alerts', async () => {
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_health_alerts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['health-channel-1', 'guild-123', 'health-channel-123', 'health-alerts', 'health-alerts', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'health-channel-1', guild_id: 'guild-123', discord_channel_id: 'health-channel-123', name: 'health-alerts', channel_name: 'health-alerts', send_health_alerts: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -571,10 +542,7 @@ describe('AnnouncementHandler', () => {
     });
 
     it('should post warning health alerts', async () => {
-      await db.run(`
-        INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_health_alerts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, ['health-channel-2', 'guild-123', 'health-channel-456', 'health-alerts', 'health-alerts', 0, 'text', 1]);
+      await createDiscordChannel({ id: 'health-channel-2', guild_id: 'guild-123', discord_channel_id: 'health-channel-456', name: 'health-alerts', channel_name: 'health-alerts', send_health_alerts: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);

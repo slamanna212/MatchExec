@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch, createMatchParticipant } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { inArray } from 'drizzle-orm';
+import { matchParticipants } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch, createMatchParticipant, createDiscordSettings } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -30,10 +32,11 @@ vi.mock('discord.js', () => ({
  
 let ReminderHandler: any;
 
+setupPgTestFile();
+
 describe('ReminderHandler — Extended', () => {
    
   let reminderHandler: any;
-  let db: ReturnType<typeof getTestDb>;
   let game: { id: string };
   let mode: { id: string };
    
@@ -46,18 +49,14 @@ describe('ReminderHandler — Extended', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
 
-    await db.run(
-      `INSERT INTO discord_settings (guild_id, bot_token) VALUES ('guild-rem', 'tok-rem')`
-    );
+    await createDiscordSettings({ guild_id: 'guild-rem', bot_token: 'tok-rem' });
 
     reminderHandler = new ReminderHandler(
       mockDiscordClient,
-      db,
       { guild_id: 'guild-rem' }
     );
 
@@ -100,11 +99,7 @@ describe('ReminderHandler — Extended', () => {
     it('skips participants without discord_user_id', async () => {
       const match = await createMatch(game.id, mode.id);
       // Create participant without discord_user_id
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, username, discord_user_id)
-         VALUES ('p-no-disc', ?, 'u-no-disc', 'NoDiscord', NULL)`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchParticipants).values({ id: 'p-no-disc', match_id: match.id, user_id: 'u-no-disc', username: 'NoDiscord', discord_user_id: null });
       // Create participant with discord_user_id
       await createMatchParticipant(match.id, 'disc-has', 'HasDiscord');
 
@@ -180,10 +175,7 @@ describe('ReminderHandler — Extended', () => {
       const p2 = await createMatchParticipant(match.id, 'disc-mc2', 'MapCodeP2');
 
       // Enable map code receipt for both participants
-      await db.run(
-        `UPDATE match_participants SET receives_map_codes = 1 WHERE id IN (?, ?)`,
-        [p1.id, p2.id]
-      );
+      await getPgTestDb().update(matchParticipants).set({ receives_map_codes: true }).where(inArray(matchParticipants.id, [p1.id, p2.id]));
 
       await reminderHandler.sendMapCodePMs(match.id, 'Ilios', 'ILIOS99');
 

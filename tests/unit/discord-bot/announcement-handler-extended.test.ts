@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks, createMockChannel } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch, createDiscordChannel, createDiscordSettings } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -52,10 +52,11 @@ vi.mock('fs', () => ({
  
 let AnnouncementHandler: any;
 
+setupPgTestFile();
+
 describe('AnnouncementHandler — Extended', () => {
    
   let announcementHandler: any;
-  let db: ReturnType<typeof getTestDb>;
   let game: { id: string };
   let mode: { id: string };
 
@@ -66,23 +67,15 @@ describe('AnnouncementHandler — Extended', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
 
-    await db.run(
-      `INSERT INTO discord_settings (guild_id, bot_token, announcements_channel_id)
-       VALUES ('guild-ext', 'tok-ext', 'chan-ext')`
-    );
-    await db.run(
-      `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_announcements)
-       VALUES ('chan-ext', 'guild-ext', 'chan-ext', 'announcements', 'announcements', 0, 'text', 1)`
-    );
+    await createDiscordSettings({ guild_id: 'guild-ext', bot_token: 'tok-ext', announcements_channel_id: 'chan-ext' });
+    await createDiscordChannel({ id: 'chan-ext', guild_id: 'guild-ext', discord_channel_id: 'chan-ext', name: 'announcements', channel_name: 'announcements', send_announcements: true });
 
     announcementHandler = new AnnouncementHandler(
       mockDiscordClient,
-      db,
       { guild_id: 'guild-ext', announcement_channel_id: 'chan-ext', mention_everyone: false, announcement_role_id: null }
     );
   });
@@ -191,10 +184,7 @@ describe('AnnouncementHandler — Extended', () => {
 
     it('posts to multiple announcement channels when configured', async () => {
       // Add a second announcement channel
-      await db.run(
-        `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_announcements)
-         VALUES ('chan-ext-2', 'guild-ext', 'chan-ext-2', 'announcements2', 'announcements2', 0, 'text', 1)`
-      );
+      await createDiscordChannel({ id: 'chan-ext-2', guild_id: 'guild-ext', discord_channel_id: 'chan-ext-2', name: 'announcements2', channel_name: 'announcements2', send_announcements: true });
 
       const mockChannel1 = createMockChannel();
       const mockChannel2 = createMockChannel();
@@ -281,10 +271,7 @@ describe('AnnouncementHandler — Extended', () => {
     });
 
     it('posts to match-start channel when configured', async () => {
-      await db.run(
-        `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-         VALUES ('ms-chan-ext', 'guild-ext', 'ms-chan-ext', 'match-start', 'match-start', 0, 'text', 1)`
-      );
+      await createDiscordChannel({ id: 'ms-chan-ext', guild_id: 'guild-ext', discord_channel_id: 'ms-chan-ext', name: 'match-start', channel_name: 'match-start', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
@@ -325,10 +312,7 @@ describe('AnnouncementHandler — Extended', () => {
     });
 
     it('posts score notification when channel configured', async () => {
-      await db.run(
-        `INSERT INTO discord_channels (id, guild_id, discord_channel_id, name, channel_name, type, channel_type, send_match_start)
-         VALUES ('live-ext', 'guild-ext', 'live-ext', 'live', 'live', 0, 'text', 1)`
-      );
+      await createDiscordChannel({ id: 'live-ext', guild_id: 'guild-ext', discord_channel_id: 'live-ext', name: 'live', channel_name: 'live', send_match_start: true });
 
       const mockChannel = createMockChannel();
       mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);

@@ -22,7 +22,6 @@ await esbuild.build({
     '@discordjs/ws',
 
     // Native modules
-    'sqlite3',
     'bufferutil',
 
     // TTS library

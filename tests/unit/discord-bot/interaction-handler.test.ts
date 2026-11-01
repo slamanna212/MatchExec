@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 import { listActiveTournamentSummaries } from '../../../src/lib/tournaments';
 import { db as pgDb } from '../../../lib/db';
+import { setupPgTestFile } from '../../utils/pg-test-db';
 import { tournamentParticipants, tournaments } from '../../../lib/db/schema';
 
 // Wrap the summary query so tests can make it fail once; by default it hits the (bridged) Postgres database.
@@ -99,6 +100,8 @@ vi.mock('../../../lib/signup-forms', () => ({
 }));
 
 let InteractionHandler: any;
+
+setupPgTestFile();
 
 describe('InteractionHandler', () => {
   let handler: any;

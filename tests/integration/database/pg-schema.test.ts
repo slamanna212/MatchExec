@@ -65,3 +65,23 @@ describe('fixtures + reset', () => {
     expect(await getPgTestDb().select().from(schema.games)).toHaveLength(0);
   });
 });
+
+describe('constraints (ported from SQLite schema/foreign-key suites)', () => {
+  it('rejects FK violations: game_mode -> game, match_participant -> match, match -> game', async () => {
+    const db = getPgTestDb();
+    await expect(db.insert(schema.gameModes).values({ id: 'm1', game_id: 'nope', name: 'x', description: 'd', scoring_type: 'Normal' } as never)).rejects.toThrow();
+    await expect(db.insert(schema.matchParticipants).values({ id: 'p1', match_id: 'nope', user_id: 'u', username: 'x' } as never)).rejects.toThrow();
+    const { game, mode } = await seedBasicTestData();
+    const match = await createMatch(game.id, mode.id);
+    await db.insert(schema.matchParticipants).values({ id: 'p2', match_id: match.id, user_id: 'u', username: 'x' } as never);
+    expect(await db.select().from(schema.matchParticipants)).toHaveLength(1);
+  });
+
+  it('check constraints reject invalid scorecard / queue statuses', async () => {
+    const db = getPgTestDb();
+    const { game, mode } = await seedBasicTestData();
+    const match = await createMatch(game.id, mode.id);
+    await expect(db.insert(schema.scorecardSubmissions).values({ match_id: match.id, team_side: 'green', source: 'web' } as never)).rejects.toThrow();
+    await expect(db.insert(schema.discordBotRequests).values({ request_type: 'x', status: 'bogus' } as never)).rejects.toThrow();
+  });
+});

@@ -4,13 +4,6 @@ vi.mock('@/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
 }));
 
-vi.mock('@/lib/database-init', () => ({
-  getDbInstance: vi.fn(async () => {
-    const { getTestDb } = await import('../../utils/test-db');
-    return getTestDb();
-  }),
-}));
-
 import {
   parseAnnouncementsField,
   calculateAnnouncementTime,

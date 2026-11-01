@@ -30,18 +30,9 @@ setupPgTestFile();
 let QueueProcessor: typeof import('../../../processes/discord-bot/modules/queue-processor').QueueProcessor;
 beforeAll(async () => { ({ QueueProcessor } = await import('../../../processes/discord-bot/modules/queue-processor')); });
 
-/** Stand-in for the legacy SQLite connection: only tournaments still live there, so nothing is found. */
-function legacyDb() {
-  return {
-    get: vi.fn(async () => undefined),
-    all: vi.fn(async () => []),
-    run: vi.fn(async () => ({ changes: 1 })),
-  };
-}
-
 const client = { isReady: vi.fn(() => true), channels: { fetch: vi.fn() }, guilds: { fetch: vi.fn() } };
 
-function make(handlers: Record<string, any> = {}, legacy = legacyDb()) {
+function make(handlers: Record<string, any> = {}) {
   const announcement = {
     postEventAnnouncement: vi.fn().mockResolvedValue({ success: true, mainMessage: { id: 'msg-1', channelId: 'c1' } }),
     postTimedReminder: vi.fn().mockResolvedValue({ success: true, messageId: 'rem-1' }),
@@ -55,8 +46,8 @@ function make(handlers: Record<string, any> = {}, legacy = legacyDb()) {
   };
   const reminder = { sendPlayerReminders: vi.fn().mockResolvedValue(true), sendMapCodePMs: vi.fn().mockResolvedValue(true), ...handlers.reminder };
   const voice = { playTeamAnnouncements: vi.fn().mockResolvedValue({ success: true }), updateFirstTeam: vi.fn(), testVoiceLineForUser: vi.fn().mockResolvedValue({ success: true }), ...handlers.voice };
-  const qp = new QueueProcessor(client as never, legacy as never, null, announcement as never, reminder as never, { createDiscordEvent: vi.fn(), deleteDiscordEvent: vi.fn() } as never, voice as never, null);
-  return { qp, announcement, reminder, voice, legacy };
+  const qp = new QueueProcessor(client as never, null, announcement as never, reminder as never, { createDiscordEvent: vi.fn(), deleteDiscordEvent: vi.fn() } as never, voice as never, null);
+  return { qp, announcement, reminder, voice };
 }
 
 beforeEach(async () => {

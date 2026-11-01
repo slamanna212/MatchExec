@@ -31,7 +31,6 @@ const PROCESS_DEPS = [
   '@discordjs/ws',
   '@snazzah/davey',
   'bufferutil',
-  'umzug',
   'tslib',
 ];
 

@@ -156,7 +156,13 @@ async function seedStats(tx: Executor, gameId: string, statsRaw: StatData[] | { 
 
 async function seedGame(db: Db, gameDir: string, dir: string): Promise<boolean> {
   const gamePath = path.join(gameDir, dir);
-  const gameData = readJson<GameData>(path.join(gamePath, 'game.json'));
+  let gameData: GameData | undefined;
+  try {
+    gameData = readJson<GameData>(path.join(gamePath, 'game.json'));
+  } catch (error) {
+    log(`invalid game.json for ${dir}, skipping:`, error instanceof Error ? error.message : error);
+    return false;
+  }
   if (!gameData) {
     log(`no game.json for ${dir}, skipping`);
     return false;

@@ -1,38 +1,5 @@
-import { beforeAll, afterAll, afterEach, expect } from 'vitest';
-import { setupTestDatabase, teardownTestDatabase, resetTestDatabase } from './utils/test-db';
-import { resetMockDbInstance } from './mocks/database';
-import { installLegacyPgBridge, resetLegacyQueueRows, teardownLegacyPgBridge } from './utils/legacy-pg-bridge';
-
 // Enable React act() environment to suppress "not configured to support act(...)" warnings
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
-// Postgres-backed test files (see tests/utils/pg-test-db.ts) opt out of the legacy SQLite per-file setup:
-// anything under tests/integration/server/ or named pg-*.test.ts.
-function usesPgHarness(): boolean {
-  const file = (expect.getState().testPath ?? '').replace(/\\/g, '/');
-  return /\/tests\/integration\/server\//.test(file) || /\/pg-[^/]*\.test\.tsx?$/.test(file);
-}
-
-let sqliteActive = false;
-
-beforeAll(async () => {
-  sqliteActive = !usesPgHarness();
-  if (sqliteActive) {
-    await setupTestDatabase();
-    installLegacyPgBridge(); // transitional: game reference data is read through Postgres (see the bridge file)
-  }
-});
-
-afterEach(async () => {
-  if (!sqliteActive) return;
-  await resetLegacyQueueRows();
-  await resetTestDatabase();
-  resetMockDbInstance();
-});
-
-afterAll(async () => {
-  if (sqliteActive) {
-    await teardownLegacyPgBridge();
-    await teardownTestDatabase();
-  }
-});
+// No global database setup: every test file that needs Postgres calls `setupPgTestFile()` from tests/utils/pg-test-db.ts
+// (PGlite by default, real Postgres when TEST_DATABASE_URL is set).

@@ -3,7 +3,6 @@ import type {
 import {
   EmbedBuilder
 } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
@@ -147,18 +146,12 @@ async function sendEmbedToChannels(
 export class ReminderHandler {
   constructor(
     private client: Client,
-    private db: Database,
     private settings: DiscordSettings | null
   ) {}
 
   async sendPlayerReminders(matchId: string): Promise<boolean> {
     if (!this.client.isReady()) {
       logger.warning('⚠️ Bot not ready');
-      return false;
-    }
-
-    if (!this.db) {
-      logger.error('❌ Database not available');
       return false;
     }
 
@@ -431,11 +424,6 @@ export class ReminderHandler {
   async sendMapCodePMs(matchId: string, mapName: string, mapCode: string): Promise<boolean> {
     if (!this.client.isReady()) {
       logger.warning('⚠️ Bot not ready');
-      return false;
-    }
-
-    if (!this.db) {
-      logger.error('❌ Database not available');
       return false;
     }
 

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
-
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),
@@ -27,27 +25,27 @@ vi.mock('../../../processes/discord-bot/utils/avatar-fetcher', () => ({
 
 import { AvatarUpdateJob } from '../../../processes/scheduler/jobs/update-avatars';
 import { getDiscordAvatarUrl } from '../../../processes/discord-bot/utils/avatar-fetcher';
-import { getTestDb } from '../../utils/test-db';
-import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { discordSettings, matchParticipants } from '../../../lib/db/schema';
+import { seedBasicTestData, createMatch, createDiscordSettings, createMatchParticipant } from '../../utils/pg-fixtures';
 
 const mockGetDiscordAvatarUrl = getDiscordAvatarUrl as ReturnType<typeof vi.fn>;
 
+setupPgTestFile();
+
 describe('AvatarUpdateJob — extended', () => {
   let job: AvatarUpdateJob;
-  let db: any;
   let gameId: string;
   let modeId: string;
 
   beforeEach(async () => {
-    db = getTestDb();
     const seed = await seedBasicTestData();
     gameId = seed.game.id;
     modeId = seed.mode.id;
     vi.clearAllMocks();
 
-    resetSettingsStore();
-    settingsStore.discord = { guild_id: 'guild-1', bot_token: 'test-token' };
+    await createDiscordSettings({ guild_id: 'guild-1', bot_token: 'test-token' });
 
     job = new AvatarUpdateJob();
     (job as any).discordClient = {
@@ -60,37 +58,23 @@ describe('AvatarUpdateJob — extended', () => {
   describe('updateAvatars — last_avatar_check timestamp', () => {
     it('sets last_avatar_check on successful avatar update', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-ts', ?, 'u-ts', 'disc-ts1', 'TimestampUser')`,
-        [match.id]
-      );
+      await createMatchParticipant(match.id, 'disc-ts1', 'TimestampUser', { id: 'p-ts', user_id: 'u-ts' });
 
       const before = new Date();
       await job.updateAvatars();
 
-      const row = await db.get(
-        `SELECT last_avatar_check FROM match_participants WHERE id = 'p-ts'`
-      );
+      const row = (await getPgTestDb().select().from(matchParticipants).where(eq(matchParticipants.id, 'p-ts')))[0];
       expect(row.last_avatar_check).not.toBeNull();
-      const checked = new Date(row.last_avatar_check);
+      const checked = new Date(row.last_avatar_check!);
       expect(checked.getTime()).toBeGreaterThanOrEqual(before.getTime() - 2000);
     });
 
     it('sets last_avatar_check even on failed avatar fetch', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-fail-ts', ?, 'u-ft', 'disc-ft1', 'FailTsUser')`,
-        [match.id]
-      );
+      await createMatchParticipant(match.id, 'disc-ft1', 'FailTsUser', { id: 'p-fail-ts', user_id: 'u-ft' });
 
       // Two participants so the second one can succeed (triggers failure increment logic)
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-ok-ts', ?, 'u-ok', 'disc-ok1', 'OkUser')`,
-        [match.id]
-      );
+      await createMatchParticipant(match.id, 'disc-ok1', 'OkUser', { id: 'p-ok-ts', user_id: 'u-ok' });
 
       mockGetDiscordAvatarUrl
         .mockRejectedValueOnce(new Error('Not found'))
@@ -98,9 +82,7 @@ describe('AvatarUpdateJob — extended', () => {
 
       await job.updateAvatars();
 
-      const failRow = await db.get(
-        `SELECT last_avatar_check FROM match_participants WHERE id = 'p-fail-ts'`
-      );
+      const failRow = (await getPgTestDb().select().from(matchParticipants).where(eq(matchParticipants.id, 'p-fail-ts')))[0];
       expect(failRow.last_avatar_check).not.toBeNull();
     });
   });
@@ -109,16 +91,8 @@ describe('AvatarUpdateJob — extended', () => {
     it('updates avatar_url on all participant rows sharing the same discord_user_id', async () => {
       const match1 = await createMatch(gameId, modeId, { status: 'gather' });
       const match2 = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('pa1', ?, 'u-shared', 'disc-shared', 'SharedUser')`,
-        [match1.id]
-      );
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('pa2', ?, 'u-shared', 'disc-shared', 'SharedUser')`,
-        [match2.id]
-      );
+      await createMatchParticipant(match1.id, 'disc-shared', 'SharedUser', { id: 'pa1', user_id: 'u-shared' });
+      await createMatchParticipant(match2.id, 'disc-shared', 'SharedUser', { id: 'pa2', user_id: 'u-shared' });
 
       await job.updateAvatars();
 
@@ -126,11 +100,9 @@ describe('AvatarUpdateJob — extended', () => {
       expect(mockGetDiscordAvatarUrl).toHaveBeenCalledOnce();
 
       // But both rows should be updated
-      const rows = await db.all(
-        `SELECT avatar_url FROM match_participants WHERE discord_user_id = 'disc-shared'`
-      );
+      const rows = await getPgTestDb().select().from(matchParticipants).where(eq(matchParticipants.discord_user_id, 'disc-shared'));
       expect(rows).toHaveLength(2);
-      rows.forEach((r: { avatar_url: string }) => {
+      rows.forEach((r) => {
         expect(r.avatar_url).toBe('https://cdn.discordapp.com/avatars/u/hash.png');
       });
     });
@@ -139,28 +111,18 @@ describe('AvatarUpdateJob — extended', () => {
   describe('updateAvatars — failure threshold edge cases', () => {
     it('includes participants with failed_avatar_checks = 2 (below threshold)', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, failed_avatar_checks)
-         VALUES ('p-2fails', ?, 'u-2f', 'disc-2f', 'AlmostSkipped', 2)`,
-        [match.id]
-      );
+      await createMatchParticipant(match.id, 'disc-2f', 'AlmostSkipped', { id: 'p-2fails', user_id: 'u-2f', failed_avatar_checks: 2 });
 
       await job.updateAvatars();
 
       expect(mockGetDiscordAvatarUrl).toHaveBeenCalledOnce();
-      const row = await db.get(
-        `SELECT failed_avatar_checks FROM match_participants WHERE id = 'p-2fails'`
-      );
+      const row = (await getPgTestDb().select().from(matchParticipants).where(eq(matchParticipants.id, 'p-2fails')))[0];
       expect(row.failed_avatar_checks).toBe(0);
     });
 
     it('excludes participants with failed_avatar_checks = 4 (above threshold)', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, failed_avatar_checks)
-         VALUES ('p-4fails', ?, 'u-4f', 'disc-4f', 'TooManyFails', 4)`,
-        [match.id]
-      );
+      await createMatchParticipant(match.id, 'disc-4f', 'TooManyFails', { id: 'p-4fails', user_id: 'u-4f', failed_avatar_checks: 4 });
 
       await job.updateAvatars();
 
@@ -169,11 +131,7 @@ describe('AvatarUpdateJob — extended', () => {
 
     it('excludes participants with NULL discord_user_id', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p-no-discord', ?, 'u-nd', NULL, 'NoDiscord')`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchParticipants).values({ id: 'p-no-discord', match_id: match.id, user_id: 'u-nd', discord_user_id: null, username: 'NoDiscord' });
 
       await job.updateAvatars();
 
@@ -185,7 +143,7 @@ describe('AvatarUpdateJob — extended', () => {
     it('handles Discord client init failure gracefully without throwing', async () => {
       (job as any).discordClient = null;
       // No discord_settings row — token will be missing
-      settingsStore.discord = undefined;
+      await getPgTestDb().delete(discordSettings);
 
       await expect(job.updateAvatars()).resolves.toBeUndefined();
       expect(mockGetDiscordAvatarUrl).not.toHaveBeenCalled();

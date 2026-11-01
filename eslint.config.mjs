@@ -77,13 +77,10 @@ const eslintConfig = [
     }
   },
   {
-    // Exception: Allow console in CLI scripts, database-init, migrations, logger, and test utilities
+    // Exception: Allow console in CLI scripts, migrations, logger, and test utilities
     files: [
       "scripts/**/*.{js,ts}",
       "add-test-participants.js",
-      "lib/database-init.ts",
-      "lib/database/seeder.ts",
-      "lib/database/migrations.ts",
       "lib/db/migrate.ts",
       "lib/db/seed.ts",
       "migrations/**/*.{js,ts}",

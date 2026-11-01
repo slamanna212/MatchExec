@@ -33,14 +33,8 @@ vi.mock('discord.js', () => ({
   Partials: { Message: 0, Channel: 1, Reaction: 2 },
 }));
 
-vi.mock('../../../lib/database', () => ({
-  waitForDatabaseReady: vi.fn().mockResolvedValue({
-    connect: vi.fn(),
-    run: vi.fn().mockResolvedValue(undefined),
-    get: vi.fn().mockResolvedValue(null),
-    all: vi.fn().mockResolvedValue([]),
-    close: vi.fn().mockResolvedValue(undefined),
-  }),
+vi.mock('../../../lib/db/system-status', () => ({
+  waitForSystemReady: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../processes/discord-bot/modules/voice-handler', () => ({

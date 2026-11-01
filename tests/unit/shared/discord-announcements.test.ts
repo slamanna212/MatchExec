@@ -9,15 +9,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
-import { getTestDb } from '../../utils/test-db';
-
-vi.mock('../../../src/lib/database-init', () => ({
-  getDbInstance: async () => {
-    const { getMockDbInstance } = await import('../../mocks/database');
-    return getMockDbInstance();
-  },
-}));
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { eq } from 'drizzle-orm';
+import { discordAnnouncementQueue } from '../../../lib/db/schema';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -29,10 +24,11 @@ vi.mock('../../../src/lib/logger/server', () => ({
   },
 }));
 
+setupPgTestFile();
+
 describe('Discord Announcements (L3)', () => {
   let gameId: string;
   let modeId: string;
-  let db: ReturnType<typeof getTestDb>;
 
   function makeEventData(matchId: string) {
     return {
@@ -50,7 +46,6 @@ describe('Discord Announcements (L3)', () => {
     const seed = await seedBasicTestData();
     gameId = seed.game.id;
     modeId = seed.mode.id;
-    db = getTestDb();
   });
 
   // ─── Happy path ───────────────────────────────────────────────────────────
@@ -69,10 +64,7 @@ describe('Discord Announcements (L3)', () => {
 
     await postEventAnnouncement(makeEventData(match.id));
 
-    const row = await db.get(
-      `SELECT * FROM discord_announcement_queue WHERE match_id = ?`,
-      [match.id]
-    ) as Record<string, unknown> | null;
+    const [row] = await getPgTestDb().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, match.id));
 
     expect(row).toBeDefined();
     expect(row!.status).toBe('pending');
@@ -86,10 +78,7 @@ describe('Discord Announcements (L3)', () => {
 
     await postEventAnnouncement(makeEventData(match.id));
 
-    const row = await db.get(
-      `SELECT id FROM discord_announcement_queue WHERE match_id = ?`,
-      [match.id]
-    ) as { id: string } | null;
+    const [row] = await getPgTestDb().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, match.id));
 
     expect(typeof row!.id).toBe('string');
     expect(row!.id.length).toBeGreaterThan(0);
@@ -106,10 +95,7 @@ describe('Discord Announcements (L3)', () => {
 
     expect(result).toBe(true);
 
-    const rows = await db.all(
-      `SELECT id FROM discord_announcement_queue WHERE match_id = ?`,
-      [match.id]
-    ) as Array<{ id: string }>;
+    const rows = await getPgTestDb().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, match.id));
     expect(rows).toHaveLength(1);
   });
 

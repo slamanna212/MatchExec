@@ -14,7 +14,6 @@ await esbuild.build({
   outfile: join(__dirname, 'dist/scheduler.js'),
   external: [
     // Native modules
-    'sqlite3',
     'bufferutil',
 
     // Discord.js (used by avatar update job, has native deps)

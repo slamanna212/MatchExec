@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 import { db as pgDb } from '../../../lib/db';
-import { tournamentTeams, tournaments } from '../../../lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { matchParticipants, matches, tournamentTeams, tournaments } from '../../../lib/db/schema';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -90,11 +91,11 @@ vi.mock('../../../lib/signup-forms', () => ({
  
 let InteractionHandler: any;
 
+setupPgTestFile();
+
 describe('InteractionHandler — Extended', () => {
    
   let handler: any;
-   
-  let db: any;
    
   let game: any;
    
@@ -109,7 +110,6 @@ describe('InteractionHandler — Extended', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -142,9 +142,9 @@ describe('InteractionHandler — Extended', () => {
   describe('handleSlashCommand — /matches extended', () => {
     it('only shows gather/assign/battle matches (not completed)', async () => {
       const m1 = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET status='complete' WHERE id=?`, [m1.id]);
+      await getPgTestDb().update(matches).set({ status: 'complete' }).where(eq(matches.id, m1.id));
       const m2 = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET status='gather' WHERE id=?`, [m2.id]);
+      await getPgTestDb().update(matches).set({ status: 'gather' }).where(eq(matches.id, m2.id));
 
       const interaction = makeInteraction({ commandName: 'matches' });
       await handler.handleSlashCommand(interaction);
@@ -159,7 +159,7 @@ describe('InteractionHandler — Extended', () => {
 
     it('replies ephemerally with no-matches message when all matches are completed', async () => {
       const m = await createMatch(game.id, mode.id);
-      await db.run(`UPDATE matches SET status='complete' WHERE id=?`, [m.id]);
+      await getPgTestDb().update(matches).set({ status: 'complete' }).where(eq(matches.id, m.id));
 
       const interaction = makeInteraction({ commandName: 'matches' });
       await handler.handleSlashCommand(interaction);
@@ -218,11 +218,7 @@ describe('InteractionHandler — Extended', () => {
     it('replies with already-signed-up when user is already a participant', async () => {
       const match = await createMatch(game.id, mode.id);
       // Insert a participant with the same user ID that makeInteraction() uses ('u-ext')
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, username, discord_user_id)
-         VALUES ('already-p1', ?, 'u-ext', 'ExtUser', 'u-ext')`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchParticipants).values({ id: 'already-p1', match_id: match.id, user_id: 'u-ext', username: 'ExtUser', discord_user_id: 'u-ext' });
 
       const interaction = makeInteraction({ customId: `signup_${match.id}` });
       await handler.handleButtonInteraction(interaction);

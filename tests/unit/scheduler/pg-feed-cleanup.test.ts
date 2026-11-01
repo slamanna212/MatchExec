@@ -13,7 +13,6 @@ vi.mock('../../../src/lib/logger/server', () => ({
 vi.mock('../../../src/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
 }));
-vi.mock('../../../lib/database', () => ({ waitForDatabaseReady: vi.fn() }));
 vi.mock('node-cron', () => ({ schedule: vi.fn(() => ({ stop: vi.fn() })), validate: vi.fn().mockReturnValue(true) }));
 vi.mock('../../../processes/scheduler/jobs/update-avatars', () => ({ AvatarUpdateJob: vi.fn() }));
 vi.mock('../../../processes/scheduler/jobs/check-for-update', () => ({ UpdateCheckJob: vi.fn() }));

@@ -13,7 +13,6 @@ await esbuild.build({
   format: 'cjs',
   outfile: join(__dirname, 'dist/stats-processor.js'),
   external: [
-    'sqlite3',
     'bufferutil',
     '@napi-rs/canvas',
     'discord.js',

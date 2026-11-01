@@ -20,18 +20,18 @@ import {
   collectFormData,
   insertParticipant,
 } from '../../../processes/discord-bot/modules/interaction-helpers';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
+import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 import { eq } from 'drizzle-orm';
 import { db as pgDb } from '../../../lib/db';
-import { tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments } from '../../../lib/db/schema';
+import { matchParticipants, tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments } from '../../../lib/db/schema';
 
-/** Tournaments live in Postgres (injected by the legacy bridge); only games / modes are still seeded through SQLite. */
 const insertTournament = async (id: string, gameId: string, modeId: string, name = 'Tourney') =>
   pgDb.insert(tournaments).values({ id, name, game_id: gameId, game_mode_id: modeId, status: 'created', format: 'single-elimination', rounds_per_match: 3 });
 
+setupPgTestFile();
+
 describe('interaction-helpers', () => {
-  let db: any;
   let game: any;
   let mode: any;
 
@@ -39,7 +39,6 @@ describe('interaction-helpers', () => {
     const data = await seedBasicTestData();
     game = data.game;
     mode = data.mode;
-    db = getTestDb();
     vi.clearAllMocks();
   });
 
@@ -54,16 +53,8 @@ describe('interaction-helpers', () => {
 
     it('returns participant count for match', async () => {
       const match = await createMatch(game.id, mode.id);
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p1', ?, 'u1', 'd1', 'Player1')`,
-        [match.id]
-      );
-      await db.run(
-        `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)
-         VALUES ('p2', ?, 'u2', 'd2', 'Player2')`,
-        [match.id]
-      );
+      await getPgTestDb().insert(matchParticipants).values({ id: 'p1', match_id: match.id, user_id: 'u1', discord_user_id: 'd1', username: 'Player1' });
+      await getPgTestDb().insert(matchParticipants).values({ id: 'p2', match_id: match.id, user_id: 'u2', discord_user_id: 'd2', username: 'Player2' });
 
       const count = await getParticipantCount(match.id, false);
       expect(count).toBe(2);
@@ -243,7 +234,7 @@ describe('interaction-helpers', () => {
 
       expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
 
-      const row = await db.get(`SELECT * FROM match_participants WHERE id = ?`, [participantId]);
+      const [row] = await getPgTestDb().select().from(matchParticipants).where(eq(matchParticipants.id, participantId));
       expect(row).toBeDefined();
       expect(row.match_id).toBe(match.id);
       expect(row.discord_user_id).toBe('discord-user-123');

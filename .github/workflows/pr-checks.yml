@@ -123,8 +123,8 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run Postgres-backed tests against postgres:18
-        run: pnpm exec vitest run tests/integration/server /pg- --reporter=default --reporter=github-actions
+      - name: Run the full suite against postgres:18 (TEST_DATABASE_URL)
+        run: pnpm exec vitest run --reporter=default --reporter=github-actions
 
   docker-test:
     name: Docker Integration Test

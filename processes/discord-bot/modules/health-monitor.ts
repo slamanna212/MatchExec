@@ -1,7 +1,7 @@
-import type { Database } from '../../../lib/database/connection';
 import type { AnnouncementHandler } from './announcement-handler';
 import { logger } from '../../../src/lib/logger/server';
 import { getAppSetting } from '../../../src/lib/settings';
+import { getHealthAlertLastSent, markHealthAlertSent } from '../../../src/lib/health-alerts';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
 
 interface HealthAlertConfig {
@@ -20,7 +20,6 @@ export class HealthMonitor {
   private readonly RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
 
   constructor(
-    private db: Database,
     private announcementHandler: AnnouncementHandler
   ) {}
 
@@ -155,17 +154,13 @@ export class HealthMonitor {
    */
   private async checkRateLimit(alertType: string): Promise<boolean> {
     try {
-      const result = await this.db.get<{ last_sent_at: string }>(
-        'SELECT last_sent_at FROM health_alerts_sent WHERE alert_type = ?',
-        [alertType]
-      );
+      const lastSent = await getHealthAlertLastSent(alertType);
 
-      if (!result) {
+      if (!lastSent) {
         // No record exists, can send
         return true;
       }
 
-      const lastSent = new Date(result.last_sent_at);
       const now = new Date();
       const timeSinceLastAlert = now.getTime() - lastSent.getTime();
 
@@ -183,12 +178,7 @@ export class HealthMonitor {
    */
   private async updateRateLimit(alertType: string): Promise<void> {
     try {
-      await this.db.run(
-        `INSERT INTO health_alerts_sent (alert_type, last_sent_at)
-         VALUES (?, CURRENT_TIMESTAMP)
-         ON CONFLICT(alert_type) DO UPDATE SET last_sent_at = CURRENT_TIMESTAMP`,
-        [alertType]
-      );
+      await markHealthAlertSent(alertType);
     } catch (error) {
       logger.error('Error updating rate limit:', error);
     }
