@@ -6,7 +6,8 @@ import { scorecardSubmissions } from './stats';
 
 export const discordAnnouncementQueue = pgTable('discord_announcement_queue', {
   id: text('id').primaryKey(),
-  match_id: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+  // Holds a match id OR a tournament id (tournament announcements / status updates / winner), so no FK to matches.
+  match_id: text('match_id').notNull(),
   announcement_type: text('announcement_type'),
   announcement_data: jsonb('announcement_data').$type<Record<string, unknown>>(),
   status: text('status', { enum: ['pending', 'processing', 'completed', 'failed'] }).notNull().default("pending"),
@@ -163,7 +164,8 @@ export const discordMatchStartQueue = pgTable('discord_match_start_queue', {
 
 export const discordMatchWinnerQueue = pgTable('discord_match_winner_queue', {
   id: text('id').primaryKey(),
-  match_id: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+  // Holds a match id OR a tournament id (tournament announcements / status updates / winner), so no FK to matches.
+  match_id: text('match_id').notNull(),
   match_name: text('match_name'),
   game_id: text('game_id'),
   winner: text('winner'),
@@ -240,7 +242,8 @@ export const discordReminderQueue = pgTable('discord_reminder_queue', {
 export const discordScoreNotificationQueue = pgTable('discord_score_notification_queue', {
   id: text('id').primaryKey(),
   match_id: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
-  game_id: text('game_id').notNull().references(() => matchGames.id, { onDelete: 'cascade' }),
+  // The GAME id (games.id, e.g. 'overwatch2') used for the embed's game display - not match_games.id (the SQLite FK was never enforced).
+  game_id: text('game_id').notNull(),
   map_id: text('map_id'),
   game_number: integer('game_number'),
   winner: text('winner'),
@@ -302,7 +305,8 @@ export const discordStatsReportQueue = pgTable('discord_stats_report_queue', {
 
 export const discordStatusUpdateQueue = pgTable('discord_status_update_queue', {
   id: text('id').primaryKey(),
-  match_id: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
+  // Holds a match id OR a tournament id (tournament announcements / status updates / winner), so no FK to matches.
+  match_id: text('match_id').notNull(),
   new_status: text('new_status'),
   status: text('status', { enum: ['pending', 'processing', 'completed', 'failed'] }).notNull().default("pending"),
   attempts: integer('attempts').notNull().default(0),

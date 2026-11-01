@@ -6,6 +6,8 @@ import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import type { ScorecardSubmission, ScorecardPlayerStat } from '@/shared/types';
 import { apiError, apiOk } from '@/lib/api-response';
+import { db as pgDb } from '../../../../../../lib/db';
+import { enqueueStatsProcessing } from '@/lib/discord-queues';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MIME_TO_EXT: Record<string, string> = {
@@ -85,7 +87,6 @@ export async function POST(
 
     const screenshotUrl = `/uploads/scorecards/${matchId}/${filename}`;
     const submissionId = crypto.randomUUID();
-    const queueId = crypto.randomUUID();
 
     const db = await getDbInstance();
 
@@ -94,10 +95,8 @@ export async function POST(
       [submissionId, matchId, matchGameId, teamSide, screenshotUrl]
     );
 
-    await db.run(
-      `INSERT INTO stats_processing_queue (id, submission_id, match_id, match_game_id) VALUES (?, ?, ?, ?)`,
-      [queueId, submissionId, matchId, matchGameId]
-    );
+    // TODO(stats): queue row is in Postgres, the submission in SQLite until the stats domain is ported
+    await enqueueStatsProcessing(pgDb, { submissionId, matchId, matchGameId });
 
     return apiOk({ success: true, submissionId, screenshotUrl });
   } catch (error) {

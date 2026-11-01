@@ -8,6 +8,8 @@ import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/util
 import { apiError, apiOk } from '@/lib/api-response';
 import { withTransaction } from '@/lib/transaction';
 import { deleteMatchDependents } from '@/lib/series';
+import { db as pgDb } from '../../../../../lib/db';
+import { enqueueDeletion, enqueueMatchEdit } from '@/lib/discord-queues';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
 
@@ -34,8 +36,8 @@ function prepareMapsJson(maps: unknown): string | null {
 async function queueDiscordMatchEdit(db: Database, matchId: string): Promise<void> {
   const announcementMsg = await db.get('SELECT id FROM discord_match_messages WHERE match_id = ? AND message_type = ?', [matchId, 'announcement']);
   if (!announcementMsg) return;
-  const editQueueId = crypto.randomUUID();
-  await db.run(`INSERT INTO discord_match_edit_queue (id, match_id, status) VALUES (?, ?, 'pending')`, [editQueueId, matchId]);
+  // TODO(matches): queue row is in Postgres, the match in SQLite until matches are ported (not one transaction yet)
+  await enqueueMatchEdit(pgDb, matchId);
   logger.debug('📝 Discord edit queued for match:', matchId);
 }
 
@@ -225,12 +227,7 @@ export async function DELETE(
 
     // Queue Discord message deletion before deleting the match
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
- // NOSONAR: non-security internal ID generation
-      await db.run(`
-        INSERT INTO discord_deletion_queue (id, match_id, status)
-        VALUES (?, ?, 'pending')
-      `, [deletionId, matchId]);
+      await enqueueDeletion(pgDb, matchId);
       
       logger.debug('🗑️ Discord deletion queued for match:', matchId);
     } catch (error) {

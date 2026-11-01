@@ -4,7 +4,12 @@ import { deleteMatchVoiceChannels } from './voice-channel-manager';
 import { logFeedEvent } from './feed-helpers';
 import { withTransaction } from './transaction';
 import { cleanMapId } from './utils/map-utils';
+import { getDiscordSettings } from './settings';
 import { db as pgDb } from '../../lib/db';
+import {
+  enqueueDeletion, enqueueMapCode, enqueueMatchWinner, enqueueScoreNotification, enqueueScorecardPrompt, enqueueStatsImage,
+  enqueueStatsReport, enqueueVoiceAnnouncement, enqueueWinnerVote,
+} from './discord-queues';
 import {
   countStatDefinitions, findMapByIdOrName, getGameScoringConfig, getMap, getMapModeScoringType, getModeScoringType,
   listMapsWithModeScoring,
@@ -1257,9 +1262,6 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string, mapInst
       logger.debug('🔍 mapCode:', mapCode);
       
       if (mapCode) {
-        // Generate unique ID for the queue entry
-        const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-        
         // Get the actual map name from database instead of using potentially raw mapName
         let displayMapName = mapName; // Fallback to passed mapName
         try {
@@ -1279,10 +1281,8 @@ async function queueMapCodePMsForNext(matchId: string, mapName?: string, mapInst
         }
 
         // Add to map code PM queue
-        await db.run(`
-          INSERT INTO discord_map_code_queue (id, match_id, map_name, map_code, status)
-          VALUES (?, ?, ?, ?, 'pending')
-        `, [queueId, matchId, displayMapName, mapCode]);
+        // (TODO(matches): runs on the Postgres pool, not inside a SQLite match transaction, until matches are ported)
+        await enqueueMapCode(pgDb, { matchId, mapName: displayMapName, mapCode });
         
         logger.debug('📱 Map code PMs queued for next map:', mapName, 'in match:', matchId);
       } else {
@@ -1385,27 +1385,16 @@ export async function queueScoreNotification(matchGameId: string, result: MatchR
       }
     }
 
-    // Generate unique notification ID
-    const notificationId = `score_notification_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-    // Insert into score notification queue
-    const insertQuery = `
-      INSERT INTO discord_score_notification_queue (
-        id, match_id, game_id, map_id, game_number, winner,
-        winning_team_name, winning_players, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `;
-
-    await db.run(insertQuery, [
-      notificationId,
-      gameData.match_id,
-      gameData.game_id,
-      gameData.map_id || 'unknown',
-      gameData.round,
-      winnerLabel,
+    // Insert into score notification queue (gameId = the GAME id, used for the embed's game display)
+    await enqueueScoreNotification(pgDb, {
+      matchId: gameData.match_id,
+      gameId: gameData.game_id,
+      mapId: gameData.map_id || 'unknown',
+      gameNumber: gameData.round,
+      winner: winnerLabel,
       winningTeamName,
-      JSON.stringify(winningPlayers)
-    ]);
+      winningPlayers,
+    });
 
     logger.debug(`✅ Queued score notification: ${winningTeamName} wins game ${gameData.round}`);
   } catch (error) {
@@ -1722,24 +1711,15 @@ async function queueVoiceAnnouncementForScore(
 
     const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
 
-    // Generate unique announcement ID
-    const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    
     // Add to voice announcement queue
-    await db.run(`
-      INSERT INTO discord_voice_announcement_queue (
-        id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel, 
-        first_team, status
-      ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
-    `, [
-      announcementId,
-      matchId, 
-      announcementType, 
-      match.blue_team_voice_channel,
-      match.red_team_voice_channel,
-      firstTeam
-    ]);
-    
+    await enqueueVoiceAnnouncement(pgDb, {
+      matchId,
+      type: announcementType,
+      blueChannel: match.blue_team_voice_channel ?? null,
+      redChannel: match.red_team_voice_channel ?? null,
+      firstTeam,
+    });
+
     logger.debug(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
   } catch (error) {
     logger.error('❌ Error queuing voice announcement for score:', error);
@@ -2120,25 +2100,17 @@ async function queueMatchWinnerNotification(matchId: string): Promise<void> {
       }
     }
 
-    const notificationId = `match_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-    await db.run(`
-      INSERT INTO discord_match_winner_queue (
-        id, match_id, match_name, game_id, winner, winning_team_name,
-        winning_players, team1_score, team2_score, total_maps, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, [
-      notificationId,
+    await enqueueMatchWinner(pgDb, {
       matchId,
-      matchData.name,
-      matchData.game_id,
+      matchName: matchData.name,
+      gameId: matchData.game_id,
       winner,
       winningTeamName,
-      JSON.stringify(winningPlayers),
+      winningPlayers,
       team1Score,
       team2Score,
-      totalMaps
-    ]);
+      totalMaps,
+    });
 
     logger.debug(`🏆 Match winner notification queued: ${winningTeamName} (${winner}) for ${matchData.name} (${team1Score}-${team2Score})`);
   } catch (error) {
@@ -2162,11 +2134,7 @@ async function queueScorecardPrompts(matchId: string, matchGameId: string, mapNa
 
     if ((await countStatDefinitions(pgDb, match.game_id)) === 0) return;
 
-    const queueId = `scorecard_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    await db.run(
-      'INSERT INTO discord_scorecard_prompt_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
-      [queueId, matchId, matchGameId, mapName, 'pending']
-    );
+    await enqueueScorecardPrompt(pgDb, { matchId, matchGameId, mapName });
     logger.debug(`📸 Scorecard prompt queued for match ${matchId}, game ${matchGameId}`);
   } catch (error) {
     logger.error('Error queuing scorecard prompts:', error);
@@ -2178,9 +2146,7 @@ async function queueWinnerVote(matchId: string, matchGameId: string, mapName: st
     const db = await getDbInstance();
 
     // Check winner vote is enabled in Discord settings
-    const discordSettings = await db.get<{ winner_vote_enabled: number }>(
-      'SELECT winner_vote_enabled FROM discord_settings WHERE id = 1'
-    );
+    const discordSettings = await getDiscordSettings(pgDb);
     if (!discordSettings?.winner_vote_enabled) {
       logger.debug(`⏭️ Winner vote skipped for match ${matchId}: winner_vote_enabled is disabled`);
       return;
@@ -2196,11 +2162,7 @@ async function queueWinnerVote(matchId: string, matchGameId: string, mapName: st
       return;
     }
 
-    const queueId = `winner_vote_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    await db.run(
-      'INSERT INTO discord_winner_vote_queue (id, match_id, match_game_id, map_name, status) VALUES (?, ?, ?, ?, ?)',
-      [queueId, matchId, matchGameId, mapName, 'pending']
-    );
+    await enqueueWinnerVote(pgDb, { matchId, matchGameId, mapName });
     logger.debug(`🗳️ Winner vote queued for match ${matchId}, game ${matchGameId}`);
   } catch (error) {
     logger.error('Error queuing winner vote:', error);
@@ -2220,8 +2182,7 @@ async function queueStatsAggregation(matchId: string): Promise<void> {
     );
     if (!count || count.cnt === 0) return;
 
-    const queueId = `stats_image_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    await db.run('INSERT INTO stats_image_queue (id, match_id, status) VALUES (?, ?, ?)', [queueId, matchId, 'pending']);
+    await enqueueStatsImage(pgDb, matchId);
     logger.debug(`📊 Stats aggregation queued for completed match ${matchId}`);
   } catch (error) {
     logger.error('Error queuing stats aggregation:', error);
@@ -2239,27 +2200,15 @@ async function queueStatsReportDMs(matchId: string): Promise<void> {
     logger.debug(`📊 Stats report DMs deferred for match ${matchId} — ${pending.cnt} submission(s) still pending review`);
     return;
   }
-  const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-  await db.run(
-    `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
-    [queueId, matchId]
-  );
+  await enqueueStatsReport(pgDb, matchId);
   logger.debug(`📊 Stats report DMs queued for completed match ${matchId}`);
 }
 
 export async function queueDiscordDeletion(matchId: string): Promise<void> {
   try {
-    const db = await getDbInstance();
-    
-    // Generate unique deletion ID
-    const deletionId = `completion_deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    
     // Insert into Discord deletion queue
-    await db.run(`
-      INSERT INTO discord_deletion_queue (id, match_id, status)
-      VALUES (?, ?, 'pending')
-    `, [deletionId, matchId]);
-    
+    await enqueueDeletion(pgDb, matchId);
+
     logger.debug(`🗑️ Discord deletion queued for completed match: ${matchId}`);
   } catch (error) {
     logger.error('❌ Error queuing Discord deletion for completed match:', error);

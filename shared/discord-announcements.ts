@@ -1,4 +1,6 @@
 import { logger } from '../src/lib/logger/server';
+import { db as pgDb } from '../lib/db';
+import { enqueueAnnouncement } from '../src/lib/discord-queues';
 
 export interface EventAnnouncementData {
   id: string;
@@ -14,30 +16,18 @@ export interface EventAnnouncementData {
 // Queue an announcement request that the Discord bot will process
 export async function postEventAnnouncement(eventData: EventAnnouncementData): Promise<boolean> {
   try {
-    // Import here to avoid build issues
-    const { getDbInstance } = await import('../src/lib/database-init');
-    const db = await getDbInstance();
-    
-    // Check if announcement already exists to prevent duplicates
-    const existing = await db.get(`
-      SELECT id FROM discord_announcement_queue 
-      WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard')
-    `, [eventData.id]);
-    
-    if (existing) {
+    // Inserts only when no announcement of any status exists yet for this match (prevents duplicates)
+    const queued = await enqueueAnnouncement(pgDb, {
+      matchId: eventData.id,
+      type: 'standard',
+      dedupe: ['pending', 'processing', 'completed', 'failed'],
+    });
+
+    if (!queued) {
       logger.debug('📢 Discord announcement already queued for:', eventData.name);
       return true;
     }
-    
-    // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    
-    // Add to announcement queue with explicit 'standard' type
-    await db.run(`
-      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
-      VALUES (?, ?, 'standard', 'pending')
-    `, [announcementId, eventData.id]);
-    
+
     logger.debug('📢 Discord announcement queued for:', eventData.name);
     return true;
   } catch (error) {

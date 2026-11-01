@@ -7,6 +7,8 @@ import { apiError, apiOk } from '@/lib/api-response';
 import { withTransaction } from '@/lib/transaction';
 import { deleteMatchDependents } from '@/lib/series';
 import { validateMaxLength, validatePositionScoringOverrideJson } from '@/lib/utils/validation';
+import { db as pgDb } from '../../../../../lib/db';
+import { enqueueDeletion } from '@/lib/discord-queues';
 
 interface TournamentWithDetails extends Tournament {
   game_name?: string;
@@ -230,11 +232,7 @@ export async function DELETE(
         logger.debug(`🗑️ Queueing Discord deletions for ${tournamentMatches.length} tournament matches`);
 
         for (const match of tournamentMatches) {
-          const matchDeletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-          await db.run(`
-            INSERT INTO discord_deletion_queue (id, match_id, status)
-            VALUES (?, ?, 'pending')
-          `, [matchDeletionId, match.id]);
+          await enqueueDeletion(pgDb, match.id);
         }
 
         logger.debug(`✅ Discord deletions queued for ${tournamentMatches.length} tournament matches`);
@@ -245,11 +243,7 @@ export async function DELETE(
 
     // Queue Discord message deletion for the tournament itself
     try {
-      const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-      await db.run(`
-        INSERT INTO discord_deletion_queue (id, match_id, status)
-        VALUES (?, ?, 'pending')
-      `, [deletionId, tournamentId]);
+      await enqueueDeletion(pgDb, tournamentId);
 
       logger.debug('🗑️ Discord deletion queued for tournament:', tournamentId);
     } catch (error) {

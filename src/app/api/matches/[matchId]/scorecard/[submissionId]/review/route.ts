@@ -3,6 +3,8 @@ import { getDbInstance } from '@/lib/database-init';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
 import { aggregateMatchStats } from '@/lib/stats-aggregation';
+import { db as pgDb } from '../../../../../../../../lib/db';
+import { enqueueStatsReport } from '@/lib/discord-queues';
 
 export async function PUT(
   request: NextRequest,
@@ -50,11 +52,7 @@ export async function PUT(
           [matchId]
         );
         if (!pending || pending.cnt === 0) {
-          const queueId = `stats_report_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-          await db.run(
-            `INSERT INTO discord_stats_report_queue (id, match_id) VALUES (?, ?) ON CONFLICT(match_id) DO NOTHING`,
-            [queueId, matchId]
-          );
+          await enqueueStatsReport(pgDb, matchId);
         }
       }
     } catch (triggerError) {

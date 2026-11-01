@@ -36,6 +36,12 @@ vi.mock('@napi-rs/canvas', () => ({
   }),
 }));
 
+// stats_image_queue lives in Postgres: completion / failure go through the Discord queues module (mocked here)
+vi.mock('../../../src/lib/discord-queues', () => ({
+  completeJob: vi.fn().mockResolvedValue(true),
+  failJob: vi.fn().mockResolvedValue('pending'),
+}));
+import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { StatImageGenerator } from '../../../processes/stats-processor/modules/stat-image-generator';
 
 interface MockDb {
@@ -79,20 +85,17 @@ describe('StatImageGenerator', () => {
       get: vi.fn().mockResolvedValue(null),
       all: vi.fn().mockResolvedValue([]),
     };
-    generator = new StatImageGenerator(mockDb);
+    generator = new StatImageGenerator(mockDb, {} as never);
   });
 
   describe('generateMatchStatImages', () => {
-    it('marks the queue entry as processing at the start', async () => {
+    it('does not touch the queue row at the start (the processor already claimed it)', async () => {
       mockDb.all.mockResolvedValue([]);
 
       await generator.generateMatchStatImages('queue-1', 'match-1');
 
-      const processingCall = mockDb.run.mock.calls.find((c: unknown[]) =>
-        (c[0] as string).includes("status = 'processing'")
-      );
-      expect(processingCall).toBeDefined();
-      expect((processingCall as unknown[])[1]).toContain('queue-1');
+      expect(completeJob).toHaveBeenCalledTimes(1);
+      expect(failJob).not.toHaveBeenCalled();
     });
 
     it('marks the queue entry as completed when no stats exist', async () => {
@@ -100,15 +103,10 @@ describe('StatImageGenerator', () => {
 
       await generator.generateMatchStatImages('queue-1', 'match-1');
 
-      const completedCall = mockDb.run.mock.calls.find((c: unknown[]) =>
-        (c[0] as string).includes("status = 'completed'") && String(c[1]).includes('queue-1')
-      );
-      expect(completedCall).toBeDefined();
+      expect(completeJob).toHaveBeenCalledWith(expect.anything(), 'statsImage', 'queue-1');
     });
 
     it('marks the queue entry as completed after generating images for stats', async () => {
-      // aggregateStats → scorecard_player_stats returns empty
-      // then match_player_stats returns our sample stats
       mockDb.all
         .mockResolvedValueOnce([]) // scorecard_player_stats in aggregateStats
         .mockResolvedValueOnce(sampleStats); // match_player_stats
@@ -117,42 +115,16 @@ describe('StatImageGenerator', () => {
 
       await generator.generateMatchStatImages('queue-2', 'match-2');
 
-      const completedCall = mockDb.run.mock.calls.find((c: unknown[]) =>
-        (c[0] as string).includes("status = 'completed'") && String(c[1]).includes('queue-2')
-      );
-      expect(completedCall).toBeDefined();
+      expect(completeJob).toHaveBeenCalledWith(expect.anything(), 'statsImage', 'queue-2');
     });
 
-    it('marks the queue entry as failed when a DB error occurs during processing', async () => {
-      // Return processing ok, but then throw on subsequent DB calls
-      mockDb.run.mockImplementation((sql: string, _params?: unknown[]) => {
-        if (sql.includes("status = 'processing'")) return Promise.resolve();
-        if (sql.includes("status = 'failed'")) return Promise.resolve();
-        return Promise.reject(new Error('DB failure'));
-      });
-      mockDb.all.mockRejectedValueOnce(new Error('DB failure'));
+    it('fails the queue entry (retry with backoff) and stores the error when a DB error occurs', async () => {
+      mockDb.all.mockRejectedValue(new Error('specific error message'));
 
       await generator.generateMatchStatImages('queue-3', 'match-3');
 
-      const failedCall = mockDb.run.mock.calls.find((c: unknown[]) =>
-        (c[0] as string).includes("status = 'failed'")
-      );
-      expect(failedCall).toBeDefined();
-      // Error message should be stored
-      expect(String((failedCall as unknown[][])[1][0])).toContain('DB failure');
-    });
-
-    it('stores the error message in the queue entry on failure', async () => {
-      mockDb.all.mockRejectedValue(new Error('specific error message'));
-      mockDb.run.mockResolvedValue(undefined);
-
-      await generator.generateMatchStatImages('queue-4', 'match-4');
-
-      const failedCall = mockDb.run.mock.calls.find((c: unknown[]) =>
-        (c[0] as string).includes("status = 'failed'")
-      ) as unknown[][];
-      expect(failedCall[1][0]).toContain('specific error message');
-      expect(failedCall[1][1]).toBe('queue-4');
+      expect(failJob).toHaveBeenCalledWith(expect.anything(), 'statsImage', 'queue-3', 'specific error message');
+      expect(completeJob).not.toHaveBeenCalled();
     });
 
     it('updates stat_image_url for each player with stat data', async () => {

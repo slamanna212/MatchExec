@@ -688,6 +688,7 @@ export class AnnouncementHandler {
       }
 
       let successCount = 0;
+      let firstMessageId: string | undefined;
 
       // Send to all configured reminder channels
       for (const channelConfig of reminderChannels) {
@@ -696,7 +697,8 @@ export class AnnouncementHandler {
 
           if (reminderChannel?.isTextBased() && 'send' in reminderChannel) {
             // Send reminder
-            await reminderChannel.send(messageOptions);
+            const sent = await reminderChannel.send(messageOptions);
+            firstMessageId ??= sent?.id;
             successCount++;
           }
         } catch (error) {
@@ -709,7 +711,7 @@ export class AnnouncementHandler {
         return false;
       }
 
-      return { success: true, successCount };
+      return { success: true, successCount, messageId: firstMessageId };
 
     } catch (error) {
       logger.error('❌ Error posting timed reminder:', error);
@@ -906,6 +908,7 @@ export class AnnouncementHandler {
       }
 
       let successCount = 0;
+      let firstMessageId: string | undefined;
 
       // Send to all configured match start channels
       for (const channelConfig of matchStartChannels) {
@@ -914,7 +917,8 @@ export class AnnouncementHandler {
 
           if (matchStartChannel?.isTextBased() && 'send' in matchStartChannel) {
             // Send match start announcement
-            await matchStartChannel.send(messageOptions);
+            const sent = await matchStartChannel.send(messageOptions);
+            firstMessageId ??= sent?.id;
             successCount++;
           }
         } catch (error) {
@@ -927,7 +931,7 @@ export class AnnouncementHandler {
         return false;
       }
 
-      return { success: true, successCount };
+      return { success: true, successCount, messageId: firstMessageId };
 
     } catch (error) {
       logger.error('❌ Error posting match start announcement:', error);
@@ -1193,6 +1197,7 @@ export class AnnouncementHandler {
       }
 
       let successCount = 0;
+      let firstMessageId: string | undefined;
 
       // Send to all configured live update channels
       for (const channelConfig of liveUpdateChannels) {
@@ -1201,7 +1206,8 @@ export class AnnouncementHandler {
 
           if (liveUpdateChannel?.isTextBased() && 'send' in liveUpdateChannel) {
             // Send score notification
-            await liveUpdateChannel.send(messageOptions);
+            const sent = await liveUpdateChannel.send(messageOptions);
+            firstMessageId ??= sent?.id;
             successCount++;
           }
         } catch (error) {
@@ -1214,7 +1220,7 @@ export class AnnouncementHandler {
         return false;
       }
 
-      return { success: true, successCount };
+      return { success: true, successCount, messageId: firstMessageId };
 
     } catch (error) {
       logger.error('❌ Error posting map score notification:', error);
@@ -1444,6 +1450,7 @@ export class AnnouncementHandler {
       }
 
       let successCount = 0;
+      let firstMessageId: string | undefined;
 
       // Send to all configured match end channels
       for (const channelConfig of matchEndChannels) {
@@ -1452,7 +1459,8 @@ export class AnnouncementHandler {
 
           if (matchEndChannel?.isTextBased() && 'send' in matchEndChannel) {
             // Send match winner notification
-            await matchEndChannel.send(messageOptions);
+            const sent = await matchEndChannel.send(messageOptions);
+            firstMessageId ??= sent?.id;
             successCount++;
           }
         } catch (error) {
@@ -1465,7 +1473,7 @@ export class AnnouncementHandler {
         return false;
       }
 
-      return { success: true, successCount };
+      return { success: true, successCount, messageId: firstMessageId };
 
     } catch (error) {
       logger.error('❌ Error posting match winner notification:', error);
@@ -1692,6 +1700,7 @@ export class AnnouncementHandler {
       }
 
       let successCount = 0;
+      let firstMessageId: string | undefined;
 
       // Send to all configured live update channels
       for (const channelConfig of liveUpdateChannels) {
@@ -1700,7 +1709,8 @@ export class AnnouncementHandler {
 
           if (liveUpdateChannel?.isTextBased() && 'send' in liveUpdateChannel) {
             // Send tournament winner notification
-            await liveUpdateChannel.send(messageOptions);
+            const sent = await liveUpdateChannel.send(messageOptions);
+            firstMessageId ??= sent?.id;
             successCount++;
           }
         } catch (error) {
@@ -1709,7 +1719,7 @@ export class AnnouncementHandler {
       }
 
       logger.debug(`🏆 Tournament winner notification sent to ${successCount}/${liveUpdateChannels.length} channels`);
-      return successCount > 0 ? { success: true } : false;
+      return successCount > 0 ? { success: true, messageId: firstMessageId } : false;
 
     } catch (error) {
       logger.error('❌ Error posting tournament winner notification:', error);
@@ -1797,13 +1807,14 @@ export class AnnouncementHandler {
     severity: 'critical' | 'warning';
     title: string;
     description: string;
-  }): Promise<void> {
+  }): Promise<string | undefined> {
+    let firstMessageId: string | undefined;
     try {
       const channels = await this.getChannelsForNotificationType('health_alerts');
 
       if (channels.length === 0) {
         logger.warning('No channels configured for health alerts');
-        return;
+        return undefined;
       }
 
       // Create embed based on severity
@@ -1823,7 +1834,8 @@ export class AnnouncementHandler {
           const discordChannel = await this.client.channels.fetch(channel.discord_channel_id);
 
           if (discordChannel?.isTextBased() && 'send' in discordChannel) {
-            await discordChannel.send({ embeds: [embed] });
+            const sent = await discordChannel.send({ embeds: [embed] });
+            firstMessageId ??= sent?.id;
             logger.info(`Health alert sent to channel ${channel.channel_name || channel.discord_channel_id}`);
           }
         } catch (error) {
@@ -1833,6 +1845,7 @@ export class AnnouncementHandler {
     } catch (error) {
       logger.error('Error posting health alert:', error);
     }
+    return firstMessageId;
   }
 
   updateSettings(settings: DiscordSettings | null) {

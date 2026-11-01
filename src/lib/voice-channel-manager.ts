@@ -5,6 +5,7 @@ import type { Database } from '../../lib/database/connection';
 import { db as pgDb } from '../../lib/db';
 import { getModeScoringTypeAndMaxTeams } from './games';
 import { getAnyDiscordSettings } from './settings';
+import { enqueueBotRequest, getBotRequest } from './discord-queues';
 
 interface VoiceChannelCreationResult {
   success: boolean;
@@ -112,7 +113,6 @@ async function determineDualTeamChannelNames(
  * Waits for voice channel creation request to complete
  */
 async function waitForVoiceChannelCreation(
-  db: Database,
   requestId: string,
   matchId: string
 ): Promise<VoiceChannelCreationResult> {
@@ -121,29 +121,18 @@ async function waitForVoiceChannelCreation(
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitTime) {
-    const request = await db.get<{ status: string; result?: string }>(
-      'SELECT status, result FROM discord_bot_requests WHERE id = ?',
-      [requestId]
-    );
+    const request = await getBotRequest(pgDb, requestId);
 
     if (request?.status === 'completed') {
       if (request.result) {
-        try {
-          const result = JSON.parse(request.result);
-          logger.debug(`Voice channels created successfully for match ${matchId}`);
-          return result;
-        } catch {
-          logger.error(`Malformed result JSON for voice channel request ${requestId}`);
-          return { success: false, message: 'Malformed response from bot' };
-        }
+        // jsonb: already parsed
+        logger.debug(`Voice channels created successfully for match ${matchId}`);
+        return request.result as unknown as VoiceChannelCreationResult;
       }
     }
 
     if (request?.status === 'failed') {
-      let result: { message?: string } = {};
-      if (request.result) {
-        try { result = JSON.parse(request.result); } catch { /* result stays {} */ }
-      }
+      const result = (request.result ?? {}) as { message?: string };
       logger.error(`Voice channel creation failed: ${result.message || 'Unknown error'}`);
       return { success: false, message: result.message || 'Failed to create voice channels' };
     }
@@ -217,28 +206,20 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
     }
 
     // Queue a Discord bot request to create the channels
-    const requestId = `voice_create_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    await db.run(`
-      INSERT INTO discord_bot_requests (id, type, data, status)
-      VALUES (?, 'voice_channel_create', ?, 'pending')
-    `, [
-      requestId,
-      JSON.stringify({
-        matchId,
-        categoryId: settings.voice_channel_category_id,
-        channelNames,
-        // Legacy fields kept for backward compatibility with older bot builds.
-        blueChannelName: channelNames[0],
-        redChannelName: channelNames[1],
-        isSingleTeam: channelNames.length <= 1
-      })
-    ]);
+    const requestId = await enqueueBotRequest(pgDb, 'voice_channel_create', {
+      matchId,
+      categoryId: settings.voice_channel_category_id,
+      channelNames,
+      // Legacy fields kept for backward compatibility with older bot builds.
+      blueChannelName: channelNames[0],
+      redChannelName: channelNames[1],
+      isSingleTeam: channelNames.length <= 1
+    });
 
     logger.debug(`Voice channel creation request queued: ${requestId} (${channelNames.length} channel(s))`);
 
     // Wait for the bot to process the request
-    return await waitForVoiceChannelCreation(db, requestId, matchId);
+    return await waitForVoiceChannelCreation(requestId, matchId);
 
   } catch (error) {
     logger.error('Error creating voice channels:', error);
@@ -270,18 +251,7 @@ export async function deleteMatchVoiceChannels(matchId: string): Promise<boolean
 
     // Queue deletion requests for each channel
     for (const channel of channels) {
-      const requestId = `voice_delete_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-      await db.run(`
-        INSERT INTO discord_bot_requests (id, type, data, status)
-        VALUES (?, 'voice_channel_delete', ?, 'pending')
-      `, [
-        requestId,
-        JSON.stringify({
-          channelId: channel.channel_id,
-          matchId
-        })
-      ]);
+      await enqueueBotRequest(pgDb, 'voice_channel_delete', { channelId: channel.channel_id, matchId });
 
       logger.debug(`Voice channel deletion request queued: ${channel.channel_id}`);
     }

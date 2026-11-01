@@ -9,6 +9,7 @@ import { logger } from '../../../src/lib/logger/server';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import { db as pgDb } from '../../../lib/db';
 import { countStatDefinitions } from '../../../src/lib/games';
+import { enqueueStatsProcessing } from '../../../src/lib/discord-queues';
 
 interface ScorecardDmRecord {
   id: string;
@@ -208,7 +209,6 @@ export class ScorecardHandler {
       }
 
       const submissionId = crypto.randomUUID();
-      const queueId = crypto.randomUUID();
 
       await this.db.run(
         `INSERT INTO scorecard_submissions (id, match_id, match_game_id, submitted_by_participant_id, submitted_by_discord_user_id, team_side, screenshot_url, discord_message_id)
@@ -217,10 +217,8 @@ export class ScorecardHandler {
          message.author.id, dmRecord.team_side || 'blue', screenshotUrl, message.id]
       );
 
-      await this.db.run(
-        `INSERT INTO stats_processing_queue (id, submission_id, match_id, match_game_id) VALUES (?, ?, ?, ?)`,
-        [queueId, submissionId, dmRecord.match_id, dmRecord.match_game_id]
-      );
+      // Queue row lives in Postgres, the submission in SQLite until the stats domain is ported (not one transaction yet)
+      await enqueueStatsProcessing(pgDb, { submissionId, matchId: dmRecord.match_id, matchGameId: dmRecord.match_game_id });
 
       await message.reply('✅ Screenshot received! Processing stats...');
       logger.debug(`📸 Scorecard screenshot received from ${message.author.id} for match ${dmRecord.match_id}`);

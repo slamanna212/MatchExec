@@ -1,8 +1,8 @@
 import type { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { getDbInstance } from '@/lib/database-init';
+import { db as pgDb } from '../../../../../../../lib/db';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { enqueueStatsImage } from '@/lib/discord-queues';
 
 export async function POST(
   _request: Request,
@@ -10,13 +10,8 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const { matchId } = await params;
-    const db = await getDbInstance();
 
-    const queueId = crypto.randomUUID();
-    await db.run(
-      'INSERT INTO stats_image_queue (id, match_id, status) VALUES (?, ?, ?)',
-      [queueId, matchId, 'pending']
-    );
+    const queueId = await enqueueStatsImage(pgDb, matchId);
 
     return apiOk({ success: true, queueId });
   } catch (error) {

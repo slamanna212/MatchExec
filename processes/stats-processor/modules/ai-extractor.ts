@@ -7,18 +7,20 @@ import type { AIExtractionResult, GameStatDefinition } from '../../../shared/typ
 import { AI_PROVIDER_CALLS } from './providers';
 import { resolveModelId } from '../../../src/lib/ai-model-resolver';
 import { logFeedEvent } from '../../../src/lib/feed-helpers';
-import { db as pgDb } from '../../../lib/db';
+import { db as pgDb, type Executor } from '../../../lib/db';
+import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { getGameAiNotes, getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
 
-const MAX_RETRIES = 3;
 const MAX_PLAYERS = 64;
 const MAX_NAME_LENGTH = 100;
-const RETRY_DELAYS = [30000, 60000, 120000]; // 30s, 60s, 120s
+/** Retry backoff for failed extractions: 30s, 60s, 2m (the queue row's max_attempts bounds the retries). */
+const RETRY_BACKOFF_BASE_MS = 30_000;
 
 export class AIExtractor {
   private db: StatsDb;
 
-  constructor(db: unknown) {
+  /** `db` is the legacy SQLite connection (scorecards / matches); `queueDb` holds stats_processing_queue. */
+  constructor(db: unknown, private queueDb: Executor = pgDb) {
     this.db = db as StatsDb;
   }
 
@@ -33,11 +35,7 @@ export class AIExtractor {
 
   async processSubmission(submissionId: string, queueId: string): Promise<void> {
     try {
-      // Mark as processing
-      await this.db.run(
-        `UPDATE stats_processing_queue SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [queueId]
-      );
+      // The queue row was claimed (status 'processing') by the stats-processor before this call
       await this.db.run(
         `UPDATE scorecard_submissions SET ai_extraction_status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [submissionId]
@@ -231,10 +229,7 @@ export class AIExtractor {
         `UPDATE scorecard_submissions SET ai_extraction_status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [submissionId]
       );
-      await this.db.run(
-        `UPDATE stats_processing_queue SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [queueId]
-      );
+      await completeJob(this.queueDb, 'statsProcessing', queueId);
 
       logger.debug(`✅ AI extraction completed for submission ${submissionId}, extracted ${extractionResult.players.length} players`);
 
@@ -242,36 +237,15 @@ export class AIExtractor {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`❌ AI extraction failed for submission ${submissionId}:`, message);
 
-      // Get current retry count
-      const queueItem = await this.db.get('SELECT retry_count FROM stats_processing_queue WHERE id = ?', [queueId]);
-      const retryCount = queueItem?.retry_count || 0;
+      // Back to 'pending' with backoff while attempts remain, otherwise 'failed'
+      const outcome = await failJob(this.queueDb, 'statsProcessing', queueId, message, { backoffBaseMs: RETRY_BACKOFF_BASE_MS });
 
-      if (retryCount < MAX_RETRIES) {
-        await this.db.run(
-          `UPDATE stats_processing_queue SET status = 'pending', retry_count = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [retryCount + 1, message, queueId]
-        );
+      if (outcome === 'pending') {
         await this.db.run(
           `UPDATE scorecard_submissions SET ai_extraction_status = 'retrying', ai_error_message = ? WHERE id = ?`,
           [message, submissionId]
         );
-        // Schedule retry after delay
-        const delay = RETRY_DELAYS[retryCount] || 120000;
-        setTimeout(async () => {
-          try {
-            await this.db.run(
-              `UPDATE stats_processing_queue SET status = 'pending' WHERE id = ? AND status = 'processing'`,
-              [queueId]
-            );
-          } catch (retryErr) {
-            logger.error('Failed to reset queue item for retry:', retryErr);
-          }
-        }, delay);
-      } else {
-        await this.db.run(
-          `UPDATE stats_processing_queue SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [message, queueId]
-        );
+      } else if (outcome === 'failed') {
         await this.db.run(
           `UPDATE scorecard_submissions SET ai_extraction_status = 'failed', ai_error_message = ? WHERE id = ?`,
           [message, submissionId]

@@ -127,8 +127,8 @@ describe('Discord Announcements (L3)', () => {
   // ─── DB error ─────────────────────────────────────────────────────────────
 
   it('returns false when DB throws an error', async () => {
-    const dbInitModule = await import('../../../src/lib/database-init');
-    const spy = vi.spyOn(dbInitModule, 'getDbInstance').mockRejectedValueOnce(
+    const queuesModule = await import('../../../src/lib/discord-queues');
+    const spy = vi.spyOn(queuesModule, 'enqueueAnnouncement').mockRejectedValueOnce(
       new Error('simulated DB failure')
     );
 

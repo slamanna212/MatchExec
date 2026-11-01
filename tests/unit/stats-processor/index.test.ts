@@ -3,6 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../../src/lib/settings', () => ({ setAppSetting: vi.fn().mockResolvedValue(undefined) }));
 import { setAppSetting } from '../../../src/lib/settings';
 
+// The stats queues live in Postgres: claims go through the Discord queues module (mocked here).
+const queueClaims = vi.hoisted(() => ({ statsProcessing: [] as unknown[], statsImage: [] as unknown[] }));
+vi.mock('../../../src/lib/discord-queues', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/lib/discord-queues')>()),
+  claimJobs: vi.fn(async (_ex: unknown, queue: 'statsProcessing' | 'statsImage') => queueClaims[queue].splice(0, 1)),
+  releaseJob: vi.fn(async () => true),
+  resetAbandonedClaims: vi.fn(async () => 0),
+}));
+import { claimJobs } from '../../../src/lib/discord-queues';
+
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),
@@ -56,6 +67,8 @@ describe('StatsProcessor — queue processing', () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    queueClaims.statsProcessing.length = 0;
+    queueClaims.statsImage.length = 0;
     // Reset module registry so each test gets a fresh auto-executing module
     vi.resetModules();
     mockDb = {
@@ -94,35 +107,24 @@ describe('StatsProcessor — queue processing', () => {
 
   it('processes extraction queue items using AIExtractor', async () => {
     const queueItem = { id: 'queue-1', submission_id: 'sub-1' };
-    mockDb.get
-      .mockResolvedValueOnce(queueItem) // extraction queue pick
-      .mockResolvedValue(null);
+    queueClaims.statsProcessing.push(queueItem);
 
     await import('../../../processes/stats-processor/index');
     // Advance fake timers past the 5-second polling interval to trigger processExtractionQueue
     await vi.advanceTimersByTimeAsync(5001);
 
-    // The processExtractionQueue method fetches from stats_processing_queue
-    const extractionQueueQuery = mockDb.get.mock.calls.find((c: unknown[]) =>
-      (c[0] as string)?.includes('stats_processing_queue')
-    );
-    expect(extractionQueueQuery).toBeDefined();
+    // The processExtractionQueue method claims from the stats_processing_queue
+    expect(vi.mocked(claimJobs)).toHaveBeenCalledWith(expect.anything(), 'statsProcessing', expect.objectContaining({ limit: 1 }));
   });
 
   it('processes image queue items using StatImageGenerator', async () => {
     const queueItem = { id: 'img-queue-1', match_id: 'match-123' };
-    mockDb.get
-      .mockResolvedValueOnce(null)       // extraction queue: nothing pending
-      .mockResolvedValueOnce(queueItem)  // image queue: one item
-      .mockResolvedValue(null);
+    queueClaims.statsImage.push(queueItem);
 
     await import('../../../processes/stats-processor/index');
     // Advance fake timers past the 5-second polling interval to trigger processImageQueue
     await vi.advanceTimersByTimeAsync(5001);
 
-    const imageQueueQuery = mockDb.get.mock.calls.find((c: unknown[]) =>
-      (c[0] as string)?.includes('stats_image_queue')
-    );
-    expect(imageQueueQuery).toBeDefined();
+    expect(vi.mocked(claimJobs)).toHaveBeenCalledWith(expect.anything(), 'statsImage', expect.objectContaining({ limit: 1 }));
   });
 });

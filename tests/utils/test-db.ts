@@ -8,6 +8,17 @@ const workerId = process.env.VITEST_POOL_ID || '1';
 const TEST_DB_PATH = path.join(process.cwd(), 'app_data', 'data', `test-matchexec-${workerId}.db`);
 
 let wrappedDb: Database | null = null;
+
+/**
+ * TRANSITIONAL (see tests/utils/legacy-pg-bridge.ts): runs before every read through `getTestDb()` so rows that the
+ * code under test wrote to the Postgres queue tables are visible to legacy assertions like
+ * `SELECT * FROM discord_announcement_queue`. Removed together with the bridge.
+ */
+type ReadHook = (sql: string) => Promise<void>;
+let readHook: ReadHook | null = null;
+export function setLegacyReadHook(hook: ReadHook | null): void {
+  readHook = hook;
+}
 let testDbWrapper: TestDatabase | null = null;
 
 /**
@@ -86,16 +97,21 @@ export class TestDatabase {
       cb = callback;
     }
 
+    const run = async () => {
+      if (readHook) await readHook(sql);
+      return this.db.get<T>(sql, params);
+    };
+
     if (cb) {
       // Callback style
-      this.db.get<T>(sql, params)
+      run()
         .then((row) => cb!(null, row))
         .catch((err) => cb!(err, undefined));
       return undefined as unknown as Promise<T | undefined>;
     }
 
     // Promise style
-    return this.db.get<T>(sql, params);
+    return run();
   }
 
   /**
@@ -119,16 +135,21 @@ export class TestDatabase {
       cb = callback;
     }
 
+    const run = async () => {
+      if (readHook) await readHook(sql);
+      return this.db.all<T>(sql, params);
+    };
+
     if (cb) {
       // Callback style
-      this.db.all<T>(sql, params)
+      run()
         .then((rows) => cb!(null, rows))
         .catch((err) => cb!(err, []));
       return undefined as unknown as Promise<T[]>;
     }
 
     // Promise style
-    return this.db.all<T>(sql, params);
+    return run();
   }
 
   /**

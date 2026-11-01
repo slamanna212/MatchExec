@@ -7,6 +7,12 @@ import { AvatarUpdateJob } from './jobs/update-avatars';
 import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
+import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
+import { db as pgDb } from '../../lib/db';
+import {
+  enqueueAnnouncement, enqueueHealthAlert, enqueueMatchReminder, enqueueMatchStart, enqueuePlayerReminder,
+  hasTimedAnnouncement, matchIdsWithLivePlayerReminder, matchIdsWithLiveReminder, nonOverlapping,
+} from '../../src/lib/discord-queues';
 
 /**
  * Token sent as x-internal-token when calling the web API with opt-in auth on.
@@ -33,6 +39,7 @@ class MatchExecScheduler {
   private cronJobs: cron.ScheduledTask[] = [];
   private avatarUpdateJob: AvatarUpdateJob | null = null;
   private updateCheckJob: UpdateCheckJob | null = null;
+  private leaderLock: LeaderLock | null = null;
 
   /** Returns the database connection, throwing if it has not been initialised yet. */
   private get db(): Database {
@@ -52,6 +59,9 @@ class MatchExecScheduler {
       // Wait for database to be ready (migrated and seeded)
       logger.debug('⏳ Waiting for database to be ready...');
       this._db = await waitForDatabaseReady();
+
+      // Exactly one scheduler per database: hold a Postgres advisory lock for the life of the process (exits if held)
+      this.leaderLock = await requireLeaderLock('scheduler', { log: (message) => logger.critical(message) });
 
       this.isRunning = true;
 
@@ -134,14 +144,14 @@ class MatchExecScheduler {
   private startCronJob(name: string, cronExpression: string, task: () => Promise<void>) {
     try {
       if (cron.validate(cronExpression)) {
-        const job = cron.schedule(cronExpression, async () => {
+        // A tick never starts while the previous run of the same job is still going.
+        const run = nonOverlapping(async () => {
           logger.debug(`🔄 Running ${name}...`);
-          try {
-            await task();
-            logger.debug(`✅ ${name} completed`);
-          } catch (error) {
-            logger.error(`❌ ${name} failed:`, error);
-          }
+          await task();
+          logger.debug(`✅ ${name} completed`);
+        }, (error) => logger.error(`❌ ${name} failed:`, error));
+        const job = cron.schedule(cronExpression, async () => {
+          if (!(await run())) logger.warning(`⏭️ Skipping ${name}: previous run still in progress`);
         }, {
           timezone: 'UTC'
         });
@@ -250,18 +260,17 @@ class MatchExecScheduler {
       const reminderMinutes = discordSettings.match_reminder_minutes;
 
       // Find matches that have start times and need reminders
-      const upcomingMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
+      // TODO(matches): the matches table is still SQLite, so the "already has a reminder" check is a separate
+      // Postgres read instead of a NOT EXISTS subquery.
+      const candidateMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
         `SELECT m.id, m.name, m.start_date
          FROM matches m
          WHERE m.start_date IS NOT NULL
          AND m.status IN ('created', 'gather', 'assign', 'battle')
-         AND datetime(m.start_date) > datetime('now')
-         AND NOT EXISTS (
-           SELECT 1 FROM discord_reminder_queue drq
-           WHERE drq.match_id = m.id
-           AND drq.status != 'failed'
-         )`
+         AND datetime(m.start_date) > datetime('now')`
       );
+      const alreadyQueued = await matchIdsWithLiveReminder(pgDb, candidateMatches.map((m) => m.id));
+      const upcomingMatches = candidateMatches.filter((m) => !alreadyQueued.has(m.id));
 
       if (upcomingMatches.length === 0) {
         logger.debug('ℹ️ No matches need reminder queue entries');
@@ -279,12 +288,8 @@ class MatchExecScheduler {
 
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
-          const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-          await this.db.run(`
-            INSERT OR IGNORE INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
-            VALUES (?, ?, 'match_reminder', ?, ?, ?, 'pending')
-          `, [reminderId, match.id, reminderMinutes, reminderTime.toISOString(), reminderTime.toISOString()]);
+          // The partial unique index (match_id, reminder_type) makes a concurrent duplicate a no-op
+          await enqueueMatchReminder(pgDb, { matchId: match.id, minutesBefore: reminderMinutes, reminderTime });
 
           logger.debug(`📅 Queued reminder for match: ${match.name} at ${reminderTime.toISOString()}`);
           queuedCount++;
@@ -317,20 +322,17 @@ class MatchExecScheduler {
       // Compute threshold in JS to avoid template literal injection into SQL
       const lookAheadMs = (reminderMinutes + 60) * 60 * 1000;
       const thresholdDate = new Date(Date.now() + lookAheadMs).toISOString();
-      const upcomingMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
+      const candidateMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
         `SELECT m.id, m.name, m.start_date
          FROM matches m
          WHERE m.start_date IS NOT NULL
          AND m.player_notifications = 1
          AND m.status IN ('gather', 'assign', 'battle')
-         AND datetime(m.start_date) <= datetime(?)
-         AND NOT EXISTS (
-           SELECT 1 FROM discord_player_reminder_queue dprq
-           WHERE dprq.match_id = m.id
-           AND dprq.status != 'failed'
-         )`,
+         AND datetime(m.start_date) <= datetime(?)`,
         [thresholdDate]
       );
+      const alreadyQueued = await matchIdsWithLivePlayerReminder(pgDb, candidateMatches.map((m) => m.id));
+      const upcomingMatches = candidateMatches.filter((m) => !alreadyQueued.has(m.id));
 
       for (const match of upcomingMatches) {
         const startDate = new Date(match.start_date);
@@ -341,12 +343,7 @@ class MatchExecScheduler {
 
         // Create a single queue entry per match; the processor calls sendPlayerReminders(matchId)
         // which sends to all participants at once — one entry per participant would cause N×N duplicates
-        const reminderId = `player_reminder_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-        await this.db.run(`
-          INSERT INTO discord_player_reminder_queue (id, match_id, user_id, reminder_type, reminder_time, scheduled_for, status)
-          VALUES (?, ?, 'all', 'player_reminder', ?, ?, 'pending')
-        `, [reminderId, match.id, effectiveReminderTime.toISOString(), effectiveReminderTime.toISOString()]);
+        await enqueuePlayerReminder(pgDb, { matchId: match.id, reminderTime: effectiveReminderTime });
 
         logger.debug(`📱 Queued player reminder DMs for match: ${match.name} at ${effectiveReminderTime.toISOString()}`);
       }
@@ -358,15 +355,10 @@ class MatchExecScheduler {
 
   private async queueMatchStartNotification(matchId: string): Promise<boolean> {
     try {
-      // Generate unique ID for the queue entry  
-      const notificationId = `match_start_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-      
       // Add to Discord match start notification queue that the bot will process
-    await this.db.run(`
-        INSERT INTO discord_match_start_queue (id, match_id, status)
-        VALUES (?, ?, 'pending')
-      `, [notificationId, matchId]);
-      
+      // (TODO(matches): the status update is SQLite, so this insert cannot share its transaction yet)
+      await enqueueMatchStart(pgDb, matchId);
+
       logger.debug('🏁 Discord match start notification queued for match:', matchId);
       return true;
     } catch (error) {
@@ -422,14 +414,7 @@ class MatchExecScheduler {
    * Check if announcement already exists in queue
    */
   private async hasExistingAnnouncement(matchId: string, announcement: AnnouncementItem): Promise<boolean> {
-    const existingAnnouncement = await this.db.get(`
-      SELECT id FROM discord_announcement_queue
-      WHERE match_id = ? AND announcement_type = 'timed'
-      AND announcement_data = ?
-      AND status NOT IN ('failed')
-    `, [matchId, JSON.stringify(announcement)]);
-
-    return !!existingAnnouncement;
+    return hasTimedAnnouncement(pgDb, matchId, announcement as unknown as Record<string, unknown>);
   }
 
   /**
@@ -494,14 +479,12 @@ class MatchExecScheduler {
 
   private async queueTimedAnnouncement(matchId: string, announcement: AnnouncementItem, scheduledFor: Date): Promise<boolean> {
     try {
-      // Generate unique ID for the announcement queue entry
-      const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-    await this.db.run(`
-        INSERT INTO discord_announcement_queue (
-          id, match_id, status, announcement_type, announcement_data, scheduled_for
-        ) VALUES (?, ?, 'pending', 'timed', ?, ?)
-      `, [announcementId, matchId, JSON.stringify(announcement), scheduledFor.toISOString()]);
+      await enqueueAnnouncement(pgDb, {
+        matchId,
+        type: 'timed',
+        data: announcement as unknown as Record<string, unknown>,
+        scheduledFor,
+      });
 
       logger.debug(`📢 Queued timed announcement for match: ${matchId} (${announcement.value} ${announcement.unit} before, scheduled for ${scheduledFor.toISOString()})`);
       return true;
@@ -629,12 +612,7 @@ class MatchExecScheduler {
       });
 
       // Enqueue Discord alert — the bot will post it when/if it recovers
-      const alertId = `health_alert_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // NOSONAR: non-security internal ID generation
-      await this.db.run(
-        `INSERT INTO discord_health_alert_queue (id, severity, title, description, status)
-         VALUES (?, ?, ?, ?, 'pending')`,
-        [alertId, 'critical', title, description]
-      );
+      await enqueueHealthAlert(pgDb, { severity: 'critical', title, description });
 
       // Update rate limit
       await this.db.run(
@@ -657,6 +635,9 @@ class MatchExecScheduler {
     // Stop all cron jobs
     this.cronJobs.forEach(job => job.stop());
     this.cronJobs = [];
+
+    await this.leaderLock?.release().catch(() => {});
+    this.leaderLock = null;
 
     // Close database connection
     if (this._db) {

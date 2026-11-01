@@ -2,6 +2,7 @@ import { getDbInstance } from './database-init';
 import { logger } from './logger';
 import { db as pgDb } from '../../lib/db';
 import { findGlobalVoiceChannelId } from './discord-channels';
+import { enqueueVoiceAnnouncement } from './discord-queues';
 import { createMatchVoiceChannels, trackVoiceChannels } from './voice-channel-manager';
 import { getMatchTeams, setTeamVoiceChannel } from './match-setup';
 
@@ -111,23 +112,14 @@ export class VoiceChannelService {
 
       const firstTeam = !lastAlternation || lastAlternation.last_first_team === 'red' ? 'blue' : 'red';
 
-      // Generate unique announcement ID
-      const announcementId = `voice_announcement_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-      // Add to voice announcement queue
-      await db.run(`
-        INSERT INTO discord_voice_announcement_queue (
-          id, match_id, announcement_type, blue_team_voice_channel, red_team_voice_channel,
-          first_team, status
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
-      `, [
-        announcementId,
+      // Add to voice announcement queue (TODO(matches): not in the SQLite match transaction until matches are ported)
+      await enqueueVoiceAnnouncement(pgDb, {
         matchId,
-        announcementType,
-        blueChannelId,
-        redChannelId,
-        firstTeam
-      ]);
+        type: announcementType,
+        blueChannel: blueChannelId ?? null,
+        redChannel: redChannelId ?? null,
+        firstTeam,
+      });
 
       logger.debug(`🔊 Voice announcement queued for match ${matchId}: ${announcementType}, starting with ${firstTeam} team`);
       return true;

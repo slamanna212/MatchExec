@@ -6,7 +6,8 @@
  * calculating announcement times, and checking announcement status.
  */
 
-import type { Database } from '../../lib/database/connection';
+import type { Executor } from '../../lib/db';
+import { getTimedAnnouncement } from './discord-queues';
 
 interface Announcement {
   id: string;
@@ -105,34 +106,25 @@ export function calculateAnnouncementTime(startDate: Date, value: number, unit: 
  *
  * Checks if the announcement has been queued, sent, or failed.
  *
- * @param db - Database instance
+ * @param ex - Postgres executor (the queue tables live in Postgres)
  * @param matchId - ID of the match
  * @param announcement - Announcement object
  * @param announcementTime - Calculated time for announcement
  * @returns Object with status, sentAt, and errorMessage
  */
 export async function getAnnouncementStatus(
-  db: Database,
+  ex: Executor,
   matchId: string,
   announcement: Announcement,
   announcementTime: Date
 ): Promise<{ status: string; sentAt: string | null; errorMessage: string | null }> {
-  const queuedAnnouncement = await db.get<{
-    status: string;
-    posted_at?: string;
-    error_message?: string;
-  }>(`
-    SELECT status, posted_at, error_message
-    FROM discord_announcement_queue
-    WHERE match_id = ? AND announcement_type = 'timed'
-    AND announcement_data = ?
-  `, [matchId, JSON.stringify(announcement)]);
+  const queuedAnnouncement = await getTimedAnnouncement(ex, matchId, announcement as unknown as Record<string, unknown>);
 
   if (queuedAnnouncement) {
     return {
       status: queuedAnnouncement.status === 'completed' ? 'sent' : queuedAnnouncement.status,
-      sentAt: queuedAnnouncement.posted_at || null,
-      errorMessage: queuedAnnouncement.error_message || null
+      sentAt: queuedAnnouncement.posted_at ? queuedAnnouncement.posted_at.toISOString() : null,
+      errorMessage: queuedAnnouncement.last_error || null
     };
   }
 
@@ -192,7 +184,7 @@ export function createScheduledAnnouncement(
  * Parses the announcements field, calculates timing, checks status,
  * and returns formatted scheduled announcements.
  *
- * @param db - Database instance
+ * @param ex - Postgres executor (the queue tables live in Postgres)
  * @param matchId - ID of the match
  * @param announcementsField - Raw announcements data from database
  * @param startDate - Match start date (ISO string)
@@ -209,7 +201,7 @@ export function createScheduledAnnouncement(
  * );
  */
 export async function processMatchAnnouncements(
-  db: Database,
+  ex: Executor,
   matchId: string,
   announcementsField: unknown,
   startDate: string,
@@ -232,7 +224,7 @@ export async function processMatchAnnouncements(
     );
 
     const { status, sentAt, errorMessage } = await getAnnouncementStatus(
-      db,
+      ex,
       matchId,
       announcement,
       announcementTime

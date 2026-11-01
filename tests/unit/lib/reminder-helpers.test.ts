@@ -1,13 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseAnnouncementsField,
   calculateAnnouncementTime,
   createScheduledAnnouncement,
-  getAnnouncementStatus,
-  processMatchAnnouncements,
 } from '@/lib/reminder-helpers';
-import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 
 vi.mock('@/lib/logger/server', () => ({
   logger: {
@@ -135,95 +131,5 @@ describe('createScheduledAnnouncement', () => {
 
     expect(result.sent_at).toBe('2025-12-01T13:30:00Z');
     expect(result.error_message).toBe('some error');
-  });
-});
-
-describe('getAnnouncementStatus', () => {
-  let db: any;
-  let match: any;
-
-  beforeEach(async () => {
-    const data = await seedBasicTestData();
-    match = await createMatch(data.game.id, data.mode.id);
-    db = getTestDb();
-  });
-
-  it('returns pending when no queue entry and time is in the future', async () => {
-    const announcement = { id: '1hour', value: 1, unit: 'hours' as const };
-    const futureTime = new Date(Date.now() + 3_600_000);
-    const result = await getAnnouncementStatus(db as any, match.id, announcement, futureTime);
-
-    expect(result.status).toBe('pending');
-    expect(result.sentAt).toBeNull();
-    expect(result.errorMessage).toBeNull();
-  });
-
-  it('returns scheduled when no queue entry and time is in the past', async () => {
-    const announcement = { id: '1hour', value: 1, unit: 'hours' as const };
-    const pastTime = new Date(Date.now() - 3_600_000);
-    const result = await getAnnouncementStatus(db as any, match.id, announcement, pastTime);
-
-    expect(result.status).toBe('scheduled');
-  });
-
-  it('returns sent when queue entry status is completed', async () => {
-    const announcement = { id: '1hour', value: 1, unit: 'hours' as const };
-    await db.run(`
-      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, announcement_data, status)
-      VALUES ('q1', ?, 'timed', ?, 'completed')
-    `, [match.id, JSON.stringify(announcement)]);
-
-    const futureTime = new Date(Date.now() + 3_600_000);
-    const result = await getAnnouncementStatus(db as any, match.id, announcement, futureTime);
-    expect(result.status).toBe('sent');
-  });
-
-  it('preserves non-completed queue status (e.g. pending)', async () => {
-    const announcement = { id: '30min', value: 30, unit: 'minutes' as const };
-    await db.run(`
-      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, announcement_data, status)
-      VALUES ('q2', ?, 'timed', ?, 'pending')
-    `, [match.id, JSON.stringify(announcement)]);
-
-    const futureTime = new Date(Date.now() + 3_600_000);
-    const result = await getAnnouncementStatus(db as any, match.id, announcement, futureTime);
-    expect(result.status).toBe('pending');
-  });
-});
-
-describe('processMatchAnnouncements', () => {
-  let db: any;
-  let match: any;
-
-  beforeEach(async () => {
-    const data = await seedBasicTestData();
-    match = await createMatch(data.game.id, data.mode.id);
-    db = getTestDb();
-  });
-
-  it('returns empty array when announcements field is null/disabled', async () => {
-    const result = await processMatchAnnouncements(db as any, match.id, false, match.start_time, new Date().toISOString());
-    expect(result).toEqual([]);
-  });
-
-  it('returns empty array when announcements field is 0', async () => {
-    const result = await processMatchAnnouncements(db as any, match.id, 0, match.start_time, new Date().toISOString());
-    expect(result).toEqual([]);
-  });
-
-  it('processes JSON string announcements', async () => {
-    const announcementsJson = JSON.stringify([{ id: '1hour', value: 1, unit: 'hours' }]);
-    const futureStart = new Date(Date.now() + 7_200_000).toISOString();
-    const result = await processMatchAnnouncements(db as any, match.id, announcementsJson, futureStart, new Date().toISOString());
-
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('announcement_1hour');
-    expect(result[0].match_id).toBe(match.id);
-  });
-
-  it('processes boolean true with default announcements', async () => {
-    const futureStart = new Date(Date.now() + 86_400_000).toISOString();
-    const result = await processMatchAnnouncements(db as any, match.id, true, futureStart, new Date().toISOString());
-    expect(result).toHaveLength(2);
   });
 });

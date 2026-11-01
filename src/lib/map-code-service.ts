@@ -2,6 +2,7 @@ import { getDbInstance } from './database-init';
 import { db as pgDb } from '../../lib/db';
 import { findMapByIdOrName, gameSupportsMapCodes } from './games';
 import { logger } from './logger';
+import { enqueueMapCode } from './discord-queues';
 import { cleanMapId } from './utils/map-utils';
 
 /**
@@ -55,16 +56,8 @@ export class MapCodeService {
    */
   private static async queueMapCodePM(matchId: string, mapName: string, mapCode: string): Promise<boolean> {
     try {
-      const db = await getDbInstance();
-
-      // Generate unique ID for the queue entry
-      const queueId = `map_codes_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
-      // Add to map code PM queue
-      await db.run(`
-        INSERT INTO discord_map_code_queue (id, match_id, map_name, map_code, status)
-        VALUES (?, ?, ?, ?, 'pending')
-      `, [queueId, matchId, mapName, mapCode]);
+      // Add to map code PM queue (TODO(matches): not in the SQLite match transaction until matches are ported)
+      await enqueueMapCode(pgDb, { matchId, mapName, mapCode });
 
       logger.debug(`📱 Map code PMs queued for match ${matchId}, map: ${mapName}`);
       return true;

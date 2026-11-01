@@ -1,5 +1,4 @@
 import type { NextResponse } from 'next/server';
-import { getDbInstance } from '../../../../lib/database-init';
 import { DiscordBotService } from '../../../../../lib/discord-bot-service';
 import { getDiscordSettings } from '@/lib/settings';
 import { logger } from '@/lib/logger';
@@ -11,8 +10,7 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    const db = await getDbInstance();
-    const botService = new DiscordBotService(db);
+    const botService = new DiscordBotService();
     
     // Get the current voice settings
     const settings = await getDiscordSettings();

@@ -2,6 +2,8 @@ import type { StatsDb } from './modules/db-types';
 import { waitForDatabaseReady } from '../../lib/database';
 import { logger } from '../../src/lib/logger/server';
 import { setAppSetting } from '../../src/lib/settings';
+import { db as pgDb } from '../../lib/db';
+import { claimJobs, makeWorkerId, nonOverlapping, releaseJob, resetAbandonedClaims } from '../../src/lib/discord-queues';
 import { AIExtractor } from './modules/ai-extractor';
 import { StatImageGenerator } from './modules/stat-image-generator';
 
@@ -11,6 +13,16 @@ class StatsProcessor {
   private aiExtractor: AIExtractor | null = null;
   private imageGenerator: StatImageGenerator | null = null;
   private intervals: ReturnType<typeof setInterval>[] = [];
+  private readonly workerId = makeWorkerId('stats-processor');
+  // A poll never starts while the previous one is still running (AI extraction can take minutes)
+  private runExtractionTick = nonOverlapping(
+    () => this.processExtractionQueue(),
+    (error) => logger.error('Error in extraction queue poll:', error),
+  );
+  private runImageTick = nonOverlapping(
+    () => this.processImageQueue(),
+    (error) => logger.error('Error in image queue poll:', error),
+  );
 
   async start() {
     logger.debug('📊 Starting MatchExec Stats Processor...');
@@ -36,21 +48,13 @@ class StatsProcessor {
       // Poll extraction queue every 5 seconds
       const extractionInterval = setInterval(async () => {
         if (!this.isRunning) return;
-        try {
-          await this.processExtractionQueue();
-        } catch (error) {
-          logger.error('Error in extraction queue poll:', error);
-        }
+        await this.runExtractionTick();
       }, 5000);
 
       // Poll image queue every 5 seconds
       const imageInterval = setInterval(async () => {
         if (!this.isRunning) return;
-        try {
-          await this.processImageQueue();
-        } catch (error) {
-          logger.error('Error in image queue poll:', error);
-        }
+        await this.runImageTick();
       }, 5000);
 
       // Heartbeat every 5 minutes
@@ -80,20 +84,27 @@ class StatsProcessor {
   }
 
   private async processExtractionQueue() {
-    const item = await this.db.get(
-      `SELECT * FROM stats_processing_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
-    );
-    if (!item || !this.aiExtractor) return;
+    // Claims left behind by a crashed run go back to pending (or fail once attempts are exhausted)
+    await resetAbandonedClaims(pgDb, ['statsProcessing', 'statsImage']);
+
+    const [item] = await claimJobs(pgDb, 'statsProcessing', { limit: 1, workerId: this.workerId });
+    if (!item) return;
+    if (!this.aiExtractor) {
+      await releaseJob(pgDb, 'statsProcessing', item.id);
+      return;
+    }
 
     logger.debug(`🤖 Processing AI extraction for submission: ${item.submission_id}`);
     await this.aiExtractor.processSubmission(item.submission_id, item.id);
   }
 
   private async processImageQueue() {
-    const item = await this.db.get(
-      `SELECT * FROM stats_image_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
-    );
-    if (!item || !this.imageGenerator) return;
+    const [item] = await claimJobs(pgDb, 'statsImage', { limit: 1, workerId: this.workerId });
+    if (!item) return;
+    if (!this.imageGenerator) {
+      await releaseJob(pgDb, 'statsImage', item.id);
+      return;
+    }
 
     logger.debug(`🖼️ Processing image generation for match: ${item.match_id}`);
     await this.imageGenerator.generateMatchStatImages(item.id, item.match_id);

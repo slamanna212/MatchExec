@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { db as pgDb } from '../../../lib/db';
+import { discordAnnouncementQueue } from '../../../lib/db/schema';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -196,11 +198,7 @@ describe('MatchExecScheduler — timed announcements extended', () => {
       const ann1h = { id: 'ann-1h', value: 1, unit: 'hours' };
 
       // Pre-insert the 2h announcement as already pending
-      await db.run(
-        `INSERT INTO discord_announcement_queue (id, match_id, status, announcement_type, announcement_data)
-         VALUES ('existing-2h', ?, 'pending', 'timed', ?)`,
-        [match.id, JSON.stringify(ann2h)]
-      );
+      await pgDb.insert(discordAnnouncementQueue).values({ id: 'existing-2h', match_id: match.id, status: 'pending', announcement_type: 'timed', announcement_data: ann2h });
 
       await (scheduler as any).processMatchAnnouncements({
         id: match.id,
@@ -209,13 +207,10 @@ describe('MatchExecScheduler — timed announcements extended', () => {
         announcements: JSON.stringify([ann2h, ann1h]),
       });
 
-      const rows = await db.all(
-        `SELECT announcement_data FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const rows = await pgDb.select().from(discordAnnouncementQueue);
 
       expect(rows).toHaveLength(2);
-      const dataValues = rows.map((r: { announcement_data: string }) => JSON.parse(r.announcement_data));
+      const dataValues = rows.map((r) => r.announcement_data);
       expect(dataValues).toContainEqual(ann2h);
       expect(dataValues).toContainEqual(ann1h);
     });

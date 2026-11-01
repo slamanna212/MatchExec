@@ -9,6 +9,7 @@ import { createMatchTeams } from './match-setup';
 import { cleanMapId } from './utils/map-utils';
 import { db as pgDb } from '../../lib/db';
 import { getMap } from './games';
+import { enqueueAnnouncement, enqueueStatusUpdate, hasAnnouncement } from './discord-queues';
 
 async function getMatchName(matchId: string): Promise<string> {
   try {
@@ -25,29 +26,15 @@ async function getMatchName(matchId: string): Promise<string> {
  */
 async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
   try {
-    const db = await getDbInstance();
+    // One statement: inserts only when no standard announcement is already pending/processing for this match
+    // (TODO(matches): runs on the Postgres pool, not in the SQLite status-change transaction, until matches are ported)
+    const queued = await enqueueAnnouncement(pgDb, { matchId, type: 'standard', dedupe: ['pending', 'processing'] });
 
-    // Check if already exists first to prevent duplicates
-    const existing = await db.get(`
-      SELECT id FROM discord_announcement_queue
-      WHERE match_id = ? AND announcement_type = 'standard' AND status IN ('pending', 'posted')
-    `, [matchId]);
-
-    if (existing) {
+    if (queued) {
+      logger.debug('📢 Discord announcement queued for match:', matchId);
+    } else {
       logger.debug('📢 Discord announcement already exists for match:', matchId);
-      return true;
     }
-
-    // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    // Add to announcement queue with explicit 'standard' type
-    await db.run(`
-      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
-      VALUES (?, ?, 'standard', 'pending')
-    `, [announcementId, matchId]);
-
-    logger.debug('📢 Discord announcement queued for match:', matchId);
     return true;
   } catch (error) {
     logger.error('❌ Error queuing Discord announcement:', error);
@@ -60,16 +47,7 @@ async function queueDiscordAnnouncement(matchId: string): Promise<boolean> {
  */
 async function queueDiscordStatusUpdate(matchId: string, newStatus: string): Promise<boolean> {
   try {
-    const db = await getDbInstance();
-
-    // Generate unique ID for the queue entry
-    const updateId = `discord_update_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    // Add to status update queue
-    await db.run(`
-      INSERT INTO discord_status_update_queue (id, match_id, new_status, status)
-      VALUES (?, ?, ?, 'pending')
-    `, [updateId, matchId, newStatus]);
+    await enqueueStatusUpdate(pgDb, matchId, newStatus);
 
     logger.debug('🔄 Discord status update queued for match:', matchId, '-> status:', newStatus);
     return true;
@@ -84,16 +62,7 @@ async function queueDiscordStatusUpdate(matchId: string, newStatus: string): Pro
  */
 async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
   try {
-    const db = await getDbInstance();
-
-    // Generate unique ID for the announcement queue entry
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    // Add to main announcement queue with match_start type
-    await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (id, match_id, announcement_type, status)
-      VALUES (?, ?, 'match_start', 'pending')
-    `, [announcementId, matchId]);
+    await enqueueAnnouncement(pgDb, { matchId, type: 'match_start' });
 
     logger.debug('🚀 Discord match start announcement queued for match:', matchId);
     return true;
@@ -109,13 +78,8 @@ async function queueDiscordMatchStart(matchId: string): Promise<boolean> {
  */
 export async function handleGatherTransition(matchId: string): Promise<void> {
   try {
-    const db = await getDbInstance();
-
     // Check if an announcement is already queued to prevent duplicates
-    const existingAnnouncement = await db.get(`
-      SELECT id FROM discord_announcement_queue
-      WHERE match_id = ? AND (announcement_type IS NULL OR announcement_type = 'standard') AND status IN ('pending', 'posted')
-    `, [matchId]);
+    const existingAnnouncement = await hasAnnouncement(pgDb, matchId, 'standard');
 
     if (!existingAnnouncement) {
       const discordSuccess = await queueDiscordAnnouncement(matchId);

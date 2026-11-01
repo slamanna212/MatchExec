@@ -4,7 +4,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '../../../src/lib/logger/server';
 import type { GameStatDefinition } from '../../../shared/types';
-import { db as pgDb } from '../../../lib/db';
+import { db as pgDb, type Executor } from '../../../lib/db';
+import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
@@ -23,16 +24,14 @@ function resolveTeamColor(stat: { team_assignment?: unknown; team_color?: unknow
 export class StatImageGenerator {
   private db: StatsDb;
 
-  constructor(db: unknown) {
+  /** `db` is the legacy SQLite connection; `queueDb` holds stats_image_queue. */
+  constructor(db: unknown, private queueDb: Executor = pgDb) {
     this.db = db as StatsDb;
   }
 
   async generateMatchStatImages(queueId: string, matchId: string): Promise<void> {
     try {
-      await this.db.run(
-        `UPDATE stats_image_queue SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [queueId]
-      );
+      // The queue row was claimed (status 'processing') by the stats-processor before this call
 
       // Aggregate stats first
       await this.aggregateStats(matchId);
@@ -48,10 +47,7 @@ export class StatImageGenerator {
       );
 
       if (!matchStats || matchStats.length === 0) {
-        await this.db.run(
-          `UPDATE stats_image_queue SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-          [queueId]
-        );
+        await completeJob(this.queueDb, 'statsImage', queueId);
         return;
       }
 
@@ -94,19 +90,14 @@ export class StatImageGenerator {
         // Don't fail — just mark as completed without images
       }
 
-      await this.db.run(
-        `UPDATE stats_image_queue SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [queueId]
-      );
+      await completeJob(this.queueDb, 'statsImage', queueId);
 
       logger.debug(`✅ Stat image generation completed for match ${matchId}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`❌ Image generation failed for match ${matchId}:`, message);
-      await this.db.run(
-        `UPDATE stats_image_queue SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [message, queueId]
-      );
+      // Back to 'pending' with backoff while attempts remain, otherwise 'failed'
+      await failJob(this.queueDb, 'statsImage', queueId, message);
     }
   }
 

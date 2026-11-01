@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { db as pgDb } from '../../../lib/db';
+import { discordAnnouncementQueue } from '../../../lib/db/schema';
 
 // Mock logger to prevent database access during import
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -163,14 +165,9 @@ describe('MatchExecScheduler — timed announcements', () => {
       });
 
       const announcementObj = { id: 'test-2h-dedup', value: 2, unit: 'hours' };
-      const announcementData = JSON.stringify(announcementObj);
 
       // Pre-insert an existing pending entry
-      await db.run(
-        `INSERT INTO discord_announcement_queue (id, match_id, status, announcement_type, announcement_data)
-         VALUES (?, ?, 'pending', 'timed', ?)`,
-        ['existing-entry', match.id, announcementData]
-      );
+      await pgDb.insert(discordAnnouncementQueue).values({ id: 'existing-entry', match_id: match.id, status: 'pending', announcement_type: 'timed', announcement_data: announcementObj });
 
       await (scheduler as any).processMatchAnnouncements({
         id: match.id,
@@ -225,13 +222,11 @@ describe('MatchExecScheduler — timed announcements', () => {
 
       await (scheduler as any).queueTimedAnnouncement(match.id, announcement, scheduledFor);
 
-      const row = await db.get(
-        `SELECT scheduled_for FROM discord_announcement_queue WHERE match_id = ? AND announcement_type = 'timed'`,
-        [match.id]
-      );
+      const [row] = await pgDb.select().from(discordAnnouncementQueue);
 
       expect(row).not.toBeUndefined();
-      expect(row.scheduled_for).toBe(scheduledFor.toISOString());
+      expect(row!.match_id).toBe(match.id);
+      expect(row!.scheduled_for?.toISOString()).toBe(scheduledFor.toISOString());
     });
   });
 });

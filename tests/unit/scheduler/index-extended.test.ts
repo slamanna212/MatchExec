@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTestDb } from '../../utils/test-db';
 import { settingsStore, resetSettingsStore } from '../../utils/settings-mock';
+import { db as pgDb } from '../../../lib/db';
+import { discordReminderQueue } from '../../../lib/db/schema';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 
 vi.mock('../../../src/lib/settings', async () => (await import('../../utils/settings-mock')).createSettingsModuleMock());
@@ -256,18 +258,11 @@ describe('MatchExecScheduler — extended', () => {
       });
 
       // Pre-insert an existing reminder
-      await db.run(
-        `INSERT INTO discord_reminder_queue (id, match_id, reminder_type, minutes_before, reminder_time, scheduled_for, status)
-         VALUES ('existing-reminder', ?, 'match_reminder', 30, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pending')`,
-        [match.id]
-      );
+      await pgDb.insert(discordReminderQueue).values({ id: 'existing-reminder', match_id: match.id, reminder_type: 'match_reminder', minutes_before: 30, reminder_time: new Date(), scheduled_for: new Date(), status: 'pending' });
 
       await (scheduler as any).queueMatchReminders();
 
-      const rows = await db.all(
-        `SELECT id FROM discord_reminder_queue WHERE match_id = ?`,
-        [match.id]
-      );
+      const rows = await pgDb.select().from(discordReminderQueue);
       // Should still be only the pre-existing one
       expect(rows).toHaveLength(1);
       expect(rows[0].id).toBe('existing-reminder');

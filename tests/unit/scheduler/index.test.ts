@@ -216,7 +216,7 @@ describe('MatchExecScheduler', () => {
 
       const alertRow = await db.get(`SELECT * FROM discord_health_alert_queue LIMIT 1`);
       expect(alertRow).toBeDefined();
-      expect(alertRow.id).toMatch(/^health_alert_\d+_[a-z0-9]+$/);
+      expect(alertRow.id).toMatch(/^health_alert_/);
       expect(alertRow.severity).toBe('critical');
       expect(alertRow.status).toBe('pending');
 

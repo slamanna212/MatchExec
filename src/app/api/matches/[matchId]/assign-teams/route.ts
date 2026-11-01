@@ -10,6 +10,9 @@ import {
 import { withTransaction } from '@/lib/transaction';
 import { logger } from '@/lib/logger';
 import { apiError, apiOk } from '@/lib/api-response';
+import { db as pgDb } from '../../../../../../lib/db';
+import { enqueueBotRequest } from '@/lib/discord-queues';
+import { getDiscordSettings } from '@/lib/settings';
 
 interface AssignmentEntry {
   participantId: string;
@@ -146,9 +149,7 @@ export async function POST(
 
     // Queue commander DMs (after commit) only for commanders whose commander
     // status or team actually changed.
-    const discordCfg = await db.get<{ commander_dm_enabled: number }>(
-      'SELECT commander_dm_enabled FROM discord_settings WHERE id = 1'
-    );
+    const discordCfg = await getDiscordSettings(pgDb);
     if (discordCfg?.commander_dm_enabled) {
       for (const { entry, teamId } of resolved) {
         if (!entry.receives_map_codes) continue;
@@ -163,14 +164,8 @@ export async function POST(
           [entry.participantId, matchId]
         );
         if (participant?.discord_user_id) {
-          await db.run(
-            `INSERT INTO discord_bot_requests (id, type, data, status, created_at, updated_at)
-             VALUES (?, 'commander_dm', ?, 'pending', datetime('now'), datetime('now'))`,
-            [
-              `cmdr_dm_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, // NOSONAR: non-security internal ID
-              JSON.stringify({ matchId, discordUserId: participant.discord_user_id, team: participant.team_name ?? '' })
-            ]
-          );
+          // TODO(matches): queue row is in Postgres, team assignment in SQLite until matches are ported
+          await enqueueBotRequest(pgDb, 'commander_dm', { matchId, discordUserId: participant.discord_user_id, team: participant.team_name ?? '' });
         }
       }
     }

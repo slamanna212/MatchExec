@@ -9,6 +9,8 @@
 import { logger } from './logger';
 import type { Database } from '../../lib/database/connection';
 import { logFeedEvent } from './feed-helpers';
+import { db as pgDb } from '../../lib/db';
+import { enqueueAnnouncement, enqueueDeletion, enqueueStatusUpdate } from './discord-queues';
 
 /**
  * Handles the transition to "gather" status (tournament open for signups)
@@ -281,28 +283,17 @@ async function transitionFirstRoundMatches(
 
 // Helper: Queue Discord tournament announcement
 async function queueDiscordTournamentAnnouncement(
-  db: Database,
+  _db: Database,
   tournamentId: string
 ): Promise<boolean> {
   try {
-    const existing = await db.get(`
-      SELECT id FROM discord_announcement_queue
-      WHERE match_id = ? AND announcement_type = 'tournament' AND status IN ('pending', 'posted')
-    `, [tournamentId]);
+    const queued = await enqueueAnnouncement(pgDb, { matchId: tournamentId, type: 'tournament', dedupe: ['pending', 'processing'] });
 
-    if (existing) {
+    if (queued) {
+      logger.debug('📢 Discord tournament announcement queued for tournament:', tournamentId);
+    } else {
       logger.debug('📢 Discord tournament announcement already exists for tournament:', tournamentId);
-      return true;
     }
-
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    await db.run(`
-      INSERT INTO discord_announcement_queue (id, match_id, announcement_type, status)
-      VALUES (?, ?, 'tournament', 'pending')
-    `, [announcementId, tournamentId]);
-
-    logger.debug('📢 Discord tournament announcement queued for tournament:', tournamentId);
     return true;
   } catch (error) {
     logger.error('❌ Error queuing Discord tournament announcement:', error);
@@ -312,17 +303,12 @@ async function queueDiscordTournamentAnnouncement(
 
 // Helper: Queue Discord tournament status update
 async function queueDiscordTournamentStatusUpdate(
-  db: Database,
+  _db: Database,
   tournamentId: string,
   newStatus: string
 ): Promise<boolean> {
   try {
-    const updateId = `discord_tournament_update_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    await db.run(`
-      INSERT INTO discord_status_update_queue (id, match_id, new_status, status)
-      VALUES (?, ?, ?, 'pending')
-    `, [updateId, tournamentId, newStatus]);
+    await enqueueStatusUpdate(pgDb, tournamentId, newStatus);
 
     logger.debug('🔄 Discord tournament status update queued for tournament:', tournamentId, '-> status:', newStatus);
     return true;
@@ -334,16 +320,11 @@ async function queueDiscordTournamentStatusUpdate(
 
 // Helper: Queue Discord match start
 async function queueDiscordMatchStart(
-  db: Database,
+  _db: Database,
   matchId: string
 ): Promise<boolean> {
   try {
-    const announcementId = `announce_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    await db.run(`
-      INSERT OR IGNORE INTO discord_announcement_queue (id, match_id, announcement_type, status)
-      VALUES (?, ?, 'match_start', 'pending')
-    `, [announcementId, matchId]);
+    await enqueueAnnouncement(pgDb, { matchId, type: 'match_start' });
 
     logger.debug('🚀 Discord match start announcement queued for match:', matchId);
     return true;
@@ -369,12 +350,7 @@ async function queueDiscordEventDeletion(
       return true;
     }
 
-    const deletionId = `deletion_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    await db.run(`
-      INSERT INTO discord_deletion_queue (id, match_id, status)
-      VALUES (?, ?, 'pending')
-    `, [deletionId, tournamentId]);
+    await enqueueDeletion(pgDb, tournamentId);
 
     logger.debug('🗑️ Discord event deletion queued for tournament:', tournamentId);
     return true;

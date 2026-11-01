@@ -22,6 +22,8 @@ import { WinnerVoteHandler } from './modules/winner-vote-handler';
 import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 import { db as pgDb } from '../../lib/db';
+import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
+import { nonOverlapping } from '../../src/lib/discord-queues';
 import { listGames } from '../../src/lib/games';
 
 class MatchExecBot {
@@ -44,6 +46,11 @@ class MatchExecBot {
   private statsReportHandler: StatsReportHandler | null = null;
   private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
   private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
+  private leaderLock: LeaderLock | null = null;
+  private runQueueTick = nonOverlapping(
+    async () => { await this.queueProcessor?.processAllQueues(); },
+    (error) => logger.error('❌ Error processing queues:', error),
+  );
 
   constructor() {
     this.client = new Client({
@@ -189,7 +196,10 @@ class MatchExecBot {
     try {
       // Wait for database to be ready (migrations should be run separately)
       this.db = await waitForDatabaseReady();
-      
+
+      // Exactly one bot per database: hold a Postgres advisory lock for the life of the process (exits if held)
+      this.leaderLock ??= await requireLeaderLock('discord-bot', { log: (message) => logger.critical(message) });
+
       // Check if welcome flow is completed
       const welcomeCompleted = await this.checkWelcomeFlowCompleted();
       if (!welcomeCompleted) {
@@ -314,12 +324,8 @@ class MatchExecBot {
   private async processQueues() {
     if (!this.queueProcessor || !this.isReady) return;
 
-    try {
-      await this.queueProcessor.processAllQueues();
-    } catch (error) {
-      logger.error('❌ Error processing queues:', error);
-      // Don't let queue processing errors crash the bot
-    }
+    // A tick never starts while the previous one is still running; errors never crash the bot.
+    await this.runQueueTick();
   }
 
   private async processVoiceChannelEmptiness() {
@@ -430,6 +436,8 @@ class MatchExecBot {
         logger.error('Error closing database connection:', error);
       }
     }
+
+    await this.leaderLock?.release();
 
     logger.info('✅ Discord bot shutdown complete');
     process.exit(0);

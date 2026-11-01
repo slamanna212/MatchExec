@@ -3,6 +3,7 @@ import { getDbInstance } from '../../../../../lib/database-init';
 import { logger } from '@/lib/logger';
 import { processMatchAnnouncements } from '../../../../../lib/reminder-helpers';
 import { apiError, apiOk } from '@/lib/api-response';
+import { db as pgDb } from '../../../../../../lib/db';
 
 
 export async function GET(
@@ -51,7 +52,7 @@ export async function GET(
       if (matchWithAnnouncements?.announcements) {
         try {
           scheduledAnnouncements = await processMatchAnnouncements(
-            db,
+            pgDb,
             matchId,
             matchWithAnnouncements.announcements,
             match.start_date,

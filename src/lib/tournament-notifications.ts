@@ -1,5 +1,7 @@
 import { getDbInstance } from './database-init';
 import { logger } from '@/lib/logger';
+import { db as pgDb } from '../../lib/db';
+import { enqueueMatchWinner } from './discord-queues';
 
 /**
  * Queue a Discord tournament winner notification using the existing match winner queue
@@ -72,28 +74,20 @@ export async function queueTournamentWinnerNotification(
       WHERE tt.tournament_id = ?
     `, [tournamentId]);
 
-    // Generate unique ID for the queue entry
-    const queueId = `tournament_winner_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-    // Use the existing discord_match_winner_queue table but with tournament data
-    // We'll use match_id to store the tournament ID and add special markers to identify it as a tournament
-    await db.run(`
-      INSERT INTO discord_match_winner_queue (
-        id, match_id, match_name, game_id, winner, winning_team_name, winning_players,
-        team1_score, team2_score, total_maps, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
-    `, [
-      queueId,
-      tournamentId, // Store tournament ID in match_id field
-      `🏆 ${tournamentData.tournament_name}`, // Add trophy emoji to identify as tournament
-      tournamentData.game_id,
-      'tournament', // Special marker to identify this as a tournament winner
+    // Reuses the match winner queue with tournament data: the tournament id goes in match_id and the special
+    // `winner = 'tournament'` marker identifies it. team1_score = total participants, team2_score = 1 for double
+    // elimination, total_maps = 1. (TODO(tournaments): runs on the Postgres pool, not the SQLite tournament tx, until ported)
+    await enqueueMatchWinner(pgDb, {
+      matchId: tournamentId,
+      matchName: `🏆 ${tournamentData.tournament_name}`,
+      gameId: tournamentData.game_id,
+      winner: 'tournament',
       winningTeamName,
-      JSON.stringify(winningPlayerLabels),
-      participantCount?.total || 0, // Use team1_score for total participants
-      tournamentData.format === 'double-elimination' ? 1 : 0, // Use team2_score to store format info
-      1 // total_maps = 1 to indicate tournament (vs multiple maps in match)
-    ]);
+      winningPlayers: winningPlayerLabels,
+      team1Score: participantCount?.total || 0,
+      team2Score: tournamentData.format === 'double-elimination' ? 1 : 0,
+      totalMaps: 1,
+    });
 
     logger.debug('🏆 Tournament winner notification queued for tournament:', tournamentId);
     return true;

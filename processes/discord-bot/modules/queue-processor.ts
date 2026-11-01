@@ -3,6 +3,7 @@ import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import type { StatsReportHandler } from './stats-report-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import fs from 'fs';
 import path from 'path';
@@ -17,69 +18,18 @@ import type { SettingsManager } from './settings-manager';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
-import { db as pgDb } from '../../../lib/db';
-import { getMapNameById } from '../../../src/lib/games';
+import { db as pgDb, type Executor } from '../../../lib/db';
+import { discordAnnouncementQueue, discordPlayerReminderQueue, discordReminderQueue } from '../../../lib/db/schema';
+import { getGameDisplay, getMapNameById } from '../../../src/lib/games';
+import {
+  alreadyPosted, claimJobs, completeJob, expireOldBotRequests, failJob, makeWorkerId, purgeFinished,
+  recordExternalResult, releaseJob, resetAbandonedClaims,
+  type CompleteOptions, type ExternalResultQueue, type FailOptions, type QueueName, type QueueRow,
+} from '../../../src/lib/discord-queues';
 
-// Interfaces for different queue types - matching existing DB structure
-
-interface QueuedDeletion {
-  id: string;
-  match_id: string;
-  created_at: string;
-}
-
-interface QueuedStatusUpdate {
-  id: string;
-  match_id: string;
-  new_status: string;
-  created_at: string;
-}
-
-interface QueuedReminder {
-  id: string;
-  match_id: string;
-  reminder_time: string;
-  created_at: string;
-}
-
-interface QueuedScoreNotification {
-  id: string;
-  match_id: string;
-  game_id: string;
-  map_id: string;
-  game_number: number;
-  winner: 'team1' | 'team2';
-  winning_team_name: string;
-  winning_players: string;
-  created_at: string;
-}
-
-interface QueuedVoiceAnnouncement {
-  id: string;
-  match_id: string;
-  announcement_type: 'welcome' | 'nextround' | 'finish';
-  blue_team_voice_channel: string | null;
-  red_team_voice_channel: string | null;
-  first_team: 'blue' | 'red';
-  created_at: string;
-  retry_count: number;
-  timeout_at: string | null;
-  first_attempted_at: string | null;
-}
-
-interface QueuedMapCode {
-  id: string;
-  match_id: string;
-  map_name: string;
-  map_code: string;
-  created_at: string;
-}
-
-interface QueuedMatchEdit {
-  id: string;
-  match_id: string;
-  created_at: string;
-}
+// Queue rows come from the Discord queues module (src/lib/queues): claimed atomically, retried with backoff,
+// abandoned claims reset. Match / tournament data still lives in the legacy SQLite database until those
+// domains are ported, so each handler reads it separately from the claim (TODO(matches): collapse into joins).
 
 interface MatchEditData {
   id: string;
@@ -100,26 +50,7 @@ interface MatchMessageRecord {
   discord_event_id: string | null;
 }
 
-interface QueuedMatchWinner {
-  id: string;
-  match_id: string;
-  match_name: string;
-  game_id: string;
-  winner: 'team1' | 'team2' | 'tie' | 'tournament';
-  winning_team_name: string;
-  winning_players: string;
-  team1_score: number;
-  team2_score: number;
-  total_maps: number;
-  created_at: string;
-}
-
-interface BotRequest {
-  id: string;
-  type: string;
-  data: string;
-  created_at: string;
-}
+type BotRequest = QueueRow<'botRequest'>;
 
 /**
  * Type for request handler functions
@@ -130,27 +61,19 @@ type RequestHandler = (processor: QueueProcessor, request: BotRequest) => Promis
  * Handles voice channel creation requests
  */
 async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
-  const requestData = JSON.parse(request.data);
+  const requestData = (request.data ?? {}) as {
+    matchId?: string; categoryId?: string; blueChannelName?: string; redChannelName?: string;
+    isSingleTeam?: boolean; channelNames?: string[];
+  };
   const { matchId, categoryId, blueChannelName, redChannelName, isSingleTeam } = requestData;
   // N-team aware: channelNames is the preferred payload shape (one name per
   // team). Falls back to the legacy blueChannelName/redChannelName pair for
   // requests queued by an older version of the caller.
   const channelNames: string[] = Array.isArray(requestData.channelNames) && requestData.channelNames.length > 0
     ? requestData.channelNames
-    : [blueChannelName, ...(!isSingleTeam && redChannelName ? [redChannelName] : [])];
+    : [blueChannelName as string, ...(!isSingleTeam && redChannelName ? [redChannelName] : [])];
 
   logger.debug(`Creating ${channelNames.length} voice channel(s) for match ${matchId} in category ${categoryId}`);
-
-  // Mark as processing
-  const updateResult = await processor['db'].run(`
-    UPDATE discord_bot_requests
-    SET status = 'processing', updated_at = datetime('now')
-    WHERE id = ? AND status = 'pending'
-  `, [request.id]);
-
-  if (updateResult.changes === 0) {
-    return;
-  }
 
   try {
     const settings = await getAnyDiscordSettings();
@@ -187,24 +110,16 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
 
     logger.debug(`✅ Voice channel(s) created: ${channelIds.join(', ')}`);
 
-    await processor['db'].run(`
-      UPDATE discord_bot_requests
-      SET status = 'completed', result = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `, [
-      JSON.stringify({ success: true, channelIds, blueChannelId: channelIds[0], redChannelId: channelIds[1] }),
-      request.id
-    ]);
+    await processor['finish']('botRequest', request.id, {
+      set: { result: { success: true, channelIds, blueChannelId: channelIds[0], redChannelId: channelIds[1] } },
+    });
   } catch (error) {
     logger.error(`❌ Error creating voice channels:`, error);
-    await processor['db'].run(`
-      UPDATE discord_bot_requests
-      SET status = 'failed', result = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `, [
-      JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Unknown error' }),
-      request.id
-    ]);
+    // Never replayed: creating channels twice would orphan the first set.
+    await processor['fail']('botRequest', request.id, error, {
+      permanent: true,
+      set: { result: { success: false, message: error instanceof Error ? error.message : 'Unknown error' } },
+    });
   }
 }
 
@@ -212,20 +127,9 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
  * Handles voice channel deletion requests
  */
 async function handleVoiceChannelDelete(processor: QueueProcessor, request: BotRequest): Promise<void> {
-  const requestData = JSON.parse(request.data);
-  const { channelId, matchId } = requestData;
+  const { channelId, matchId } = (request.data ?? {}) as { channelId: string; matchId?: string };
 
   logger.debug(`Deleting voice channel ${channelId} for match ${matchId}`);
-
-  const updateResult = await processor['db'].run(`
-    UPDATE discord_bot_requests
-    SET status = 'processing', updated_at = datetime('now')
-    WHERE id = ? AND status = 'pending'
-  `, [request.id]);
-
-  if (updateResult.changes === 0) {
-    return;
-  }
 
   try {
     const channel = await processor['client'].channels.fetch(channelId);
@@ -234,18 +138,10 @@ async function handleVoiceChannelDelete(processor: QueueProcessor, request: BotR
       logger.debug(`✅ Voice channel deleted: ${channelId}`);
     }
 
-    await processor['db'].run(`
-      UPDATE discord_bot_requests
-      SET status = 'completed', result = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `, [JSON.stringify({ success: true }), request.id]);
+    await processor['finish']('botRequest', request.id, { set: { result: { success: true } } });
   } catch (error) {
     logger.warning(`⚠️ Error deleting voice channel ${channelId}:`, error instanceof Error ? error.message : 'Unknown');
-    await processor['db'].run(`
-      UPDATE discord_bot_requests
-      SET status = 'completed', result = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `, [JSON.stringify({ success: true, message: 'Channel may already be deleted' }), request.id]);
+    await processor['finish']('botRequest', request.id, { set: { result: { success: true, message: 'Channel may already be deleted' } } });
   }
 }
 
@@ -253,44 +149,33 @@ async function handleVoiceChannelDelete(processor: QueueProcessor, request: BotR
  * Handles voice test requests
  */
 async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): Promise<void> {
-  const requestData = JSON.parse(request.data);
-  const { userId, voiceId } = requestData;
+  const { userId, voiceId } = (request.data ?? {}) as { userId: string; voiceId?: string };
 
   if (processor['processingVoiceTests'].has(userId)) {
+    // Another test for this user is running: hand the claim back and pick it up on a later tick
+    await processor['release']('botRequest', request.id);
     return;
   }
 
   processor['processingVoiceTests'].add(userId);
 
-  const updateResult = await processor['db'].run(`
-    UPDATE discord_bot_requests
-    SET status = 'processing', updated_at = datetime('now')
-    WHERE id = ? AND status = 'pending'
-  `, [request.id]);
-
-  if (updateResult.changes === 0) {
-    processor['processingVoiceTests'].delete(userId);
-    return;
-  }
-
   try {
     if (!processor['voiceHandler']) {
-      await processor['db'].run(`
-        UPDATE discord_bot_requests
-        SET status = 'failed', result = ?, updated_at = datetime('now')
-        WHERE id = ?
-      `, [JSON.stringify({ success: false, message: 'Voice handler not available' }), request.id]);
+      await processor['fail']('botRequest', request.id, 'Voice handler not available', {
+        permanent: true,
+        set: { result: { success: false, message: 'Voice handler not available' } },
+      });
       logger.error(`❌ Voice handler not available for request ${request.id}`);
       return;
     }
 
     const result = await processor['voiceHandler'].testVoiceLineForUser(userId, voiceId);
 
-    await processor['db'].run(`
-      UPDATE discord_bot_requests
-      SET status = ?, result = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `, [result.success ? 'completed' : 'failed', JSON.stringify(result), request.id]);
+    if (result.success) {
+      await processor['finish']('botRequest', request.id, { set: { result } });
+    } else {
+      await processor['fail']('botRequest', request.id, result.message ?? 'Voice test failed', { permanent: true, set: { result } });
+    }
   } finally {
     processor['processingVoiceTests'].delete(userId);
   }
@@ -300,23 +185,20 @@ async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): 
  * Registry of request type handlers
  */
 async function handleCommanderDM(processor: QueueProcessor, request: BotRequest): Promise<void> {
-  const { matchId, discordUserId, team } = JSON.parse(request.data);
+  const { matchId, discordUserId, team } = (request.data ?? {}) as { matchId: string; discordUserId: string; team: string };
 
-  const match = await processor['db'].get<{ name: string; game_name: string; game_color?: string }>(
-    `SELECT m.name, g.name as game_name, g.color as game_color
-     FROM matches m LEFT JOIN games g ON m.game_id = g.id WHERE m.id = ?`,
+  const match = await processor['db']!.get<{ name: string; game_id: string }>(
+    'SELECT name, game_id FROM matches WHERE id = ?',
     [matchId]
   );
+  const game = match ? await getGameDisplay(pgDb, match.game_id) : undefined;
 
   if (match) {
-    const embed = buildCommanderAssignedEmbed(match.name, match.game_name, match.game_color, team);
+    const embed = buildCommanderAssignedEmbed(match.name, game?.name ?? '', game?.color ?? undefined, team);
     await sendDM(processor['client'], discordUserId, embed);
   }
 
-  await processor['db'].run(
-    `UPDATE discord_bot_requests SET status = 'completed', updated_at = datetime('now') WHERE id = ?`,
-    [request.id]
-  );
+  await processor['finish']('botRequest', request.id);
 }
 
 const REQUEST_HANDLERS: Record<string, RequestHandler> = {
@@ -402,6 +284,8 @@ export class QueueProcessor {
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
   private statsReportHandler: StatsReportHandler | null = null;
+  private readonly workerId = makeWorkerId('discord-bot');
+  private ticking = false;
 
   constructor(
     private client: Client,
@@ -411,7 +295,9 @@ export class QueueProcessor {
     private reminderHandler: ReminderHandler | null,
     private eventHandler: EventHandler | null,
     private voiceHandler: VoiceHandler | null = null,
-    private settingsManager: SettingsManager | null = null
+    private settingsManager: SettingsManager | null = null,
+    /** Postgres connection used for the queue tables (injectable for tests). */
+    private queueDb: Executor = pgDb
   ) {}
 
   setScorecardHandler(handler: ScorecardHandler) {
@@ -426,11 +312,37 @@ export class QueueProcessor {
     this.statsReportHandler = handler;
   }
 
+  // ─── Queue worker contract helpers (claim / complete / fail / release) ─────────────────────────
+
+  private claim<N extends QueueName>(queue: N, limit = 5, where?: SQL): Promise<QueueRow<N>[]> {
+    return claimJobs(this.queueDb, queue, { limit, workerId: this.workerId, where });
+  }
+
+  private finish(queue: QueueName, id: string, opts?: CompleteOptions) {
+    return completeJob(this.queueDb, queue, id, opts);
+  }
+
+  private fail(queue: QueueName, id: string, error: unknown, opts?: FailOptions) {
+    return failJob(this.queueDb, queue, id, error, opts);
+  }
+
+  private release(queue: QueueName, id: string, delayMs = 0) {
+    return releaseJob(this.queueDb, queue, id, delayMs);
+  }
+
+  /** Remember the Discord message id on the job right after posting, so a retry never double-posts. */
+  private async recordPosted(queue: ExternalResultQueue, id: string, messageId: unknown) {
+    if (typeof messageId === 'string' && messageId) {
+      await recordExternalResult(this.queueDb, queue, id, messageId);
+    }
+  }
+
   async processAnnouncementQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const announcements = await this.fetchPendingAnnouncements();
+      const due = or(isNull(discordAnnouncementQueue.scheduled_for), lte(discordAnnouncementQueue.scheduled_for, sql`now()`));
+      const announcements = await this.claim('announcement', 5, due);
 
       for (const announcement of announcements) {
         await this.processSingleAnnouncement(announcement);
@@ -440,82 +352,70 @@ export class QueueProcessor {
     }
   }
 
-  private async fetchPendingAnnouncements() {
-    return await this.db!.all<{
-      announcement_id: string;
-      match_id: string;
-      name: string;
-      description: string;
-      game_id: string;
-      max_participants: number;
-      guild_id: string;
-      maps?: string;
-      livestream_link?: string;
-      event_image_url?: string;
-      start_date?: string;
+  /** Match (or tournament) data for a claimed announcement; undefined when it no longer exists. */
+  private async fetchAnnouncementContext(queued: QueueRow<'announcement'>) {
+    type Context = {
+      name: string; description: string; game_id: string; max_participants: number; guild_id?: string;
+      maps?: string; livestream_link?: string; event_image_url?: string; start_date?: string;
       rules?: 'competitive' | 'casual';
-      announcement_type?: string;
-      announcement_data?: string;
-    }>(`
-      SELECT daq.id as announcement_id, daq.match_id, daq.announcement_type, daq.announcement_data,
-             COALESCE(m.name, t.name) as name,
-             COALESCE(m.description, t.description) as description,
-             COALESCE(m.game_id, t.game_id) as game_id,
-             COALESCE(m.max_participants, t.max_participants) as max_participants,
-             COALESCE(m.guild_id, ds.guild_id) as guild_id,
-             m.maps, m.livestream_link, COALESCE(m.event_image_url, t.event_image_url) as event_image_url,
-             COALESCE(m.start_date, t.start_time) as start_date,
-             COALESCE(m.rules, 'casual') as rules
-      FROM discord_announcement_queue daq
-      LEFT JOIN matches m ON daq.match_id = m.id AND (daq.announcement_type IS NULL OR daq.announcement_type IN ('standard', 'match_start', 'timed'))
-      LEFT JOIN tournaments t ON daq.match_id = t.id AND daq.announcement_type = 'tournament'
-      LEFT JOIN discord_settings ds ON daq.announcement_type = 'tournament'
-      WHERE daq.status = 'pending' AND (m.id IS NOT NULL OR t.id IS NOT NULL)
-      AND (daq.scheduled_for IS NULL OR datetime(daq.scheduled_for) <= datetime('now'))
-      ORDER BY daq.created_at ASC
-      LIMIT 5
-    `);
+    };
+    if (queued.announcement_type === 'tournament') {
+      const t = await this.db.get<Omit<Context, 'guild_id' | 'rules'>>(
+        `SELECT name, description, game_id, max_participants, event_image_url, start_time AS start_date
+         FROM tournaments WHERE id = ?`,
+        [queued.match_id]
+      );
+      if (!t) return undefined;
+      const settings = await getAnyDiscordSettings(pgDb);
+      return { ...t, guild_id: settings?.guild_id, rules: 'casual' } as Context;
+    }
+    return await this.db.get<Context>(
+      `SELECT name, description, game_id, max_participants, guild_id, maps, livestream_link, event_image_url, start_date,
+              COALESCE(rules, 'casual') AS rules
+       FROM matches WHERE id = ?`,
+      [queued.match_id]
+    );
   }
 
-  private async processSingleAnnouncement(announcement: any) {
+  private async processSingleAnnouncement(queued: QueueRow<'announcement'>) {
+    const announcementId = queued.id;
     try {
-      logger.debug(`🚀 Processing announcement ${announcement.announcement_id} for match ${announcement.match_id} (type: ${announcement.announcement_type})`);
+      logger.debug(`🚀 Processing announcement ${announcementId} for match ${queued.match_id} (type: ${queued.announcement_type})`);
 
-      const wasMarkedAsProcessing = await this.markAnnouncementAsProcessing(announcement.announcement_id);
-      if (!wasMarkedAsProcessing) {
+      if (alreadyPosted(queued)) {
+        logger.debug(`⏭️ Announcement ${announcementId} was already posted (message ${queued.external_message_id}); completing`);
+        await this.markAnnouncementAsCompleted(announcementId);
+        return;
+      }
+
+      const context = await this.fetchAnnouncementContext(queued);
+      if (!context) {
+        await this.markAnnouncementAsFailed(announcementId, 'Match or tournament not found');
         return;
       }
 
       if (!this.announcementHandler) {
-        await this.markAnnouncementAsFailed(announcement.announcement_id, 'AnnouncementHandler not available');
+        await this.markAnnouncementAsFailed(announcementId, 'AnnouncementHandler not available');
         return;
       }
 
+      const announcement = { ...context, announcement_id: announcementId, match_id: queued.match_id, announcement_type: queued.announcement_type ?? undefined, announcement_data: queued.announcement_data };
       const eventData = this.buildEventData(announcement);
-      const result = await this.postAnnouncementByType(announcement.announcement_type, eventData);
+      const result = await this.postAnnouncementByType(queued.announcement_type ?? undefined, eventData);
 
       if (result?.success) {
+        await this.recordPosted('announcement', announcementId, result.mainMessage?.id ?? result.messageId);
         await this.handleSuccessfulAnnouncement(announcement, result, eventData);
       } else {
-        await this.markAnnouncementAsFailed(announcement.announcement_id, 'Failed to post announcement');
+        await this.markAnnouncementAsFailed(announcementId, 'Failed to post announcement', true);
       }
     } catch (error) {
-      logger.error(`❌ Error processing announcement ${announcement.announcement_id}:`, error);
+      logger.error(`❌ Error processing announcement ${announcementId}:`, error);
       await this.markAnnouncementAsFailed(
-        announcement.announcement_id,
+        announcementId,
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
-  }
-
-  private async markAnnouncementAsProcessing(announcementId: string): Promise<boolean> {
-    const updateResult = await this.db!.run(`
-      UPDATE discord_announcement_queue
-      SET status = 'processing', posted_at = datetime('now')
-      WHERE id = ? AND status = 'pending'
-    `, [announcementId]);
-
-    return updateResult.changes !== 0;
   }
 
   private buildEventData(announcement: any): Record<string, unknown> {
@@ -552,12 +452,8 @@ export class QueueProcessor {
 
   private addTimingInfoIfNeeded(eventData: Record<string, unknown>, announcement: any): void {
     if (announcement.announcement_type === 'timed' && announcement.announcement_data) {
-      try {
-        const timingData = JSON.parse(announcement.announcement_data);
-        eventData._timingInfo = timingData;
-      } catch {
-        logger.warning('Could not parse timing data for timed announcement:', announcement.announcement_id);
-      }
+      // announcement_data is jsonb: already an object
+      eventData._timingInfo = announcement.announcement_data;
     }
   }
 
@@ -638,20 +534,12 @@ export class QueueProcessor {
   }
 
   private async markAnnouncementAsCompleted(announcementId: string) {
-    await this.db!.run(`
-      UPDATE discord_announcement_queue
-      SET status = 'completed', posted_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [announcementId]);
+    await this.finish('announcement', announcementId, { set: { posted_at: new Date() } });
   }
 
-  private async markAnnouncementAsFailed(announcementId: string, errorMessage: string) {
+  private async markAnnouncementAsFailed(announcementId: string, errorMessage: string, permanent = false) {
     logger.error(`❌ ${errorMessage}`);
-    await this.db!.run(`
-      UPDATE discord_announcement_queue
-      SET status = 'failed', posted_at = datetime('now'), error_message = ?
-      WHERE id = ?
-    `, [errorMessage, announcementId]);
+    await this.fail('announcement', announcementId, errorMessage, { permanent, set: { posted_at: new Date() } });
   }
 
   /**
@@ -709,7 +597,7 @@ export class QueueProcessor {
   /**
    * Process deletion for a single match
    */
-  private async processSingleDeletion(deletion: QueuedDeletion): Promise<void> {
+  private async processSingleDeletion(deletion: QueueRow<'deletion'>): Promise<void> {
     if (!this.db) return;
 
     const matchId = deletion.match_id;
@@ -736,37 +624,21 @@ export class QueueProcessor {
     await this.db.run('DELETE FROM discord_match_messages WHERE match_id = ?', [matchId]);
 
     // Mark deletion as completed
-    await this.db.run(`
-      UPDATE discord_deletion_queue
-      SET status = 'completed', processed_at = datetime('now')
-      WHERE id = ?
-    `, [deletion.id]);
+    await this.finish('deletion', deletion.id);
   }
 
   async processDeletionQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const deletions = await this.db.all<QueuedDeletion>(`
-        SELECT id, match_id, created_at
-        FROM discord_deletion_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 10
-      `);
+      const deletions = await this.claim('deletion', 10);
 
       for (const deletion of deletions) {
         try {
           await this.processSingleDeletion(deletion);
         } catch (error) {
           logger.error(`❌ Error processing deletion ${deletion.id}:`, error);
-
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_deletion_queue
-            SET status = 'failed', processed_at = datetime('now')
-            WHERE id = ?
-          `, [deletion.id]);
+          await this.fail('deletion', deletion.id, error);
         }
       }
     } catch (error) {
@@ -774,7 +646,7 @@ export class QueueProcessor {
     }
   }
 
-  private async processSingleStatusUpdate(update: QueuedStatusUpdate): Promise<void> {
+  private async processSingleStatusUpdate(update: QueueRow<'statusUpdate'>): Promise<void> {
     let success = false;
     try {
       if (update.new_status === 'assign') {
@@ -789,33 +661,25 @@ export class QueueProcessor {
       logger.error(`❌ Error updating Discord messages for status ${update.new_status}:`, error);
     }
 
-    await this.db!.run(
-      `UPDATE discord_status_update_queue SET status = ?, processed_at = datetime('now'), error_message = ? WHERE id = ?`,
-      [success ? 'completed' : 'failed', success ? null : 'Failed to update Discord messages', update.id]
-    );
+    if (success) {
+      await this.finish('statusUpdate', update.id);
+    } else {
+      await this.fail('statusUpdate', update.id, 'Failed to update Discord messages');
+    }
   }
 
   async processStatusUpdateQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const updates = await this.db.all<QueuedStatusUpdate>(`
-        SELECT id, match_id, new_status, created_at
-        FROM discord_status_update_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const updates = await this.claim('statusUpdate', 5);
 
       for (const update of updates) {
         try {
           await this.processSingleStatusUpdate(update);
         } catch (error) {
           logger.error(`❌ Error processing status update ${update.id}:`, error);
-          await this.db.run(
-            `UPDATE discord_status_update_queue SET status = 'failed', processed_at = datetime('now') WHERE id = ?`,
-            [update.id]
-          );
+          await this.fail('statusUpdate', update.id, error);
         }
       }
     } catch (error) {
@@ -829,12 +693,15 @@ export class QueueProcessor {
     return { value: diffMinutes, unit: 'minutes' };
   }
 
-  private async processSingleReminder(reminder: QueuedReminder): Promise<void> {
+
+  private async processSingleReminder(reminder: QueueRow<'reminder'>): Promise<void> {
+    if (alreadyPosted(reminder)) {
+      await this.finish('reminder', reminder.id, { set: { sent_at: new Date() } });
+      return;
+    }
+
     if (!this.announcementHandler) {
-      await this.db!.run(
-        `UPDATE discord_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
-        ['AnnouncementHandler not available', reminder.id]
-      );
+      await this.fail('reminder', reminder.id, 'AnnouncementHandler not available', { set: { sent_at: new Date() } });
       return;
     }
 
@@ -847,37 +714,34 @@ export class QueueProcessor {
 
     if (matchData.status === 'complete' || matchData.status === 'cancelled') {
       logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (status: ${matchData.status})`);
-      await this.db!.run(`UPDATE discord_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]);
+      await this.finish('reminder', reminder.id, { set: { sent_at: new Date() } });
       return;
     }
 
     if (new Date(matchData.start_date) <= new Date()) {
       logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (start time has passed)`);
-      await this.db!.run(`UPDATE discord_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]);
+      await this.finish('reminder', reminder.id, { set: { sent_at: new Date() } });
       return;
     }
 
     logger.debug(`📨 Sending reminder for match: ${matchData.name}`);
-    const success = await this.announcementHandler.postTimedReminder({ ...matchData, _timingInfo: this.calcTimingInfo(matchData.start_date) });
+    const result = await this.announcementHandler.postTimedReminder({ ...matchData, _timingInfo: this.calcTimingInfo(matchData.start_date) });
 
-    if (success) logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
-    else logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
-
-    await this.db!.run(`UPDATE discord_reminder_queue SET status = ?, sent_at = datetime('now') WHERE id = ?`, [success ? 'completed' : 'failed', reminder.id]);
+    if (result) {
+      logger.debug(`✅ Reminder sent successfully for match: ${matchData.name}`);
+      await this.recordPosted('reminder', reminder.id, typeof result === 'object' ? result.messageId : undefined);
+      await this.finish('reminder', reminder.id, { set: { sent_at: new Date() } });
+    } else {
+      logger.warning(`⚠️ Failed to send reminder for match: ${matchData.name}`);
+      await this.fail('reminder', reminder.id, 'Failed to send reminder', { permanent: true, set: { sent_at: new Date() } });
+    }
   }
 
   async processReminderQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const reminders = await this.db.all<QueuedReminder>(`
-        SELECT id, match_id, reminder_time, created_at
-        FROM discord_reminder_queue
-        WHERE status = 'pending'
-        AND datetime(reminder_time) <= datetime('now')
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const reminders = await this.claim('reminder', 5, lte(discordReminderQueue.reminder_time, sql`now()`));
 
       if (reminders.length === 0) { logger.debug('ℹ️ No reminders ready to send'); return; }
       logger.debug(`📬 Processing ${reminders.length} reminder(s)`);
@@ -887,10 +751,7 @@ export class QueueProcessor {
           await this.processSingleReminder(reminder);
         } catch (error) {
           logger.error(`❌ Error processing reminder ${reminder.id}:`, error);
-          await this.db.run(
-            `UPDATE discord_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
-            [error instanceof Error ? error.message : 'Unknown error', reminder.id]
-          );
+          await this.fail('reminder', reminder.id, error, { set: { sent_at: new Date() } });
         }
       }
     } catch (error) {
@@ -898,12 +759,9 @@ export class QueueProcessor {
     }
   }
 
-  private async processSinglePlayerReminder(reminder: { id: string; match_id: string }): Promise<void> {
+  private async processSinglePlayerReminder(reminder: QueueRow<'playerReminder'>): Promise<void> {
     if (!this.reminderHandler) {
-      await this.db!.run(
-        `UPDATE discord_player_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
-        ['ReminderHandler not available', reminder.id]
-      );
+      await this.fail('playerReminder', reminder.id, 'ReminderHandler not available', { set: { sent_at: new Date() } });
       return;
     }
 
@@ -913,9 +771,7 @@ export class QueueProcessor {
 
     if (!matchSettings) throw new Error('Match not found');
 
-    const markCompleted = () => this.db!.run(
-      `UPDATE discord_player_reminder_queue SET status = 'completed', sent_at = datetime('now') WHERE id = ?`, [reminder.id]
-    );
+    const markCompleted = () => this.finish('playerReminder', reminder.id, { set: { sent_at: new Date() } });
 
     if (!matchSettings.player_notifications) { await markCompleted(); return; }
     if (matchSettings.status === 'complete' || matchSettings.status === 'cancelled') {
@@ -928,36 +784,26 @@ export class QueueProcessor {
     }
 
     const success = await this.reminderHandler.sendPlayerReminders(reminder.match_id);
-    await this.db!.run(
-      `UPDATE discord_player_reminder_queue SET status = ?, sent_at = datetime('now') WHERE id = ?`,
-      [success ? 'completed' : 'failed', reminder.id]
-    );
+    if (success) {
+      await markCompleted();
+    } else {
+      // DM fan-out is not idempotent: never replay a partially delivered batch
+      await this.fail('playerReminder', reminder.id, 'Failed to send player reminders', { permanent: true, set: { sent_at: new Date() } });
+    }
   }
 
   async processPlayerReminderQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const playerReminders = await this.db.all<{
-        id: string; match_id: string; reminder_time: string; created_at: string;
-      }>(`
-        SELECT id, match_id, reminder_time, created_at
-        FROM discord_player_reminder_queue
-        WHERE status = 'pending'
-        AND datetime(reminder_time) <= datetime('now')
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const playerReminders = await this.claim('playerReminder', 5, lte(discordPlayerReminderQueue.reminder_time, sql`now()`));
 
       for (const reminder of playerReminders) {
         try {
           await this.processSinglePlayerReminder(reminder);
         } catch (error) {
           logger.error(`❌ Error processing player reminder ${reminder.id}:`, error);
-          await this.db.run(
-            `UPDATE discord_player_reminder_queue SET status = 'failed', sent_at = datetime('now'), error_message = ? WHERE id = ?`,
-            [error instanceof Error ? error.message : 'Unknown error', reminder.id]
-          );
+          await this.fail('playerReminder', reminder.id, error, { permanent: true, set: { sent_at: new Date() } });
         }
       }
     } catch (error) {
@@ -970,28 +816,13 @@ export class QueueProcessor {
 
     try {
       // Clean up old completed/failed requests older than 1 hour
-      await this.db.run(`
-        DELETE FROM discord_bot_requests
-        WHERE status IN ('completed', 'failed')
-        AND datetime(updated_at, '+1 hour') < datetime('now')
-      `);
+      await purgeFinished(this.queueDb, 'botRequest', 60 * 60_000, 'updated_at');
 
-      // Clean up really old pending/processing requests (older than 5 minutes)
-      await this.db.run(`
-        UPDATE discord_bot_requests
-        SET status = 'failed', result = ?, updated_at = datetime('now')
-        WHERE status IN ('pending', 'processing')
-        AND datetime(created_at, '+5 minutes') < datetime('now')
-      `, [JSON.stringify({ success: false, message: 'Request abandoned - too old' })]);
+      // Requests nobody is waiting for any more (older than 5 minutes) fail with an explanatory result
+      await expireOldBotRequests(this.queueDb, 5 * 60_000);
 
       // Process bot requests
-      const requests = await this.db.all<BotRequest>(`
-        SELECT id, type, data, created_at
-        FROM discord_bot_requests
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const requests = await this.claim('botRequest', 5);
 
       for (const request of requests) {
         try {
@@ -1002,20 +833,20 @@ export class QueueProcessor {
             await handler(this, request);
           } else {
             logger.warning(`⚠️ Unknown request type: ${request.type}`);
+            await this.fail('botRequest', request.id, `Unknown request type: ${request.type}`, {
+              permanent: true,
+              set: { result: { success: false, message: `Unknown request type: ${request.type}` } },
+            });
           }
 
         } catch (error) {
           logger.error(`❌ Error processing request ${request.id}:`, error);
 
-          // Mark request as failed
-          await this.db.run(`
-            UPDATE discord_bot_requests
-            SET status = 'failed', result = ?, updated_at = datetime('now')
-            WHERE id = ?
-          `, [
-            JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Unknown error' }),
-            request.id
-          ]);
+          // Bot requests are RPC calls the web side stopped waiting for: fail, never replay
+          await this.fail('botRequest', request.id, error, {
+            permanent: true,
+            set: { result: { success: false, message: error instanceof Error ? error.message : 'Unknown error' } },
+          });
         }
       }
     } catch (error) {
@@ -1027,35 +858,18 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const scoreNotifications = await this.db.all<QueuedScoreNotification>(`
-        SELECT id, match_id, game_id, map_id, game_number, winner, 
-               winning_team_name, winning_players, created_at
-        FROM discord_score_notification_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const scoreNotifications = await this.claim('scoreNotification', 5);
 
       for (const notification of scoreNotifications) {
         try {
-          // Immediately mark as processing to prevent duplicate processing
-          const updateResult = await this.db.run(`
-            UPDATE discord_score_notification_queue 
-            SET status = 'processing', sent_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [notification.id]);
-          
-          if (updateResult.changes === 0) {
+          if (alreadyPosted(notification)) {
+            await this.finish('scoreNotification', notification.id, { set: { sent_at: new Date() } });
             continue;
           }
 
           if (!this.announcementHandler) {
             logger.error('❌ AnnouncementHandler not available');
-            await this.db.run(`
-              UPDATE discord_score_notification_queue 
-              SET status = 'failed', sent_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['AnnouncementHandler not available', notification.id]);
+            await this.fail('scoreNotification', notification.id, 'AnnouncementHandler not available', { set: { sent_at: new Date() } });
             continue;
           }
 
@@ -1070,57 +884,34 @@ export class QueueProcessor {
             throw new Error('Match not found');
           }
 
-          // Parse winning players from JSON
-          let winningPlayers: string[] = [];
-          try {
-            winningPlayers = JSON.parse(notification.winning_players);
-          } catch {
-            logger.warning('Could not parse winning players JSON for notification:', notification.id);
-          }
-
-          // Build score notification data
+          // Build score notification data (winning_players is a jsonb array)
           const scoreData = {
             matchId: notification.match_id,
             matchName: matchData.name,
             gameId: notification.game_id,
-            gameNumber: notification.game_number,
-            mapId: notification.map_id,
-            winner: notification.winner,
-            winningTeamName: notification.winning_team_name,
-            winningPlayers: winningPlayers
+            gameNumber: notification.game_number ?? 0,
+            mapId: notification.map_id ?? '',
+            winner: notification.winner as 'team1' | 'team2',
+            winningTeamName: notification.winning_team_name ?? '',
+            winningPlayers: notification.winning_players ?? []
           };
 
           // Post the score notification
           const result = await this.announcementHandler.postMapScoreNotification(scoreData);
-          
+
           if (result && typeof result === 'object' && result.success) {
-            // Mark as completed
-            await this.db.run(`
-              UPDATE discord_score_notification_queue 
-              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [notification.id]);
+            await this.recordPosted('scoreNotification', notification.id, result.messageId);
+            await this.finish('scoreNotification', notification.id, { set: { sent_at: new Date() } });
 
             logger.debug(`✅ Score notification sent for match ${notification.match_id}, game ${notification.game_number}`);
           } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_score_notification_queue 
-              SET status = 'failed', error_message = 'Failed to post score notification'
-              WHERE id = ?
-            `, [notification.id]);
+            await this.fail('scoreNotification', notification.id, 'Failed to post score notification', { permanent: true });
 
             logger.error(`❌ Failed to post score notification for ${notification.id}`);
           }
         } catch (error) {
           logger.error(`❌ Error processing score notification ${notification.id}:`, error);
-          
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_score_notification_queue 
-            SET status = 'failed', sent_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', notification.id]);
+          await this.fail('scoreNotification', notification.id, error);
         }
       }
     } catch (error) {
@@ -1128,44 +919,14 @@ export class QueueProcessor {
     }
   }
 
-  private async handleTimedOutVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
-    if (!this.db) return;
-    const maxRetries = 3;
-    if (announcement.retry_count < maxRetries) {
-      await this.db.run(`
-        UPDATE discord_voice_announcement_queue
-        SET status = 'pending', retry_count = retry_count + 1, timeout_at = NULL, updated_at = datetime('now')
-        WHERE id = ?
-      `, [announcement.id]);
-      logger.warning(`⚠️ Voice announcement ${announcement.id} timed out, retrying (attempt ${announcement.retry_count + 1}/${maxRetries})`);
-    } else {
-      await this.db.run(`
-        UPDATE discord_voice_announcement_queue
-        SET status = 'failed', completed_at = datetime('now'), error_message = 'Exceeded maximum retry attempts after timeout'
-        WHERE id = ?
-      `, [announcement.id]);
-      logger.error(`❌ Voice announcement ${announcement.id} failed after ${maxRetries} retry attempts`);
-    }
-  }
-
-  private async processSingleVoiceAnnouncement(announcement: QueuedVoiceAnnouncement): Promise<void> {
-    if (!this.db) return;
+  private async processSingleVoiceAnnouncement(announcement: QueueRow<'voiceAnnouncement'>): Promise<void> {
     try {
-      const updateResult = await this.db.run(`
-        UPDATE discord_voice_announcement_queue
-        SET status = 'processing', timeout_at = datetime('now', '+2 minutes'),
-            first_attempted_at = COALESCE(first_attempted_at, datetime('now')), updated_at = datetime('now')
-        WHERE id = ? AND status = 'pending'
-      `, [announcement.id]);
-
-      if (updateResult.changes === 0) return;
-
       if (announcement.announcement_type === 'welcome') {
         const settings = await getAnyDiscordSettings();
         const delaySecs = settings?.match_start_delay_seconds ?? 45;
-        const elapsedSecs = (Date.now() - new Date(`${announcement.created_at}Z`).getTime()) / 1000;
+        const elapsedSecs = (Date.now() - announcement.created_at.getTime()) / 1000;
         if (elapsedSecs < delaySecs) {
-          await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'pending', timeout_at = NULL, updated_at = datetime('now') WHERE id = ?`, [announcement.id]);
+          await this.release('voiceAnnouncement', announcement.id, Math.ceil(delaySecs - elapsedSecs) * 1000);
           logger.debug(`⏰ Welcome announcement for match ${announcement.match_id} delayed (${Math.ceil(delaySecs - elapsedSecs)}s remaining)`);
           return;
         }
@@ -1173,31 +934,33 @@ export class QueueProcessor {
 
       if (!this.voiceHandler) {
         logger.error('❌ VoiceHandler not available');
-        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, ['VoiceHandler not available', announcement.id]);
+        await this.fail('voiceAnnouncement', announcement.id, 'VoiceHandler not available', { set: { completed_at: new Date() } });
         return;
       }
 
-      logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.retry_count > 0 ? ` (retry ${announcement.retry_count})` : ''}`);
+      logger.debug(`🔊 Processing ${announcement.announcement_type} voice announcement for match ${announcement.match_id}${announcement.attempts > 1 ? ` (attempt ${announcement.attempts})` : ''}`);
 
+      const firstTeam = (announcement.first_team ?? 'blue') as 'blue' | 'red';
       const result = await this.voiceHandler.playTeamAnnouncements(
         announcement.blue_team_voice_channel,
         announcement.red_team_voice_channel,
-        announcement.announcement_type,
-        announcement.first_team,
+        announcement.announcement_type as 'welcome' | 'nextround' | 'finish',
+        firstTeam,
         announcement.match_id
       );
 
       if (result.success) {
-        await this.voiceHandler.updateFirstTeam(announcement.match_id, announcement.first_team);
-        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'completed', completed_at = datetime('now') WHERE id = ?`, [announcement.id]);
+        await this.voiceHandler.updateFirstTeam(announcement.match_id, firstTeam);
+        await this.finish('voiceAnnouncement', announcement.id, { set: { completed_at: new Date() } });
         logger.debug(`✅ Voice announcement completed for match ${announcement.match_id}: ${announcement.announcement_type}`);
       } else {
-        await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [result.message, announcement.id]);
+        await this.fail('voiceAnnouncement', announcement.id, result.message, { permanent: true, set: { completed_at: new Date() } });
         logger.error(`❌ Failed to play voice announcement for ${announcement.id}: ${result.message}`);
       }
     } catch (error) {
       logger.error(`❌ Error processing voice announcement ${announcement.id}:`, error);
-      await this.db.run(`UPDATE discord_voice_announcement_queue SET status = 'failed', completed_at = datetime('now'), error_message = ? WHERE id = ?`, [error instanceof Error ? error.message : 'Unknown error', announcement.id]);
+      // Audio may have partially played: do not replay (a timeout / crash is retried by the abandoned-claim reset)
+      await this.fail('voiceAnnouncement', announcement.id, error, { permanent: true, set: { completed_at: new Date() } });
     }
   }
 
@@ -1205,27 +968,11 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const timedOutAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
-        SELECT id, match_id, announcement_type, retry_count
-        FROM discord_voice_announcement_queue
-        WHERE status = 'processing' AND timeout_at IS NOT NULL AND datetime(timeout_at) < datetime('now')
-      `);
+      // Finished rows are kept for an hour, then removed
+      await purgeFinished(this.queueDb, 'voiceAnnouncement', 60 * 60_000, 'updated_at');
 
-      for (const announcement of timedOutAnnouncements) {
-        await this.handleTimedOutVoiceAnnouncement(announcement);
-      }
-
-      await this.db.run(`DELETE FROM discord_voice_announcement_queue WHERE status IN ('completed', 'failed') AND datetime(updated_at, '+1 hour') < datetime('now')`);
-
-      const voiceAnnouncements = await this.db.all<QueuedVoiceAnnouncement>(`
-        SELECT id, match_id, announcement_type, blue_team_voice_channel,
-               red_team_voice_channel, first_team, created_at, retry_count,
-               timeout_at, first_attempted_at
-        FROM discord_voice_announcement_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      // Timed-out claims (worker crashed / hung mid-playback) are reset by resetAbandonedClaims in processAllQueues
+      const voiceAnnouncements = await this.claim('voiceAnnouncement', 5);
 
       for (const announcement of voiceAnnouncements) {
         await this.processSingleVoiceAnnouncement(announcement);
@@ -1235,32 +982,21 @@ export class QueueProcessor {
     }
   }
 
-  private async processSingleMapCode(mapCodeRequest: QueuedMapCode): Promise<void> {
-    const updateResult = await this.db!.run(
-      `UPDATE discord_map_code_queue SET status = 'processing', processed_at = datetime('now') WHERE id = ? AND status = 'pending'`,
-      [mapCodeRequest.id]
-    );
-    if (updateResult.changes === 0) return;
-
+  private async processSingleMapCode(mapCodeRequest: QueueRow<'mapCode'>): Promise<void> {
     if (!this.reminderHandler) {
-      await this.db!.run(
-        `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
-        ['ReminderHandler not available', mapCodeRequest.id]
-      );
+      await this.fail('mapCode', mapCodeRequest.id, 'ReminderHandler not available');
       return;
     }
 
     logger.debug(`📱 Processing map code PMs for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
-    const result = await this.reminderHandler.sendMapCodePMs(mapCodeRequest.match_id, mapCodeRequest.map_name, mapCodeRequest.map_code);
+    const result = await this.reminderHandler.sendMapCodePMs(mapCodeRequest.match_id, mapCodeRequest.map_name ?? '', mapCodeRequest.map_code ?? '');
 
     if (result) {
-      await this.db!.run(`UPDATE discord_map_code_queue SET status = 'completed', processed_at = datetime('now') WHERE id = ?`, [mapCodeRequest.id]);
+      await this.finish('mapCode', mapCodeRequest.id);
       logger.debug(`✅ Map code PMs sent for match ${mapCodeRequest.match_id}, map: ${mapCodeRequest.map_name}`);
     } else {
-      await this.db!.run(
-        `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
-        ['Failed to send map code PMs', mapCodeRequest.id]
-      );
+      // DM fan-out is not idempotent: never replay a partially delivered batch
+      await this.fail('mapCode', mapCodeRequest.id, 'Failed to send map code PMs', { permanent: true });
       logger.error(`❌ Failed to send map code PMs for ${mapCodeRequest.id}`);
     }
   }
@@ -1269,23 +1005,14 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const mapCodes = await this.db.all<QueuedMapCode>(`
-        SELECT id, match_id, map_name, map_code, created_at
-        FROM discord_map_code_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const mapCodes = await this.claim('mapCode', 5);
 
       for (const mapCodeRequest of mapCodes) {
         try {
           await this.processSingleMapCode(mapCodeRequest);
         } catch (error) {
           logger.error(`❌ Error processing map code request ${mapCodeRequest.id}:`, error);
-          await this.db.run(
-            `UPDATE discord_map_code_queue SET status = 'failed', processed_at = datetime('now'), error_message = ? WHERE id = ?`,
-            [error instanceof Error ? error.message : 'Unknown error', mapCodeRequest.id]
-          );
+          await this.fail('mapCode', mapCodeRequest.id, error, { permanent: true });
         }
       }
     } catch (error) {
@@ -1297,14 +1024,7 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const winnerNotifications = await this.db.all<QueuedMatchWinner>(`
-        SELECT id, match_id, match_name, game_id, winner, winning_team_name, 
-               winning_players, team1_score, team2_score, total_maps, created_at
-        FROM discord_match_winner_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const winnerNotifications = await this.claim('matchWinner', 5);
 
       for (const notification of winnerNotifications) {
         // Gate: for regular matches, wait until all map win notifications have been queued
@@ -1312,49 +1032,43 @@ export class QueueProcessor {
         // firing before map win messages in stats-enabled matches where map notifications
         // are held until stats are assigned. Bypass after 30 min to prevent permanent blockage.
         if (notification.winner !== 'tournament') {
-          const mapStatus = await this.db.get<{ total: number; notified: number }>(
-            `SELECT COUNT(*) as total,
-                    SUM(CASE WHEN discord_notified = 1 THEN 1 ELSE 0 END) as notified
-             FROM match_games WHERE match_id = ?`,
-            [notification.match_id]
-          );
-          const allNotified = !mapStatus || mapStatus.total === 0 || (mapStatus.notified ?? 0) >= mapStatus.total;
-          const ageMinutes = (Date.now() - new Date(notification.created_at).getTime()) / 60000;
-          if (!allNotified && ageMinutes < 30) {
-            logger.debug(`⏳ Waiting for map notifications before match winner: ${notification.match_name} (${mapStatus?.notified ?? 0}/${mapStatus?.total ?? 0} maps notified)`);
+          try {
+            const mapStatus = await this.db.get<{ total: number; notified: number }>(
+              `SELECT COUNT(*) as total,
+                      SUM(CASE WHEN discord_notified = 1 THEN 1 ELSE 0 END) as notified
+               FROM match_games WHERE match_id = ?`,
+              [notification.match_id]
+            );
+            const allNotified = !mapStatus || mapStatus.total === 0 || (mapStatus.notified ?? 0) >= mapStatus.total;
+            const ageMinutes = (Date.now() - notification.created_at.getTime()) / 60000;
+            if (!allNotified && ageMinutes < 30) {
+              logger.debug(`⏳ Waiting for map notifications before match winner: ${notification.match_name} (${mapStatus?.notified ?? 0}/${mapStatus?.total ?? 0} maps notified)`);
+              // Not ready yet: hand the claim back without spending an attempt
+              await this.release('matchWinner', notification.id, 10_000);
+              continue;
+            }
+          } catch (error) {
+            logger.error(`❌ Error checking map notifications for match winner ${notification.id}:`, error);
+            await this.fail('matchWinner', notification.id, error);
             continue;
           }
         }
 
         try {
-          // Immediately mark as processing to prevent duplicate processing
-          const updateResult = await this.db.run(`
-            UPDATE discord_match_winner_queue 
-            SET status = 'processing', sent_at = datetime('now')
-            WHERE id = ? AND status = 'pending'
-          `, [notification.id]);
-          
-          if (updateResult.changes === 0) {
+          if (alreadyPosted(notification)) {
+            await this.finish('matchWinner', notification.id, { set: { sent_at: new Date() } });
             continue;
           }
 
           if (!this.announcementHandler) {
             logger.error('❌ AnnouncementHandler not available');
-            await this.db.run(`
-              UPDATE discord_match_winner_queue 
-              SET status = 'failed', sent_at = datetime('now'), error_message = ?
-              WHERE id = ?
-            `, ['AnnouncementHandler not available', notification.id]);
+            await this.fail('matchWinner', notification.id, 'AnnouncementHandler not available', { set: { sent_at: new Date() } });
             continue;
           }
 
-          // Parse winning players from JSON
-          let winningPlayers: string[] = [];
-          try {
-            winningPlayers = JSON.parse(notification.winning_players);
-          } catch {
-            logger.warning('Could not parse winning players JSON for winner notification:', notification.id);
-          }
+          const winningPlayers = notification.winning_players ?? [];
+          const matchName = notification.match_name ?? '';
+          const winningTeamName = notification.winning_team_name ?? '';
 
           let result;
 
@@ -1363,13 +1077,13 @@ export class QueueProcessor {
             // Build tournament winner notification data
             const tournamentData = {
               tournamentId: notification.match_id, // We stored tournament ID in match_id
-              tournamentName: notification.match_name.replace('🏆 ', ''), // Remove trophy emoji
-              gameId: notification.game_id,
+              tournamentName: matchName.replace('🏆 ', ''), // Remove trophy emoji
+              gameId: notification.game_id ?? '',
               winner: notification.match_id, // Tournament ID
-              winningTeamName: notification.winning_team_name,
+              winningTeamName,
               winningPlayers: winningPlayers,
               format: (notification.team2_score === 1 ? 'double-elimination' : 'single-elimination') as 'double-elimination' | 'single-elimination', // Decoded from team2_score
-              totalParticipants: notification.team1_score // Stored in team1_score
+              totalParticipants: notification.team1_score ?? 0 // Stored in team1_score
             };
 
             logger.debug(`🏆 Sending tournament winner notification for ${tournamentData.tournamentName}`);
@@ -1380,52 +1094,37 @@ export class QueueProcessor {
             // Build regular match winner notification data
             const winnerData = {
               matchId: notification.match_id,
-              matchName: notification.match_name,
-              gameId: notification.game_id,
-              winner: notification.winner,
-              winningTeamName: notification.winning_team_name,
+              matchName,
+              gameId: notification.game_id ?? '',
+              winner: notification.winner as 'team1' | 'team2' | 'tie',
+              winningTeamName,
               winningPlayers: winningPlayers,
-              team1Score: notification.team1_score,
-              team2Score: notification.team2_score,
-              totalMaps: notification.total_maps
+              team1Score: notification.team1_score ?? 0,
+              team2Score: notification.team2_score ?? 0,
+              totalMaps: notification.total_maps ?? 0
             };
 
             // Wait 15 seconds to ensure last map winner embed goes out first
-            logger.debug(`⏱️ Waiting 15 seconds before sending match winner notification for ${notification.match_name}`);
+            logger.debug(`⏱️ Waiting 15 seconds before sending match winner notification for ${matchName}`);
             await new Promise(resolve => setTimeout(resolve, 15000));
 
             // Post the match winner notification
             result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
           }
-          
+
           if (result && typeof result === 'object' && result.success) {
-            // Mark as completed
-            await this.db.run(`
-              UPDATE discord_match_winner_queue 
-              SET status = 'completed', sent_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [notification.id]);
+            await this.recordPosted('matchWinner', notification.id, result.messageId);
+            await this.finish('matchWinner', notification.id, { set: { sent_at: new Date() } });
 
             logger.debug(`🏆 Match winner notification sent: ${notification.winning_team_name} wins ${notification.match_name}`);
           } else {
-            // Mark as failed
-            await this.db.run(`
-              UPDATE discord_match_winner_queue 
-              SET status = 'failed', error_message = 'Failed to post match winner notification'
-              WHERE id = ?
-            `, [notification.id]);
+            await this.fail('matchWinner', notification.id, 'Failed to post match winner notification', { permanent: true });
 
             logger.error(`❌ Failed to post match winner notification for ${notification.id}`);
           }
         } catch (error) {
           logger.error(`❌ Error processing match winner notification ${notification.id}:`, error);
-          
-          // Mark as failed
-          await this.db.run(`
-            UPDATE discord_match_winner_queue 
-            SET status = 'failed', sent_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', notification.id]);
+          await this.fail('matchWinner', notification.id, error, { set: { sent_at: new Date() } });
         }
       }
     } catch (error) {
@@ -1588,15 +1287,7 @@ export class QueueProcessor {
     }
   }
 
-  private async processSingleMatchEdit(edit: QueuedMatchEdit): Promise<void> {
-    const updateResult = await this.db!.run(`
-      UPDATE discord_match_edit_queue
-      SET status = 'processing', processed_at = datetime('now')
-      WHERE id = ? AND status = 'pending'
-    `, [edit.id]);
-
-    if (updateResult.changes === 0) return;
-
+  private async processSingleMatchEdit(edit: QueueRow<'matchEdit'>): Promise<void> {
     const matchId = edit.match_id;
 
     const matchData = await this.db!.get<MatchEditData>(`
@@ -1620,35 +1311,21 @@ export class QueueProcessor {
       await this.updateMatchScheduledEvent(matchId, matchData, messageRecord);
     }
 
-    await this.db!.run(`
-      UPDATE discord_match_edit_queue
-      SET status = 'completed', processed_at = datetime('now')
-      WHERE id = ?
-    `, [edit.id]);
+    await this.finish('matchEdit', edit.id);
   }
 
   async processMatchEditQueue() {
     if (!this.client.isReady() || !this.db) return;
 
     try {
-      const edits = await this.db.all<QueuedMatchEdit>(`
-        SELECT id, match_id, created_at
-        FROM discord_match_edit_queue
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        LIMIT 5
-      `);
+      const edits = await this.claim('matchEdit', 5);
 
       for (const edit of edits) {
         try {
           await this.processSingleMatchEdit(edit);
         } catch (error) {
           logger.error(`❌ Error processing match edit ${edit.id}:`, error);
-          await this.db.run(`
-            UPDATE discord_match_edit_queue
-            SET status = 'failed', processed_at = datetime('now'), error_message = ?
-            WHERE id = ?
-          `, [error instanceof Error ? error.message : 'Unknown error', edit.id]);
+          await this.fail('matchEdit', edit.id, error);
         }
       }
     } catch (error) {
@@ -1656,52 +1333,59 @@ export class QueueProcessor {
     }
   }
 
+  /**
+   * One pass over every queue. A pass never starts while the previous one is still running (no overlapping ticks),
+   * and claims left behind by a crashed worker are reset first.
+   */
   async processAllQueues() {
-    await Promise.all([
-      this.processAnnouncementQueue(),
-      this.processDeletionQueue(),
-      this.processStatusUpdateQueue(),
-      this.processReminderQueue(),
-      this.processPlayerReminderQueue(),
-      this.processScoreNotificationQueue(),
-      this.processVoiceAnnouncementQueue(),
-      this.processMatchWinnerNotificationQueue(),
-      this.processDiscordBotRequests(),
-      this.processMatchEditQueue(),
-      this.processHealthAlertQueue(),
-      this.processStatsReportQueue(),
-      // Must run in order: map code → winner vote → scorecard
-      this.processMapCodeQueue()
-        .then(() => this.processWinnerVoteQueue())
-        .then(() => this.processScorecardPromptQueue()),
-    ]);
+    if (this.ticking) {
+      logger.debug('⏭️ Queue tick skipped: previous tick still running');
+      return;
+    }
+    this.ticking = true;
+    try {
+      try {
+        await resetAbandonedClaims(this.queueDb);
+      } catch (error) {
+        logger.error('❌ Error resetting abandoned queue claims:', error);
+      }
+
+      await Promise.all([
+        this.processAnnouncementQueue(),
+        this.processDeletionQueue(),
+        this.processStatusUpdateQueue(),
+        this.processReminderQueue(),
+        this.processPlayerReminderQueue(),
+        this.processScoreNotificationQueue(),
+        this.processVoiceAnnouncementQueue(),
+        this.processMatchWinnerNotificationQueue(),
+        this.processDiscordBotRequests(),
+        this.processMatchEditQueue(),
+        this.processHealthAlertQueue(),
+        this.processStatsReportQueue(),
+        // Must run in order: map code → winner vote → scorecard
+        this.processMapCodeQueue()
+          .then(() => this.processWinnerVoteQueue())
+          .then(() => this.processScorecardPromptQueue()),
+      ]);
+    } finally {
+      this.ticking = false;
+    }
   }
 
   async processStatsReportQueue() {
     if (!this.client.isReady() || !this.db || !this.statsReportHandler) return;
 
     try {
-      const pending = await this.db.all<{ id: string; match_id: string }>(
-        `SELECT id, match_id FROM discord_stats_report_queue WHERE status = 'pending' LIMIT 3`
-      );
+      const pending = await this.claim('statsReport', 3);
 
-      for (const item of (pending || [])) {
+      for (const item of pending) {
         try {
-          await this.db.run(
-            `UPDATE discord_stats_report_queue SET status = 'processing', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
           await this.statsReportHandler.processMatch(item.match_id);
-          await this.db.run(
-            `UPDATE discord_stats_report_queue SET status = 'completed', processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          await this.finish('statsReport', item.id);
         } catch (err) {
           logger.error(`Error processing stats report queue item ${item.id}:`, err);
-          await this.db.run(
-            `UPDATE discord_stats_report_queue SET status = 'failed', error_message = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [err instanceof Error ? err.message : 'Unknown error', item.id]
-          );
+          await this.fail('statsReport', item.id, err);
         }
       }
     } catch (error) {
@@ -1713,33 +1397,26 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db || !this.announcementHandler) return;
 
     try {
-      const pending = await this.db.all<{ id: string; severity: string; title: string; description: string | null }>(
-        `SELECT id, severity, title, description FROM discord_health_alert_queue WHERE status = 'pending' LIMIT 5`
-      );
+      const pending = await this.claim('healthAlert', 5);
 
-      for (const item of (pending || [])) {
+      for (const item of pending) {
         try {
-          await this.db.run(
-            `UPDATE discord_health_alert_queue SET status = 'processing', posted_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          if (alreadyPosted(item)) {
+            await this.finish('healthAlert', item.id, { set: { posted_at: new Date() } });
+            continue;
+          }
 
-          await this.announcementHandler.postHealthAlert({
+          const messageId = await this.announcementHandler.postHealthAlert({
             severity: item.severity as 'critical' | 'warning',
             title: item.title,
             description: item.description ?? item.title,
           });
+          await this.recordPosted('healthAlert', item.id, messageId);
 
-          await this.db.run(
-            `UPDATE discord_health_alert_queue SET status = 'completed' WHERE id = ?`,
-            [item.id]
-          );
+          await this.finish('healthAlert', item.id, { set: { posted_at: new Date() } });
         } catch (err) {
           logger.error(`Error processing health alert queue item ${item.id}:`, err);
-          await this.db.run(
-            `UPDATE discord_health_alert_queue SET status = 'failed', error_message = ? WHERE id = ?`,
-            [err instanceof Error ? err.message : 'Unknown error', item.id]
-          );
+          await this.fail('healthAlert', item.id, err);
         }
       }
     } catch (error) {
@@ -1751,16 +1428,14 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db || !this.scorecardHandler) return;
 
     try {
-      const pending = await this.db.all<{ id: string; match_id: string; match_game_id: string; map_name: string | null }>(
-        `SELECT id, match_id, match_game_id, map_name FROM discord_scorecard_prompt_queue WHERE status = 'pending' LIMIT 5`
-      );
+      const pending = await this.claim('scorecardPrompt', 5);
 
-      for (const item of (pending || [])) {
+      for (const item of pending) {
         try {
-          await this.db.run(
-            `UPDATE discord_scorecard_prompt_queue SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          if (alreadyPosted(item)) {
+            await this.finish('scorecardPrompt', item.id, { status: 'sent' });
+            continue;
+          }
           const sent = await this.scorecardHandler.sendScorecardPrompts(
             item.match_id,
             item.match_game_id,
@@ -1769,12 +1444,11 @@ export class QueueProcessor {
           if (!sent) {
             logger.debug(`No scorecard prompts sent for match ${item.match_id} (no eligible commanders)`);
           }
+          await this.finish('scorecardPrompt', item.id, { status: 'sent' });
         } catch (err) {
           logger.error(`Error processing scorecard prompt queue item ${item.id}:`, err);
-          await this.db.run(
-            `UPDATE discord_scorecard_prompt_queue SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          // DM fan-out is not idempotent: never replay a partially delivered batch
+          await this.fail('scorecardPrompt', item.id, err, { permanent: true });
         }
       }
     } catch (error) {
@@ -1786,34 +1460,29 @@ export class QueueProcessor {
     if (!this.client.isReady() || !this.db || !this.winnerVoteHandler) return;
 
     try {
-      const pending = await this.db.all<{ id: string; match_id: string; match_game_id: string; map_name: string | null }>(
-        `SELECT id, match_id, match_game_id, map_name FROM discord_winner_vote_queue WHERE status = 'pending' LIMIT 5`
-      );
+      const pending = await this.claim('winnerVote', 5);
 
-      for (const item of (pending || [])) {
+      for (const item of pending) {
         try {
-          await this.db.run(
-            `UPDATE discord_winner_vote_queue SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          if (alreadyPosted(item)) {
+            await this.finish('winnerVote', item.id, { status: 'sent' });
+            continue;
+          }
           const sent = await this.winnerVoteHandler.sendWinnerVotePrompts(
             item.match_id,
             item.match_game_id,
             item.map_name || ''
           );
-          await this.db.run(
-            `UPDATE discord_winner_vote_queue SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [sent ? 'sent' : 'failed', item.id]
-          );
-          if (!sent) {
+          if (sent) {
+            await this.finish('winnerVote', item.id, { status: 'sent' });
+          } else {
             logger.debug(`No winner vote prompts sent for match ${item.match_id} (no eligible commanders)`);
+            await this.fail('winnerVote', item.id, 'No winner vote prompts sent (no eligible commanders)', { permanent: true });
           }
         } catch (err) {
           logger.error(`Error processing winner vote queue item ${item.id}:`, err);
-          await this.db.run(
-            `UPDATE discord_winner_vote_queue SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [item.id]
-          );
+          // DM fan-out is not idempotent: never replay a partially delivered batch
+          await this.fail('winnerVote', item.id, err, { permanent: true });
         }
       }
     } catch (error) {

@@ -1,5 +1,5 @@
 {
-  "id": "e5701e45-b038-4682-a405-673b2a222b04",
+  "id": "55ebae3e-234d-470c-af62-e00cea4cd02a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -5049,21 +5049,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "discord_announcement_queue_match_id_matches_id_fk": {
-          "name": "discord_announcement_queue_match_id_matches_id_fk",
-          "tableFrom": "discord_announcement_queue",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -6112,21 +6098,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "discord_match_winner_queue_match_id_matches_id_fk": {
-          "name": "discord_match_winner_queue_match_id_matches_id_fk",
-          "tableFrom": "discord_match_winner_queue",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -6651,19 +6623,6 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "discord_score_notification_queue_game_id_match_games_id_fk": {
-          "name": "discord_score_notification_queue_game_id_match_games_id_fk",
-          "tableFrom": "discord_score_notification_queue",
-          "tableTo": "match_games",
-          "columnsFrom": [
-            "game_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7041,21 +7000,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "discord_status_update_queue_match_id_matches_id_fk": {
-          "name": "discord_status_update_queue_match_id_matches_id_fk",
-          "tableFrom": "discord_status_update_queue",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
