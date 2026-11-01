@@ -6,14 +6,15 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
-import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
+import { setupPgTestFile, getPgTestDb, isRealPostgres } from '../../utils/pg-test-db';
 import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createMatch } from '../../utils/pg-fixtures';
 import {
   discordAnnouncementQueue, discordMatchWinnerQueue, discordScoreNotificationQueue, gameMaps, matchGamePlacements, matchGames,
   matchParticipants, matchTeams, matches,
 } from '../../../lib/db/schema';
-import { addParticipant, createMatchTeams } from '@/lib/matches';
+import { addParticipant, createMatchTeams, lockMatch } from '@/lib/matches';
+import { sql } from 'drizzle-orm';
 import { db } from '../../../lib/db';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -109,5 +110,77 @@ describe('match write races', () => {
     const participant = (await pg().select().from(matchParticipants).where(eq(matchParticipants.id, 'as-p')))[0];
     if (assign.status === 200) expect(participant.team_id).toBe(teams[0].id);
     else { expect(assign.status).toBe(409); expect(participant.team_id).toBeNull(); }
+  });
+});
+
+/**
+ * Proof of REAL overlap. These run only against real Postgres (`pnpm test:pg`): PGlite has a single connection that
+ * serialises everything, so the other tests in this file cannot show contention there. Here a background transaction
+ * holds the match row lock while competing requests are fired, and the timestamps show they really queued behind it.
+ */
+describe.skipIf(!isRealPostgres())('real overlap on Postgres', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** Hold the match row lock for `ms` in a background transaction; resolves once the lock is taken. */
+  async function holdLock(matchId: string, ms: number) {
+    let locked!: () => void;
+    const ready = new Promise<void>((r) => { locked = r; });
+    const done = db.transaction(async (tx) => {
+      await lockMatch(tx, matchId);
+      locked();
+      await sleep(ms);
+      return Date.now();
+    });
+    await ready;
+    return done;
+  }
+
+  it('the pooled connections really run queries at the same time', async () => {
+    const t0 = Date.now();
+    await Promise.all([1, 2, 3].map(() => pg().execute(sql`select pg_sleep(0.4)`)));
+    expect(Date.now() - t0).toBeLessThan(1000); // serialised it would take 1.2s
+  });
+
+  it('a transition queues behind a transaction holding the match row lock', async () => {
+    const m = await createMatch(gameId, modeId, { id: 'lk', status: 'created' });
+    const release = holdLock(m.id, 500);
+    await sleep(100);
+    const req = status(m.id, 'gather').then((r) => ({ r, at: Date.now() }));
+    // still blocked while the holder sleeps
+    await sleep(200);
+    expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].status).toBe('created');
+    const [releasedAt, { r, at }] = await Promise.all([release, req]);
+    expect(r.status).toBe(200);
+    expect(at).toBeGreaterThanOrEqual(releasedAt);
+    expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].status).toBe('gather');
+  });
+
+  it('two scorers queued on the same lock: exactly one scores, the other gets 409', async () => {
+    const { matchId, teams, games: gs } = await battleMatch(2);
+    const release = holdLock(matchId, 500);
+    await sleep(100);
+    const score = (winner: string) => appRequest(`/api/matches/${matchId}/games/${gs[0].id}/result`, { method: 'POST', json: { winnerTeamId: winner } });
+    const both = Promise.all([score(teams[0].id), score(teams[1].id)]);
+    await sleep(150);
+    expect(await pg().select().from(matchGamePlacements).where(eq(matchGamePlacements.match_game_id, gs[0].id))).toHaveLength(0); // both still waiting
+    await release;
+    expect((await both).map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await pg().select().from(discordScoreNotificationQueue).where(eq(discordScoreNotificationQueue.match_id, matchId))).toHaveLength(1);
+  });
+
+  it('repeated transition races always have exactly one winner', async () => {
+    for (let i = 0; i < 8; i++) {
+      const m = await createMatch(gameId, modeId, { id: `rep-${i}`, status: 'created' });
+      const results = await Promise.all(Array.from({ length: 5 }, () => status(m.id, 'gather')));
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      expect(await pg().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, m.id))).toHaveLength(1);
+    }
+  });
+
+  it('many simultaneous signups never exceed the capacity', async () => {
+    const m = await createMatch(gameId, modeId, { id: 'burst' });
+    const users = Array.from({ length: 24 }, (_, i) => `user-${i % 12}`); // each user tries twice
+    const results = await Promise.all(users.map((userId) => addParticipant(db, { matchId: m.id, userId, discordUserId: userId, username: userId, signupData: null, avatarUrl: null }, { capacity: 3 })));
+    expect(await pg().select().from(matchParticipants).where(eq(matchParticipants.match_id, m.id))).toHaveLength(3);
+    expect(results.filter((r) => r.status === 'added')).toHaveLength(3);
   });
 });

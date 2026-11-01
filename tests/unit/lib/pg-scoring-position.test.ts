@@ -30,6 +30,18 @@ describe('points', () => {
   });
 });
 
+describe('position spread edge cases', () => {
+  it('parses each accepted string form, returns 0 beyond the spread and tolerates a config without pointsPerPosition', () => {
+    expect(parsePositionScoringConfig(JSON.stringify({ type: 'Position', pointsPerPosition: { '1': 10, '2': 5 } })).pointsPerPosition).toEqual({ '1': 10, '2': 5 });
+    expect(parsePositionScoringConfig(JSON.stringify({ '1': 100, '2': 50 })).pointsPerPosition).toEqual({ '1': 100, '2': 50 });
+    for (const raw of ['not json', '[]', '"x"', '{}', JSON.stringify({ '1': 'a' }), JSON.stringify({ first: 3 })]) {
+      expect(parsePositionScoringConfig(raw).pointsPerPosition).toEqual(DEFAULT_POSITION_SPREAD);
+    }
+    expect(getPointsForPosition(11, parsePositionScoringConfig(null))).toBe(0);
+    expect(getPointsForPosition(1, {} as never)).toBe(0);
+  });
+});
+
 describe('rankByPoints', () => {
   it('uses competition ranking and gives no winner on a tie for first', () => {
     const ranked = rankByPoints(new Map([['a', 10], ['b', 30], ['c', 30], ['d', 5]]));
