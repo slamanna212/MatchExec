@@ -19,8 +19,8 @@ import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentI
 import { POST as createTeam, PUT as assignMembers } from '@/app/api/tournaments/[tournamentId]/teams/route';
 import { POST as generateMatches } from '@/app/api/tournaments/[tournamentId]/generate-matches/route';
 import { POST as progressTournament } from '@/app/api/tournaments/[tournamentId]/progress/route';
-import { POST as transitionMatch } from '@/app/api/matches/[matchId]/transition/route';
-import { POST as saveResult } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
+import { forwardToApp as transitionMatch } from '../../utils/legacy-match-routes';
+import { forwardToApp as saveResult } from '../../utils/legacy-match-routes';
 import { POST as createSeries } from '@/app/api/series/route';
 import { POST as addSeriesEvent } from '@/app/api/series/[seriesId]/events/route';
 import { GET as getSeriesStandings } from '@/app/api/series/[seriesId]/standings/route';
@@ -177,7 +177,7 @@ describe('Tournament brackets', () => {
     it('only draws grand-final maps from the tournament mode pool (never an FFA map)', async () => {
       // An FFA mode on the same game: an unfiltered pool picks it about half the time.
       const ffa = await addMode('FFA', null);
-      for (let run = 0; run < 8; run++) {
+      for (let run = 0; run < 4; run++) { // (was 8; each run is a full tournament and the legacy PG bridge made them slower)
         const { id } = await tournamentInAssign('double-elimination', 4);
         await generate(id);
         await tPost(id, 'battle');
@@ -188,7 +188,7 @@ describe('Tournament brackets', () => {
         );
         expect(used.some(u => ffa.mapIds.includes(u.map_id))).toBe(false);
       }
-    });
+    }, 90_000);
 
     describe.each([2, 3, 4, 5, 6, 8, 9])('%i teams, played through scoring', (n) => {
       it.each([

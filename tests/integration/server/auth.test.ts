@@ -21,8 +21,8 @@ afterEach(() => {
   }
 });
 
-// /api/matches is not mounted yet: authenticated -> JSON 404, unauthenticated -> 401 (the gate runs first).
-const PROTECTED = '/api/matches';
+// A path no router serves: authenticated -> JSON 404, unauthenticated -> 401 (the gate runs first).
+const PROTECTED = '/api/__unmounted__';
 
 describe('auth disabled', () => {
   it('lets everything through', async () => {

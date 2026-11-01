@@ -8,7 +8,11 @@ import type { DiscordSettings, DiscordChannel } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
 import { db as pgDb } from '../../../lib/db';
+import { eq, getTableColumns } from 'drizzle-orm';
+import { games, matches } from '../../../lib/db/schema';
 import { listChannelsForNotification } from '../../../src/lib/discord-channels';
+import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
+import { getBlueRedChannels, getMatchWithGame, listDmRecipients } from '../../../src/lib/matches';
 
 interface EventData {
   id: string;
@@ -32,19 +36,18 @@ async function getEventDataForSignup(
   matchId: string,
   isTournament: boolean
 ): Promise<EventData | null> {
-  const query = isTournament ? `
+  if (!isTournament) {
+    const [row] = await pgDb.select({ ...getTableColumns(matches), game_name: games.name, max_signups: games.max_signups, game_color: games.color })
+      .from(matches).leftJoin(games, eq(matches.game_id, games.id)).where(eq(matches.id, matchId));
+    return (row as unknown as EventData | undefined) ?? null;
+  }
+  // TODO(tournaments): tournaments still live in the legacy SQLite database.
+  const result = await db.get<EventData>(`
     SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
     FROM tournaments t
     LEFT JOIN games g ON t.game_id = g.id
     WHERE t.id = ?
-  ` : `
-    SELECT m.*, g.name as game_name, g.max_signups, g.color as game_color
-    FROM matches m
-    LEFT JOIN games g ON m.game_id = g.id
-    WHERE m.id = ?
-  `;
-
-  const result = await db.get<EventData>(query, [matchId]);
+  `, [matchId]);
   return result ?? null;
 }
 
@@ -168,23 +171,18 @@ export class ReminderHandler {
 
     try {
       // Get match data with game information and voice channels
-      const matchData = await this.db.get<{
-        id: string;
-        name: string;
-        description?: string;
-        start_date?: string;
-        game_name?: string;
-        game_color?: string;
-        blue_team_voice_channel?: string;
-        red_team_voice_channel?: string;
-        event_image_url?: string;
-        [key: string]: unknown;
-      }>(`
-        SELECT m.*, g.name as game_name, g.color as game_color
-        FROM matches m
-        LEFT JOIN games g ON m.game_id = g.id
-        WHERE m.id = ?
-      `, [matchId]);
+      const matchRow = await getMatchWithGame(pgDb, matchId);
+      const channels = await getBlueRedChannels(pgDb, matchId);
+      const matchData = matchRow ? {
+        ...matchRow,
+        description: matchRow.description ?? undefined,
+        start_date: matchRow.start_date.toISOString(),
+        game_name: matchRow.game_name ?? undefined,
+        game_color: matchRow.game_color ?? undefined,
+        blue_team_voice_channel: channels.blue,
+        red_team_voice_channel: channels.red,
+        event_image_url: matchRow.event_image_url ?? undefined,
+      } : undefined;
 
       if (!matchData) {
         logger.error('❌ Match not found for player reminders:', matchId);
@@ -192,31 +190,14 @@ export class ReminderHandler {
       }
 
       // Get participants with Discord user IDs
-      const participants = await this.db.all<{
-        discord_user_id: string;
-        username: string;
-        team_assignment?: string;
-        signup_data?: string;
-      }>(`
-        SELECT discord_user_id, username, team_assignment, signup_data
-        FROM match_participants
-        WHERE match_id = ? AND discord_user_id IS NOT NULL
-      `, [matchId]);
+      const participants = await listDmRecipients(pgDb, matchId);
 
       if (!participants || participants.length === 0) {
         return true; // Not an error, just no one to notify
       }
 
       // Get announcement message link for embed
-      const announcementMessage = await this.db.get<{
-        message_id: string;
-        channel_id: string;
-      }>(`
-        SELECT message_id, channel_id
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-        LIMIT 1
-      `, [matchId]);
+      const announcementMessage = await getAnnouncementMessage(pgDb, matchId);
 
       let successCount = 0;
 
@@ -284,12 +265,7 @@ export class ReminderHandler {
       }
 
       // Get announcement message info for linking
-      const announcementMessage = await this.db?.get<AnnouncementMessageData>(`
-        SELECT message_id, channel_id
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-        LIMIT 1
-      `, [matchId]);
+      const announcementMessage = await getAnnouncementMessage(pgDb, matchId);
 
       // Build signup embed using helper function
       const guildId = this.client.guilds.cache.first()?.id;
@@ -429,7 +405,7 @@ export class ReminderHandler {
     participant: {
       username: string;
       team_assignment?: string;
-      signup_data?: string;
+      signup_data?: unknown;
     },
     announcementMessage?: {
       message_id: string;
@@ -472,17 +448,8 @@ export class ReminderHandler {
 
     try {
       // Get match data
-      const matchData = await this.db.get<{
-        id: string;
-        name: string;
-        game_name?: string;
-        game_color?: string;
-      }>(`
-        SELECT m.*, g.name as game_name, g.color as game_color
-        FROM matches m
-        LEFT JOIN games g ON m.game_id = g.id
-        WHERE m.id = ?
-      `, [matchId]);
+      const matchRow = await getMatchWithGame(pgDb, matchId);
+      const matchData = matchRow ? { ...matchRow, game_name: matchRow.game_name ?? undefined, game_color: matchRow.game_color ?? undefined } : undefined;
 
       if (!matchData) {
         logger.error('❌ Match not found for map code PMs:', matchId);
@@ -490,15 +457,7 @@ export class ReminderHandler {
       }
 
       // Get participants who should receive map codes
-      const participants = await this.db.all<{
-        discord_user_id: string;
-        username: string;
-        team_assignment?: string;
-      }>(`
-        SELECT discord_user_id, username, team_assignment
-        FROM match_participants
-        WHERE match_id = ? AND discord_user_id IS NOT NULL AND receives_map_codes = 1
-      `, [matchId]);
+      const participants = await listDmRecipients(pgDb, matchId, { commandersOnly: true });
 
       if (!participants || participants.length === 0) {
         logger.debug('ℹ️ No participants configured to receive map codes for match:', matchId);

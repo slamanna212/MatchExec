@@ -36,6 +36,8 @@ import { cleanMapId } from '../../../src/lib/utils/map-utils';
 import { db as pgDb } from '../../../lib/db';
 import { findMapByIdOrName, findMapByIdPattern, getGameDisplay, getMode } from '../../../src/lib/games';
 import { listChannelsForNotification } from '../../../src/lib/discord-channels';
+import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
+import { getMapNotes, getMatch, listMatchGameStatuses } from '../../../src/lib/matches';
 
 export class AnnouncementHandler {
   constructor(
@@ -159,9 +161,7 @@ export class AnnouncementHandler {
       // Check if this is a tournament match
       let isTournamentMatch = false;
       if (this.db) {
-        const matchData = await this.db.get<{ tournament_id: string | null }>(`
-          SELECT tournament_id FROM matches WHERE id = ?
-        `, [eventData.id]);
+        const matchData = await getMatch(pgDb, eventData.id);
         isTournamentMatch = !!matchData?.tournament_id;
       }
 
@@ -223,15 +223,7 @@ export class AnnouncementHandler {
       const mapNotes: Record<string, string> = {};
       if (matchId && this.db) {
         try {
-          const notesResult = await this.db.all<{map_id: string, notes: string}>(`
-            SELECT map_id, notes 
-            FROM match_games 
-            WHERE match_id = ? AND notes IS NOT NULL AND notes != ''
-          `, [matchId]);
-          
-          notesResult.forEach(note => {
-            mapNotes[note.map_id] = note.notes;
-          });
+          Object.assign(mapNotes, await getMapNotes(pgDb, matchId));
         } catch (error) {
           logger.error('Error fetching map notes for Discord:', error);
         }
@@ -772,15 +764,7 @@ export class AnnouncementHandler {
     if (!this.db) return;
 
     try {
-      const originalMessage = await this.db.get<{
-        message_id: string;
-        channel_id: string;
-      }>(`
-        SELECT message_id, channel_id
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-        LIMIT 1
-      `, [matchId]);
+      const originalMessage = await getAnnouncementMessage(pgDb, matchId);
 
       if (originalMessage) {
         const messageLink = `https://discord.com/channels/${this.settings?.guild_id}/${originalMessage.channel_id}/${originalMessage.message_id}`;
@@ -975,7 +959,7 @@ export class AnnouncementHandler {
       };
     }
 
-    return await fetchMatchStartData(this.db, eventData.id, eventData.game_id);
+    return await fetchMatchStartData(eventData.id, eventData.game_id);
   }
 
   private createBaseMatchStartEmbed(eventData: any, matchData: any): EmbedBuilder {
@@ -996,7 +980,7 @@ export class AnnouncementHandler {
     const hasMaps = eventData.maps && eventData.maps.length > 0 && this.db;
     if (!hasMaps) return;
 
-    const mapList = await buildMapListField(this.db!, eventData.maps, eventData.game_id);
+    const mapList = await buildMapListField(eventData.maps, eventData.game_id);
     embed.addFields([{ name: '🗺️ Maps', value: mapList, inline: false }]);
   }
 
@@ -1004,7 +988,7 @@ export class AnnouncementHandler {
     if (!this.db) return;
 
     // Try new match_teams-based rendering first
-    const teamRows = await fetchMatchTeamRows(this.db, eventData.id);
+    const teamRows = await fetchMatchTeamRows(eventData.id);
 
     if (teamRows.length > 0) {
       const active = teamRows.filter(t => !t.is_reserve);
@@ -1037,7 +1021,7 @@ export class AnnouncementHandler {
     }
 
     // Legacy fallback
-    const teams = await fetchTeamAssignments(this.db, eventData.id);
+    const teams = await fetchTeamAssignments(eventData.id);
     this.addBlueTeamField(embed, teams.blueTeam, matchData);
     this.addRedTeamField(embed, teams.redTeam, matchData);
     this.addReservesField(embed, teams.reserves);
@@ -1122,7 +1106,7 @@ export class AnnouncementHandler {
   private async addMatchLinkIfNeeded(embed: EmbedBuilder, eventData: any): Promise<void> {
     if (!this.db) return;
 
-    const matchLink = await getMatchLink(this.db, eventData.id, this.client);
+    const matchLink = await getMatchLink(eventData.id, this.client);
     if (!matchLink) return;
 
     embed.addFields([{
@@ -1269,13 +1253,11 @@ export class AnnouncementHandler {
         }
       }
 
-      const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
-        SELECT team1_name, team2_name FROM matches WHERE id = ?
-      `, [matchId]);
+      const matchData = await getMatch(pgDb, matchId);
 
       if (matchData) {
-        team1Name = matchData.team1_name;
-        team2Name = matchData.team2_name;
+        team1Name = matchData.team1_name ?? undefined;
+        team2Name = matchData.team2_name ?? undefined;
       }
 
       // Get map data
@@ -1288,25 +1270,13 @@ export class AnnouncementHandler {
       }
 
       // Get map notes
-      const mapNoteData = await this.db.get<{notes: string}>(`
-        SELECT notes
-        FROM match_games
-        WHERE match_id = ? AND map_id = ? AND notes IS NOT NULL AND notes != ''
-        LIMIT 1
-      `, [matchId, mapId]);
-
-      if (mapNoteData?.notes) {
-        mapNote = mapNoteData.notes;
+      const mapNotes = await getMapNotes(pgDb, matchId);
+      if (mapNotes[mapId]) {
+        mapNote = mapNotes[mapId];
       }
 
       // Get total maps count
-      const mapCountData = await this.db.get<{total_maps: number}>(`
-        SELECT COUNT(*) as total_maps FROM match_games WHERE match_id = ?
-      `, [matchId]);
-
-      if (mapCountData) {
-        totalMaps = mapCountData.total_maps;
-      }
+      totalMaps = (await listMatchGameStatuses(pgDb, matchId)).length;
     } catch (error) {
       logger.error('Error fetching game/map data for score notification:', error);
     }
@@ -1506,13 +1476,11 @@ export class AnnouncementHandler {
           }
         }
 
-        const matchData = await this.db.get<{team1_name?: string, team2_name?: string}>(`
-          SELECT team1_name, team2_name FROM matches WHERE id = ?
-        `, [matchId]);
+        const matchData = await getMatch(pgDb, matchId);
 
         if (matchData) {
-          team1Name = matchData.team1_name;
-          team2Name = matchData.team2_name;
+          team1Name = matchData.team1_name ?? undefined;
+          team2Name = matchData.team2_name ?? undefined;
         }
       } catch (error) {
         logger.error('Error fetching game data for match winner notification:', error);
@@ -1565,15 +1533,7 @@ export class AnnouncementHandler {
     if (!this.db) return null;
 
     try {
-      const originalMessage = await this.db.get<{
-        message_id: string;
-        channel_id: string;
-      }>(`
-        SELECT message_id, channel_id
-        FROM discord_match_messages
-        WHERE match_id = ? AND message_type = 'announcement'
-        LIMIT 1
-      `, [matchId]);
+      const originalMessage = await getAnnouncementMessage(pgDb, matchId);
 
       if (originalMessage && this.client.guilds.cache.first()) {
         const guildId = this.client.guilds.cache.first()?.id;

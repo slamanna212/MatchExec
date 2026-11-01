@@ -15,9 +15,9 @@ import {
 import { GET as getStandings } from '@/app/api/series/[seriesId]/standings/route';
 import { POST as transitionSeries } from '@/app/api/series/[seriesId]/transition/route';
 import { DELETE as deleteEvent } from '@/app/api/series/[seriesId]/events/[eventId]/route';
-import { DELETE as deleteMatchRoute } from '@/app/api/matches/[matchId]/route';
+import { forwardToApp as deleteMatchRoute } from '../../utils/legacy-match-routes';
 import { DELETE as deleteTournamentRoute } from '@/app/api/tournaments/[tournamentId]/route';
-import { GET as listMatchesRoute } from '@/app/api/matches/route';
+import { forwardToApp as listMatchesRoute } from '../../utils/legacy-match-routes';
 import { NextRequest } from 'next/server';
 
 describe('Series API', () => {

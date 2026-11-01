@@ -8,7 +8,12 @@ import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent } from '../../src/lib/feed-helpers';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
-import { db as pgDb } from '../../lib/db';
+import { db as pgDb, type Executor } from '../../lib/db';
+import {
+  areAllGamesCompleted, casMatchStatus, listMatchesDueToStart, listMatchesForPlayerReminders, listMatchesWithAnnouncements,
+  listMatchGameStatuses, listStaleBattleMatches, listUpcomingMatches,
+} from '../../src/lib/matches';
+import { parseAnnouncementsField } from '../../src/lib/reminder-helpers';
 import {
   enqueueAnnouncement, enqueueHealthAlert, enqueueMatchReminder, enqueueMatchStart, enqueuePlayerReminder,
   hasTimedAnnouncement, matchIdsWithLivePlayerReminder, matchIdsWithLiveReminder, nonOverlapping,
@@ -105,7 +110,7 @@ class MatchExecScheduler {
         this.startCronJob('Feed Cleanup', '0 0 2 * * *', this.runFeedCleanup.bind(this));
 
         // Initialize and run avatar update job every 2 hours
-        this.avatarUpdateJob = new AvatarUpdateJob(this.db);
+        this.avatarUpdateJob = new AvatarUpdateJob();
         this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
         // Check for updates daily at 9am UTC
@@ -128,7 +133,7 @@ class MatchExecScheduler {
       }
 
       // Initialize and run avatar update job every 2 hours
-      this.avatarUpdateJob = new AvatarUpdateJob(this.db);
+      this.avatarUpdateJob = new AvatarUpdateJob();
       this.startCronJob('Avatar Update', '0 */2 * * *', this.avatarUpdateJob.updateAvatars.bind(this.avatarUpdateJob));
 
       // Check for updates daily at 9am UTC
@@ -169,23 +174,16 @@ class MatchExecScheduler {
   private async checkMatchStartTimes() {
     // Check for matches that should transition from 'assign' to 'battle' at their scheduled start time
     const now = new Date();
-    const matchesToStart = await this.db.all<{ id: string; name: string }>(
-      `SELECT id, name FROM matches
-       WHERE status = 'assign'
-       AND start_date <= ?
-       AND start_date IS NOT NULL`,
-      [now.toISOString()]
-    );
+    const matchesToStart = await listMatchesDueToStart(pgDb, now);
 
     for (const match of matchesToStart) {
       logger.debug(`🏆 Starting battle phase for match: ${match.name}`);
-    await this.db.run(
-        'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        ['battle', match.id]
-      );
-      
-      // Queue Discord notification for match starting
-      await this.queueMatchStartNotification(match.id);
+      // Compare-and-set the status and queue the Discord notification in one transaction
+      await pgDb.transaction(async (tx) => {
+        if (await casMatchStatus(tx, match.id, 'assign', 'battle')) {
+          await this.queueMatchStartNotification(tx, match.id);
+        }
+      });
     }
 
     // Check for matches that should be auto-completed (battle phase lasting too long)
@@ -205,36 +203,21 @@ class MatchExecScheduler {
     const thresholdTime = new Date();
     thresholdTime.setHours(thresholdTime.getHours() - autoCompleteThresholdHours);
 
-    const matchesToComplete = await this.db.all<{ id: string; name: string }>(
-      `SELECT id, name FROM matches
-       WHERE status = 'battle'
-       AND updated_at < ?`,
-      [thresholdTime.toISOString()]
-    );
+    const matchesToComplete = await listStaleBattleMatches(pgDb, thresholdTime);
+    let completed = 0;
 
     for (const match of matchesToComplete) {
-      const statusResult = await this.db.get<{ total: number; completed: number }>(
-        `SELECT COUNT(*) as total,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
-         FROM match_games WHERE match_id = ?`,
-        [match.id]
-      );
-      const allScored = !statusResult || statusResult.total === 0 || statusResult.completed === statusResult.total;
-
-      if (!allScored) {
+      if (!(await areAllGamesCompleted(pgDb, match.id)) && (await listMatchGameStatuses(pgDb, match.id)).length > 0) {
         logger.debug(`⏭️ Skipping auto-complete for match ${match.name} — not all maps scored`);
         continue;
       }
 
       logger.debug(`⏰ Auto-completing match that has been in battle phase too long: ${match.name}`);
-      await this.db.run(
-        'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        ['complete', match.id]
-      );
+      if (await casMatchStatus(pgDb, match.id, 'battle', 'complete')) completed++;
     }
 
-    if (matchesToComplete.length > 0) {
-      logger.debug(`✅ Auto-completed ${matchesToComplete.length} matches that exceeded battle phase time limit`);
+    if (completed > 0) {
+      logger.debug(`✅ Auto-completed ${completed} matches that exceeded battle phase time limit`);
     }
   }
 
@@ -260,15 +243,7 @@ class MatchExecScheduler {
       const reminderMinutes = discordSettings.match_reminder_minutes;
 
       // Find matches that have start times and need reminders
-      // TODO(matches): the matches table is still SQLite, so the "already has a reminder" check is a separate
-      // Postgres read instead of a NOT EXISTS subquery.
-      const candidateMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
-        `SELECT m.id, m.name, m.start_date
-         FROM matches m
-         WHERE m.start_date IS NOT NULL
-         AND m.status IN ('created', 'gather', 'assign', 'battle')
-         AND datetime(m.start_date) > datetime('now')`
-      );
+      const candidateMatches = await listUpcomingMatches(pgDb, new Date());
       const alreadyQueued = await matchIdsWithLiveReminder(pgDb, candidateMatches.map((m) => m.id));
       const upcomingMatches = candidateMatches.filter((m) => !alreadyQueued.has(m.id));
 
@@ -283,8 +258,7 @@ class MatchExecScheduler {
       let skippedCount = 0;
 
       for (const match of upcomingMatches) {
-        const startDate = new Date(match.start_date);
-        const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
+        const reminderTime = new Date(match.start_date.getTime() - (reminderMinutes * 60 * 1000));
 
         // Only queue if reminder time is in the future
         if (reminderTime > new Date()) {
@@ -321,22 +295,12 @@ class MatchExecScheduler {
       // Find matches that have player_notifications enabled, start times, and need reminders
       // Compute threshold in JS to avoid template literal injection into SQL
       const lookAheadMs = (reminderMinutes + 60) * 60 * 1000;
-      const thresholdDate = new Date(Date.now() + lookAheadMs).toISOString();
-      const candidateMatches = await this.db.all<{ id: string; name: string; start_date: string }>(
-        `SELECT m.id, m.name, m.start_date
-         FROM matches m
-         WHERE m.start_date IS NOT NULL
-         AND m.player_notifications = 1
-         AND m.status IN ('gather', 'assign', 'battle')
-         AND datetime(m.start_date) <= datetime(?)`,
-        [thresholdDate]
-      );
+      const candidateMatches = await listMatchesForPlayerReminders(pgDb, new Date(Date.now() + lookAheadMs));
       const alreadyQueued = await matchIdsWithLivePlayerReminder(pgDb, candidateMatches.map((m) => m.id));
       const upcomingMatches = candidateMatches.filter((m) => !alreadyQueued.has(m.id));
 
       for (const match of upcomingMatches) {
-        const startDate = new Date(match.start_date);
-        const reminderTime = new Date(startDate.getTime() - (reminderMinutes * 60 * 1000));
+        const reminderTime = new Date(match.start_date.getTime() - (reminderMinutes * 60 * 1000));
 
         // If reminder time is already past but match hasn't started yet, fire immediately
         const effectiveReminderTime = reminderTime > new Date() ? reminderTime : new Date();
@@ -353,11 +317,10 @@ class MatchExecScheduler {
   }
 
 
-  private async queueMatchStartNotification(matchId: string): Promise<boolean> {
+  private async queueMatchStartNotification(ex: Executor, matchId: string): Promise<boolean> {
     try {
-      // Add to Discord match start notification queue that the bot will process
-      // (TODO(matches): the status update is SQLite, so this insert cannot share its transaction yet)
-      await enqueueMatchStart(pgDb, matchId);
+      // Add to the Discord match start notification queue that the bot will process (same transaction as the status flip)
+      await enqueueMatchStart(ex, matchId);
 
       logger.debug('🏁 Discord match start notification queued for match:', matchId);
       return true;
@@ -371,27 +334,9 @@ class MatchExecScheduler {
    * Parse announcements field into array
    */
   private parseAnnouncementsField(announcements: unknown, matchName: string): AnnouncementItem[] | null {
-    if (typeof announcements === 'string') {
-      try {
-        return JSON.parse(announcements);
-      } catch {
-        logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not valid JSON`);
-        return null;
-      }
-    }
-
-    if (typeof announcements === 'number' || typeof announcements === 'boolean') {
-      if (announcements) {
-        return [
-          { id: 'default_1hour', value: 1, unit: 'hours' },
-          { id: 'default_30min', value: 30, unit: 'minutes' }
-        ];
-      }
-      return null;
-    }
-
-    logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not an array`);
-    return null;
+    const parsed = parseAnnouncementsField(announcements);
+    if (!parsed) logger.debug(`⚠️ Skipping match ${matchName} - announcements field is not a valid list`);
+    return parsed as AnnouncementItem[] | null;
   }
 
   /**
@@ -420,7 +365,7 @@ class MatchExecScheduler {
   /**
    * Process announcements for a single match
    */
-  private async processMatchAnnouncements(match: { id: string; name: string; start_date: string; announcements: string }): Promise<void> {
+  private async processMatchAnnouncements(match: { id: string; name: string; start_date: Date | string; announcements: unknown }): Promise<void> {
     const announcements = this.parseAnnouncementsField(match.announcements, match.name);
     if (!announcements) return;
 
@@ -456,14 +401,7 @@ class MatchExecScheduler {
     try {
       // Include matches whose start_date is within 30 minutes ago (catch-up window)
       // to avoid permanently missing announcements that fired just before match start.
-      const matchesWithAnnouncements = await this.db.all<{ id: string; name: string; start_date: string; announcements: string }>(`
-        SELECT id, name, start_date, announcements
-        FROM matches
-        WHERE announcements IS NOT NULL
-        AND start_date IS NOT NULL
-        AND status IN ('created', 'gather', 'assign')
-        AND datetime(start_date) >= datetime('now', '-30 minutes')
-      `);
+      const matchesWithAnnouncements = await listMatchesWithAnnouncements(pgDb, new Date(Date.now() - 30 * 60 * 1000));
 
       for (const match of matchesWithAnnouncements) {
         try {

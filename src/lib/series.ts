@@ -1,6 +1,6 @@
 import { getDbInstance } from './database-init';
 import { logger } from './logger';
-import { determineMatchWinner } from './scoring-functions';
+import { determineMatchWinner } from './matches';
 import { withTransaction } from './transaction';
 import { db as pgDb } from '../../lib/db';
 import { gameExists } from './games';
@@ -555,7 +555,7 @@ async function scoreMatchEvent(
   if (match.tournament_id) {
     // Tournament match: winner_team is a tournament_teams.id, so credit by
     // tournament team membership instead of match_teams.
-    const winnerTeam = match.winner_team ?? await determineMatchWinner(db, event.match_id);
+    const winnerTeam = match.winner_team ?? await determineMatchWinner(pgDb, event.match_id); // TODO(series): match data now lives in Postgres
     const members = await db.all<{ team_id: string; user_id: string; discord_user_id: string | null }>(
       `SELECT team_id, user_id, discord_user_id FROM tournament_team_members WHERE team_id IN (?, ?)`,
       [match.team1_id, match.team2_id]
@@ -571,7 +571,7 @@ async function scoreMatchEvent(
     return;
   }
 
-  const winnerEntityId = await determineMatchWinner(db, event.match_id);
+  const winnerEntityId = await determineMatchWinner(pgDb, event.match_id); // TODO(series): match data now lives in Postgres
   for (const p of participants) {
     if (p.is_reserve === 1 || p.team_assignment === 'reserve') continue;
     if (!p.team_id && !p.team_assignment) continue; // unassigned

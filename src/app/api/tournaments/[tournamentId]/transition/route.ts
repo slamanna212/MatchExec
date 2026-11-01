@@ -10,7 +10,8 @@ import {
   handleBattleTransition,
   handleEndTransition
 } from '../../../../../lib/tournament-transition-handlers';
-import { handleTournamentAssignTransition } from '../../../../../lib/transition-handlers';
+import { handleTournamentAssignTransition } from '@/lib/matches';
+import { db as pgDb } from '../../../../../../lib/db';
 import type { Database } from '@/lib/database/connection';
 
 function validateNewStatus(newStatus: string | undefined): string | null {
@@ -59,7 +60,7 @@ async function executeTournamentStatusActions(db: Database, tournamentId: string
       break;
     case 'assign':
       await handleAssignTransition(db, tournamentId);
-      await handleTournamentAssignTransition(tournamentId);
+      await handleTournamentAssignTransition(pgDb, tournamentId); // TODO(tournaments): match status updates run on Postgres
       break;
     case 'battle':
       await handleBattleTransition(db, tournamentId);

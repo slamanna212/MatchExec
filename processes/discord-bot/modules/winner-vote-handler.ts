@@ -1,50 +1,20 @@
 import type { Client, MessageReaction, PartialMessageReaction, User, PartialUser } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
-import crypto from 'crypto';
-import type { Database } from '../../../lib/database/connection';
 import { logger } from '../../../src/lib/logger/server';
-import { db as pgDb } from '../../../lib/db';
-import { countStatDefinitions } from '../../../src/lib/games';
+import { db } from '../../../lib/db';
+import {
+  castVote, findVoteByMessage, isScorecardRequiredButMissing, listVoteCommanders, listVotesForGame, recordVotePrompt,
+  submitVoteWinner, type VoteRow,
+} from '../../../src/lib/matches';
 
-interface CommanderRecord {
-  id: string;
-  discord_user_id: string;
-  team_assignment: string;
-}
-
-interface VoteRecord {
-  id: string;
-  match_id: string;
-  match_game_id: string;
-  discord_user_id: string;
-  discord_message_id: string;
-  participant_id: string | null;
-  team_side: 'blue' | 'red' | null;
-  voted_for: 'blue' | 'red' | null;
-}
+type VoteRecord = VoteRow;
 
 export class WinnerVoteHandler {
-  constructor(
-    private client: Client,
-    private db: Database
-  ) {}
+  constructor(private client: Client) {}
 
   async sendWinnerVotePrompts(matchId: string, matchGameId: string, mapName: string): Promise<boolean> {
     try {
-      const commanders = await this.db.all<CommanderRecord>(
-        `SELECT mp.id, mp.discord_user_id,
-                CASE
-                  WHEN mt.id IS NULL THEN mp.team_assignment
-                  WHEN mt.is_reserve = 1 THEN 'reserve'
-                  WHEN mt.team_order = 0 THEN 'blue'
-                  WHEN mt.team_order = 1 THEN 'red'
-                  ELSE NULL
-                END AS team_assignment
-         FROM match_participants mp
-         LEFT JOIN match_teams mt ON mt.id = mp.team_id
-         WHERE mp.match_id = ? AND mp.receives_map_codes = 1 AND mp.discord_user_id IS NOT NULL`,
-        [matchId]
-      );
+      const commanders = await listVoteCommanders(db, matchId);
 
       if (!commanders || commanders.length === 0) return false;
 
@@ -52,9 +22,7 @@ export class WinnerVoteHandler {
 
       for (const commander of commanders) {
         try {
-          const teamSide = commander.team_assignment === 'blue' ? 'blue'
-            : commander.team_assignment === 'red' ? 'red'
-            : null;
+          const teamSide = commander.team_side;
 
           const teamLabel = teamSide === 'blue' ? '🔵 Blue Team'
             : teamSide === 'red' ? '🔴 Red Team'
@@ -79,20 +47,10 @@ export class WinnerVoteHandler {
           await sentMessage.react('🔵');
           await sentMessage.react('🔴');
 
-          await this.db.run(
-            `INSERT INTO discord_winner_vote_messages
-               (id, match_id, match_game_id, discord_user_id, discord_message_id, participant_id, team_side)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              crypto.randomUUID(),
-              matchId,
-              matchGameId,
-              commander.discord_user_id,
-              sentMessage.id,
-              commander.id,
-              teamSide,
-            ]
-          );
+          await recordVotePrompt(db, {
+            matchId, matchGameId, discordUserId: commander.discord_user_id, discordMessageId: sentMessage.id,
+            participantId: commander.id, teamSide,
+          });
 
           dmsSent++;
           logger.debug(`🗳️ Winner vote prompt sent to ${commander.discord_user_id} for match ${matchId}`);
@@ -119,22 +77,14 @@ export class WinnerVoteHandler {
     const discordUserId = user.id;
 
     try {
-      const record = await this.db.get<VoteRecord>(
-        `SELECT * FROM discord_winner_vote_messages
-         WHERE discord_message_id = ? AND discord_user_id = ?`,
-        [messageId, discordUserId]
-      );
-
+      const record = await findVoteByMessage(db, messageId, discordUserId);
       if (!record) return;
       // Ignore if already voted
       if (record.voted_for !== null) return;
 
       const votedFor: 'blue' | 'red' = emoji === '🔵' ? 'blue' : 'red';
-
-      await this.db.run(
-        `UPDATE discord_winner_vote_messages SET voted_for = ? WHERE id = ?`,
-        [votedFor, record.id]
-      );
+      // Atomic: only the first vote counts even if the reaction event is delivered twice.
+      if (!(await castVote(db, record.id, votedFor))) return;
 
       logger.debug(`🗳️ Commander ${discordUserId} voted ${votedFor} for game ${record.match_game_id}`);
 
@@ -145,10 +95,7 @@ export class WinnerVoteHandler {
   }
 
   private async evaluateVotes(matchId: string, matchGameId: string): Promise<void> {
-    const allVotes = await this.db.all<VoteRecord>(
-      `SELECT * FROM discord_winner_vote_messages WHERE match_game_id = ?`,
-      [matchGameId]
-    );
+    const allVotes = await listVotesForGame(db, matchGameId);
 
     if (!allVotes || allVotes.length === 0) return;
 
@@ -172,41 +119,18 @@ export class WinnerVoteHandler {
         }
         await this.submitWinner(matchId, matchGameId, winner);
       } else {
-        // Conflict — clear any provisional winner and notify commanders
-        await this.db.run(
-          `UPDATE match_games SET winner_id = NULL WHERE id = ? AND status != 'completed'`,
-          [matchGameId]
-        );
+        // Conflict — notify commanders
         logger.warning(`⚠️ Winner vote conflict for game ${matchGameId} — commanders disagree`);
         await this.notifyConflict(allVotes);
       }
-    } else {
-      // Partial votes — set provisional winner (direct update, no scoring flow)
-      if (uniqueVotes.size === 1) {
-        const provisionalWinner = voted[0].voted_for === 'blue' ? 'team1' : 'team2';
-        await this.db.run(
-          `UPDATE match_games SET winner_id = ? WHERE id = ? AND status != 'completed'`,
-          [provisionalWinner, matchGameId]
-        );
-        logger.debug(`🗳️ Provisional winner set to ${provisionalWinner} for game ${matchGameId}`);
-      }
-      // If partial votes already conflict with each other, leave winner_id as-is until all vote
     }
+    // Partial votes: nothing to do until everyone has voted. (The old provisional `match_games.winner_id` write went
+    // away with the legacy scoring columns.)
   }
 
   /** Returns true if a scorecard is required but not yet submitted. */
   private async checkStatsGate(matchId: string, matchGameId: string): Promise<boolean> {
-    const matchRow = await this.db.get<{ stats_enabled: number; game_id: string }>(
-      'SELECT stats_enabled, game_id FROM matches WHERE id = ?',
-      [matchId]
-    );
-    if (!matchRow?.stats_enabled || (await countStatDefinitions(pgDb, matchRow.game_id)) === 0) return false;
-
-    const submission = await this.db.get<{ id: string }>(
-      'SELECT id FROM scorecard_submissions WHERE match_game_id = ? LIMIT 1',
-      [matchGameId]
-    );
-    return !submission;
+    return isScorecardRequiredButMissing(db, matchId, matchGameId);
   }
 
   private async notifyScorecardRequired(votes: VoteRecord[]): Promise<void> {
@@ -230,33 +154,10 @@ export class WinnerVoteHandler {
 
   async submitWinner(matchId: string, matchGameId: string, winner: 'blue' | 'red'): Promise<void> {
     try {
-      const { saveMatchResult } = await import('../../../src/lib/scoring-functions');
-      // A vote only ever records a first result: never override a map an admin already
-      // scored, and never score a match that has left battle. saveMatchResult re-checks
-      // the game status inside its transaction to close the race with a web submission.
-      const state = await this.db.get<{ match_status: string; game_status: string }>(
-        `SELECT m.status AS match_status, mg.status AS game_status
-         FROM match_games mg JOIN matches m ON m.id = mg.match_id
-         WHERE mg.id = ? AND mg.match_id = ?`,
-        [matchGameId, matchId]
-      );
-      if (state?.match_status !== 'battle' || state.game_status === 'completed') {
-        logger.info(`Winner vote for game ${matchGameId} ignored: game already scored or match not in battle`);
-        return;
+      if (await submitVoteWinner(matchId, matchGameId, winner)) {
+        logger.info(`Winner vote consensus: ${winner} wins game ${matchGameId}`);
       }
-
-      await saveMatchResult(matchGameId, {
-        matchId,
-        gameId: matchGameId,
-        winner: winner === 'blue' ? 'team1' : 'team2',
-        completedAt: new Date(),
-      });
-      logger.info(`✅ Winner vote consensus: ${winner} wins game ${matchGameId}`);
     } catch (error) {
-      if (error instanceof Error && error.name === 'GameAlreadyScoredError') {
-        logger.info(`Winner vote for game ${matchGameId} ignored: game was scored concurrently`);
-        return;
-      }
       logger.error(`Error submitting winner vote result for game ${matchGameId}:`, error);
     }
   }

@@ -1,16 +1,15 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
+import { db as pgDb, type Executor } from '../../../lib/db';
+import {
+  countAvatarUsersSkipped, incrementAvatarFailures, listAvatarRefreshUsers, recordAvatarCheckFailed, recordAvatarRefreshed,
+} from '../../../src/lib/matches';
 import { getDiscordAvatarUrl } from '../../discord-bot/utils/avatar-fetcher';
 import { logger } from '../../../src/lib/logger/server';
 import { getDiscordSettings } from '../../../src/lib/settings';
 
 export class AvatarUpdateJob {
   private discordClient: Client | null = null;
-  private db: Database;
-
-  constructor(db: Database) {
-    this.db = db;
-  }
+  constructor(private db: Executor = pgDb) {}
 
   /**
    * Initialize Discord client for avatar fetching
@@ -58,24 +57,10 @@ export class AvatarUpdateJob {
       }
 
       // Get all unique Discord user IDs from active match participants, skipping users with 3+ failures
-      const participants = await this.db.all<{ discord_user_id: string }>(`
-        SELECT DISTINCT mp.discord_user_id
-        FROM match_participants mp
-        JOIN matches m ON m.id = mp.match_id
-        WHERE mp.discord_user_id IS NOT NULL
-          AND (mp.failed_avatar_checks IS NULL OR mp.failed_avatar_checks < 3)
-          AND m.status NOT IN ('complete', 'cancelled')
-      `);
+      const participants = (await listAvatarRefreshUsers(this.db)).map((discord_user_id) => ({ discord_user_id }));
 
       // Check how many users are being skipped due to failure threshold
-      const skipped = await this.db.get<{ count: number }>(`
-        SELECT COUNT(DISTINCT mp.discord_user_id) as count
-        FROM match_participants mp
-        JOIN matches m ON m.id = mp.match_id
-        WHERE mp.discord_user_id IS NOT NULL
-          AND mp.failed_avatar_checks >= 3
-          AND m.status NOT IN ('complete', 'cancelled')
-      `);
+      const skipped = { count: await countAvatarUsersSkipped(this.db) };
 
       if (skipped && skipped.count > 0) {
         logger.debug(`🖼️  Skipping ${skipped.count} users with 3+ failed avatar checks`);
@@ -96,11 +81,7 @@ export class AvatarUpdateJob {
           const avatarUrl = await getDiscordAvatarUrl(this.discordClient, discordUserId);
 
           // Update all records for this user - success resets failure count
-          await this.db.run(`
-            UPDATE match_participants
-            SET avatar_url = ?, last_avatar_check = CURRENT_TIMESTAMP, failed_avatar_checks = 0
-            WHERE discord_user_id = ?
-          `, [avatarUrl, discordUserId]);
+          await recordAvatarRefreshed(this.db, discordUserId, avatarUrl);
 
           updated++;
         } catch (error) {
@@ -109,11 +90,7 @@ export class AvatarUpdateJob {
           failedUserIds.push(discordUserId);
 
           // Update last_avatar_check but do NOT overwrite avatar_url
-          await this.db.run(`
-            UPDATE match_participants
-            SET last_avatar_check = CURRENT_TIMESTAMP
-            WHERE discord_user_id = ?
-          `, [discordUserId]);
+          await recordAvatarCheckFailed(this.db, discordUserId);
         }
       }
 
@@ -124,11 +101,7 @@ export class AvatarUpdateJob {
       } else if (failedUserIds.length > 0) {
         // At least one succeeded, so increment failure counts for those that failed
         for (const userId of failedUserIds) {
-          await this.db.run(`
-            UPDATE match_participants
-            SET failed_avatar_checks = COALESCE(failed_avatar_checks, 0) + 1
-            WHERE discord_user_id = ?
-          `, [userId]);
+          await incrementAvatarFailures(this.db, userId);
         }
       }
 

@@ -6,6 +6,7 @@ import { auth } from './routes/auth';
 import { channels } from './routes/channels';
 import { games } from './routes/games';
 import { health } from './routes/health';
+import { matches } from './routes/matches';
 import { settings } from './routes/settings';
 import { dbStatus, metrics, version } from './routes/system';
 import { welcomeFlow as welcomeFlowRoutes } from './routes/welcome-flow';
@@ -29,6 +30,7 @@ app.route('/api/welcome-flow', welcomeFlowRoutes);
 app.route('/api/auth', auth);
 app.route('/api/games', games);
 app.route('/api/channels', channels);
+app.route('/api/matches', matches);
 
 // TODO(Stage 3): serveStatic({ root: 'dist/client' }) for hashed assets, /uploads/* from blobs, /dev/* redirect in
 // production, and the SPA fallback to index.html (no-cache) for unmatched non-API GETs.

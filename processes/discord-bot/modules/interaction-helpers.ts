@@ -6,6 +6,16 @@ import type { Client, ModalSubmitInteraction } from 'discord.js';
 import type { ParsedModalId } from '../utils/id-parsers';
 import type { Database } from '../../../lib/database/connection';
 import { getDiscordAvatarUrl } from '../utils/avatar-fetcher';
+import { db as pgDb } from '../../../lib/db';
+import { addParticipant, countParticipants } from '../../../src/lib/matches';
+
+/** The user is already signed up (unique match + user). */
+export class DuplicateSignupError extends Error {
+  constructor() {
+    super('UNIQUE constraint failed: already signed up');
+    this.name = 'DuplicateSignupError';
+  }
+}
 
 interface SignupFormField {
   id: string;
@@ -67,12 +77,12 @@ export async function insertParticipant(
   signupData: Record<string, string>,
   client: Client
 ): Promise<string> {
-  const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-
   // Fetch avatar URL when user signs up
   const avatarUrl = await getDiscordAvatarUrl(client, interaction.user.id);
 
   if (parsedId.isTournament) {
+    // TODO(tournaments): tournaments still live in the legacy SQLite database.
+    const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
     // Insert tournament participant
     await db.run(`
       INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data, team_assignment)
@@ -101,29 +111,21 @@ export async function insertParticipant(
         displayUsername
       ]);
     }
-  } else {
-    // Insert match participant
-    await db.run(`
-      INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username, signup_data, avatar_url, last_avatar_check)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [
-      participantId,
-      parsedId.eventId,
-      interaction.user.id,
-      interaction.user.id,
-      displayUsername,
-      JSON.stringify(signupData),
-      avatarUrl
-    ]);
-
-    // Update match updated_at so ETag-based polling detects the participant change
-    await db.run(
-      'UPDATE matches SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [parsedId.eventId]
-    );
-  }
-
-  return participantId;
+    return participantId;
+  } 
+    // Match participant (Postgres). Capacity was checked before the modal; the unique (match, user) key makes a
+    // double submit a DuplicateSignupError instead of a second row.
+    const result = await addParticipant(pgDb, {
+      matchId: parsedId.eventId,
+      userId: interaction.user.id,
+      discordUserId: interaction.user.id,
+      username: displayUsername,
+      signupData,
+      avatarUrl,
+    });
+    if (result.status !== 'added') throw new DuplicateSignupError();
+    return result.id;
+  
 }
 
 /**
@@ -134,18 +136,11 @@ export async function getParticipantCount(
   eventId: string,
   isTournament: boolean
 ): Promise<number> {
-  let result;
+  if (!isTournament) return (await countParticipants(pgDb, eventId)) || 1;
 
-  if (isTournament) {
-    result = await db.get<{ count: number }>(`
-      SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
-    `, [eventId]);
-  } else {
-    result = await db.get<{ count: number }>(`
-      SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?
-    `, [eventId]);
-  }
-
+  const result = await db.get<{ count: number }>(`
+    SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
+  `, [eventId]); // TODO(tournaments)
   return result?.count || 1;
 }
 

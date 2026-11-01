@@ -1,5 +1,6 @@
 import type { Client } from 'discord.js';
-import type { Database } from '../../../lib/database/connection';
+import { db } from '../../../lib/db';
+import { clearAutoVoiceChannels, listFinishedMatchVoiceChannels } from '../../../src/lib/matches';
 import { logger } from '../../../src/lib/logger/server';
 
 interface TrackedVoiceChannel {
@@ -12,7 +13,6 @@ export class VoiceChannelEmptinessMonitor {
 
   constructor(
     private client: Client,
-    private db: Database,
     private requiredEmptyChecks = 2
   ) {}
 
@@ -20,12 +20,7 @@ export class VoiceChannelEmptinessMonitor {
     if (!this.client.isReady()) return;
 
     try {
-      const trackedChannels = await this.db.all<TrackedVoiceChannel>(`
-        SELECT avc.match_id, avc.channel_id
-        FROM auto_voice_channels avc
-        INNER JOIN matches m ON m.id = avc.match_id
-        WHERE m.status IN ('complete', 'cancelled')
-      `);
+      const trackedChannels: TrackedVoiceChannel[] = await listFinishedMatchVoiceChannels(db);
 
       if (trackedChannels.length === 0) {
         this.emptyCheckCounts.clear();
@@ -109,7 +104,7 @@ export class VoiceChannelEmptinessMonitor {
       }
     }
 
-    await this.db.run('DELETE FROM auto_voice_channels WHERE match_id = ?', [matchId]);
+    await clearAutoVoiceChannels(db, matchId);
     logger.info(`✅ Deleted auto-created voice channels for match ${matchId} after ${this.requiredEmptyChecks} empty checks`);
   }
 }

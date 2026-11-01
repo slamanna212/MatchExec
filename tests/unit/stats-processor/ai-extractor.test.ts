@@ -8,6 +8,9 @@ vi.mock('../../../src/lib/feed-helpers', () => ({
   logFeedEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+const matchesMock = vi.hoisted(() => ({ listParticipants: vi.fn(), getMatchTeams: vi.fn(), getMatch: vi.fn() }));
+vi.mock('../../../src/lib/matches', () => matchesMock);
+
 import { AIExtractor } from '../../../processes/stats-processor/modules/ai-extractor';
 import type { GameStatDefinition } from '../../../shared/types';
 
@@ -165,11 +168,11 @@ describe('AIExtractor', () => {
 
   describe('autoAssignParticipants', () => {
     it('assigns matching participant by normalized name', async () => {
-      const mockDb = {
-        all: vi.fn().mockResolvedValue([
+      matchesMock.listParticipants.mockResolvedValue([
           { id: 'participant-1', username: 'Alice' },
           { id: 'participant-2', username: 'Bob' },
-        ]),
+        ]);
+      const mockDb = {
         run: vi.fn().mockResolvedValue(undefined),
       };
       const ext = new AIExtractor(mockDb);
@@ -185,8 +188,8 @@ describe('AIExtractor', () => {
     });
 
     it('does not assign when confidence is too low', async () => {
+      matchesMock.listParticipants.mockResolvedValue([{ id: 'p-1', username: 'Alice' }]);
       const mockDb = {
-        all: vi.fn().mockResolvedValue([{ id: 'p-1', username: 'Alice' }]),
         run: vi.fn().mockResolvedValue(undefined),
       };
       const ext = new AIExtractor(mockDb);
@@ -199,11 +202,11 @@ describe('AIExtractor', () => {
     });
 
     it('does not assign when multiple participants share normalized name', async () => {
-      const mockDb = {
-        all: vi.fn().mockResolvedValue([
+      matchesMock.listParticipants.mockResolvedValue([
           { id: 'p-1', username: 'Alice' },
           { id: 'p-2', username: 'alice' },
-        ]),
+        ]);
+      const mockDb = {
         run: vi.fn().mockResolvedValue(undefined),
       };
       const ext = new AIExtractor(mockDb);
@@ -216,8 +219,8 @@ describe('AIExtractor', () => {
     });
 
     it('does nothing when no participants exist', async () => {
+      matchesMock.listParticipants.mockResolvedValue([]);
       const mockDb = {
-        all: vi.fn().mockResolvedValue([]),
         run: vi.fn(),
       };
       const ext = new AIExtractor(mockDb);
@@ -232,12 +235,12 @@ describe('AIExtractor', () => {
 
   describe('resolveNormalTeamIds', () => {
     it('maps team_order 0 to blue and 1 to red', async () => {
-      const mockDb = {
-        all: vi.fn().mockResolvedValue([
-          { id: 'mt_blue', team_order: 0 },
-          { id: 'mt_red', team_order: 1 },
-        ]),
-      };
+      matchesMock.getMatchTeams.mockResolvedValue([
+        { id: 'mt_blue', team_order: 0, is_reserve: false },
+        { id: 'mt_red', team_order: 1, is_reserve: false },
+        { id: 'mt_res', team_order: 99, is_reserve: true },
+      ]);
+      const mockDb = {};
       const ext = new AIExtractor(mockDb) as unknown as { resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> };
 
       const result = await ext.resolveNormalTeamIds('match-1');
@@ -246,7 +249,8 @@ describe('AIExtractor', () => {
     });
 
     it('returns an empty map when match_teams has not been created yet', async () => {
-      const mockDb = { all: vi.fn().mockResolvedValue([]) };
+      matchesMock.getMatchTeams.mockResolvedValue([]);
+      const mockDb = {};
       const ext = new AIExtractor(mockDb) as unknown as { resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> };
 
       const result = await ext.resolveNormalTeamIds('match-1');
@@ -287,8 +291,8 @@ describe('AIExtractor suggested positions', () => {
 
   it('stores a suggestion on the submission and never writes placements', async () => {
     const run = vi.fn().mockResolvedValue({});
-    const all = vi.fn().mockResolvedValue(participants);
-    const ex = new AIExtractor({ run, all, get: vi.fn() });
+    matchesMock.listParticipants.mockResolvedValue(participants);
+    const ex = new AIExtractor({ run, all: vi.fn(), get: vi.fn() });
     await (ex as any).storeSuggestedPositions('sub-1', 'match-1', { Alice: 2, Bob: 1 });
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][0]).toContain('UPDATE scorecard_submissions SET suggested_positions');

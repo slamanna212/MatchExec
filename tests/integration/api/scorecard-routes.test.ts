@@ -11,7 +11,7 @@ import { PUT as reviewSubmission } from '@/app/api/matches/[matchId]/scorecard/[
 import { PUT as assignSubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/assign/route';
 import { POST as retrySubmission } from '@/app/api/matches/[matchId]/scorecard/[submissionId]/retry/route';
 import { GET as getScorecard, POST as postScorecard } from '@/app/api/matches/[matchId]/scorecard/route';
-import { GET as getGameResult, POST as postGameResult } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
+import { forwardToApp as getGameResult, forwardToApp as postGameResult } from '../../utils/legacy-match-routes';
 import { GET as getStats } from '@/app/api/stats/route';
 
 // Minimal valid PNG (magic bytes only — enough to pass isValidImageType)

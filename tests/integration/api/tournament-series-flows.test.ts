@@ -22,11 +22,11 @@ import { POST as createTeam, PUT as assignMembers, DELETE as deleteTeam } from '
 import { POST as generateMatches } from '@/app/api/tournaments/[tournamentId]/generate-matches/route';
 import { POST as progressTournament } from '@/app/api/tournaments/[tournamentId]/progress/route';
 import { GET as getLeaderboard } from '@/app/api/tournaments/[tournamentId]/leaderboard/route';
-import { POST as createMatch, } from '@/app/api/matches/route';
-import { DELETE as deleteMatch } from '@/app/api/matches/[matchId]/route';
-import { POST as transitionMatch } from '@/app/api/matches/[matchId]/transition/route';
-import { POST as assignTeams } from '@/app/api/matches/[matchId]/assign-teams/route';
-import { POST as saveResult } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
+import { forwardToApp as createMatch } from '../../utils/legacy-match-routes';
+import { forwardToApp as deleteMatch } from '../../utils/legacy-match-routes';
+import { forwardToApp as transitionMatch } from '../../utils/legacy-match-routes';
+import { forwardToApp as assignTeams } from '../../utils/legacy-match-routes';
+import { forwardToApp as saveResult } from '../../utils/legacy-match-routes';
 import { POST as createSeries, } from '@/app/api/series/route';
 import { DELETE as deleteSeries } from '@/app/api/series/[seriesId]/route';
 import { POST as addEvent } from '@/app/api/series/[seriesId]/events/route';

@@ -49,7 +49,7 @@ describe('AvatarUpdateJob', () => {
     resetSettingsStore();
     settingsStore.discord = { guild_id: 'guild-1', bot_token: 'test-token' };
 
-    job = new AvatarUpdateJob(db as any);
+    job = new AvatarUpdateJob();
 
     // Inject a ready mock client to skip actual login
     (job as any).discordClient = {
@@ -191,9 +191,11 @@ describe('AvatarUpdateJob', () => {
 
     it('increments failure count for individual failing users when at least one succeeds', async () => {
       const match = await createMatch(gameId, modeId, { status: 'battle' });
-      mockGetDiscordAvatarUrl
-        .mockResolvedValueOnce('https://cdn.example.com/avatar1.png') // first user succeeds
-        .mockRejectedValueOnce(new Error('Unknown User')); // second user fails
+      // keyed by user: the order users are visited in is not part of the contract
+      mockGetDiscordAvatarUrl.mockImplementation(async (_client: unknown, discordUserId: string) => {
+        if (discordUserId === 'disc-err') throw new Error('Unknown User');
+        return 'https://cdn.example.com/avatar1.png';
+      });
 
       await db.run(
         `INSERT INTO match_participants (id, match_id, user_id, discord_user_id, username)

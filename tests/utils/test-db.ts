@@ -16,6 +16,11 @@ let wrappedDb: Database | null = null;
  */
 type ReadHook = (sql: string) => Promise<void>;
 let readHook: ReadHook | null = null;
+/** Count of SQLite writes through the wrapper; lets the legacy PG bridge skip re-reading unchanged tables. */
+let writeCount = 0;
+export function getLegacyWriteCount(): number {
+  return writeCount;
+}
 export function setLegacyReadHook(hook: ReadHook | null): void {
   readHook = hook;
 }
@@ -98,7 +103,6 @@ export class TestDatabase {
     }
 
     const run = async () => {
-      if (readHook) await readHook(sql);
       return this.db.get<T>(sql, params);
     };
 
@@ -136,7 +140,6 @@ export class TestDatabase {
     }
 
     const run = async () => {
-      if (readHook) await readHook(sql);
       return this.db.all<T>(sql, params);
     };
 
@@ -218,6 +221,21 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
   // Create Database wrapper and connect
   wrappedDb = new Database(TEST_DB_PATH);
   await wrappedDb.connect();
+  // Count every write (fixtures AND application code share this connection) for the legacy PG bridge.
+  const counted = wrappedDb;
+  for (const method of ['run', 'exec'] as const) {
+    const original = counted[method].bind(counted) as (...args: unknown[]) => unknown;
+    (counted as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => { writeCount++; return original(...args); };
+  }
+  // Reads (from fixtures/assertions AND application code, which share this connection) first let the legacy PG bridge
+  // copy Postgres-side changes into SQLite.
+  for (const method of ['get', 'all'] as const) {
+    const original = counted[method].bind(counted) as (...args: unknown[]) => Promise<unknown>;
+    (counted as unknown as Record<string, unknown>)[method] = async (sql: string, ...rest: unknown[]) => {
+      if (readHook && typeof sql === 'string') await readHook(sql);
+      return original(sql, ...rest);
+    };
+  }
 
   // Inject wrappedDb into getDbInstance() so API routes use the same connection
   setDbForTesting(wrappedDb);

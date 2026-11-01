@@ -7,6 +7,7 @@
  */
 
 import { logger } from './logger';
+import { initializeMatchGames } from './matches';
 import type { Database } from '../../lib/database/connection';
 import { logFeedEvent } from './feed-helpers';
 import { db as pgDb } from '../../lib/db';
@@ -264,8 +265,7 @@ async function transitionFirstRoundMatches(
 
         await queueDiscordMatchStart(db, match.id);
 
-        const { initializeMatchGames } = await import('./scoring-functions');
-        await initializeMatchGames(match.id);
+        await initializeMatchGames(pgDb, match.id); // TODO(tournaments): pass the tx once tournaments are on Postgres
 
         logger.debug(`🚀 Started match with notifications: ${match.name}`);
       } catch (matchError) {

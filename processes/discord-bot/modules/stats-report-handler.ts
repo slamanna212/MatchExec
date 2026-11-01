@@ -5,6 +5,7 @@ import { sendDM } from './dm-builder';
 import { logger } from '../../../src/lib/logger/server';
 import { db as pgDb } from '../../../lib/db';
 import { getGameDisplay, listStatDefinitions } from '../../../src/lib/games';
+import { getMatch, listDmRecipients } from '../../../src/lib/matches';
 
 interface StatsSettingsRow {
   enabled: number;
@@ -305,10 +306,7 @@ export class StatsReportHandler {
     }
 
     // Get match info
-    const matchBase = await this.db.get<Pick<MatchInfoRow, 'id' | 'name' | 'game_id'>>(
-      'SELECT id, name, game_id FROM matches WHERE id = ?',
-      [matchId]
-    );
+    const matchBase = await getMatch(pgDb, matchId);
     const gameInfo = matchBase ? await getGameDisplay(pgDb, matchBase.game_id) : undefined;
     const matchInfo: MatchInfoRow | undefined = matchBase
       ? { ...matchBase, game_name: gameInfo?.name ?? null, game_color: gameInfo?.color ?? null } as MatchInfoRow
@@ -326,19 +324,22 @@ export class StatsReportHandler {
     }
 
     // Get participants with stats that haven't been DM'd yet
-    const participants = await this.db.all<ParticipantStatsRow>(
-      `SELECT mps.participant_id, mp.discord_user_id, mp.username,
-              mp.team_assignment, mp.signup_data,
-              mps.total_stats_json, mps.maps_played
-       FROM match_player_stats mps
-       JOIN match_participants mp ON mps.participant_id = mp.id
-       WHERE mps.match_id = ?
-         AND mps.stats_dm_sent = 0
-         AND mps.total_stats_json IS NOT NULL
-         AND mp.discord_user_id IS NOT NULL
-         AND mp.discord_user_id != ''`,
+    // TODO(stats): match_player_stats is still SQLite while participants live in Postgres, so this is two reads.
+    const statRows = await this.db.all<{ participant_id: string; total_stats_json: string; maps_played: number }>(
+      `SELECT participant_id, total_stats_json, maps_played FROM match_player_stats
+       WHERE match_id = ? AND stats_dm_sent = 0 AND total_stats_json IS NOT NULL`,
       [matchId]
     );
+    const people = new Map((await listDmRecipients(pgDb, matchId)).map(p => [p.id, p]));
+    const participants: ParticipantStatsRow[] = statRows.flatMap(row => {
+      const p = people.get(row.participant_id);
+      if (!p) return [];
+      return [{
+        participant_id: row.participant_id, discord_user_id: p.discord_user_id, username: p.username,
+        team_assignment: p.team_assignment ?? null, signup_data: p.signup_data ? JSON.stringify(p.signup_data) : null,
+        total_stats_json: row.total_stats_json, maps_played: row.maps_played,
+      }];
+    });
 
     if (!participants || participants.length === 0) {
       logger.debug(`📊 No participants to DM for match ${matchId} (all sent or no stats)`);

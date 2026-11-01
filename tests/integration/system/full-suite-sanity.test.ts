@@ -15,7 +15,7 @@ import { getTestDb } from '../../utils/test-db';
 import { DatabaseSeeder } from '../../../lib/database/seeder';
 import type { Database } from '../../../lib/database/connection';
 import { createMockRequest, parseResponse } from '../../utils/api-helpers';
-import { POST as createMatch } from '@/app/api/matches/route';
+import { forwardToApp as createMatch } from '../../utils/legacy-match-routes';
 
 describe('Full-Suite Sanity (M2)', () => {
   let db: ReturnType<typeof getTestDb>;

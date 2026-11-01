@@ -263,7 +263,7 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 
 - **Transactions**: use `withTransaction` from `@/lib/transaction` (implementation in `lib/database/transaction.ts`) for multi-statement writes.
 - **Foreign keys are NOT enforced** (`PRAGMA foreign_keys` off), so deletes must clean up child rows explicitly.
-- **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/scoring-functions.ts`.
+- **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/matches/scoreboard.ts`.
 
 ## Authentication (opt-in)
 
@@ -429,9 +429,9 @@ tests/
 │   └── discord.ts                    # mockDiscordClient, createMockChannel()
 ├── unit/
 │   ├── validation.test.ts            # validateRequiredFields, safeJSONParse/Stringify
-│   ├── scoring-functions.test.ts     # Scoring calculations
+│   ├── lib/pg-scoring-position.test.ts # Pure scoring calculations (src/lib/scoring/*)
 │   ├── tournament-bracket.test.ts    # Bracket generation and progression
-│   ├── transition-handlers.test.ts   # Match state transition side effects
+│   ├── lib/pg-matches-domain.test.ts # Matches domain on Postgres (teams, participants, voice, votes, scheduler queries)
 │   └── discord-bot/
 │       ├── announcement-handler.test.ts
 │       ├── queue-processor.test.ts
@@ -458,12 +458,12 @@ tests/
 | Source File | Test File |
 |-------------|-----------|
 | `src/lib/utils/validation.ts` | `tests/unit/validation.test.ts` |
-| `src/lib/scoring-functions.ts` | `tests/unit/scoring-functions.test.ts` |
+| `src/lib/scoring/*.ts` | `tests/unit/lib/pg-scoring-position.test.ts` |
+| `src/lib/matches/*.ts` | `tests/unit/lib/pg-matches-domain.test.ts`, `tests/integration/server/match*.test.ts` |
 | `src/lib/tournament-bracket.ts` | `tests/unit/tournament-bracket.test.ts` |
-| `src/lib/transition-handlers.ts` | `tests/unit/transition-handlers.test.ts` |
 | `processes/discord-bot/modules/announcement-handler.ts` | `tests/unit/discord-bot/announcement-handler.test.ts` |
 | `processes/discord-bot/modules/voice-handler.ts` | `tests/unit/discord-bot/voice-handler.test.ts` |
-| `src/app/api/matches/*/route.ts` | `tests/integration/api/matches*.test.ts` |
+| `src/server/routes/matches.ts` | `tests/integration/server/matches.test.ts`, `match-lifecycle.test.ts`, `matches-concurrency.test.ts` |
 | `src/app/api/tournaments/*/route.ts` | `tests/integration/api/tournaments.test.ts` |
 | `src/app/api/settings/*/route.ts` | `tests/integration/api/settings.test.ts` |
 | `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |

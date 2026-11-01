@@ -49,7 +49,7 @@ describe('AvatarUpdateJob — extended', () => {
     resetSettingsStore();
     settingsStore.discord = { guild_id: 'guild-1', bot_token: 'test-token' };
 
-    job = new AvatarUpdateJob(db as any);
+    job = new AvatarUpdateJob();
     (job as any).discordClient = {
       isReady: vi.fn().mockReturnValue(true),
       login: vi.fn().mockResolvedValue('token'),

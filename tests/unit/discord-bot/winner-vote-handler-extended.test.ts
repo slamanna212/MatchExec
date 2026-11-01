@@ -18,8 +18,9 @@ vi.mock('discord.js', () => ({
   }),
 }));
 
-vi.mock('@/lib/scoring-functions', () => ({
+vi.mock('@/lib/matches/results', () => ({
   saveMatchResult: vi.fn().mockResolvedValue(undefined),
+  GameAlreadyScoredError: class GameAlreadyScoredError extends Error { name = 'GameAlreadyScoredError'; },
 }));
 
  
@@ -46,7 +47,7 @@ describe('WinnerVoteHandler — Extended', () => {
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
-    handler = new WinnerVoteHandler(mockDiscordClient, db);
+    handler = new WinnerVoteHandler(mockDiscordClient);
   });
 
   afterEach(() => {
@@ -66,8 +67,9 @@ describe('WinnerVoteHandler — Extended', () => {
     it('sends to red team commander and records team_side=red', async () => {
       const match = await createMatch(game.id, mode.id);
       const p = await createMatchParticipant(match.id, 'disc-red-cmd', 'RedCommander');
+      await db.run(`INSERT INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-red-x', ?, 'Red', 1, 0)`, [match.id]);
       await db.run(
-        `UPDATE match_participants SET receives_map_codes=1, team_assignment='red' WHERE id=?`,
+        `UPDATE match_participants SET receives_map_codes=1, team_id='t-red-x' WHERE id=?`,
         [p.id]
       );
 
@@ -89,8 +91,9 @@ describe('WinnerVoteHandler — Extended', () => {
       const match = await createMatch(game.id, mode.id);
       const p1 = await createMatchParticipant(match.id, 'disc-fail-cmd', 'FailCmd');
       const p2 = await createMatchParticipant(match.id, 'disc-ok-cmd', 'OkCmd');
+      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
       await db.run(
-        `UPDATE match_participants SET receives_map_codes=1, team_assignment='blue' WHERE id IN (?,?)`,
+        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id IN (?,?)`,
         [p1.id, p2.id]
       );
 
@@ -108,8 +111,9 @@ describe('WinnerVoteHandler — Extended', () => {
     it('returns false when all DMs fail', async () => {
       const match = await createMatch(game.id, mode.id);
       const p = await createMatchParticipant(match.id, 'disc-allfail', 'AllFail');
+      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
       await db.run(
-        `UPDATE match_participants SET receives_map_codes=1, team_assignment='blue' WHERE id=?`,
+        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id=?`,
         [p.id]
       );
 

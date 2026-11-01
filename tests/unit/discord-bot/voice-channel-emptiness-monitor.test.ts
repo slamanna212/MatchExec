@@ -62,7 +62,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
       return channelMap.get(channelId) ?? null;
     });
 
-    monitor = new VoiceChannelEmptinessMonitor(mockDiscordClient as any, db as any);
+    monitor = new VoiceChannelEmptinessMonitor(mockDiscordClient as any);
   });
 
   afterEach(() => {

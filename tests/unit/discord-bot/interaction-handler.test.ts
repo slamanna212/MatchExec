@@ -322,7 +322,7 @@ describe('InteractionHandler', () => {
 
   describe('handleSlashCommand — error handling', () => {
     it('uses followUp when interaction is already replied and an error occurs', async () => {
-      const interaction = createMockInteraction({ commandName: 'matches', replied: true });
+      const interaction = createMockInteraction({ commandName: 'tournaments', replied: true });
       vi.spyOn(db, 'all').mockRejectedValueOnce(new Error('DB failure'));
 
       await handler.handleSlashCommand(interaction);
@@ -332,7 +332,7 @@ describe('InteractionHandler', () => {
     });
 
     it('replies directly when interaction is not yet replied and an error occurs', async () => {
-      const interaction = createMockInteraction({ commandName: 'matches', replied: false, deferred: false });
+      const interaction = createMockInteraction({ commandName: 'tournaments', replied: false, deferred: false });
       vi.spyOn(db, 'all').mockRejectedValueOnce(new Error('DB failure'));
 
       await handler.handleSlashCommand(interaction);

@@ -3,15 +3,13 @@
  * Manually trigger avatar update for all participants
  */
 
-import { getDbInstance } from '../src/lib/database-init';
 import { AvatarUpdateJob } from '../processes/scheduler/jobs/update-avatars';
 
 async function main() {
   console.log('🖼️  Manually updating participant avatars...');
 
   try {
-    const db = await getDbInstance();
-    const avatarJob = new AvatarUpdateJob(db);
+    const avatarJob = new AvatarUpdateJob();
 
     await avatarJob.updateAvatars();
 

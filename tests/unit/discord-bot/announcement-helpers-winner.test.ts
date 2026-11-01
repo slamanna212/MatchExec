@@ -11,6 +11,17 @@ vi.mock('../../../src/lib/games', () => ({
   getModeScoringType: vi.fn().mockResolvedValue('Position'),
 }));
 
+vi.mock('../../../src/lib/matches', () => ({
+  getMatch: vi.fn().mockResolvedValue({ id: 'm1', game_id: 'mk', mode_id: 'mk-mode', team1_name: null, team2_name: null }),
+  getMatchTeams: vi.fn().mockResolvedValue([
+    { team_name: 'alice', team_order: 0, voice_channel_id: null, is_reserve: false },
+    { team_name: 'bob', team_order: 1, voice_channel_id: null, is_reserve: false },
+  ]),
+  getTeamAssignments: vi.fn(),
+  listTeamsWithParticipants: vi.fn(),
+}));
+vi.mock('../../../src/lib/discord-messages', () => ({ getAnnouncementMessage: vi.fn() }));
+
 import {
   resolveWinnerDisplayName,
   isTwoSidedResult,
@@ -64,16 +75,7 @@ describe('chunkLinesForFields', () => {
 
 describe('fetchMatchStartData for FFA/Position', () => {
   it('does not expose the first two participants as team1/team2 names', async () => {
-    const db = {
-      get: vi.fn().mockResolvedValue({
-        game_id: 'mk', mode_id: 'mk-mode', team1_name: null, team2_name: null,
-      }),
-      all: vi.fn().mockResolvedValue([
-        { team_name: 'alice', team_order: 0, voice_channel_id: null },
-        { team_name: 'bob', team_order: 1, voice_channel_id: null },
-      ]),
-    };
-    const data = await fetchMatchStartData(db as any, 'm1', 'mk');
+    const data = await fetchMatchStartData('m1', 'mk');
     expect(data.scoringType).toBe('Position');
     expect(data.team1Name).toBeUndefined();
     expect(data.team2Name).toBeUndefined();

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockRequest, parseResponse } from '../../utils/api-helpers';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch, createTournament } from '../../utils/fixtures';
-import { GET as listMatches } from '@/app/api/matches/route';
+import { forwardToApp as listMatches } from '../../utils/legacy-match-routes';
 import { GET as listTournaments } from '@/app/api/tournaments/route';
 
 let db: ReturnType<typeof getTestDb>;

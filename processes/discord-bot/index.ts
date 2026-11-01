@@ -241,13 +241,13 @@ class MatchExecBot {
       );
       this.scorecardHandler = new ScorecardHandler(this.client, this.db, this.settings);
       this.queueProcessor.setScorecardHandler(this.scorecardHandler);
-      this.winnerVoteHandler = new WinnerVoteHandler(this.client, this.db);
+      this.winnerVoteHandler = new WinnerVoteHandler(this.client);
       this.queueProcessor.setWinnerVoteHandler(this.winnerVoteHandler);
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
       this.statsReportHandler = new StatsReportHandler(this.db, this.client);
       this.queueProcessor.setStatsReportHandler(this.statsReportHandler);
       this.healthMonitor = new HealthMonitor(this.db, this.announcementHandler);
-      this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client, this.db);
+      this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client);
 
 
       // Start periodic tasks

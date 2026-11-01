@@ -14,6 +14,8 @@ import { ChannelType } from 'discord.js';
 import type { Database } from '../../../lib/database/connection';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
+import { db as pgDb } from '../../../lib/db';
+import { listTeamVoiceChannelIds, nextFirstTeam, recordFirstTeam } from '../../../src/lib/matches';
 
 export class VoiceHandler {
   private voiceConnections = new Map<string, unknown>(); // channelId -> connection
@@ -494,15 +496,8 @@ export class VoiceHandler {
    * Distinct voice channel IDs of a match's non-reserve teams, in team_order.
    */
   private async getMatchTeamVoiceChannels(matchId: string): Promise<string[]> {
-    if (!this.db) return [];
     try {
-      const rows = await this.db.all<{ voice_channel_id: string }>(
-        `SELECT voice_channel_id FROM match_teams
-         WHERE match_id = ? AND is_reserve = 0 AND voice_channel_id IS NOT NULL AND voice_channel_id != ''
-         ORDER BY team_order ASC`,
-        [matchId]
-      );
-      return [...new Set((rows ?? []).map(r => r.voice_channel_id))];
+      return await listTeamVoiceChannelIds(pgDb, matchId);
     } catch (error) {
       logger.error('❌ Error reading match team voice channels:', error);
       return [];
@@ -514,14 +509,7 @@ export class VoiceHandler {
    */
   async getNextFirstTeam(matchId: string): Promise<'blue' | 'red'> {
     try {
-      if (!this.db) return 'blue'; // Default to blue if no database
-
-      const result = await this.db.get<{ last_first_team: string }>(`
-        SELECT last_first_team FROM match_voice_alternation WHERE match_id = ?
-      `, [matchId]);
-
-      // If no record exists or last was red, return blue. If last was blue, return red.
-      return !result || result.last_first_team === 'red' ? 'blue' : 'red';
+      return await nextFirstTeam(pgDb, matchId);
     } catch (error) {
       logger.error('❌ Error getting next first team:', error);
       return 'blue'; // Default to blue on error
@@ -533,13 +521,7 @@ export class VoiceHandler {
    */
   async updateFirstTeam(matchId: string, firstTeam: 'blue' | 'red'): Promise<void> {
     try {
-      if (!this.db) return;
-
-      await this.db.run(`
-        INSERT OR REPLACE INTO match_voice_alternation (match_id, current_team, last_first_team, last_updated_at, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [matchId, firstTeam, firstTeam]);
-
+      await recordFirstTeam(pgDb, matchId, firstTeam);
       logger.debug(`📝 Updated first team for match ${matchId}: ${firstTeam}`);
     } catch (error) {
       logger.error('❌ Error updating first team:', error);

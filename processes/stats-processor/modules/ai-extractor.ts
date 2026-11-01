@@ -10,6 +10,7 @@ import { logFeedEvent } from '../../../src/lib/feed-helpers';
 import { db as pgDb, type Executor } from '../../../lib/db';
 import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { getGameAiNotes, getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
+import { getMatch, getMatchTeams, listParticipants } from '../../../src/lib/matches';
 
 const MAX_PLAYERS = 64;
 const MAX_NAME_LENGTH = 100;
@@ -49,10 +50,7 @@ export class AIExtractor {
       if (!submission) throw new Error(`Submission ${submissionId} not found`);
 
       // Load match to get game_id and scoring_type
-      const match = await this.db.get(
-        'SELECT id, game_id, mode_id FROM matches WHERE id = ?',
-        [submission.match_id]
-      );
+      const match = await getMatch(pgDb, submission.match_id);
       if (!match) throw new Error(`Match ${submission.match_id} not found`);
       const scoringType: string = (match.mode_id ? await getModeScoringType(pgDb, match.game_id, match.mode_id) : undefined) ?? 'Normal';
 
@@ -273,10 +271,7 @@ export class AIExtractor {
   }
 
   private async resolveNormalTeamIds(matchId: string): Promise<Record<string, string>> {
-    const teams = await this.db.all<{ id: string; team_order: number }>(
-      `SELECT id, team_order FROM match_teams WHERE match_id = ? AND is_reserve = 0 ORDER BY team_order ASC LIMIT 2`,
-      [matchId]
-    );
+    const teams = (await getMatchTeams(pgDb, matchId)).filter(t => !t.is_reserve).slice(0, 2);
     const bySide: Record<string, string> = {};
     for (const t of teams) {
       if (t.team_order === 0) bySide.blue = t.id;
@@ -445,10 +440,7 @@ ${positionSchema}
     playerPositions: Record<string, number>
   ): Promise<void> {
     try {
-      const participants = await this.db.all<{ id: string; username: string }>(
-        'SELECT id, username FROM match_participants WHERE match_id = ?',
-        [matchId]
-      );
+      const participants = await listParticipants(pgDb, matchId);
       if (!participants || participants.length === 0) return;
 
       const suggestion = this.buildSuggestedPositions(playerPositions, participants);
@@ -473,10 +465,7 @@ ${positionSchema}
     matchId: string,
     players: AIExtractionResult['players']
   ): Promise<void> {
-    const participants = await this.db.all(
-      'SELECT id, username FROM match_participants WHERE match_id = ?',
-      [matchId]
-    );
+    const participants = await listParticipants(pgDb, matchId);
     if (!participants || participants.length === 0) return;
 
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');

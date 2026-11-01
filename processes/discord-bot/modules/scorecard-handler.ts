@@ -10,6 +10,9 @@ import type { WinnerVoteHandler } from './winner-vote-handler';
 import { db as pgDb } from '../../../lib/db';
 import { countStatDefinitions } from '../../../src/lib/games';
 import { enqueueStatsProcessing } from '../../../src/lib/discord-queues';
+import { getMatch, listDmRecipients, listVotesForGame } from '../../../src/lib/matches';
+import { matchGames } from '../../../lib/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 
 interface ScorecardDmRecord {
   id: string;
@@ -115,10 +118,7 @@ export class ScorecardHandler {
 
   private async checkHeldWinnerVote(matchId: string, matchGameId: string): Promise<void> {
     try {
-      const votes = await this.db.all<{ discord_user_id: string; voted_for: string | null }>(
-        'SELECT discord_user_id, voted_for FROM discord_winner_vote_messages WHERE match_game_id = ?',
-        [matchGameId]
-      );
+      const votes = await listVotesForGame(pgDb, matchGameId);
       if (!votes || votes.length === 0) return;
       const allVoted = votes.every(v => v.voted_for !== null);
       const uniqueVotes = new Set(votes.map(v => v.voted_for));
@@ -139,28 +139,13 @@ export class ScorecardHandler {
       );
       if (!statsSettings?.enabled) return false;
 
-      const match = await this.db.get<{ game_id: string }>(
-        'SELECT game_id FROM matches WHERE id = ?',
-        [matchId]
-      );
+      const match = await getMatch(pgDb, matchId);
       if (!match) return false;
 
       if ((await countStatDefinitions(pgDb, match.game_id)) === 0) return false;
 
-      const commanders = await this.db.all<CommanderRecord>(
-        `SELECT mp.id, mp.discord_user_id,
-                CASE
-                  WHEN mt.id IS NULL THEN mp.team_assignment
-                  WHEN mt.is_reserve = 1 THEN 'reserve'
-                  WHEN mt.team_order = 0 THEN 'blue'
-                  WHEN mt.team_order = 1 THEN 'red'
-                  ELSE NULL
-                END AS team_assignment
-         FROM match_participants mp
-         LEFT JOIN match_teams mt ON mt.id = mp.team_id
-         WHERE mp.match_id = ? AND mp.receives_map_codes = 1 AND mp.discord_user_id IS NOT NULL`,
-        [matchId]
-      );
+      const commanders: CommanderRecord[] = (await listDmRecipients(pgDb, matchId, { commandersOnly: true }))
+        .map(r => ({ id: r.id, discord_user_id: r.discord_user_id, team_assignment: r.team_assignment ?? '' }));
       if (!commanders || commanders.length === 0) return false;
 
       const results = await Promise.all(
@@ -234,13 +219,14 @@ export class ScorecardHandler {
   async handleNonReplyDM(message: Message): Promise<void> {
     try {
       // Check if user has any pending scorecard DM records
-      const pendingRecord = await this.db.get<{ id: string }>(
-        `SELECT sdm.id FROM scorecard_dm_messages sdm
-         JOIN match_games mg ON mg.id = sdm.match_game_id
-         WHERE sdm.discord_user_id = ? AND mg.status = 'ongoing'
-         LIMIT 1`,
+      // TODO(stats): scorecard_dm_messages is still SQLite; the game status lives in Postgres, so this is two reads.
+      const dmRows = await this.db.all<{ match_game_id: string }>(
+        'SELECT match_game_id FROM scorecard_dm_messages WHERE discord_user_id = ?',
         [message.author.id]
       );
+      const gameIds = [...new Set(dmRows.map(r => r.match_game_id))];
+      const pendingRecord = gameIds.length === 0 ? undefined : (await pgDb.select({ id: matchGames.id }).from(matchGames)
+        .where(and(inArray(matchGames.id, gameIds), eq(matchGames.status, 'ongoing'))).limit(1))[0];
 
       if (pendingRecord) {
         await message.reply(

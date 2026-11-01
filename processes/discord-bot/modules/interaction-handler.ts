@@ -22,6 +22,8 @@ import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { db as pgDb } from '../../../lib/db';
 import { countFailed } from '../../../src/lib/discord-queues';
+import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
+import { countParticipants, getMatch, getMatchWithGame, getMatchSignupLimit, isSignedUp, listActiveMatchSignups, listActiveMatchSummaries } from '../../../src/lib/matches';
 import { capTitle } from './utils';
 
 // Import SignupFormLoader
@@ -32,6 +34,7 @@ import { version } from '../../../package.json';
 import { parseModalCustomId } from '../utils/id-parsers';
 import {
   collectFormData,
+  DuplicateSignupError,
   insertParticipant,
   getParticipantCount,
   buildConfirmationMessage
@@ -53,11 +56,8 @@ async function checkExistingParticipant(
   userId: string,
   isTournament: boolean
 ): Promise<boolean> {
-  const query = isTournament
-    ? 'SELECT id FROM tournament_participants WHERE tournament_id = ? AND user_id = ?'
-    : 'SELECT id FROM match_participants WHERE match_id = ? AND user_id = ?';
-
-  const existing = await db.get(query, [eventId, userId]);
+  if (!isTournament) return isSignedUp(pgDb, eventId, userId);
+  const existing = await db.get('SELECT id FROM tournament_participants WHERE tournament_id = ? AND user_id = ?', [eventId, userId]); // TODO(tournaments)
   return !!existing;
 }
 
@@ -69,21 +69,20 @@ async function checkEventCapacity(
   eventId: string,
   isTournament: boolean
 ): Promise<{ isFull: boolean; eventData: EventData | null }> {
-  // Get participant count
-  const countQuery = isTournament
-    ? 'SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?'
-    : 'SELECT COUNT(*) as count FROM match_participants WHERE match_id = ?';
+  if (!isTournament) {
+    const limit = await getMatchSignupLimit(pgDb, eventId);
+    const count = await countParticipants(pgDb, eventId);
+    const eventData = limit ? { game_id: limit.game_id, max_signups: limit.max_signups ?? 0 } : null;
+    return { isFull: count >= (eventData?.max_signups || 16), eventData };
+  }
 
-  const participantCount = await db.get<{ count: number }>(countQuery, [eventId]);
-
-  // Get event data
-  const eventQuery = isTournament
-    ? `SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups, t.allow_player_team_selection
-       FROM tournaments t WHERE t.id = ?`
-    : `SELECT m.game_id, g.max_signups
-       FROM matches m JOIN games g ON m.game_id = g.id WHERE m.id = ?`;
-
-  const eventData = await db.get<EventData>(eventQuery, [eventId]);
+  // TODO(tournaments): tournaments still live in the legacy SQLite database.
+  const participantCount = await db.get<{ count: number }>('SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?', [eventId]);
+  const eventData = await db.get<EventData>(
+    `SELECT t.game_id, COALESCE(t.max_participants, 999999) as max_signups, t.allow_player_team_selection
+     FROM tournaments t WHERE t.id = ?`,
+    [eventId]
+  );
 
   const isFull = (participantCount?.count ?? 0) >= (eventData?.max_signups || 16);
 
@@ -317,17 +316,7 @@ export class InteractionHandler {
   }
 
   private async handleMatchesCommand(interaction: ChatInputCommandInteraction) {
-    const matches = await this.db.all<{
-      id: string; name: string; status: string; start_date: string | null; game_name: string;
-    }>(`
-      SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
-      FROM matches m
-      JOIN games g ON m.game_id = g.id
-      WHERE m.status IN ('gather', 'assign', 'battle')
-        AND m.tournament_id IS NULL
-      ORDER BY m.start_date ASC
-      LIMIT 5
-    `);
+    const matches = (await listActiveMatchSummaries(pgDb, 5)).map(m => ({ ...m, start_date: m.start_date.toISOString() as string | null }));
 
     if (!matches.length) {
       await interaction.reply({ content: 'No active matches found.', flags: MessageFlags.Ephemeral });
@@ -341,10 +330,7 @@ export class InteractionHandler {
       .setFooter({ text: 'Showing up to 5 active matches' });
 
     for (const match of matches) {
-      const msg = await this.db.get<{ message_id: string; channel_id: string }>(
-        `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
-        [match.id]
-      );
+      const msg = await getAnnouncementMessage(pgDb, match.id);
       embed.addFields(this.buildEventField(match, msg, this.settings?.guild_id));
     }
 
@@ -395,10 +381,7 @@ export class InteractionHandler {
       .setFooter({ text: 'Showing up to 5 active tournaments' });
 
     for (const tournament of tournaments) {
-      const msg = await this.db.get<{ message_id: string; channel_id: string }>(
-        `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
-        [tournament.id]
-      );
+      const msg = await getAnnouncementMessage(pgDb, tournament.id);
       const field = this.buildEventField(tournament, msg, this.settings?.guild_id);
       const formatLabel = tournament.format === 'double-elimination' ? 'DE' : 'SE';
       // Insert format badge after game name
@@ -413,17 +396,7 @@ export class InteractionHandler {
   private async handleMineCommand(interaction: ChatInputCommandInteraction) {
     const discordUserId = interaction.user.id;
 
-    const matches = await this.db.all<{
-      id: string; name: string; status: string; start_date: string | null; game_name: string;
-    }>(`
-      SELECT m.id, m.name, m.status, m.start_date, g.name as game_name
-      FROM match_participants mp
-      JOIN matches m ON mp.match_id = m.id
-      JOIN games g ON m.game_id = g.id
-      WHERE mp.discord_user_id = ?
-        AND m.status IN ('gather', 'assign', 'battle')
-      ORDER BY m.start_date ASC
-    `, [discordUserId]);
+    const matches = (await listActiveMatchSignups(pgDb, discordUserId)).map(m => ({ ...m, start_date: m.start_date.toISOString() as string | null }));
 
     const tournaments = await this.db.all<{
       id: string; name: string; status: string; start_date: string | null; game_name: string;
@@ -451,10 +424,7 @@ export class InteractionHandler {
     if (matches.length) {
       if (showLabels) embed.addFields({ name: 'Matches', value: '​', inline: false });
       for (const match of matches) {
-        const msg = await this.db.get<{ message_id: string; channel_id: string }>(
-          `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
-          [match.id]
-        );
+        const msg = await getAnnouncementMessage(pgDb, match.id);
         embed.addFields(this.buildEventField(match, msg, this.settings?.guild_id));
       }
     }
@@ -462,10 +432,7 @@ export class InteractionHandler {
     if (tournaments.length) {
       if (showLabels) embed.addFields({ name: 'Tournaments', value: '​', inline: false });
       for (const tournament of tournaments) {
-        const msg = await this.db.get<{ message_id: string; channel_id: string }>(
-          `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
-          [tournament.id]
-        );
+        const msg = await getAnnouncementMessage(pgDb, tournament.id);
         embed.addFields(this.buildEventField(tournament, msg, this.settings?.guild_id));
       }
     }
@@ -475,7 +442,7 @@ export class InteractionHandler {
 
   private async getPreSignupDenial(eventId: string, userId: string, isTournament: boolean): Promise<string | null> {
     if (!isTournament) {
-      const matchData = await this.db.get<{ tournament_id: string | null }>('SELECT tournament_id FROM matches WHERE id = ?', [eventId]);
+      const matchData = await getMatch(pgDb, eventId);
       if (matchData?.tournament_id) return '❌ This is a tournament match - participants are assigned from the tournament bracket. You cannot sign up directly.';
     }
     if (await checkExistingParticipant(this.db, eventId, userId, isTournament)) return '✅ You are already signed up for this event!';
@@ -545,10 +512,9 @@ export class InteractionHandler {
       const tableName = parsedId.isTournament ? 'tournaments' : 'matches';
       logger.debug(`Querying ${tableName} for event ID:`, parsedId.eventId);
 
-      const eventData = await this.db.get<{ game_id: string }>(
-        `SELECT game_id FROM ${tableName} WHERE id = ?`,
-        [parsedId.eventId]
-      );
+      const eventData = parsedId.isTournament
+        ? await this.db.get<{ game_id: string }>(`SELECT game_id FROM ${tableName} WHERE id = ?`, [parsedId.eventId]) // TODO(tournaments)
+        : await getMatch(pgDb, parsedId.eventId);
 
       if (!eventData) {
         throw new Error('Event not found');
@@ -593,26 +559,19 @@ export class InteractionHandler {
 
       // Send welcome DM to the player if enabled
       if (this.settings?.signup_dm_enabled) {
-        const eventRow = await this.db.get<{
-          name: string;
-          game_name: string;
-          game_color?: string;
-          start_date?: string;
-        }>(
-          parsedId.isTournament
-            ? `SELECT t.name, g.name as game_name, g.color as game_color, t.start_date
-               FROM tournaments t LEFT JOIN games g ON t.game_id = g.id WHERE t.id = ?`
-            : `SELECT m.name, g.name as game_name, g.color as game_color, m.start_date
-               FROM matches m LEFT JOIN games g ON m.game_id = g.id WHERE m.id = ?`,
-          [parsedId.eventId]
-        );
+        const eventRow = parsedId.isTournament
+          ? await this.db.get<{ name: string; game_name: string; game_color?: string; start_date?: string }>(
+              `SELECT t.name, g.name as game_name, g.color as game_color, t.start_date
+               FROM tournaments t LEFT JOIN games g ON t.game_id = g.id WHERE t.id = ?`,
+              [parsedId.eventId]
+            ) // TODO(tournaments)
+          : await getMatchWithGame(pgDb, parsedId.eventId).then(m => m
+              ? { name: m.name, game_name: m.game_name ?? '', game_color: m.game_color ?? undefined, start_date: m.start_date.toISOString() }
+              : undefined);
         if (eventRow) {
           let announcementUrl: string | null = null;
           if (interaction.guildId) {
-            const msgRow = await this.db.get<{ message_id: string; channel_id: string }>(
-              `SELECT message_id, channel_id FROM discord_match_messages WHERE match_id = ? AND message_type = 'announcement' LIMIT 1`,
-              [parsedId.eventId]
-            );
+            const msgRow = await getAnnouncementMessage(pgDb, parsedId.eventId);
             if (msgRow) {
               announcementUrl = `https://discord.com/channels/${interaction.guildId}/${msgRow.channel_id}/${msgRow.message_id}`;
             }
@@ -633,7 +592,7 @@ export class InteractionHandler {
     } catch (error) {
       logger.error('❌ Error processing signup:', error);
 
-      if (error instanceof Error && error.message?.includes('UNIQUE constraint failed')) {
+      if (error instanceof DuplicateSignupError || (error instanceof Error && error.message?.includes('UNIQUE constraint failed'))) {
         await interaction.reply({
           content: '❌ You are already signed up for this event!',
           flags: MessageFlags.Ephemeral

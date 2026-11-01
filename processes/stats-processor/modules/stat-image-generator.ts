@@ -7,6 +7,7 @@ import type { GameStatDefinition } from '../../../shared/types';
 import { db as pgDb, type Executor } from '../../../lib/db';
 import { completeJob, failJob } from '../../../src/lib/discord-queues';
 import { getModeScoringType, listStatDefinitions } from '../../../src/lib/games';
+import { getMatch, getMatchTeams, listParticipants } from '../../../src/lib/matches';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -37,14 +38,18 @@ export class StatImageGenerator {
       await this.aggregateStats(matchId);
 
       // Load aggregated stats
-      const matchStats = await this.db.all(
-        `SELECT mps.*, mp.username, mp.team_assignment, mt.team_color, mt.team_name
-         FROM match_player_stats mps
-         JOIN match_participants mp ON mp.id = mps.participant_id
-         LEFT JOIN match_teams mt ON mt.id = mp.team_id
-         WHERE mps.match_id = ?`,
-        [matchId]
-      );
+      // TODO(stats): match_player_stats is still SQLite while participants / teams live in Postgres, so this is two reads.
+      const statRows = await this.db.all('SELECT * FROM match_player_stats WHERE match_id = ?', [matchId]);
+      const people = new Map((await listParticipants(pgDb, matchId)).map(p => [p.id, p]));
+      const teamsById = new Map((await getMatchTeams(pgDb, matchId)).map(t => [t.id, t]));
+      const sideOf = (t?: { team_order: number; is_reserve: boolean }) =>
+        !t ? null : t.is_reserve ? 'reserve' : t.team_order === 0 ? 'blue' : t.team_order === 1 ? 'red' : null;
+      const matchStats = statRows.flatMap((mps: Record<string, any>) => {
+        const person = people.get(mps.participant_id);
+        if (!person) return [];
+        const team = person.team_id ? teamsById.get(person.team_id) : undefined;
+        return [{ ...mps, username: person.username, team_assignment: sideOf(team), team_color: team?.team_color ?? null, team_name: team?.team_name ?? null } as Record<string, any>];
+      });
 
       if (!matchStats || matchStats.length === 0) {
         await completeJob(this.queueDb, 'statsImage', queueId);
@@ -54,7 +59,7 @@ export class StatImageGenerator {
       // Load game stat definitions + scoring_type (Normal shows a Team column;
       // FFA/Position have no meaningful team_assignment, so that column and
       // its blue/red coloring would be nonsensical for them).
-      const match = await this.db.get('SELECT game_id, mode_id FROM matches WHERE id = ?', [matchId]);
+      const match = await getMatch(pgDb, matchId);
       const scoringType: string = (match?.mode_id ? await getModeScoringType(pgDb, match.game_id, match.mode_id) : undefined) ?? 'Normal';
       const statDefs = match ? await listStatDefinitions(pgDb, match.game_id) as GameStatDefinition[] : [];
 

@@ -11,7 +11,8 @@ vi.mock('@/lib/database-init', () => ({
 }));
 
 // Mock voice channel service (used by saveGeneratedMatches)
-vi.mock('@/lib/voice-channel-service', () => ({
+vi.mock('@/lib/matches/voice-channels', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/matches/voice-channels')>()),
   VoiceChannelService: {
     setupMatchVoiceChannels: vi.fn().mockResolvedValue(undefined)
   }

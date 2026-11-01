@@ -21,6 +21,10 @@ import { cleanMapId } from '../../../src/lib/utils/map-utils';
 import { db as pgDb, type Executor } from '../../../lib/db';
 import { discordAnnouncementQueue, discordPlayerReminderQueue, discordReminderQueue } from '../../../lib/db/schema';
 import { getGameDisplay, getMapNameById } from '../../../src/lib/games';
+import { areAllMapNotificationsSent, getMatch, getMatchName, mapIdsOf } from '../../../src/lib/matches';
+import {
+  deleteMessages, getAnnouncementMessage, listAllMessages, listAnnouncementMessages, recordMessage, setAnnouncementThread,
+} from '../../../src/lib/discord-messages';
 import {
   alreadyPosted, claimJobs, completeJob, expireOldBotRequests, failJob, makeWorkerId, purgeFinished,
   recordExternalResult, releaseJob, resetAbandonedClaims,
@@ -28,8 +32,8 @@ import {
 } from '../../../src/lib/discord-queues';
 
 // Queue rows come from the Discord queues module (src/lib/queues): claimed atomically, retried with backoff,
-// abandoned claims reset. Match / tournament data still lives in the legacy SQLite database until those
-// domains are ported, so each handler reads it separately from the claim (TODO(matches): collapse into joins).
+// abandoned claims reset. Match data is read through the matches domain (Postgres); tournament data still lives in
+// the legacy SQLite database until that domain is ported (TODO(tournaments)).
 
 interface MatchEditData {
   id: string;
@@ -37,7 +41,7 @@ interface MatchEditData {
   description: string;
   game_id: string;
   rules: string;
-  maps: string | null;
+  maps: string[] | null;
   livestream_link: string | null;
   start_date: string | null;
   event_image_url: string | null;
@@ -187,10 +191,7 @@ async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): 
 async function handleCommanderDM(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const { matchId, discordUserId, team } = (request.data ?? {}) as { matchId: string; discordUserId: string; team: string };
 
-  const match = await processor['db']!.get<{ name: string; game_id: string }>(
-    'SELECT name, game_id FROM matches WHERE id = ?',
-    [matchId]
-  );
+  const match = await getMatch(processor['queueDb'], matchId);
   const game = match ? await getGameDisplay(pgDb, match.game_id) : undefined;
 
   if (match) {
@@ -356,7 +357,7 @@ export class QueueProcessor {
   private async fetchAnnouncementContext(queued: QueueRow<'announcement'>) {
     type Context = {
       name: string; description: string; game_id: string; max_participants: number; guild_id?: string;
-      maps?: string; livestream_link?: string; event_image_url?: string; start_date?: string;
+      maps?: string[] | string; livestream_link?: string; event_image_url?: string; start_date?: string;
       rules?: 'competitive' | 'casual';
     };
     if (queued.announcement_type === 'tournament') {
@@ -369,12 +370,13 @@ export class QueueProcessor {
       const settings = await getAnyDiscordSettings(pgDb);
       return { ...t, guild_id: settings?.guild_id, rules: 'casual' } as Context;
     }
-    return await this.db.get<Context>(
-      `SELECT name, description, game_id, max_participants, guild_id, maps, livestream_link, event_image_url, start_date,
-              COALESCE(rules, 'casual') AS rules
-       FROM matches WHERE id = ?`,
-      [queued.match_id]
-    );
+    const m = await getMatch(this.queueDb, queued.match_id);
+    if (!m) return undefined;
+    return {
+      name: m.name, description: m.description ?? '', game_id: m.game_id, max_participants: m.max_participants ?? 0, guild_id: m.guild_id ?? undefined,
+      maps: mapIdsOf(m.maps), livestream_link: m.livestream_link ?? undefined, event_image_url: m.event_image_url ?? undefined,
+      start_date: m.start_date.toISOString(), rules: (m.rules || 'casual') as 'competitive' | 'casual',
+    };
   }
 
   private async processSingleAnnouncement(queued: QueueRow<'announcement'>) {
@@ -440,8 +442,9 @@ export class QueueProcessor {
     return eventData;
   }
 
-  private parseAnnouncementMaps(mapsJson: string | undefined): string[] {
+  private parseAnnouncementMaps(mapsJson: string[] | string | undefined): string[] {
     if (!mapsJson) return [];
+    if (Array.isArray(mapsJson)) return mapsJson;
 
     try {
       return JSON.parse(mapsJson);
@@ -481,22 +484,13 @@ export class QueueProcessor {
 
   private async storeDiscordMessageTracking(announcement: any, result: any, eventData: Record<string, unknown>) {
     try {
-      const messageRecordId = `discord_msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
       const threadId = await this.createMapsThreadIfNeeded(result.mainMessage, eventData);
       const discordEventId = await this.createDiscordEventIfNeeded(eventData, result.mainMessage);
 
-      await this.db!.run(`
-        INSERT INTO discord_match_messages (id, match_id, message_id, channel_id, thread_id, discord_event_id, message_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [
-        messageRecordId,
-        eventData.id as string,
-        result.mainMessage.id,
-        result.mainMessage.channelId,
-        threadId,
-        discordEventId,
-        'announcement'
-      ]);
+      await recordMessage(this.queueDb, {
+        eventId: eventData.id as string, messageId: result.mainMessage.id, channelId: result.mainMessage.channelId,
+        threadId, discordEventId, type: 'announcement',
+      });
     } catch (error) {
       logger.error('❌ Error storing Discord message tracking:', error);
     }
@@ -603,17 +597,7 @@ export class QueueProcessor {
     const matchId = deletion.match_id;
 
     // Get all Discord messages for this match
-    const messages = await this.db.all<{
-      message_id: string;
-      channel_id: string;
-      thread_id: string | null;
-      discord_event_id: string | null;
-      message_type: string;
-    }>(`
-      SELECT message_id, channel_id, thread_id, discord_event_id, message_type
-      FROM discord_match_messages
-      WHERE match_id = ?
-    `, [matchId]);
+    const messages = await listAllMessages(this.queueDb, matchId);
 
     // Delete each message
     for (const record of messages) {
@@ -621,7 +605,7 @@ export class QueueProcessor {
     }
 
     // Clean up message tracking records
-    await this.db.run('DELETE FROM discord_match_messages WHERE match_id = ?', [matchId]);
+    await deleteMessages(this.queueDb, matchId);
 
     // Mark deletion as completed
     await this.finish('deletion', deletion.id);
@@ -705,12 +689,12 @@ export class QueueProcessor {
       return;
     }
 
-    const matchData = await this.db!.get<{
-      id: string; name: string; description: string; game_id: string;
-      start_date: string; status: string; event_image_url?: string;
-    }>('SELECT id, name, description, game_id, start_date, status, event_image_url FROM matches WHERE id = ?', [reminder.match_id]);
-
-    if (!matchData) throw new Error('Match not found');
+    const matchRow = await getMatch(this.queueDb, reminder.match_id);
+    if (!matchRow) throw new Error('Match not found');
+    const matchData = {
+      id: matchRow.id, name: matchRow.name, description: matchRow.description ?? '', game_id: matchRow.game_id,
+      start_date: matchRow.start_date.toISOString(), status: matchRow.status, event_image_url: matchRow.event_image_url ?? undefined,
+    };
 
     if (matchData.status === 'complete' || matchData.status === 'cancelled') {
       logger.debug(`⏭️ Skipping stale reminder for match ${matchData.name} (status: ${matchData.status})`);
@@ -765,11 +749,9 @@ export class QueueProcessor {
       return;
     }
 
-    const matchSettings = await this.db!.get<{
-      player_notifications: number; name: string; status: string; start_date: string;
-    }>('SELECT player_notifications, name, status, start_date FROM matches WHERE id = ?', [reminder.match_id]);
-
-    if (!matchSettings) throw new Error('Match not found');
+    const matchRow = await getMatch(this.queueDb, reminder.match_id);
+    if (!matchRow) throw new Error('Match not found');
+    const matchSettings = { player_notifications: matchRow.player_notifications, name: matchRow.name, status: matchRow.status, start_date: matchRow.start_date.toISOString() };
 
     const markCompleted = () => this.finish('playerReminder', reminder.id, { set: { sent_at: new Date() } });
 
@@ -874,15 +856,11 @@ export class QueueProcessor {
           }
 
           // Get match name for the notification
-          const matchData = await this.db.get<{
-            name: string;
-          }>(`
-            SELECT name FROM matches WHERE id = ?
-          `, [notification.match_id]);
-
-          if (!matchData) {
+          const matchName = await getMatchName(this.queueDb, notification.match_id);
+          if (matchName === undefined) {
             throw new Error('Match not found');
           }
+          const matchData = { name: matchName };
 
           // Build score notification data (winning_players is a jsonb array)
           const scoreData = {
@@ -1033,16 +1011,11 @@ export class QueueProcessor {
         // are held until stats are assigned. Bypass after 30 min to prevent permanent blockage.
         if (notification.winner !== 'tournament') {
           try {
-            const mapStatus = await this.db.get<{ total: number; notified: number }>(
-              `SELECT COUNT(*) as total,
-                      SUM(CASE WHEN discord_notified = 1 THEN 1 ELSE 0 END) as notified
-               FROM match_games WHERE match_id = ?`,
-              [notification.match_id]
-            );
-            const allNotified = !mapStatus || mapStatus.total === 0 || (mapStatus.notified ?? 0) >= mapStatus.total;
+            const mapStatus = await areAllMapNotificationsSent(this.queueDb, notification.match_id);
+            const allNotified = mapStatus.total === 0 || mapStatus.notified >= mapStatus.total;
             const ageMinutes = (Date.now() - notification.created_at.getTime()) / 60000;
             if (!allNotified && ageMinutes < 30) {
-              logger.debug(`⏳ Waiting for map notifications before match winner: ${notification.match_name} (${mapStatus?.notified ?? 0}/${mapStatus?.total ?? 0} maps notified)`);
+              logger.debug(`⏳ Waiting for map notifications before match winner: ${notification.match_name} (${mapStatus.notified}/${mapStatus.total} maps notified)`);
               // Not ready yet: hand the claim back without spending an attempt
               await this.release('matchWinner', notification.id, 10_000);
               continue;
@@ -1156,16 +1129,9 @@ export class QueueProcessor {
 
   private async updateEmbedMapsField(
     embed: EmbedBuilder,
-    mapsJson: string | null
+    storedMaps: string[] | null
   ): Promise<{ maps: string[]; changed: boolean }> {
-    let maps: string[] = [];
-    if (mapsJson) {
-      try {
-        maps = JSON.parse(mapsJson);
-      } catch {
-        // ignore parse error
-      }
-    }
+    const maps: string[] = storedMaps ?? [];
 
     const fields = embed.data.fields || [];
     const mapsIdx = fields.findIndex(f => f.name === '🗺️ Maps');
@@ -1277,10 +1243,7 @@ export class QueueProcessor {
           newThreadId = newThread?.id ?? null;
         }
 
-        await this.db!.run(`
-          UPDATE discord_match_messages SET thread_id = ?
-          WHERE match_id = ? AND message_type = 'announcement'
-        `, [newThreadId, matchId]);
+        await setAnnouncementThread(this.queueDb, matchId, newThreadId);
       }
     } catch (embedError) {
       logger.error(`❌ Error updating embed for match ${matchId}:`, embedError);
@@ -1290,21 +1253,17 @@ export class QueueProcessor {
   private async processSingleMatchEdit(edit: QueueRow<'matchEdit'>): Promise<void> {
     const matchId = edit.match_id;
 
-    const matchData = await this.db!.get<MatchEditData>(`
-      SELECT id, name, description, game_id, rules, maps, livestream_link, start_date, event_image_url
-      FROM matches WHERE id = ?
-    `, [matchId]);
-
-    if (!matchData) {
+    const match = await getMatch(this.queueDb, matchId);
+    if (!match) {
       throw new Error(`Match ${matchId} not found`);
     }
+    const matchData: MatchEditData = {
+      id: match.id, name: match.name, description: match.description ?? '', game_id: match.game_id, rules: match.rules ?? '',
+      maps: mapIdsOf(match.maps), livestream_link: match.livestream_link, start_date: match.start_date.toISOString(),
+      event_image_url: match.event_image_url,
+    };
 
-    const messageRecord = await this.db!.get<MatchMessageRecord>(`
-      SELECT message_id, channel_id, thread_id, discord_event_id
-      FROM discord_match_messages
-      WHERE match_id = ? AND message_type = 'announcement'
-      LIMIT 1
-    `, [matchId]);
+    const messageRecord: MatchMessageRecord | undefined = await getAnnouncementMessage(this.queueDb, matchId);
 
     if (messageRecord) {
       await this.updateMatchAnnouncementEmbed(matchId, matchData, messageRecord);
@@ -1518,23 +1477,12 @@ export class QueueProcessor {
   }
 
   private async fetchMatchImageData(matchId: string): Promise<{ event_image_url?: string } | undefined> {
-    return await this.db!.get<{ event_image_url?: string }>(`
-      SELECT event_image_url
-      FROM matches
-      WHERE id = ?
-    `, [matchId]);
+    const match = await getMatch(this.queueDb, matchId);
+    return match ? { event_image_url: match.event_image_url ?? undefined } : undefined;
   }
 
   private async fetchMatchAnnouncementMessages(matchId: string): Promise<Array<{ message_id: string; channel_id: string; message_type: string }>> {
-    return await this.db!.all<{
-      message_id: string;
-      channel_id: string;
-      message_type: string;
-    }>(`
-      SELECT message_id, channel_id, message_type
-      FROM discord_match_messages
-      WHERE match_id = ? AND message_type = 'announcement'
-    `, [matchId]);
+    return await listAnnouncementMessages(this.queueDb, matchId);
   }
 
   private async updateMessagesForClosure(

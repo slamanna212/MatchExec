@@ -3,10 +3,9 @@ import { getDbInstance } from './database-init';
 import type { Database } from '../../lib/database/connection';
 import { db as pgDb } from '../../lib/db';
 import { getModeById, listMapsForModes, listModesByTeamSize, listNonWorkshopModes } from './games';
-import { VoiceChannelService } from './voice-channel-service';
+import { VoiceChannelService, createMatchTeams, createNamedMatchTeams, initializeMatchGames } from './matches';
 import { logger } from './logger';
 import { withTransaction } from '@/lib/transaction';
-import { createMatchTeams, createNamedMatchTeams } from './match-setup';
 import type { PlannedMatch } from './double-elimination';
 
 interface GameMode {
@@ -683,7 +682,7 @@ export async function addAllTeamsToMatch(tournamentId: string, matchId: string):
   }
 
   // FFA/Position: one match_teams row per participant (idempotent)
-  await createMatchTeams(matchId);
+  await createMatchTeams(pgDb, matchId); // TODO(tournaments): pass the bracket's tx once tournaments are on Postgres
 }
 
 /**
@@ -822,7 +821,7 @@ async function setupTournamentMatchTeams(
   const t1 = await db.get<{ team_name: string }>('SELECT team_name FROM tournament_teams WHERE id = ?', [team1Id]);
   const t2 = await db.get<{ team_name: string }>('SELECT team_name FROM tournament_teams WHERE id = ?', [team2Id]);
 
-  const [blueId, redId] = await createNamedMatchTeams(matchId, [
+  const [blueId, redId] = await createNamedMatchTeams(pgDb, matchId, [
     { name: t1?.team_name ?? 'Team 1', color: TOURNAMENT_TEAM_COLORS.blue },
     { name: t2?.team_name ?? 'Team 2', color: TOURNAMENT_TEAM_COLORS.red },
   ]);
@@ -877,10 +876,9 @@ export async function saveGeneratedMatches(
     }
 
     // Initialize match games for each match
-    const { initializeMatchGames } = await import('./scoring-functions');
     for (const match of matches) {
       if (match.maps && match.maps.length > 0) {
-        await initializeMatchGames(match.id);
+        await initializeMatchGames(pgDb, match.id);
       }
     }
 

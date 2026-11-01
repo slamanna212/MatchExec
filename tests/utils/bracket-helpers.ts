@@ -10,8 +10,8 @@ import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentI
 import { POST as createTeam, PUT as assignMembers } from '@/app/api/tournaments/[tournamentId]/teams/route';
 import { POST as generateMatches } from '@/app/api/tournaments/[tournamentId]/generate-matches/route';
 import { POST as progressTournament } from '@/app/api/tournaments/[tournamentId]/progress/route';
-import { POST as transitionMatch } from '@/app/api/matches/[matchId]/transition/route';
-import { POST as saveResult } from '@/app/api/matches/[matchId]/games/[gameId]/result/route';
+import { forwardToApp as transitionMatch } from '../utils/legacy-match-routes';
+import { forwardToApp as saveResult } from '../utils/legacy-match-routes';
 
 export interface BracketCtx {
   db: ReturnType<typeof getTestDb>;

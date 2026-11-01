@@ -24,8 +24,9 @@ vi.mock('discord.js', () => ({
   }),
 }));
 
-vi.mock('@/lib/scoring-functions', () => ({
+vi.mock('@/lib/matches/results', () => ({
   saveMatchResult: vi.fn().mockResolvedValue(undefined),
+  GameAlreadyScoredError: class GameAlreadyScoredError extends Error { name = 'GameAlreadyScoredError'; },
 }));
 
 let WinnerVoteHandler: any;
@@ -47,7 +48,7 @@ describe('WinnerVoteHandler', () => {
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
-    handler = new WinnerVoteHandler(mockDiscordClient as any, db);
+    handler = new WinnerVoteHandler(mockDiscordClient as any);
   });
 
   afterEach(() => {
@@ -73,8 +74,9 @@ describe('WinnerVoteHandler', () => {
     it('returns true and inserts vote records when commanders receive DMs successfully', async () => {
       const match = await createMatch(game.id, mode.id);
       const participant = await createMatchParticipant(match.id, 'discord-blue-1', 'BlueCommander');
+      await db.run(`INSERT OR IGNORE INTO match_teams (id, match_id, team_name, team_order, is_reserve) VALUES ('t-blue-x', ?, 'Blue', 0, 0)`, [match.id]);
       await db.run(
-        `UPDATE match_participants SET receives_map_codes = 1, team_assignment = 'blue' WHERE id = ?`,
+        `UPDATE match_participants SET receives_map_codes = 1, team_id = 't-blue-x' WHERE id = ?`,
         [participant.id]
       );
 
@@ -309,44 +311,44 @@ describe('WinnerVoteHandler', () => {
       db.run(`INSERT INTO match_games (id, match_id, round, status) VALUES (?, ?, 1, ?)`, [id, matchId, status]);
 
     it('calls saveMatchResult mapping blue to team1', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await addGame(match.id, 'game-sw');
 
       await handler.submitWinner(match.id, 'game-sw', 'blue');
 
-      expect(saveMatchResult).toHaveBeenCalledWith('game-sw', expect.objectContaining({
+      expect(saveMatchResult).toHaveBeenCalledWith(expect.anything(), 'game-sw', expect.objectContaining({
         matchId: match.id,
         winner: 'team1',
       }));
     });
 
     it('calls saveMatchResult mapping red to team2', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await addGame(match.id, 'game-sw2');
 
       await handler.submitWinner(match.id, 'game-sw2', 'red');
 
-      expect(saveMatchResult).toHaveBeenCalledWith('game-sw2', expect.objectContaining({
+      expect(saveMatchResult).toHaveBeenCalledWith(expect.anything(), 'game-sw2', expect.objectContaining({
         matchId: match.id,
         winner: 'team2',
       }));
     });
 
     it('never passes rescore, so it cannot overwrite a result', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await addGame(match.id, 'game-sw3');
 
       await handler.submitWinner(match.id, 'game-sw3', 'blue');
 
-      const result = vi.mocked(saveMatchResult).mock.calls[0][1];
+      const result = vi.mocked(saveMatchResult).mock.calls[0][2];
       expect(result.rescore).toBeUndefined();
     });
 
     it('does not override a map that was already scored', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await addGame(match.id, 'game-done', 'completed');
 
@@ -356,7 +358,7 @@ describe('WinnerVoteHandler', () => {
     });
 
     it('does not score a match that is no longer in battle', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const match = await createMatch(game.id, mode.id, { status: 'complete' });
       await addGame(match.id, 'game-late');
 
@@ -366,10 +368,10 @@ describe('WinnerVoteHandler', () => {
     });
 
     it('treats a concurrent first score as a no-op, not an error', async () => {
-      const { saveMatchResult } = await import('@/lib/scoring-functions');
+      const { saveMatchResult } = await import('@/lib/matches/results');
       const { logger } = await import('../../../src/lib/logger/server');
-      const err = Object.assign(new Error('already scored'), { name: 'GameAlreadyScoredError' });
-      vi.mocked(saveMatchResult).mockRejectedValueOnce(err);
+      const { GameAlreadyScoredError } = await import('@/lib/matches/results');
+      vi.mocked(saveMatchResult).mockRejectedValueOnce(new GameAlreadyScoredError('game-race'));
       const match = await createMatch(game.id, mode.id, { status: 'battle' });
       await addGame(match.id, 'game-race');
 

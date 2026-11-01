@@ -7,7 +7,8 @@ import { db } from '../../../lib/db';
 import {
   discordAnnouncementQueue, discordBotRequests, discordSettings, discordMatchWinnerQueue, discordVoiceAnnouncementQueue,
   discordStatsReportQueue, discordHealthAlertQueue, discordScorecardPromptQueue, discordWinnerVoteQueue, discordDeletionQueue,
-  discordReminderQueue, discordMapCodeQueue, discordScoreNotificationQueue, discordStatusUpdateQueue,
+  discordReminderQueue, discordMapCodeQueue, discordScoreNotificationQueue, discordStatusUpdateQueue, discordMatchMessages, matches,
+  matchGames,
 } from '../../../lib/db/schema';
 import {
   enqueueAnnouncement, enqueueBotRequest, enqueueDeletion, enqueueHealthAlert, enqueueMapCode, enqueueMatchReminder,
@@ -29,11 +30,10 @@ setupPgTestFile();
 let QueueProcessor: typeof import('../../../processes/discord-bot/modules/queue-processor').QueueProcessor;
 beforeAll(async () => { ({ QueueProcessor } = await import('../../../processes/discord-bot/modules/queue-processor')); });
 
-/** Stand-in for the legacy SQLite connection (matches / discord_match_messages are not ported yet). */
-function legacyDb(over: { match?: Record<string, unknown> | undefined } = {}) {
-  const match = 'match' in over ? over.match : { id: 'm1', name: 'Match One', description: 'd', game_id: 'g', start_date: new Date(Date.now() + 3600_000).toISOString(), status: 'gather', rules: 'casual', player_notifications: 1, maps: null };
+/** Stand-in for the legacy SQLite connection: only tournaments still live there, so nothing is found. */
+function legacyDb() {
   return {
-    get: vi.fn(async (sql: string) => (/FROM matches/.test(sql) ? match : /FROM match_games/.test(sql) ? { total: 0, notified: 0 } : undefined)),
+    get: vi.fn(async () => undefined),
     all: vi.fn(async () => []),
     run: vi.fn(async () => ({ changes: 1 })),
   };
@@ -64,6 +64,9 @@ beforeEach(async () => {
   client.isReady.mockReturnValue(true);
   await seedQueueFixtures();
   await db.insert(discordSettings).values({ id: 1, guild_id: 'guild-1', bot_token: 't', match_start_delay_seconds: 45 });
+  // matches start in an hour (reminders for matches that already started are stale)
+  const inAnHour = new Date(Date.now() + 3600_000);
+  await db.update(matches).set({ name: 'Match One', status: 'gather', start_date: inAnHour, start_time: inAnHour });
 });
 
 const one = async <T extends { id: any }>(t: T, id: string) => (await db.select().from(t as never).where(eq((t as any).id, id)))[0] as any;
@@ -71,13 +74,13 @@ const one = async <T extends { id: any }>(t: T, id: string) => (await db.select(
 describe('announcements', () => {
   it('posts, records the message id, tracks the message and completes', async () => {
     const id = (await enqueueAnnouncement(db, { matchId: 'm1', type: 'standard' }))!;
-    const { qp, announcement, legacy } = make();
+    const { qp, announcement } = make();
     await qp.processAnnouncementQueue();
     expect(announcement.postEventAnnouncement).toHaveBeenCalledTimes(1);
     const row = await one(discordAnnouncementQueue, id);
     expect(row).toMatchObject({ status: 'completed', external_message_id: 'msg-1', attempts: 1, last_error: null });
     expect(row.posted_at).toBeInstanceOf(Date);
-    expect(legacy.run).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO discord_match_messages'), expect.any(Array));
+    expect(await db.select().from(discordMatchMessages).where(eq(discordMatchMessages.match_id, 'm1'))).toMatchObject([{ message_id: 'msg-1', channel_id: 'c1', message_type: 'announcement' }]);
   });
 
   it('timed announcements pass the jsonb timing data and honour scheduled_for', async () => {
@@ -113,8 +116,8 @@ describe('announcements', () => {
   });
 
   it('a missing match is retried with backoff, not lost', async () => {
-    const id = (await enqueueAnnouncement(db, { matchId: 'm1', type: 'standard' }))!;
-    const { qp, announcement } = make({}, legacyDb({ match: undefined }));
+    const id = (await enqueueAnnouncement(db, { matchId: 'ghost', type: 'standard' }))!;
+    const { qp, announcement } = make();
     await qp.processAnnouncementQueue();
     expect(announcement.postEventAnnouncement).not.toHaveBeenCalled();
     expect(await one(discordAnnouncementQueue, id)).toMatchObject({ status: 'pending', last_error: 'Match or tournament not found' });
@@ -149,10 +152,14 @@ describe('other queues', () => {
     expect(rows.find((r) => r.match_id === 'm1')).toMatchObject({ status: 'completed', external_message_id: 'rem-1' });
     expect(rows.find((r) => r.match_id === 'm2')?.status).toBe('pending');
 
-    const stale = make({}, legacyDb({ match: { id: 'm1', name: 'x', game_id: 'g', start_date: new Date(Date.now() - 1000).toISOString(), status: 'gather' } }));
+    const started = new Date(Date.now() - 1000);
+    await db.update(matches).set({ start_date: started, start_time: started }).where(eq(matches.id, 'm9'));
     await enqueueMatchReminder(db, { matchId: 'm9', minutesBefore: 5, reminderTime: new Date(Date.now() - 1000) });
+    const stale = make();
     await stale.qp.processReminderQueue();
     expect(stale.announcement.postTimedReminder).not.toHaveBeenCalled();
+    expect(rows.find((r) => r.match_id === 'm9')).toBeUndefined();
+    expect((await db.select().from(discordReminderQueue).where(eq(discordReminderQueue.match_id, 'm9')))[0].status).toBe('completed');
   });
 
   it('score notification: posts with jsonb players, records the id', async () => {
@@ -178,9 +185,11 @@ describe('other queues', () => {
 
   it('match winner: waits (without spending an attempt) until map notifications are done, then posts', async () => {
     const id = await enqueueMatchWinner(db, { matchId: 'm1', matchName: 'Match One', gameId: 'g', winner: 'team1', winningTeamName: 'Blue', winningPlayers: [], team1Score: 2, team2Score: 0, totalMaps: 2 });
-    const legacy = legacyDb();
-    legacy.get.mockImplementation(async (sql: string) => (/FROM match_games/.test(sql) ? { total: 2, notified: 1 } : undefined) as never);
-    const { qp, announcement } = make({}, legacy);
+    await db.insert(matchGames).values([
+      { id: 'm1_game_1', match_id: 'm1', round: 1, status: 'completed', discord_notified: true },
+      { id: 'm1_game_2', match_id: 'm1', round: 2, status: 'completed', discord_notified: false },
+    ]);
+    const { qp, announcement } = make();
     await qp.processMatchWinnerNotificationQueue();
     expect(announcement.postMatchWinnerNotification).not.toHaveBeenCalled();
     expect(await one(discordMatchWinnerQueue, id)).toMatchObject({ status: 'pending', attempts: 0 });
