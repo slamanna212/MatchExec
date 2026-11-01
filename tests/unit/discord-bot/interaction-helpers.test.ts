@@ -21,7 +21,14 @@ import {
   insertParticipant,
 } from '../../../processes/discord-bot/modules/interaction-helpers';
 import { getTestDb } from '../../utils/test-db';
-import { seedBasicTestData, createMatch, createTournament } from '../../utils/fixtures';
+import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { eq } from 'drizzle-orm';
+import { db as pgDb } from '../../../lib/db';
+import { tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments } from '../../../lib/db/schema';
+
+/** Tournaments live in Postgres (injected by the legacy bridge); only games / modes are still seeded through SQLite. */
+const insertTournament = async (id: string, gameId: string, modeId: string, name = 'Tourney') =>
+  pgDb.insert(tournaments).values({ id, name, game_id: gameId, game_mode_id: modeId, status: 'created', format: 'single-elimination', rounds_per_match: 3 });
 
 describe('interaction-helpers', () => {
   let db: any;
@@ -63,15 +70,8 @@ describe('interaction-helpers', () => {
     });
 
     it('returns tournament participant count', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t1', 'Test Tourney', ?, ?, 'created', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
-      await db.run(
-        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username)
-         VALUES ('tp1', 't1', 'u1', 'd1', 'Player1')`
-      );
+      await insertTournament('t1', game.id, mode.id, 'Test Tourney');
+      await pgDb.insert(tournamentParticipants).values({ id: 'tp1', tournament_id: 't1', user_id: 'u1', discord_user_id: 'd1', username: 'Player1' });
 
       const count = await getParticipantCount('t1', true);
       expect(count).toBe(1);
@@ -99,14 +99,8 @@ describe('interaction-helpers', () => {
     });
 
     it('includes team name when selected', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t2', 'Tourney', ?, ?, 'created', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
-      await db.run(
-        `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES ('team-1', 't2', 'Alpha Squad')`
-      );
+      await insertTournament('t2', game.id, mode.id);
+      await pgDb.insert(tournamentTeams).values({ id: 'team-1', tournament_id: 't2', team_name: 'Alpha Squad' });
 
       const parsedId = { eventId: 't2', isTournament: true, selectedTeamId: 'team-1' };
       const signupForm = { fields: [{ id: 'username', label: 'Username', required: true }] };
@@ -268,36 +262,35 @@ describe('interaction-helpers', () => {
     });
 
     it('inserts a tournament participant without a team', async () => {
-      const tournament = await createTournament(game.id, { game_mode_id: mode.id });
+      const tournament = { id: 'tourney-solo' };
+      await insertTournament(tournament.id, game.id, mode.id);
       const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: null } as any;
 
       const participantId = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
 
       expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
-      const row = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
+      const [row] = await pgDb.select().from(tournamentParticipants).where(eq(tournamentParticipants.id, participantId));
       expect(row).toBeDefined();
       expect(row.tournament_id).toBe(tournament.id);
 
-      const memberRow = await db.get(`SELECT * FROM tournament_team_members WHERE user_id = ?`, ['discord-user-123']);
-      expect(memberRow).toBeUndefined();
+      const memberRows = await pgDb.select().from(tournamentTeamMembers).where(eq(tournamentTeamMembers.user_id, 'discord-user-123'));
+      expect(memberRows).toHaveLength(0);
     });
 
     it('inserts tournament participant and team member when team is selected', async () => {
-      const tournament = await createTournament(game.id, { game_mode_id: mode.id });
+      const tournament = { id: 'tourney-team' };
+      await insertTournament(tournament.id, game.id, mode.id);
       const teamId = `team_test_${Date.now()}`;
-      await db.run(
-        `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES (?, ?, 'Alpha')`,
-        [teamId, tournament.id]
-      );
+      await pgDb.insert(tournamentTeams).values({ id: teamId, tournament_id: tournament.id, team_name: 'Alpha' });
       const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: teamId } as any;
 
       const participantId = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
 
-      const pRow = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
+      const [pRow] = await pgDb.select().from(tournamentParticipants).where(eq(tournamentParticipants.id, participantId));
       expect(pRow).toBeDefined();
       expect(pRow.team_assignment).toBe(teamId);
 
-      const mRow = await db.get(`SELECT * FROM tournament_team_members WHERE team_id = ?`, [teamId]);
+      const [mRow] = await pgDb.select().from(tournamentTeamMembers).where(eq(tournamentTeamMembers.team_id, teamId));
       expect(mRow).toBeDefined();
       expect(mRow.id).toMatch(/^member_\d+_[a-z0-9]+$/);
       expect(mRow.discord_user_id).toBe('discord-user-123');

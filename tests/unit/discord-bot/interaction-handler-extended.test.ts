@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { db as pgDb } from '../../../lib/db';
+import { tournamentTeams, tournaments } from '../../../lib/db/schema';
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() },
@@ -264,11 +266,7 @@ describe('InteractionHandler — Extended', () => {
     });
 
     it('replies with not-found when team does not exist', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('tu-ext1', 'ExtTourney', ?, ?, 'gather', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
+      await pgDb.insert(tournaments).values({ id: 'tu-ext1', name: 'ExtTourney', game_id: game.id, game_mode_id: mode.id, status: 'gather', format: 'single-elimination', rounds_per_match: 3 });
 
       const interaction = makeInteraction({
         customId: 'team_select_tu-ext1',
@@ -284,15 +282,8 @@ describe('InteractionHandler — Extended', () => {
     });
 
     it('shows modal when tournament and team both exist', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('tu-ext2', 'ExtTourney2', ?, ?, 'gather', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
-      await db.run(
-        `INSERT INTO tournament_teams (id, tournament_id, team_name)
-         VALUES ('tt-ext2', 'tu-ext2', 'ExtTeam')`,
-      );
+      await pgDb.insert(tournaments).values({ id: 'tu-ext2', name: 'ExtTourney2', game_id: game.id, game_mode_id: mode.id, status: 'gather', format: 'single-elimination', rounds_per_match: 3 });
+      await pgDb.insert(tournamentTeams).values({ id: 'tt-ext2', tournament_id: 'tu-ext2', team_name: 'ExtTeam' });
 
       const interaction = makeInteraction({
         customId: 'team_select_tu-ext2',

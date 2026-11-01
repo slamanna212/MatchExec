@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
-import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
 import { listActiveTournamentSummaries } from '../../../src/lib/tournaments';
+import { db as pgDb } from '../../../lib/db';
+import { tournamentParticipants, tournaments } from '../../../lib/db/schema';
 
 // Wrap the summary query so tests can make it fail once; by default it hits the (bridged) Postgres database.
 vi.mock('../../../src/lib/tournaments', async (importOriginal) => {
@@ -101,7 +102,6 @@ let InteractionHandler: any;
 
 describe('InteractionHandler', () => {
   let handler: any;
-  let db: any;
   let game: any;
   let mode: any;
 
@@ -112,7 +112,6 @@ describe('InteractionHandler', () => {
 
   beforeEach(async () => {
     resetDiscordMocks();
-    db = getTestDb();
     const testData = await seedBasicTestData();
     game = testData.game;
     mode = testData.mode;
@@ -271,11 +270,7 @@ describe('InteractionHandler', () => {
     });
 
     it('replies with an embed when active tournaments exist', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t1', 'Test Tournament', ?, ?, 'gather', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
+      await pgDb.insert(tournaments).values({ id: 't1', name: 'Test Tournament', game_id: game.id, game_mode_id: mode.id, status: 'gather', format: 'single-elimination', rounds_per_match: 3 });
       const interaction = createMockInteraction({ commandName: 'tournaments' });
       await handler.handleSlashCommand(interaction);
 
@@ -284,11 +279,7 @@ describe('InteractionHandler', () => {
     });
 
     it('shows double-elimination tournaments without error', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('t2', 'DE Tournament', ?, ?, 'gather', 'double-elimination', 3)`,
-        [game.id, mode.id]
-      );
+      await pgDb.insert(tournaments).values({ id: 't2', name: 'DE Tournament', game_id: game.id, game_mode_id: mode.id, status: 'gather', format: 'double-elimination', rounds_per_match: 3 });
       const interaction = createMockInteraction({ commandName: 'tournaments' });
       await handler.handleSlashCommand(interaction);
 
@@ -366,15 +357,8 @@ describe('InteractionHandler', () => {
     });
 
     it('replies with "already signed up" message when user is already a tournament participant', async () => {
-      await db.run(
-        `INSERT INTO tournaments (id, name, game_id, game_mode_id, status, format, rounds_per_match)
-         VALUES ('tu1', 'Team Tourney', ?, ?, 'gather', 'single-elimination', 3)`,
-        [game.id, mode.id]
-      );
-      await db.run(
-        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username)
-         VALUES ('tp1', 'tu1', 'user-123', 'user-123', 'TestUser')`
-      );
+      await pgDb.insert(tournaments).values({ id: 'tu1', name: 'Team Tourney', game_id: game.id, game_mode_id: mode.id, status: 'gather', format: 'single-elimination', rounds_per_match: 3 });
+      await pgDb.insert(tournamentParticipants).values({ id: 'tp1', tournament_id: 'tu1', user_id: 'user-123', discord_user_id: 'user-123', username: 'TestUser' });
 
       const interaction = createMockInteraction({
         customId: 'team_select_tu1',

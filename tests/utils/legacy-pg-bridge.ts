@@ -1,5 +1,5 @@
 /**
- * TRANSITIONAL bridge for test files that still run on the legacy SQLite harness (matches, tournaments, series,
+ * TRANSITIONAL bridge for test files that still run on the legacy SQLite harness (matches,
  * scoring, bot and stats-processor suites) while the game reference data (games / game_modes / game_maps /
  * game_stat_definitions), discord_settings and discord_channels are already read through Postgres (`src/lib/games.ts`).
  *
@@ -19,8 +19,7 @@ import { applyMigrationsPglite } from '../../lib/db/migrate';
 import {
   autoVoiceChannels, discordChannels, discordMatchMessages, discordSettings, discordWinnerVoteMessages, gameMaps, gameModes, games,
   gameStatDefinitions, matchGamePlacements, matchGames, matchParticipants, matchTeams, matchVoiceAlternation, matches,
-  scorecardSubmissions, series, seriesEvents, statsSettings, tournamentMatches, tournamentParticipants, tournamentRoundByes,
-  tournamentTeamMembers, tournamentTeams, tournaments,
+  scorecardSubmissions, statsSettings,
 } from '../../lib/db/schema';
 import { getLegacyWriteCount, getTestDb, setLegacyReadHook } from './test-db';
 import { QUEUE_TABLES } from '../../src/lib/queues/registry';
@@ -32,13 +31,11 @@ const MATCH_TABLES: Table[] = [
   matches, matchTeams, matchParticipants, matchGames, matchGamePlacements, matchVoiceAlternation, autoVoiceChannels,
   discordMatchMessages, discordWinnerVoteMessages,
   // FK cascades from matches reach these, so the matches domain can change them too
-  seriesEvents, tournamentMatches, scorecardSubmissions,
-  // The tournaments domain (Postgres) owns these; unported series code and fixtures still read / seed them in SQLite.
-  tournaments, tournamentTeams, tournamentParticipants, tournamentTeamMembers, tournamentRoundByes,
+  scorecardSubmissions,
 ];
-// Forward-only: still owned by SQLite until their domains are ported (series / stats).
+// Forward-only: still owned by SQLite until their domain is ported (stats).
 const FORWARD_ONLY_TABLES: Table[] = [
-  series, statsSettings,
+  statsSettings,
 ];
 const MIRRORED_TABLES: Table[] = [
   games, gameModes, gameMaps, gameStatDefinitions, discordSettings, discordChannels, ...FORWARD_ONLY_TABLES, ...MATCH_TABLES,
@@ -245,7 +242,7 @@ async function pushPgChangesToSqliteInner(): Promise<void> {
     const name = getTableName(table);
     const base = pgBase?.get(name) ?? new Map<string, string>();
     const current = new Set(rows.map(rowKey));
-    const keyCol = table === matchVoiceAlternation || table === tournamentMatches ? 'match_id' : 'id';
+    const keyCol = table === matchVoiceAlternation ? 'match_id' : 'id';
     for (const key of base.keys()) if (!current.has(key)) await sqlite.run(`DELETE FROM ${name} WHERE ${keyCol} = ?`, [key]);
     const changed = rows.filter((r) => base.get(rowKey(r)) !== JSON.stringify(r));
     if (changed.length === 0) continue;
@@ -265,35 +262,9 @@ async function pushPgChangesToSqliteInner(): Promise<void> {
   for (const id of matchBase.keys()) {
     if (nowMatches.has(id)) continue;
     await sqlite.run('DELETE FROM match_game_placements WHERE match_game_id IN (SELECT id FROM match_games WHERE match_id = ?)', [id]);
-    for (const child of ['match_games', 'match_participants', 'match_teams', 'series_events', 'tournament_matches', 'scorecard_submissions', 'match_voice_alternation']) {
+    for (const child of ['match_games', 'match_participants', 'match_teams', 'scorecard_submissions', 'match_voice_alternation']) {
       await sqlite.run(`DELETE FROM ${child} WHERE match_id = ?`, [id]);
     }
-  }
-  // A team deleted through the API: its members go, and signups lose their assignment (FK actions the replica session skips).
-  const teamBase = pgBase?.get('tournament_teams') ?? new Map<string, string>();
-  const nowTeams = new Set(snapshot.find((x) => getTableName(x.table) === 'tournament_teams')?.rows.map(rowKey));
-  for (const id of teamBase.keys()) {
-    if (nowTeams.has(id)) continue;
-    await sqlite.run('DELETE FROM tournament_team_members WHERE team_id = ?', [id]);
-    await sqlite.run('UPDATE tournament_participants SET team_assignment = NULL WHERE team_assignment = ?', [id]);
-  }
-  // Same for a tournament deleted through the API: its teams, participants, byes, bracket rows, matches and series events.
-  const tournamentBase = pgBase?.get('tournaments') ?? new Map<string, string>();
-  const nowTournaments = new Set(snapshot.find((x) => getTableName(x.table) === 'tournaments')?.rows.map(rowKey));
-  for (const id of tournamentBase.keys()) {
-    if (nowTournaments.has(id)) continue;
-    await sqlite.run('DELETE FROM tournament_team_members WHERE team_id IN (SELECT id FROM tournament_teams WHERE tournament_id = ?)', [id]);
-    for (const child of ['tournament_teams', 'tournament_participants', 'tournament_round_byes', 'tournament_matches', 'series_events']) {
-      await sqlite.run(`DELETE FROM ${child} WHERE tournament_id = ?`, [id]);
-    }
-    const ids = (await sqlite.all<{ id: string }>('SELECT id FROM matches WHERE tournament_id = ?', [id])).map((r) => r.id);
-    for (const matchId of ids) {
-      await sqlite.run('DELETE FROM match_game_placements WHERE match_game_id IN (SELECT id FROM match_games WHERE match_id = ?)', [matchId]);
-      for (const child of ['match_games', 'match_participants', 'match_teams', 'scorecard_submissions', 'match_voice_alternation']) {
-        await sqlite.run(`DELETE FROM ${child} WHERE match_id = ?`, [matchId]);
-      }
-    }
-    await sqlite.run('DELETE FROM matches WHERE tournament_id = ?', [id]);
   }
   pgBase = toBase(snapshot);
   lastPgMatchSignature = signature;

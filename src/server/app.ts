@@ -7,6 +7,7 @@ import { channels } from './routes/channels';
 import { games } from './routes/games';
 import { health } from './routes/health';
 import { matches } from './routes/matches';
+import { seriesRoutes } from './routes/series';
 import { settings } from './routes/settings';
 import { tournaments } from './routes/tournaments';
 import { dbStatus, metrics, version } from './routes/system';
@@ -33,6 +34,7 @@ app.route('/api/games', games);
 app.route('/api/channels', channels);
 app.route('/api/matches', matches);
 app.route('/api/tournaments', tournaments);
+app.route('/api/series', seriesRoutes);
 
 // TODO(Stage 3): serveStatic({ root: 'dist/client' }) for hashed assets, /uploads/* from blobs, /dev/* redirect in
 // production, and the SPA fallback to index.html (no-cache) for unmatched non-API GETs.

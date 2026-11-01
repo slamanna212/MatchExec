@@ -1,9 +1,10 @@
 /** `tournaments`: reads, list, create, edit, delete, status compare-and-set and the tournament-level row lock. */
 import { and, asc, desc, eq, getTableColumns, inArray, ne, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { games, matches, series, seriesEvents, tournamentParticipants, tournaments } from '../../../lib/db/schema';
+import { games, matches, tournamentParticipants, tournaments } from '../../../lib/db/schema';
 import type { AnnouncementConfig, PositionScoringConfig } from '../../../lib/db/schema/types';
 import { genId } from '../matches/ids';
+import { listSeriesRefsForTournaments } from '../series/refs';
 
 export type TournamentRow = typeof tournaments.$inferSelect;
 export type TournamentStatus = TournamentRow['status'];
@@ -94,24 +95,6 @@ export interface ListTournamentsOptions {
   status?: string | null;
   limit?: number | null;
   offset?: number;
-}
-
-/** Series each tournament belongs to. */
-export async function listSeriesRefsForTournaments(ex: Executor, tournamentIds: string[]): Promise<Map<string, Array<{ id: string; name: string }>>> {
-  const out = new Map<string, Array<{ id: string; name: string }>>();
-  if (tournamentIds.length === 0) return out;
-  const rows = await ex
-    .select({ tournament_id: seriesEvents.tournament_id, id: series.id, name: series.name })
-    .from(seriesEvents).innerJoin(series, eq(series.id, seriesEvents.series_id))
-    .where(inArray(seriesEvents.tournament_id, tournamentIds))
-    .orderBy(asc(series.id));
-  for (const r of rows) {
-    if (!r.tournament_id) continue;
-    const list = out.get(r.tournament_id) ?? [];
-    if (!list.some((s) => s.id === r.id)) list.push({ id: r.id, name: r.name });
-    out.set(r.tournament_id, list);
-  }
-  return out;
 }
 
 export async function listTournaments(ex: Executor, opts: ListTournamentsOptions = {}): Promise<TournamentListRow[]> {

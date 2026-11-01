@@ -1,12 +1,13 @@
 /** The `matches` table: reads for the API / bot / scheduler, creation, editing, deletion and the status compare-and-set. */
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import {
-  gameMaps, gameModes, games, matchParticipants, matches, series, seriesEvents, tournamentMatches, tournaments,
+  gameMaps, gameModes, games, matchParticipants, matches, tournamentMatches, tournaments,
 } from '../../../lib/db/schema';
 import type { PositionScoringConfig } from '../../../lib/db/schema/types';
 import type { Announcement } from '../../../lib/db/schema/types';
 import { newMatchId } from './ids';
+import { listSeriesRefsForMatches } from '../series/refs';
 
 export type MatchRow = typeof matches.$inferSelect;
 export type MatchStatus = MatchRow['status'];
@@ -156,30 +157,6 @@ export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): 
     const maps = Array.isArray(row.maps) ? row.maps : row.map_id ? [row.map_id] : [];
     return { ...row, maps, map_codes: row.map_codes ?? {}, series: seriesByMatch.get(row.id) ?? [] } as MatchListRow;
   });
-}
-
-/** Series each match belongs to: directly, or through the series its tournament is part of. */
-async function listSeriesRefsForMatches(
-  ex: Executor,
-  rows: Array<{ id: string; tournament_id: string | null }>,
-): Promise<Map<string, Array<{ id: string; name: string }>>> {
-  const out = new Map<string, Array<{ id: string; name: string }>>();
-  if (rows.length === 0) return out;
-  const matchIds = rows.map((r) => r.id);
-  const tournamentIds = [...new Set(rows.map((r) => r.tournament_id).filter((t): t is string => !!t))];
-  const events = await ex
-    .select({ match_id: seriesEvents.match_id, tournament_id: seriesEvents.tournament_id, id: series.id, name: series.name })
-    .from(seriesEvents).innerJoin(series, eq(series.id, seriesEvents.series_id))
-    .where(or(inArray(seriesEvents.match_id, matchIds), tournamentIds.length ? inArray(seriesEvents.tournament_id, tournamentIds) : undefined))
-    .orderBy(asc(series.id));
-  for (const row of rows) {
-    const refs = new Map<string, { id: string; name: string }>();
-    for (const e of events) {
-      if (e.match_id === row.id || (row.tournament_id && e.tournament_id === row.tournament_id)) refs.set(e.id, { id: e.id, name: e.name });
-    }
-    out.set(row.id, [...refs.values()]);
-  }
-  return out;
 }
 
 /** Matches of a tournament (id only), for fan-out like status updates. */

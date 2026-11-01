@@ -18,14 +18,6 @@ export interface MatchFixture {
   created_at: string;
 }
 
-export interface TournamentFixture {
-  id: string;
-  name: string;
-  game_id: string;
-  format: 'single-elimination' | 'double-elimination';
-  status: string;
-}
-
 export interface GameFixture {
   id: string;
   name: string;
@@ -58,14 +50,6 @@ const defaults = {
     status: 'created',
     match_format: 'competitive',
     rounds: 3,
-  },
-  tournament: {
-    name: 'Test Tournament',
-    format: 'single-elimination' as const,
-    status: 'created',
-    rounds_per_match: 3,
-    game_mode_id: 'test-mode',
-    ruleset: 'competitive',
   },
 };
 
@@ -116,19 +100,6 @@ export async function createMatchParticipant(matchId: string, discordUserId: str
     [id, matchId, generateId('user_'), discordUserId, username, team]
   );
   return { id, match_id: matchId, discord_user_id: discordUserId, username, team };
-}
-
-export async function createTournament(gameId: string, overrides: Partial<Omit<typeof defaults.tournament, 'format'> & { format?: 'single-elimination' | 'double-elimination' | 'cumulative-points'; game_mode_id?: string }> = {}): Promise<TournamentFixture> {
-  const db = getTestDb();
-  const data = { ...defaults.tournament, ...overrides };
-  const id = generateId('tournament_');
-
-  await db.run(
-    `INSERT INTO tournaments (id, name, game_id, game_mode_id, format, status, rounds_per_match, ruleset, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-    [id, data.name, gameId, overrides.game_mode_id || data.game_mode_id, data.format, data.status, data.rounds_per_match, data.ruleset]
-  );
-  return { id, game_id: gameId, name: data.name, format: data.format, status: data.status } as TournamentFixture;
 }
 
 // Queue fixtures for contract testing

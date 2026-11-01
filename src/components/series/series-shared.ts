@@ -1,7 +1,7 @@
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import type { SeriesScoringConfig } from '@/lib/series';
 
-/** Client-side shapes of the series API responses (see src/lib/series-summary.ts). */
+/** Client-side shapes of the series API responses (see src/lib/series/summary.ts). */
 
 export type SeriesStatus = 'created' | 'active' | 'complete' | 'cancelled';
 
@@ -26,7 +26,7 @@ export interface SeriesSummary {
   name: string;
   description?: string | null;
   status: SeriesStatus;
-  scoring_config?: string | null;
+  scoring_config?: SeriesScoringConfig | string | null;
   start_date?: string | null;
   end_date?: string | null;
   event_image_url?: string | null;
@@ -133,8 +133,10 @@ export function formatPoints(p: number): string {
   return Number.isInteger(p) ? String(p) : String(Number(p.toFixed(2)));
 }
 
-export function parseScoringConfig(raw: string | null | undefined): SeriesScoringConfig {
+/** The API returns scoring_config as an object (jsonb); a JSON string is still accepted. */
+export function parseScoringConfig(raw: SeriesScoringConfig | string | null | undefined): SeriesScoringConfig {
   if (!raw) return {};
+  if (typeof raw === 'object') return Array.isArray(raw) ? {} : raw;
   try {
     const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as SeriesScoringConfig : {};
