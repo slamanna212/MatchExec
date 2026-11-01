@@ -1,0 +1,22 @@
+# Dev-only Postgres for `pnpm dev:all` (the app processes run under PM2 on the host).
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: matchexec-dev-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: matchexec
+      POSTGRES_PASSWORD: matchexec
+      POSTGRES_DB: matchexec
+    volumes:
+      - matchexec-dev-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchexec -d matchexec"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  matchexec-dev-pgdata:

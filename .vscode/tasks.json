@@ -43,7 +43,9 @@
       "type": "shell",
       "command": "pnpm run lint",
       "group": "build",
-      "problemMatcher": ["$eslint-stylish"]
+      "problemMatcher": [
+        "$eslint-stylish"
+      ]
     },
     {
       "label": "Run All Tests",
@@ -97,6 +99,22 @@
       "command": "pnpm exec vitest run ${relativeFile}",
       "group": "test",
       "problemMatcher": []
+    },
+    {
+      "label": "Reset Dev Database",
+      "type": "shell",
+      "command": "pnpm run dev:db:reset",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Typecheck",
+      "type": "shell",
+      "command": "pnpm run typecheck",
+      "group": "build",
+      "problemMatcher": [
+        "$tsc"
+      ]
     }
   ]
 }

@@ -51,3 +51,6 @@ matchexec.db
 # uploaded files
 /public/uploads/
 app_data/data/.db-status.json
+
+!.env.example
+.playwright-mcp/
