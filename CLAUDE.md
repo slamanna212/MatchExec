@@ -430,7 +430,7 @@ tests/
 ├── unit/
 │   ├── validation.test.ts            # validateRequiredFields, safeJSONParse/Stringify
 │   ├── lib/pg-scoring-position.test.ts # Pure scoring calculations (src/lib/scoring/*)
-│   ├── tournament-bracket.test.ts    # Bracket generation and progression
+│   ├── lib/pg-tournament-*.test.ts   # Tournament bracket / transitions / notifications (Postgres harness)
 │   ├── lib/pg-matches-domain.test.ts # Matches domain on Postgres (teams, participants, voice, votes, scheduler queries)
 │   └── discord-bot/
 │       ├── announcement-handler.test.ts
@@ -460,11 +460,12 @@ tests/
 | `src/lib/utils/validation.ts` | `tests/unit/validation.test.ts` |
 | `src/lib/scoring/*.ts` | `tests/unit/lib/pg-scoring-position.test.ts` |
 | `src/lib/matches/*.ts` | `tests/unit/lib/pg-matches-domain.test.ts`, `tests/integration/server/match*.test.ts` |
-| `src/lib/tournament-bracket.ts` | `tests/unit/tournament-bracket.test.ts` |
+| `src/lib/tournaments/bracket-math.ts` (pure) | `tests/unit/lib/tournament-bracket-math.test.ts` |
+| `src/lib/tournaments/*` (bracket, progress, transitions) | `tests/unit/lib/pg-tournament-*.test.ts`, `tests/integration/server/tournament*.test.ts` |
 | `processes/discord-bot/modules/announcement-handler.ts` | `tests/unit/discord-bot/announcement-handler.test.ts` |
 | `processes/discord-bot/modules/voice-handler.ts` | `tests/unit/discord-bot/voice-handler.test.ts` |
 | `src/server/routes/matches.ts` | `tests/integration/server/matches.test.ts`, `match-lifecycle.test.ts`, `matches-concurrency.test.ts` |
-| `src/app/api/tournaments/*/route.ts` | `tests/integration/api/tournaments.test.ts` |
+| `src/server/routes/tournaments.ts` | `tests/integration/server/tournaments.test.ts` |
 | `src/app/api/settings/*/route.ts` | `tests/integration/api/settings.test.ts` |
 | `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |
 

@@ -72,12 +72,12 @@ export interface Tournament {
   start_time?: Date;
   allow_player_team_selection?: boolean;
   allow_match_editing?: boolean;
-  stats_enabled?: number;
-  announcements?: string;
-  player_notifications?: number;
+  stats_enabled?: boolean;
+  announcements?: Array<{ id: string; value: number; unit: 'minutes' | 'hours' | 'days' }> | null;
+  player_notifications?: boolean;
   livestream_link?: string;
-  /** JSON-stringified PositionScoringConfig — per-tournament override of the game's default spread. */
-  position_scoring_override?: string;
+  /** Per-tournament override of the game's default points spread (an object; the API still accepts a JSON string on write). */
+  position_scoring_override?: Record<string, number> | null;
   created_at: Date;
   updated_at: Date;
 }

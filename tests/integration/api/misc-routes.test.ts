@@ -1,24 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createMockRequest, parseResponse, createRouteParams } from '../../utils/api-helpers';
-import { seedBasicTestData, createTournament, createGameMode, createMatch, createMatchParticipant } from '../../utils/fixtures';
+import { createMockRequest } from '../../utils/api-helpers';
+import { seedBasicTestData } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
 
 import { GET as getFeed } from '@/app/api/feed/route';
 import { GET as getStatsSettings, PUT as putStatsSettings } from '@/app/api/settings/stats/route';
-import { GET as getTournamentStandings } from '@/app/api/tournaments/[tournamentId]/standings/route';
-import { GET as getTournamentParticipants } from '@/app/api/tournaments/[tournamentId]/participants/route';
-import { POST as postBracketAssignments } from '@/app/api/tournaments/[tournamentId]/bracket-assignments/route';
-import { GET as getTournamentMatches } from '@/app/api/tournaments/[tournamentId]/matches/route';
 
 describe('Misc Routes', () => {
   let db: any;
-  let game: any;
-  let mode: any;
 
   beforeEach(async () => {
-    const data = await seedBasicTestData();
-    game = data.game;
-    mode = data.mode;
+    await seedBasicTestData();
     db = getTestDb();
   });
 
@@ -177,202 +169,6 @@ describe('Misc Routes', () => {
 
       expect(response.status).toBe(200);
       expect(body.success).toBe(true);
-    });
-  });
-
-  // ─── GET /api/tournaments/[tournamentId]/standings ───────────────────────────
-
-  describe('GET /api/tournaments/[tournamentId]/standings', () => {
-    it('returns empty standings for tournament with no teams', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/standings`);
-      const response = await getTournamentStandings(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(Array.isArray(data.standings)).toBe(true);
-    });
-
-    it('returns standings for tournament with teams', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      await db.run(
-        `INSERT INTO tournament_teams (id, tournament_id, team_name) VALUES ('t1', ?, 'Alpha')`,
-        [tournament.id]
-      );
-
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/standings`);
-      const response = await getTournamentStandings(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(data.standings.length).toBeGreaterThan(0);
-      expect(data.standings[0].team_name).toBe('Alpha');
-    });
-
-    it('returns per-participant leaderboard for cumulative-points tournaments, only counting completed games', async () => {
-      const ffaMode = await createGameMode(game.id, { scoring_type: 'FFA' });
-      const tournament = await createTournament(game.id, { game_mode_id: ffaMode.id, format: 'cumulative-points' });
-      const match = await createMatch(game.id, ffaMode.id, { status: 'battle' });
-      await db.run(`UPDATE matches SET tournament_id = ? WHERE id = ?`, [tournament.id, match.id]);
-
-      const p1 = await createMatchParticipant(match.id, 'd1', 'Alice');
-      const p2 = await createMatchParticipant(match.id, 'd2', 'Bob');
-
-      await db.run(
-        `INSERT INTO match_games (id, match_id, round, status) VALUES ('mg-complete', ?, 1, 'completed')`,
-        [match.id]
-      );
-      await db.run(
-        `INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
-         VALUES ('pl1', 'mg-complete', 'participant', ?, 1, 25, 1), ('pl2', 'mg-complete', 'participant', ?, 2, 18, 0)`,
-        [p1.id, p2.id]
-      );
-
-      // A pending (not completed) game's placements must not count toward the total.
-      await db.run(
-        `INSERT INTO match_games (id, match_id, round, status) VALUES ('mg-pending', ?, 2, 'pending')`,
-        [match.id]
-      );
-      await db.run(
-        `INSERT INTO match_game_placements (id, match_game_id, entity_type, entity_id, position, points_awarded, is_winner)
-         VALUES ('pl3', 'mg-pending', 'participant', ?, 1, 999, 1)`,
-        [p1.id]
-      );
-
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/standings`);
-      const response = await getTournamentStandings(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(data.standings).toHaveLength(2);
-      const alice = data.standings.find((s: { username: string }) => s.username === 'Alice');
-      const bob = data.standings.find((s: { username: string }) => s.username === 'Bob');
-      expect(alice).toMatchObject({ total_points: 25, matches_played: 1, best_position: 1 });
-      expect(bob).toMatchObject({ total_points: 18, matches_played: 1, best_position: 2 });
-      expect(data.standings[0].rank).toBe(1);
-      expect(data.standings[0].username).toBe('Alice');
-    });
-  });
-
-  // ─── GET /api/tournaments/[tournamentId]/participants ────────────────────────
-
-  describe('GET /api/tournaments/[tournamentId]/participants', () => {
-    it('returns empty participants for new tournament', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/participants`);
-      const response = await getTournamentParticipants(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(Array.isArray(data.participants)).toBe(true);
-      expect(data.participants).toHaveLength(0);
-    });
-
-    it('returns participants when they exist', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      await db.run(
-        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username)
-         VALUES ('tp1', ?, 'u1', 'discord-u1', 'Player1')`,
-        [tournament.id]
-      );
-
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/participants`);
-      const response = await getTournamentParticipants(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(data.participants.length).toBe(1);
-      expect(data.participants[0].username).toBe('Player1');
-    });
-
-    it('parses signup_data JSON for participants', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      await db.run(
-        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data)
-         VALUES ('tp2', ?, 'u2', 'discord-u2', 'Player2', '{"rank":"gold"}')`,
-        [tournament.id]
-      );
-
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/participants`);
-      const response = await getTournamentParticipants(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(data.participants[0].signup_data).toEqual({ rank: 'gold' });
-    });
-  });
-
-  // ─── POST /api/tournaments/[tournamentId]/bracket-assignments ────────────────
-
-  describe('POST /api/tournaments/[tournamentId]/bracket-assignments', () => {
-    it('returns 400 when assignments missing', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      const request = createMockRequest('POST', `/api/tournaments/${tournament.id}/bracket-assignments`, {});
-      const response = await postBracketAssignments(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status } = await parseResponse(response);
-      expect(status).toBe(400);
-    });
-
-    it('returns 400 when assignments is not an array', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      const request = createMockRequest('POST', `/api/tournaments/${tournament.id}/bracket-assignments`, {
-        assignments: 'invalid',
-      });
-      const response = await postBracketAssignments(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status } = await parseResponse(response);
-      expect(status).toBe(400);
-    });
-
-    it('returns 404 when tournament not in assign status', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      // Default status is 'created', not 'assign'
-      const request = createMockRequest('POST', `/api/tournaments/${tournament.id}/bracket-assignments`, {
-        assignments: [],
-      });
-      const response = await postBracketAssignments(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status } = await parseResponse(response);
-      expect(status).toBe(404);
-    });
-
-    it('returns success with empty assignments when tournament is in assign status', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      await db.run(`UPDATE tournaments SET status = 'assign' WHERE id = ?`, [tournament.id]);
-
-      const request = createMockRequest('POST', `/api/tournaments/${tournament.id}/bracket-assignments`, {
-        assignments: [],
-      });
-      const response = await postBracketAssignments(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(data.message).toContain('saved');
-    });
-
-    it('returns 400 when team not found in tournament', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      await db.run(`UPDATE tournaments SET status = 'assign' WHERE id = ?`, [tournament.id]);
-
-      const request = createMockRequest('POST', `/api/tournaments/${tournament.id}/bracket-assignments`, {
-        assignments: [{ position: 1, teamId: 'nonexistent-team' }],
-      });
-      const response = await postBracketAssignments(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status } = await parseResponse(response);
-      expect(status).toBe(400);
-    });
-  });
-
-  // ─── GET /api/tournaments/[tournamentId]/matches ─────────────────────────────
-
-  describe('GET /api/tournaments/[tournamentId]/matches', () => {
-    it('returns empty matches for new tournament', async () => {
-      const tournament = await createTournament(game.id, mode.id);
-      const request = createMockRequest('GET', `/api/tournaments/${tournament.id}/matches`);
-      const response = await getTournamentMatches(request, createRouteParams({ tournamentId: tournament.id }));
-      const { status, data } = await parseResponse(response);
-
-      expect(status).toBe(200);
-      expect(Array.isArray(data.matches)).toBe(true);
-      expect(data.count).toBe(0);
     });
   });
 });

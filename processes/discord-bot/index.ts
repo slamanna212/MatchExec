@@ -226,7 +226,6 @@ class MatchExecBot {
       this.reminderHandler = new ReminderHandler(this.client, this.db, this.settings);
       this.interactionHandler = new InteractionHandler(
         this.client,
-        this.db,
         this.settings,
         this.sendSignupNotification.bind(this)
       );

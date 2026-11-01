@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { planDoubleElimination } from '@/lib/double-elimination';
-import type { DeMatch, PlannedMatch } from '@/lib/double-elimination';
+import { planDoubleElimination } from '@/lib/tournaments/double-elimination';
+import type { DeMatch, PlannedMatch } from '@/lib/tournaments/double-elimination';
 
 // Deterministic RNG so a failing seed can be replayed.
 function rng(seed: number) {

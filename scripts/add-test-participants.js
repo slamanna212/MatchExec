@@ -1,7 +1,8 @@
-import sqlite3 from 'sqlite3';
+import pg from 'pg';
 import { randomUUID } from 'crypto';
 
-const dbPath = './app_data/data/matchexec.db';
+// Dev helper: connects to Postgres through DATABASE_URL (defaults to the compose.dev.yml database).
+const connectionString = process.env.DATABASE_URL || 'postgres://matchexec:matchexec@127.0.0.1:5432/matchexec';
 
 // Sample usernames for randomization
 const adjectives = ['Swift', 'Shadow', 'Fire', 'Ice', 'Thunder', 'Steel', 'Mystic', 'Phantom', 'Cyber', 'Neon', 'Viper', 'Phoenix', 'Storm', 'Blade', 'Frost', 'Crimson', 'Ghost', 'Titan', 'Sonic', 'Alpha'];
@@ -20,16 +21,12 @@ function generateRandomDiscordId() {
 }
 
 async function addTestParticipants() {
-  const db = new sqlite3.Database(dbPath);
+  const client = new pg.Client({ connectionString });
+  await client.connect();
 
   try {
     // Get the tournament in gather stage
-    const tournament = await new Promise((resolve, reject) => {
-      db.get('SELECT id, name FROM tournaments WHERE status = "gather" LIMIT 1', (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    const { rows: [tournament] } = await client.query("SELECT id, name FROM tournaments WHERE status = 'gather' ORDER BY created_at LIMIT 1");
 
     if (!tournament) {
       console.log('No tournament in gather stage found in database');
@@ -38,69 +35,33 @@ async function addTestParticipants() {
 
     console.log(`Adding test participants to tournament: ${tournament.name} (${tournament.id})`);
 
-    // Generate 39 test participants
-    const participants = [];
+    // Generate 39 test participants (team_assignment stays NULL, which keeps them in reserves)
     for (let i = 0; i < 39; i++) {
-      participants.push({
-        id: randomUUID(),
-        tournament_id: tournament.id,
-        user_id: randomUUID(),
-        discord_user_id: generateRandomDiscordId(),
-        username: generateRandomUsername(),
-        signup_data: JSON.stringify({
-          experience: ['Beginner', 'Intermediate', 'Advanced', 'Expert'][Math.floor(Math.random() * 4)],
-          preferred_role: ['Tank', 'DPS', 'Support', 'Flex'][Math.floor(Math.random() * 4)],
-          availability: 'Available'
-        }),
-        team_assignment: null // This keeps them in reserves
-      });
-    }
-
-    // Insert all participants
-    const stmt = db.prepare(`
-      INSERT INTO tournament_participants
-      (id, tournament_id, user_id, discord_user_id, username, signup_data, team_assignment)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const participant of participants) {
-      await new Promise((resolve, reject) => {
-        stmt.run([
-          participant.id,
-          participant.tournament_id,
-          participant.user_id,
-          participant.discord_user_id,
-          participant.username,
-          participant.signup_data,
-          participant.team_assignment
-        ], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    }
-
-    stmt.finalize();
-    console.log(`Successfully added ${participants.length} test participants to tournament reserves`);
-
-    // Show current participant count
-    const count = await new Promise((resolve, reject) => {
-      db.get(
-        'SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?',
-        [tournament.id],
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row.count);
-        }
+      await client.query(
+        `INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          randomUUID(),
+          tournament.id,
+          randomUUID(),
+          generateRandomDiscordId(),
+          generateRandomUsername(),
+          JSON.stringify({
+            experience: ['Beginner', 'Intermediate', 'Advanced', 'Expert'][Math.floor(Math.random() * 4)],
+            preferred_role: ['Tank', 'DPS', 'Support', 'Flex'][Math.floor(Math.random() * 4)],
+            availability: 'Available'
+          }),
+        ]
       );
-    });
+    }
+    console.log('Successfully added 39 test participants to tournament reserves');
 
+    const { rows: [{ count }] } = await client.query('SELECT COUNT(*)::int AS count FROM tournament_participants WHERE tournament_id = $1', [tournament.id]);
     console.log(`Total participants in tournament: ${count}`);
-
   } catch (error) {
     console.error('Error adding test participants:', error);
   } finally {
-    db.close();
+    await client.end();
   }
 }
 

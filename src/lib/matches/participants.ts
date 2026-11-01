@@ -71,6 +71,26 @@ export async function addParticipant(
   });
 }
 
+export interface BulkParticipantInput {
+  user_id: string;
+  discord_user_id: string | null;
+  username: string;
+  receives_map_codes?: boolean;
+}
+
+/**
+ * Add several players to a match at once (tournament rosters), optionally linked to a match_teams row. Players already
+ * in the match are left alone (unique match + user). Returns how many rows were inserted.
+ */
+export async function addParticipantsBulk(ex: Executor, matchId: string, members: BulkParticipantInput[], matchTeamId?: string | null): Promise<number> {
+  if (members.length === 0) return 0;
+  const inserted = await ex.insert(matchParticipants).values(members.map((m) => ({
+    id: genId('participant'), match_id: matchId, user_id: m.user_id, discord_user_id: m.discord_user_id, username: m.username,
+    receives_map_codes: !!m.receives_map_codes, team_id: matchTeamId ?? null,
+  }))).onConflictDoNothing().returning({ id: matchParticipants.id });
+  return inserted.length;
+}
+
 /** Remove a signup by user id; returns whether a row was removed. */
 export async function removeParticipantByUser(ex: Executor, matchId: string, userId: string): Promise<boolean> {
   return ex.transaction(async (tx) => {

@@ -22,6 +22,7 @@ import { db as pgDb, type Executor } from '../../../lib/db';
 import { discordAnnouncementQueue, discordPlayerReminderQueue, discordReminderQueue } from '../../../lib/db/schema';
 import { getGameDisplay, getMapNameById } from '../../../src/lib/games';
 import { areAllMapNotificationsSent, getMatch, getMatchName, mapIdsOf } from '../../../src/lib/matches';
+import { getTournamentAnnouncementContext, getTournamentEventImage } from '../../../src/lib/tournaments';
 import {
   deleteMessages, getAnnouncementMessage, listAllMessages, listAnnouncementMessages, recordMessage, setAnnouncementThread,
 } from '../../../src/lib/discord-messages';
@@ -32,8 +33,7 @@ import {
 } from '../../../src/lib/discord-queues';
 
 // Queue rows come from the Discord queues module (src/lib/queues): claimed atomically, retried with backoff,
-// abandoned claims reset. Match data is read through the matches domain (Postgres); tournament data still lives in
-// the legacy SQLite database until that domain is ported (TODO(tournaments)).
+// abandoned claims reset. Match and tournament data are read through the matches / tournaments domains (Postgres).
 
 interface MatchEditData {
   id: string;
@@ -218,12 +218,8 @@ interface TournamentMessageData {
 /**
  * Fetches tournament messages from database
  */
-async function fetchTournamentMessages(db: Database, tournamentId: string): Promise<TournamentMessageData[]> {
-  return await db.all<TournamentMessageData>(`
-    SELECT message_id, channel_id, message_type
-    FROM discord_match_messages
-    WHERE match_id = ? AND message_type = 'announcement'
-  `, [tournamentId]);
+async function fetchTournamentMessages(tournamentId: string): Promise<TournamentMessageData[]> {
+  return await listAnnouncementMessages(pgDb, tournamentId);
 }
 
 /**
@@ -361,14 +357,13 @@ export class QueueProcessor {
       rules?: 'competitive' | 'casual';
     };
     if (queued.announcement_type === 'tournament') {
-      const t = await this.db.get<Omit<Context, 'guild_id' | 'rules'>>(
-        `SELECT name, description, game_id, max_participants, event_image_url, start_time AS start_date
-         FROM tournaments WHERE id = ?`,
-        [queued.match_id]
-      );
+      const t = await getTournamentAnnouncementContext(pgDb, queued.match_id);
       if (!t) return undefined;
       const settings = await getAnyDiscordSettings(pgDb);
-      return { ...t, guild_id: settings?.guild_id, rules: 'casual' } as Context;
+      return {
+        name: t.name, description: t.description ?? '', game_id: t.game_id, max_participants: t.max_participants ?? 0,
+        event_image_url: t.event_image_url ?? undefined, start_date: t.start_time?.toISOString(), guild_id: settings?.guild_id, rules: 'casual',
+      } as Context;
     }
     const m = await getMatch(this.queueDb, queued.match_id);
     if (!m) return undefined;
@@ -1584,7 +1579,7 @@ export class QueueProcessor {
       logger.debug(`🔄 Updating tournament messages for signup closure: ${tournamentId}`);
 
       const tournamentData = await this.fetchTournamentImageData(tournamentId);
-      const messages = await fetchTournamentMessages(this.db, tournamentId);
+      const messages = await fetchTournamentMessages(tournamentId);
 
       logger.debug(`📝 Found ${messages.length} tournament messages to update`);
 
@@ -1602,9 +1597,7 @@ export class QueueProcessor {
   }
 
   private async fetchTournamentImageData(tournamentId: string) {
-    return await this.db!.get<{ event_image_url?: string }>(`
-      SELECT event_image_url FROM tournaments WHERE id = ?
-    `, [tournamentId]);
+    return await getTournamentEventImage(pgDb, tournamentId);
   }
 
   private async updateTournamentMessagesBatch(messages: any[], tournamentData: any): Promise<number> {

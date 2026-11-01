@@ -16,7 +16,7 @@ import { GET as getStandings } from '@/app/api/series/[seriesId]/standings/route
 import { POST as transitionSeries } from '@/app/api/series/[seriesId]/transition/route';
 import { DELETE as deleteEvent } from '@/app/api/series/[seriesId]/events/[eventId]/route';
 import { forwardToApp as deleteMatchRoute } from '../../utils/legacy-match-routes';
-import { DELETE as deleteTournamentRoute } from '@/app/api/tournaments/[tournamentId]/route';
+import { forwardToApp as deleteTournamentRoute } from '../../utils/legacy-match-routes';
 import { forwardToApp as listMatchesRoute } from '../../utils/legacy-match-routes';
 import { NextRequest } from 'next/server';
 

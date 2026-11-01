@@ -5,11 +5,7 @@
 import { expect } from 'vitest';
 import { createMockRequest, parseResponse, createRouteParams } from './api-helpers';
 import type { getTestDb } from './test-db';
-import { POST as createTournament } from '@/app/api/tournaments/route';
-import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentId]/transition/route';
-import { POST as createTeam, PUT as assignMembers } from '@/app/api/tournaments/[tournamentId]/teams/route';
-import { POST as generateMatches } from '@/app/api/tournaments/[tournamentId]/generate-matches/route';
-import { POST as progressTournament } from '@/app/api/tournaments/[tournamentId]/progress/route';
+import { forwardToApp as createTournament, forwardToApp as transitionTournament, forwardToApp as createTeam, forwardToApp as assignMembers, forwardToApp as generateMatches, forwardToApp as progressTournament } from '../utils/legacy-match-routes';
 import { forwardToApp as transitionMatch } from '../utils/legacy-match-routes';
 import { forwardToApp as saveResult } from '../utils/legacy-match-routes';
 

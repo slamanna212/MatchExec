@@ -7,7 +7,7 @@ import { createMockRequest, parseResponse } from '../../utils/api-helpers';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch, createTournament } from '../../utils/fixtures';
 import { forwardToApp as listMatches } from '../../utils/legacy-match-routes';
-import { GET as listTournaments } from '@/app/api/tournaments/route';
+import { forwardToApp as listTournaments } from '../../utils/legacy-match-routes';
 
 let db: ReturnType<typeof getTestDb>;
 let order = 0;

@@ -15,13 +15,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createMockRequest, parseResponse, createRouteParams } from '../../utils/api-helpers';
 import { createGame, createGameMode } from '../../utils/fixtures';
 import { getTestDb } from '../../utils/test-db';
-import { POST as createTournament, } from '@/app/api/tournaments/route';
-import { PUT as updateTournament } from '@/app/api/tournaments/[tournamentId]/route';
-import { POST as transitionTournament } from '@/app/api/tournaments/[tournamentId]/transition/route';
-import { POST as createTeam, PUT as assignMembers, DELETE as deleteTeam } from '@/app/api/tournaments/[tournamentId]/teams/route';
-import { POST as generateMatches } from '@/app/api/tournaments/[tournamentId]/generate-matches/route';
-import { POST as progressTournament } from '@/app/api/tournaments/[tournamentId]/progress/route';
-import { GET as getLeaderboard } from '@/app/api/tournaments/[tournamentId]/leaderboard/route';
+import {
+  forwardToApp as createTournament, forwardToApp as updateTournament, forwardToApp as transitionTournament, forwardToApp as createTeam,
+  forwardToApp as assignMembers, forwardToApp as deleteTeam, forwardToApp as generateMatches, forwardToApp as progressTournament,
+  forwardToApp as getLeaderboard,
+} from '../../utils/legacy-match-routes';
 import { forwardToApp as createMatch } from '../../utils/legacy-match-routes';
 import { forwardToApp as deleteMatch } from '../../utils/legacy-match-routes';
 import { forwardToApp as transitionMatch } from '../../utils/legacy-match-routes';

@@ -82,7 +82,8 @@ export async function getTournamentRescoreBlocker(ex: Executor, matchId: string)
   const later = await ex.select({ match_id: tournamentMatches.match_id }).from(tournamentMatches)
     .where(and(
       eq(tournamentMatches.tournament_id, tm.tournament_id),
-      sql`${tournamentMatches.created_at} > ${tm.created_at}`,
+      // Compared inside SQL: a JS Date round trip would truncate Postgres' microseconds and make the row itself look "later".
+      sql`${tournamentMatches.created_at} > (select tm0.created_at from tournament_matches tm0 where tm0.match_id = ${matchId})`,
       sql`(${tournamentMatches.team1_id} IN (${sql.join(teams.map((t) => sql`${t}`), sql`, `)}) OR ${tournamentMatches.team2_id} IN (${sql.join(teams.map((t) => sql`${t}`), sql`, `)}))`,
     )).limit(1);
   return later.length > 0 ? 'The bracket has already advanced past this match; it can no longer be rescored' : null;

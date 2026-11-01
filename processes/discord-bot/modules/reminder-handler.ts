@@ -13,6 +13,7 @@ import { games, matches } from '../../../lib/db/schema';
 import { listChannelsForNotification } from '../../../src/lib/discord-channels';
 import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
 import { getBlueRedChannels, getMatchWithGame, listDmRecipients } from '../../../src/lib/matches';
+import { getTournamentSignupEventData } from '../../../src/lib/tournaments';
 
 interface EventData {
   id: string;
@@ -32,7 +33,6 @@ interface AnnouncementMessageData {
  * Retrieves event data for signup notification (match or tournament)
  */
 async function getEventDataForSignup(
-  db: Database,
   matchId: string,
   isTournament: boolean
 ): Promise<EventData | null> {
@@ -41,14 +41,7 @@ async function getEventDataForSignup(
       .from(matches).leftJoin(games, eq(matches.game_id, games.id)).where(eq(matches.id, matchId));
     return (row as unknown as EventData | undefined) ?? null;
   }
-  // TODO(tournaments): tournaments still live in the legacy SQLite database.
-  const result = await db.get<EventData>(`
-    SELECT t.*, g.name as game_name, t.max_participants as max_signups, g.color as game_color
-    FROM tournaments t
-    LEFT JOIN games g ON t.game_id = g.id
-    WHERE t.id = ?
-  `, [matchId]);
-  return result ?? null;
+  return ((await getTournamentSignupEventData(pgDb, matchId)) as unknown as EventData | undefined) ?? null;
 }
 
 /**
@@ -257,7 +250,7 @@ export class ReminderHandler {
       const isTournament = matchId.startsWith('tournament_');
 
       // Get event data using helper function
-      const eventData = await getEventDataForSignup(this.db, matchId, isTournament);
+      const eventData = await getEventDataForSignup(matchId, isTournament);
 
       if (!eventData) {
         logger.error(`❌ ${isTournament ? 'Tournament' : 'Match'} not found for signup notification:`, matchId);

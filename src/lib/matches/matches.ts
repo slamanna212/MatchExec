@@ -239,6 +239,65 @@ export async function createMatch(ex: Executor, input: CreateMatchInput & { id?:
   return row;
 }
 
+export interface CreateTournamentMatchInput {
+  id: string;
+  name: string;
+  description?: string | null;
+  gameId: string;
+  modeId: string;
+  mapId: string | null;
+  maps: string[];
+  rounds: number;
+  maxParticipants: number;
+  status: MatchStatus;
+  tournamentId: string;
+  tournamentRound: number;
+  tournamentBracketType: string;
+  scheduledTime: Date;
+  team1Name?: string | null;
+  team2Name?: string | null;
+  /** tournament_teams ids: team1 plays blue, team2 plays red. */
+  team1Id?: string | null;
+  team2Id?: string | null;
+  announcements?: Announcement[] | null;
+  rules?: string | null;
+  eventImageUrl?: string | null;
+  statsEnabled?: boolean;
+  playerNotifications?: boolean;
+}
+
+/** Insert a bracket match for a tournament (the matches domain owns every write to `matches`). */
+export async function createTournamentMatch(ex: Executor, input: CreateTournamentMatchInput): Promise<void> {
+  await ex.insert(matches).values({
+    id: input.id,
+    name: input.name,
+    description: input.description || null,
+    game_id: input.gameId,
+    mode_id: input.modeId,
+    map_id: input.mapId,
+    maps: input.maps.length > 0 ? input.maps : null,
+    rounds: input.rounds,
+    max_participants: input.maxParticipants,
+    status: input.status,
+    tournament_id: input.tournamentId,
+    tournament_round: input.tournamentRound,
+    tournament_bracket_type: input.tournamentBracketType,
+    start_date: input.scheduledTime,
+    start_time: input.scheduledTime,
+    team1_name: input.team1Name ?? null,
+    team2_name: input.team2Name ?? null,
+    // blue = team1, red = team2 (see getTournamentTeamId in scoreboard.ts)
+    blue_team_id: input.team1Id ?? null,
+    red_team_id: input.team2Id ?? null,
+    announcements: input.announcements && input.announcements.length > 0 ? input.announcements : null,
+    rules: input.rules || 'casual',
+    match_format: input.rules || 'casual',
+    event_image_url: input.eventImageUrl || null,
+    stats_enabled: !!input.statsEnabled,
+    player_notifications: input.playerNotifications ?? true,
+  });
+}
+
 export interface UpdateMatchInput {
   name: string;
   description?: string | null;

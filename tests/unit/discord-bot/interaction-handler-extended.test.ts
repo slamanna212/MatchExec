@@ -113,7 +113,7 @@ describe('InteractionHandler — Extended', () => {
     mode = testData.mode;
 
     const clientWithWs = { ...mockDiscordClient, ws: { ping: 5 } };
-    handler = new InteractionHandler(clientWithWs, db, mockSettings, vi.fn().mockResolvedValue(undefined));
+    handler = new InteractionHandler(clientWithWs, mockSettings, vi.fn().mockResolvedValue(undefined));
   });
 
   afterEach(() => {

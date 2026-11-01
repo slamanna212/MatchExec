@@ -224,8 +224,8 @@ export function TournamentInfoPanel({
 
             <Group justify="space-between">
               <Text size="sm" fw={500} c="dimmed">Stats Collection:</Text>
-              <Badge variant="light" color={tournament.stats_enabled === 1 ? 'green' : 'gray'}>
-                {tournament.stats_enabled === 1 ? 'Enabled' : 'Disabled'}
+              <Badge variant="light" color={tournament.stats_enabled ? 'green' : 'gray'}>
+                {tournament.stats_enabled ? 'Enabled' : 'Disabled'}
               </Badge>
             </Group>
           </Stack>

@@ -4,10 +4,10 @@
 
 import type { Client, ModalSubmitInteraction } from 'discord.js';
 import type { ParsedModalId } from '../utils/id-parsers';
-import type { Database } from '../../../lib/database/connection';
 import { getDiscordAvatarUrl } from '../utils/avatar-fetcher';
 import { db as pgDb } from '../../../lib/db';
 import { addParticipant, countParticipants } from '../../../src/lib/matches';
+import { addParticipant as addTournamentParticipant, countParticipants as countTournamentParticipants, getTeamName } from '../../../src/lib/tournaments';
 
 /** The user is already signed up (unique match + user). */
 export class DuplicateSignupError extends Error {
@@ -30,10 +30,6 @@ interface SignupForm {
 interface CollectedFormData {
   signupData: Record<string, string>;
   displayUsername: string;
-}
-
-interface TeamInfo {
-  team_name: string;
 }
 
 /**
@@ -70,7 +66,6 @@ export function collectFormData(
  * Insert participant into database
  */
 export async function insertParticipant(
-  db: Database,
   parsedId: ParsedModalId,
   interaction: ModalSubmitInteraction,
   displayUsername: string,
@@ -81,38 +76,18 @@ export async function insertParticipant(
   const avatarUrl = await getDiscordAvatarUrl(client, interaction.user.id);
 
   if (parsedId.isTournament) {
-    // TODO(tournaments): tournaments still live in the legacy SQLite database.
-    const participantId = `participant_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-    // Insert tournament participant
-    await db.run(`
-      INSERT INTO tournament_participants (id, tournament_id, user_id, discord_user_id, username, signup_data, team_assignment)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [
-      participantId,
-      parsedId.eventId,
-      interaction.user.id,
-      interaction.user.id,
-      displayUsername,
-      JSON.stringify(signupData),
-      parsedId.selectedTeamId
-    ]);
-
-    // If team was selected, also add to tournament_team_members
-    if (parsedId.selectedTeamId) {
-      const memberId = `member_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`; // NOSONAR: non-security internal ID generation
-      await db.run(`
-        INSERT INTO tournament_team_members (id, team_id, user_id, discord_user_id, username)
-        VALUES (?, ?, ?, ?, ?)
-      `, [
-        memberId,
-        parsedId.selectedTeamId,
-        interaction.user.id,
-        interaction.user.id,
-        displayUsername
-      ]);
-    }
-    return participantId;
-  } 
+    // The unique (tournament, user) key makes a double submit a DuplicateSignupError; picking a team also adds the player to it.
+    const result = await addTournamentParticipant(pgDb, {
+      tournamentId: parsedId.eventId,
+      userId: interaction.user.id,
+      discordUserId: interaction.user.id,
+      username: displayUsername,
+      signupData,
+      teamId: parsedId.selectedTeamId,
+    });
+    if (result.status !== 'added') throw new DuplicateSignupError();
+    return result.id;
+  }
     // Match participant (Postgres). Capacity was checked before the modal; the unique (match, user) key makes a
     // double submit a DuplicateSignupError instead of a second row.
     const result = await addParticipant(pgDb, {
@@ -132,23 +107,18 @@ export async function insertParticipant(
  * Get participant count for an event
  */
 export async function getParticipantCount(
-  db: Database,
   eventId: string,
   isTournament: boolean
 ): Promise<number> {
   if (!isTournament) return (await countParticipants(pgDb, eventId)) || 1;
 
-  const result = await db.get<{ count: number }>(`
-    SELECT COUNT(*) as count FROM tournament_participants WHERE tournament_id = ?
-  `, [eventId]); // TODO(tournaments)
-  return result?.count || 1;
+  return (await countTournamentParticipants(pgDb, eventId)) || 1;
 }
 
 /**
  * Build confirmation message for signup
  */
 export async function buildConfirmationMessage(
-  db: Database,
   parsedId: ParsedModalId,
   signupForm: SignupForm,
   signupData: Record<string, string>,
@@ -158,12 +128,10 @@ export async function buildConfirmationMessage(
 
   // Show team name if selected
   if (parsedId.selectedTeamId) {
-    const team = await db.get<TeamInfo>(`
-      SELECT team_name FROM tournament_teams WHERE id = ?
-    `, [parsedId.selectedTeamId]);
+    const teamName = await getTeamName(pgDb, parsedId.selectedTeamId);
 
-    if (team) {
-      message += `**Team:** ${team.team_name}\n`;
+    if (teamName) {
+      message += `**Team:** ${teamName}\n`;
     }
   }
 

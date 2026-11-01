@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
 import { getTestDb } from '../../utils/test-db';
 import { seedBasicTestData, createMatch } from '../../utils/fixtures';
+import { listActiveTournamentSummaries } from '../../../src/lib/tournaments';
+
+// Wrap the summary query so tests can make it fail once; by default it hits the (bridged) Postgres database.
+vi.mock('../../../src/lib/tournaments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/lib/tournaments')>();
+  return { ...actual, listActiveTournamentSummaries: vi.fn(actual.listActiveTournamentSummaries) };
+});
 
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
@@ -120,7 +127,6 @@ describe('InteractionHandler', () => {
 
     handler = new InteractionHandler(
       clientWithWs as any,
-      db,
       mockSettings,
       vi.fn().mockResolvedValue(undefined)
     );
@@ -153,7 +159,6 @@ describe('InteractionHandler', () => {
     it('skips registration when bot_token is missing', async () => {
       const noTokenHandler = new InteractionHandler(
         mockDiscordClient as any,
-        db,
         { guild_id: 'guild-123' },
         vi.fn()
       );
@@ -163,7 +168,6 @@ describe('InteractionHandler', () => {
     it('skips registration when guild_id is missing', async () => {
       const noGuildHandler = new InteractionHandler(
         mockDiscordClient as any,
-        db,
         { bot_token: 'some-token' },
         vi.fn()
       );
@@ -173,7 +177,6 @@ describe('InteractionHandler', () => {
     it('skips registration when settings is null', async () => {
       const nullSettingsHandler = new InteractionHandler(
         mockDiscordClient as any,
-        db,
         null,
         vi.fn()
       );
@@ -323,7 +326,7 @@ describe('InteractionHandler', () => {
   describe('handleSlashCommand — error handling', () => {
     it('uses followUp when interaction is already replied and an error occurs', async () => {
       const interaction = createMockInteraction({ commandName: 'tournaments', replied: true });
-      vi.spyOn(db, 'all').mockRejectedValueOnce(new Error('DB failure'));
+      vi.mocked(listActiveTournamentSummaries).mockRejectedValueOnce(new Error('DB failure'));
 
       await handler.handleSlashCommand(interaction);
 
@@ -333,7 +336,7 @@ describe('InteractionHandler', () => {
 
     it('replies directly when interaction is not yet replied and an error occurs', async () => {
       const interaction = createMockInteraction({ commandName: 'tournaments', replied: false, deferred: false });
-      vi.spyOn(db, 'all').mockRejectedValueOnce(new Error('DB failure'));
+      vi.mocked(listActiveTournamentSummaries).mockRejectedValueOnce(new Error('DB failure'));
 
       await handler.handleSlashCommand(interaction);
 

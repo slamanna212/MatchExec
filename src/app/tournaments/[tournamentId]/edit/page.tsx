@@ -41,9 +41,9 @@ interface TournamentData {
   start_time?: string;
   event_image_url?: string;
   livestream_link?: string;
-  announcements?: string;
-  player_notifications?: number;
-  allow_match_editing?: number;
+  announcements?: AnnouncementTime[] | null;
+  player_notifications?: boolean;
+  allow_match_editing?: boolean;
   ruleset?: string;
   format?: string;
   rounds_per_match?: number;
@@ -106,17 +106,10 @@ export default function EditTournamentPage({
         setName(data.name || '');
         setDescription(data.description || '');
         setLivestreamLink(data.livestream_link || '');
-        setPlayerNotifications(data.player_notifications !== 0);
-        setAllowMatchEditing(data.allow_match_editing !== 0);
+        setPlayerNotifications(data.player_notifications !== false);
+        setAllowMatchEditing(data.allow_match_editing !== false);
 
-        if (data.announcements) {
-          try {
-            const parsed = JSON.parse(data.announcements);
-            setAnnouncements(Array.isArray(parsed) ? parsed : []);
-          } catch {
-            setAnnouncements([]);
-          }
-        }
+        setAnnouncements(Array.isArray(data.announcements) ? data.announcements : []);
 
         if (data.start_time) {
           const d = new Date(`${data.start_time}${data.start_time.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(data.start_time) ? '' : 'Z'}`);

@@ -41,7 +41,7 @@ describe('interaction-helpers', () => {
   describe('getParticipantCount', () => {
     it('returns 1 as fallback when no match participants', async () => {
       const match = await createMatch(game.id, mode.id);
-      const count = await getParticipantCount(db as any, match.id, false);
+      const count = await getParticipantCount(match.id, false);
       expect(count).toBe(1); // 0 count -> returns 1 as fallback
     });
 
@@ -58,7 +58,7 @@ describe('interaction-helpers', () => {
         [match.id]
       );
 
-      const count = await getParticipantCount(db as any, match.id, false);
+      const count = await getParticipantCount(match.id, false);
       expect(count).toBe(2);
     });
 
@@ -73,7 +73,7 @@ describe('interaction-helpers', () => {
          VALUES ('tp1', 't1', 'u1', 'd1', 'Player1')`
       );
 
-      const count = await getParticipantCount(db as any, 't1', true);
+      const count = await getParticipantCount('t1', true);
       expect(count).toBe(1);
     });
   });
@@ -91,7 +91,7 @@ describe('interaction-helpers', () => {
       };
       const signupData = { username: 'TestUser', rank: 'Diamond' };
 
-      const msg = await buildConfirmationMessage(db as any, parsedId as any, signupForm, signupData, 5);
+      const msg = await buildConfirmationMessage(parsedId as any, signupForm, signupData, 5);
 
       expect(msg).toContain('Successfully signed up');
       expect(msg).toContain('TestUser');
@@ -111,7 +111,7 @@ describe('interaction-helpers', () => {
       const parsedId = { eventId: 't2', isTournament: true, selectedTeamId: 'team-1' };
       const signupForm = { fields: [{ id: 'username', label: 'Username', required: true }] };
 
-      const msg = await buildConfirmationMessage(db as any, parsedId as any, signupForm, { username: 'player' }, 3);
+      const msg = await buildConfirmationMessage(parsedId as any, signupForm, { username: 'player' }, 3);
 
       expect(msg).toContain('Alpha Squad');
     });
@@ -128,7 +128,7 @@ describe('interaction-helpers', () => {
       };
       const signupData = { f1: 'val1', f2: 'val2', f3: 'val3', f4: 'val4' };
 
-      const msg = await buildConfirmationMessage(db as any, parsedId as any, signupForm, signupData, 1);
+      const msg = await buildConfirmationMessage(parsedId as any, signupForm, signupData, 1);
 
       expect(msg).toContain('Field 1');
       expect(msg).toContain('Field 2');
@@ -142,7 +142,7 @@ describe('interaction-helpers', () => {
         fields: [{ id: 'rank', label: 'Rank (Optional)', required: false }],
       };
 
-      const msg = await buildConfirmationMessage(db as any, parsedId as any, signupForm, { rank: 'Gold' }, 1);
+      const msg = await buildConfirmationMessage(parsedId as any, signupForm, { rank: 'Gold' }, 1);
 
       expect(msg).toContain('Rank:');
       expect(msg).not.toContain('(Optional)');
@@ -245,7 +245,7 @@ describe('interaction-helpers', () => {
       const match = await createMatch(game.id, mode.id);
       const parsedId = { eventId: match.id, isTournament: false, selectedTeamId: null } as any;
 
-      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', { rank: 'Gold' }, mockClient);
+      const participantId = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', { rank: 'Gold' }, mockClient);
 
       expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
 
@@ -261,8 +261,8 @@ describe('interaction-helpers', () => {
       const parsedId = { eventId: match.id, isTournament: false, selectedTeamId: null } as any;
       const interaction2 = { ...mockInteraction, user: { id: 'discord-user-456', username: 'Player2' } } as any;
 
-      const id1 = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
-      const id2 = await insertParticipant(db as any, parsedId, interaction2, 'Player2', {}, mockClient);
+      const id1 = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+      const id2 = await insertParticipant(parsedId, interaction2, 'Player2', {}, mockClient);
 
       expect(id1).not.toBe(id2);
     });
@@ -271,7 +271,7 @@ describe('interaction-helpers', () => {
       const tournament = await createTournament(game.id, { game_mode_id: mode.id });
       const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: null } as any;
 
-      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+      const participantId = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
 
       expect(participantId).toMatch(/^participant_\d+_[a-z0-9]+$/);
       const row = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
@@ -291,7 +291,7 @@ describe('interaction-helpers', () => {
       );
       const parsedId = { eventId: tournament.id, isTournament: true, selectedTeamId: teamId } as any;
 
-      const participantId = await insertParticipant(db as any, parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
+      const participantId = await insertParticipant(parsedId, mockInteraction, 'TestPlayer', {}, mockClient);
 
       const pRow = await db.get(`SELECT * FROM tournament_participants WHERE id = ?`, [participantId]);
       expect(pRow).toBeDefined();
