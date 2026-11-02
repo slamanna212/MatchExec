@@ -1,16 +1,16 @@
 // @vitest-environment node
 /** Bracket generation, persistence and state queries against the Postgres harness (domain functions called directly). */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { createTournament } from '../../utils/pg-fixtures';
 import { bracketGame, completeMatch, insertTeams } from '../../utils/pg-tournament-fixtures';
 import type { tournaments } from '../../../lib/db/schema';
-import { matchGames, matchParticipants, matchTeams, matches, tournamentMatches, tournamentRoundByes, tournamentTeams } from '../../../lib/db/schema';
+import { gameMaps, matchGames, matchParticipants, matchTeams, matches, tournamentMatches, tournamentRoundByes, tournamentTeams } from '../../../lib/db/schema';
 import { db } from '../../../lib/db';
 import {
   generateCumulativeMatches, generateDoubleEliminationMatches, generateDoubleEliminationRoundMatches, generateNextRoundMatches,
-  generateSingleEliminationMatches, getBracketWinner, getCurrentRoundInfo, isRoundComplete, saveGeneratedMatches, TournamentError,
+  generateSingleEliminationMatches, getBracketWinner, getCurrentRoundInfo, isRoundComplete, saveGeneratedMatches, TournamentError, tournamentMatchCapacity,
   type BracketAssignment, type GeneratedMatch, type TournamentMatchInfo,
 } from '@/lib/tournaments';
 import { AfterCommit as Effects } from '@/lib/matches/effects';
@@ -78,12 +78,43 @@ describe('generateSingleEliminationMatches', () => {
     const [m] = await generateSingleEliminationMatches(db, t.id, assignmentsFor(teams), new Date('2026-05-01T10:00:00Z'));
     expect(m).toMatchObject({
       status: 'assign', match_type: 'tournament', rules: 'competitive', description: 'Finals', event_image_url: '/img.png', stats_enabled: true,
-      announcements: [{ id: 'a', value: 1, unit: 'hours' }], max_participants: 12, game_id: gameId, rounds_per_match: 3,
+      announcements: [{ id: 'a', value: 1, unit: 'hours' }], max_participants: 10, game_id: gameId, rounds_per_match: 3,
     });
     expect(m.scheduled_time?.toISOString()).toBe('2026-05-01T10:00:00.000Z');
     expect(m.maps).toHaveLength(3);
     expect(new Set(m.maps).size).toBe(3);
     expect(m.map_id).toBe(m.maps![0]);
+  });
+
+  it('sizes a match for both teams at full strength (team_size x 2), 12 when the mode has no team size', async () => {
+    const t = await newTournament();
+    const [m] = await generateSingleEliminationMatches(db, t.id, assignmentsFor(await insertTeams(t.id, 2)));
+    expect(m.max_participants).toBe(10); // the fixture mode is 5v5
+    expect(tournamentMatchCapacity(null)).toBe(12);
+    expect(tournamentMatchCapacity(0)).toBe(12);
+    expect(tournamentMatchCapacity(3)).toBe(6);
+  });
+
+  it('never draws a map that is switched off for tournaments on the Games page', async () => {
+    const { gameId: g, modeId: mo, mapIds } = await bracketGame({ maps: 6 });
+    const off = mapIds.slice(0, 3);
+    await pg().update(gameMaps).set({ tournament_enabled: false }).where(inArray(gameMaps.id, off));
+    const t = await createTournament(g, { game_mode_id: mo, rounds_per_match: 3 });
+    const teams = await insertTeams(t.id, 8);
+    const generated = await generateSingleEliminationMatches(db, t.id, assignmentsFor(teams));
+    expect(generated).toHaveLength(4);
+    for (const m of generated) {
+      expect(m.maps).toHaveLength(3);
+      for (const map of m.maps!) expect(off).not.toContain(map);
+    }
+  });
+
+  it('fails clearly when every map is switched off for tournaments', async () => {
+    const { gameId: g, modeId: mo } = await bracketGame({ maps: 3 });
+    await pg().update(gameMaps).set({ tournament_enabled: false }).where(eq(gameMaps.game_id, g));
+    const t = await createTournament(g, { game_mode_id: mo });
+    const teams = await insertTeams(t.id, 2);
+    await expect(generateSingleEliminationMatches(db, t.id, assignmentsFor(teams))).rejects.toThrow(/Enable maps for tournaments on the Games page/);
   });
 
   it('propagates player_notifications from the tournament to the generated matches', async () => {

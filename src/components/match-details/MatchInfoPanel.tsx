@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router';
 import type { MatchWithGameDetails, MatchGameResult } from '@/shared/types';
 import { StageRing } from '../StageRing';
 import { SeriesMembershipRow } from '../series/SeriesMembershipRow';
+import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 
 // Use MatchWithGame as a local alias for the shared type
 type MatchWithGame = MatchWithGameDetails;
@@ -45,6 +46,7 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
 };
 
 function formatTs(parseDbTimestamp: (ts: string | null | undefined) => Date | null, ts: string | null | undefined): string {
+  if (isUnscheduled(ts)) return UNSCHEDULED_LABEL;
   return parseDbTimestamp(ts)?.toLocaleString('en-US', DATE_FORMAT) ?? 'N/A';
 }
 
@@ -58,7 +60,26 @@ function getStatusTransitionButton(
     case 'created':
       return <Button variant="filled" color="violet" fullWidth onClick={() => onStatusTransition('gather')}>Start Signups</Button>;
     case 'gather':
-      return <Button variant="light" color="orange" fullWidth onClick={() => onStatusTransition('assign')}>Close Signups</Button>;
+      return (
+        <Button
+          variant="light"
+          color="orange"
+          fullWidth
+          onClick={() => modals.openConfirmModal({
+            title: 'Close Signups',
+            children: (
+              <Text size="sm">
+                Are you sure you want to close signups for &quot;{match.name}&quot;? This will prevent new participants from joining.
+              </Text>
+            ),
+            labels: { confirm: 'Close Signups', cancel: 'Cancel' },
+            confirmProps: { color: 'orange' },
+            onConfirm: () => onStatusTransition('assign'),
+          })}
+        >
+          Close Signups
+        </Button>
+      );
     case 'assign':
       return <Button variant="filled" color="violet" fullWidth onClick={() => onStatusTransition('battle')}>Start Match</Button>;
     case 'battle':
@@ -203,12 +224,12 @@ function MatchActionsCard({
         {(showAssignPlayers || showEdit) && (
           <Group grow gap="xs">
             {showAssignPlayers && (
-              <Button size="sm" variant="light" color="violet" onClick={onAssignPlayers}>
+              <Button size="sm" px="xs" variant="light" color="violet" onClick={onAssignPlayers}>
                 Assign Players
               </Button>
             )}
             {showEdit && (
-              <Button size="sm" variant="light" color="violet" onClick={onEdit}>
+              <Button size="sm" px="xs" variant="light" color="violet" onClick={onEdit}>
                 Edit Match
               </Button>
             )}

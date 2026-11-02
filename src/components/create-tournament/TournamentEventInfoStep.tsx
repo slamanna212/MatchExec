@@ -140,7 +140,7 @@ export function TournamentEventInfoStep({
           Back
         </Button>
         <Button onClick={onNext} disabled={!canProceed}>
-          Next: Tournament Format
+          Next: Announcements
         </Button>
       </Group>
     </Stack>

@@ -43,6 +43,7 @@ import {
   buildConfirmationMessage
 } from './interaction-helpers';
 import { sendDM, buildSignupWelcomeEmbed } from './dm-builder';
+import { isUnscheduled } from '../../../shared/schedule';
 
 interface EventData {
   max_signups: number;
@@ -294,7 +295,7 @@ export class InteractionHandler {
     guildId: string | undefined
   ) {
     const parts: string[] = [`🎮 ${item.game_name}`];
-    if (item.start_date) {
+    if (item.start_date && !isUnscheduled(item.start_date)) {
       const ts = Math.floor(new Date(item.start_date).getTime() / 1000);
       if (!isNaN(ts)) parts.push(`🕐 <t:${ts}:R>`);
     }

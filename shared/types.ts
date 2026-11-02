@@ -238,6 +238,8 @@ export interface MatchWithGameDetails extends Omit<Match, 'created_at' | 'update
   tournament_allow_match_editing?: boolean;
   stats_enabled?: boolean;
   player_notifications?: boolean;
+  /** Derived from the match's game mode; drives setup, scoring and how participants are grouped. */
+  scoring_type?: 'Normal' | 'FFA' | 'Position';
   created_at: string;
   updated_at: string;
   start_date?: string;
@@ -254,6 +256,17 @@ export interface TournamentWithGameDetails extends Omit<Tournament, 'created_at'
   created_at: string;
   updated_at: string;
   start_time?: string;
+  /** Present while the tournament is running: what the "next round" action would do right now. */
+  progress_hint?: TournamentProgressHint | null;
+}
+
+/** Mirrors `ProgressHint` from `src/lib/tournaments/progress.ts`. */
+export interface TournamentProgressHint {
+  canAdvance: boolean;
+  /** Advancing finishes the tournament (final round / last matches of a cumulative tournament). */
+  willComplete: boolean;
+  /** Why it cannot advance yet. */
+  reason: string | null;
 }
 
 // Data seeding types

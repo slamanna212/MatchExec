@@ -180,11 +180,17 @@ export async function saveSetup(
 
 export type ParticipantDto = Omit<ParticipantRow, 'match_id' | 'last_avatar_check' | 'failed_avatar_checks' | 'grid_position' | 'qualifying_time_ms'> & {
   team_assignment: 'blue' | 'red' | 'reserve' | null;
+  /** The participant's own team (name / colour / order), null when unassigned. Lets clients group without a second fetch. */
+  team_name: string | null;
+  team_color: string | null;
+  team_order: number | null;
 };
 
 /**
  * Participants as the API returns them. `team_assignment` ('blue' | 'red' | 'reserve') is derived from the team
  * (team_order 0 / 1 / reserve) because the legacy column is gone; it is null for other teams and unassigned players.
+ * It is only meaningful for Normal two-team matches: FFA matches (one team per participant) and Position matches
+ * should be grouped by `team_id` / `team_name` / `team_order` instead.
  */
 export async function listParticipantDtos(ex: Executor, matchId: string): Promise<ParticipantDto[]> {
   const rows = await ex
@@ -193,13 +199,17 @@ export async function listParticipantDtos(ex: Executor, matchId: string): Promis
       username: matchParticipants.username, avatar_url: matchParticipants.avatar_url, joined_at: matchParticipants.joined_at,
       signup_data: matchParticipants.signup_data, team_id: matchParticipants.team_id, receives_map_codes: matchParticipants.receives_map_codes,
       team_order: matchTeams.team_order, is_reserve: matchTeams.is_reserve,
+      team_name: matchTeams.team_name, team_color: matchTeams.team_color,
     })
     .from(matchParticipants).leftJoin(matchTeams, eq(matchTeams.id, matchParticipants.team_id))
     .where(eq(matchParticipants.match_id, matchId))
     .orderBy(asc(matchParticipants.joined_at), asc(matchParticipants.id));
-  return rows.map(({ team_order, is_reserve, ...p }) => ({
+  return rows.map(({ team_order, is_reserve, team_name, team_color, ...p }) => ({
     ...p,
     team_assignment: is_reserve ? 'reserve' : team_order === 0 ? 'blue' : team_order === 1 ? 'red' : null,
+    team_name: team_name ?? null,
+    team_color: team_color ?? null,
+    team_order: team_order ?? null,
   }));
 }
 

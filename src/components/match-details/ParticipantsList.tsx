@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid, ActionIcon } from '@mantine/core';
 import { IconMapRoute, IconBrandDiscord } from '@tabler/icons-react';
+import { layoutParticipants, type TeamGroup } from './participant-groups';
 
 interface MatchParticipant {
   id: string;
@@ -10,9 +11,16 @@ interface MatchParticipant {
   avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
-  team_assignment?: 'reserve' | 'blue' | 'red';
+  team_assignment?: 'reserve' | 'blue' | 'red' | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  team_color?: string | null;
+  team_order?: number | null;
   receives_map_codes?: boolean;
 }
+
+/** Mantine colour name of a team section; null/'reserve' is the "unassigned" look. */
+type TeamColor = string | null;
 
 interface SignupField {
   id: string;
@@ -28,6 +36,8 @@ interface ParticipantsListProps {
   participants: MatchParticipant[];
   loading: boolean;
   matchStatus?: string;
+  /** 'Normal' (default) | 'FFA' | 'Position'. FFA and one-person-per-team Position matches have no team columns. */
+  scoringType?: string;
   signupConfig: SignupConfig | null;
   parseDbTimestamp: (timestamp: string | null | undefined) => Date | null;
 }
@@ -36,32 +46,18 @@ export function ParticipantsList({
   participants,
   loading,
   matchStatus,
+  scoringType = 'Normal',
   signupConfig,
   parseDbTimestamp
 }: ParticipantsListProps): JSX.Element {
   // Utility function for team card styling
-  const getTeamCardStyles = (team: 'blue' | 'red' | 'reserve' | null) => {
-    switch(team) {
-      case 'blue':
-        return {
-          borderLeft: '4px solid var(--mantine-color-blue-6)'
-        };
-      case 'red':
-        return {
-          borderLeft: '4px solid var(--mantine-color-red-6)'
-        };
-      case 'reserve':
-      case null:
-        return {
-          borderLeft: '4px solid var(--mantine-color-yellow-6)'
-        };
-      default:
-        return {};
-    }
+  const getTeamCardStyles = (team: TeamColor) => {
+    if (team === null || team === 'reserve') return { borderLeft: '4px solid var(--mantine-color-yellow-6)' };
+    return { borderLeft: `4px solid var(--mantine-color-${team}-6)` };
   };
 
   // Utility function for badge colors
-  const getBadgeColor = (team: 'blue' | 'red' | 'reserve' | null) => {
+  const getBadgeColor = (team: TeamColor) => {
     switch(team) {
       case 'blue': return 'orange';
       case 'red': return 'cyan';
@@ -70,9 +66,8 @@ export function ParticipantsList({
   };
 
   // Utility function for avatar colors
-  const getAvatarColor = (team: 'blue' | 'red' | 'reserve' | null) => {
-    if (team === 'blue') return 'blue';
-    if (team === 'red') return 'red';
+  const getAvatarColor = (team: TeamColor) => {
+    if (team !== null && team !== 'reserve') return team;
     return matchStatus === 'complete' ? 'green' : 'teal';
   };
 
@@ -80,7 +75,7 @@ export function ParticipantsList({
   const renderParticipantCard = (
     participant: MatchParticipant,
     index: number,
-    teamColor: 'blue' | 'red' | 'reserve' | null
+    teamColor: TeamColor
   ) => {
     return (
       <Card
@@ -145,7 +140,7 @@ export function ParticipantsList({
   const renderTeamSection = (
     title: string,
     teamPlayers: MatchParticipant[],
-    teamColor: 'blue' | 'red'
+    teamColor: string
   ) => {
     return (
       <div>
@@ -229,25 +224,70 @@ export function ParticipantsList({
     );
   }
 
-  // Group participants by team
-  const blueTeam = participants.filter(p => p.team_assignment === 'blue');
-  const redTeam = participants.filter(p => p.team_assignment === 'red');
-  const unassigned = participants.filter(
-    p => !p.team_assignment || p.team_assignment === 'reserve'
+  const layout = layoutParticipants(participants, scoringType);
+
+  // FFA / Position without teams: one flat list, no team sections.
+  if (layout.kind === 'flat') {
+    const half = Math.ceil(layout.players.length / 2);
+    return (
+      <Grid gap="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Stack gap="xs">
+            {layout.players.slice(0, half).map((p, i) => renderParticipantCard(p, i + 1, null))}
+          </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Stack gap="xs">
+            {layout.players.slice(half).map((p, i) => renderParticipantCard(p, half + i + 1, null))}
+          </Stack>
+        </Grid.Col>
+      </Grid>
+    );
+  }
+
+  const renderUnassigned = (unassigned: MatchParticipant[], offset: number) => (
+    <div>
+      <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
+      <Grid gap="md">
+        {unassigned.map((participant, index) => (
+          <Grid.Col key={participant.id} span={{ base: 12, md: 6 }}>
+            {renderParticipantCard(participant, offset + index + 1, 'reserve')}
+          </Grid.Col>
+        ))}
+      </Grid>
+    </div>
   );
 
-  const allUnassigned = blueTeam.length === 0 && redTeam.length === 0;
+  // Three or more teams: one section per team.
+  if (layout.kind === 'teams') {
+    return (
+      <Stack gap="lg">
+        <Grid gap="md">
+          {layout.teams.map((team: TeamGroup<MatchParticipant>) => (
+            <Grid.Col key={team.key} span={{ base: 12, md: 6 }}>
+              {renderTeamSection(team.title, team.players, team.color)}
+            </Grid.Col>
+          ))}
+        </Grid>
+        {layout.unassigned.length > 0 &&
+          renderUnassigned(layout.unassigned, layout.teams.reduce((n, t) => n + t.players.length, 0))}
+      </Stack>
+    );
+  }
+
+  const { blue, red, unassigned } = layout;
+  const allUnassigned = blue.players.length === 0 && red.players.length === 0;
 
   return (
     <Stack gap="lg">
-      {/* Team Columns - Blue vs Red */}
+      {/* Team Columns - two teams side by side */}
       {!allUnassigned && (
         <Grid gap="md">
           <Grid.Col span={{ base: 12, md: 6 }}>
-            {renderTeamSection('Blue Team', blueTeam, 'blue')}
+            {renderTeamSection(blue.title, blue.players, 'blue')}
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 6 }}>
-            {renderTeamSection('Red Team', redTeam, 'red')}
+            {renderTeamSection(red.title, red.players, 'red')}
           </Grid.Col>
         </Grid>
       )}
@@ -276,18 +316,8 @@ export function ParticipantsList({
       )}
 
       {/* Unassigned Players Section - When teams exist */}
-      {!allUnassigned && unassigned.length > 0 && (
-        <div>
-          <Text size="md" fw={600} c="gray" mb="sm">Unassigned Players</Text>
-          <Grid gap="md">
-            {unassigned.map((participant, index) => (
-              <Grid.Col key={participant.id} span={{ base: 12, md: 6 }}>
-                {renderParticipantCard(participant, blueTeam.length + redTeam.length + index + 1, 'reserve')}
-              </Grid.Col>
-            ))}
-          </Grid>
-        </div>
-      )}
+      {!allUnassigned && unassigned.length > 0 &&
+        renderUnassigned(unassigned, blue.players.length + red.players.length)}
     </Stack>
   );
 }

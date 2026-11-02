@@ -234,10 +234,10 @@ describe('PUT /api/settings/stats', () => {
     expect((await put({})).data).toEqual({ success: true });
   });
 
-  it('answers 500 for a malformed JSON body (as the old route did) and changes nothing', async () => {
+  it('answers 400 for a malformed JSON body and changes nothing', async () => {
     const res = await appRequest('/api/settings/stats', { method: 'PUT', body: '{nope', headers: { 'content-type': 'application/json' } });
-    expect(res.status).toBe(500);
-    expect(res.data.error).toBe('Failed to update stats settings');
+    expect(res.status).toBe(400);
+    expect(res.data.error).toBe('Invalid JSON body');
     expect(await pg().select().from(statsSettings)).toHaveLength(0);
   });
 });

@@ -12,7 +12,7 @@ import { validateEnum, validateMaxLength, validateNumberRange, validatePositionS
 import {
   TournamentError, assignTeamMembers, createTeam, createTournament, deleteTeam, deleteTournament, generateTournamentMatches, getBracketStandings,
   getCumulativeStandings, getLeaderboardBreakdown, getTournament, getTournamentDetail, getTournamentEventImage, getTournamentWithGame,
-  hasActiveMatches, listBracketMatches, listParticipants, listTeamsWithMembers, listTournamentMatchesIds, listTournaments, lockTournament,
+  getProgressHint, hasActiveMatches, listBracketMatches, listParticipants, listTeamsWithMembers, listTournamentMatchesIds, listTournaments, lockTournament,
   progressTournament, transitionTournament, updateTournamentDetails, type BracketAssignment, type CreateTournamentInput, type TeamAssignmentInput,
   type UpdateTournamentInput,
 } from '@/lib/tournaments';
@@ -175,7 +175,9 @@ export const tournaments = new Hono()
     const tournament = await getTournamentDetail(db, id);
     if (!tournament) return jsonError(c, 'Tournament not found', 404);
     const teams = await listTeamsWithMembers(db, id, { withAvatars: true });
-    return c.json({ ...tournament, teams });
+    // What the "next round" action would do right now (null unless the tournament is running).
+    const progress_hint = await getProgressHint(db, { id, status: tournament.status, format: tournament.format });
+    return c.json({ ...tournament, teams, progress_hint });
   }))
   .put('/:tournamentId', (c) => guard(c, 'Error updating tournament', 'Failed to update tournament', async () => {
     const id = c.req.param('tournamentId');

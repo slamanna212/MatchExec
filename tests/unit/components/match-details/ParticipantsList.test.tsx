@@ -40,6 +40,16 @@ function makeParticipant(id: string, username: string, team?: 'blue' | 'red' | '
   };
 }
 
+/** A participant as the API returns it, with its own team (name / order). */
+function makeTeamed(id: string, username: string, order: number | null, name: string | null, reserve = false) {
+  return {
+    ...makeParticipant(id, username, reserve ? 'reserve' : order === 0 ? 'blue' : order === 1 ? 'red' : undefined),
+    team_id: order === null ? null : `team-${order}`,
+    team_name: name,
+    team_order: order,
+  };
+}
+
 describe('ParticipantsList', () => {
   it('renders all participants usernames', () => {
     const participants = [
@@ -143,6 +153,119 @@ describe('ParticipantsList', () => {
     );
     expect(container.textContent).toContain('Role');
     expect(container.textContent).toContain('DPS');
+  });
+
+  it('shows no team sections for an FFA match even though the API labels orders 0 and 1 blue/red', () => {
+    // One match_teams row per participant: the first two get team_order 0 and 1 (-> blue / red).
+    const participants = [
+      makeTeamed('1', 'FFAPlayer1', 0, 'FFAPlayer1'),
+      makeTeamed('2', 'FFAPlayer2', 1, 'FFAPlayer2'),
+      makeTeamed('3', 'FFAPlayer3', 2, 'FFAPlayer3'),
+      makeTeamed('4', 'FFAPlayer4', 3, 'FFAPlayer4'),
+    ];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        scoringType="FFA"
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    for (const name of ['FFAPlayer1', 'FFAPlayer2', 'FFAPlayer3', 'FFAPlayer4']) expect(container.textContent).toContain(name);
+    expect(container.textContent).not.toContain('Blue Team');
+    expect(container.textContent).not.toContain('Red Team');
+    expect(container.textContent).not.toContain('Unassigned');
+  });
+
+  it('shows no team sections for a Position match with one driver per team', () => {
+    const participants = [makeTeamed('1', 'Driver1', 0, 'Driver1'), makeTeamed('2', 'Driver2', 1, 'Driver2')];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        scoringType="Position"
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    expect(container.textContent).toContain('Driver1');
+    expect(container.textContent).not.toContain('Blue Team');
+    expect(container.textContent).not.toContain('Red Team');
+  });
+
+  it('groups a Position team mode (squads) by team name', () => {
+    const participants = [
+      makeTeamed('1', 'A1', 0, 'Team 1'),
+      makeTeamed('2', 'A2', 0, 'Team 1'),
+      makeTeamed('3', 'B1', 1, 'Team 2'),
+      makeTeamed('4', 'B2', 1, 'Team 2'),
+      makeTeamed('5', 'Spare', 99, 'Reserve', true),
+    ];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        scoringType="Position"
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    expect(container.textContent).toContain('Team 1');
+    expect(container.textContent).toContain('Team 2');
+    expect(container.textContent).not.toContain('Blue Team');
+    expect(container.textContent).toContain('Unassigned Players');
+    expect(container.textContent).toContain('Spare');
+  });
+
+  it('shows one section per team for a Normal match with more than two teams', () => {
+    const participants = [
+      makeTeamed('1', 'P1', 0, 'Team 1'),
+      makeTeamed('2', 'P2', 1, 'Team 2'),
+      makeTeamed('3', 'P3', 2, 'Team 3'),
+    ];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        scoringType="Normal"
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    expect(container.textContent).toContain('Team 1');
+    expect(container.textContent).toContain('Team 2');
+    expect(container.textContent).toContain('Team 3');
+    expect(container.textContent).not.toContain('Red Team');
+  });
+
+  it('uses the real team names for a two-team Normal match with named teams (tournament matches)', () => {
+    const participants = [makeTeamed('1', 'P1', 0, 'Alpha'), makeTeamed('2', 'P2', 1, 'Charlie')];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    expect(container.textContent).toContain('Alpha');
+    expect(container.textContent).toContain('Charlie');
+    expect(container.textContent).not.toContain('Blue Team');
+  });
+
+  it('keeps the Blue/Red titles for the default two-team names', () => {
+    const participants = [makeTeamed('1', 'P1', 0, 'Blue'), makeTeamed('2', 'P2', 1, 'Red')];
+    const container = renderWithMantine(
+      <ParticipantsList
+        participants={participants}
+        loading={false}
+        signupConfig={null}
+        parseDbTimestamp={parseDbTimestamp}
+      />
+    );
+    expect(container.textContent).toContain('Blue Team');
+    expect(container.textContent).toContain('Red Team');
   });
 
   it('is a function component', () => {

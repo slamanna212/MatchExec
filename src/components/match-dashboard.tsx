@@ -27,6 +27,7 @@ import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
 import { cleanMapId } from '@/lib/utils/map-utils';
+import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 import { SeriesCardLinks, type SeriesRef } from './series/SeriesCardLinks';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
@@ -157,7 +158,9 @@ const MatchCard = memo(({
           <Stack gap={2} align="center">
             <Text size="xs" c="dimmed">Starts</Text>
             <Text size="sm" fw={500}>
-              {parseDbTimestamp(match.start_date)
+              {isUnscheduled(match.start_date)
+                ? UNSCHEDULED_LABEL
+                : parseDbTimestamp(match.start_date)
                 ? parseDbTimestamp(match.start_date)!.toLocaleString('en-US', {
                     month: 'numeric',
                     day: 'numeric',

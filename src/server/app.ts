@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { apiNotFound, noStore, onError } from './http';
+import { apiNotFound, jsonBodyGuard, noStore, onError } from './http';
 import { authGate } from './middleware/auth';
 import { degradedGate } from './middleware/degraded';
 import { maintenanceGate } from './middleware/maintenance';
@@ -41,6 +41,7 @@ app.route('/uploads', uploads);
 app.use('*', redirectDevPages);
 app.use('*', authGate);
 app.use('*', welcomeFlow);
+app.use('/api/*', jsonBodyGuard);
 
 // Domain routers are mounted here as Stage 2 ports them.
 app.route('/api/health', health);

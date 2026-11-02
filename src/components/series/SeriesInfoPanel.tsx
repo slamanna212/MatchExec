@@ -111,9 +111,9 @@ export function SeriesInfoPanel({
               <Button fullWidth variant="filled" color="violet" onClick={onAddEvent}>Add Event</Button>
             )}
             <Group grow gap="xs">
-              <Button size="sm" variant="light" color="violet" onClick={onEdit}>Edit Series</Button>
+              <Button size="sm" px="xs" variant="light" color="violet" onClick={onEdit}>Edit Series</Button>
               {series.status === 'active' && (
-                <Button size="sm" variant="light" color="blue" onClick={onComplete}>Complete Series</Button>
+                <Button size="sm" px="xs" variant="light" color="blue" onClick={onComplete}>Complete Series</Button>
               )}
             </Group>
             {!finished && (

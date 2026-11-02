@@ -2,14 +2,16 @@
   {
     "id": "standard",
     "name": "Standard",
-    "description": "Classic Fortnite Battle Royale with building mechanics. Teams compete to be the last standing.",
-    "scoringType": "Normal"
+    "description": "Classic Fortnite Battle Royale with building mechanics. Up to 16 numbered squads compete; the last squad standing wins.",
+    "scoringType": "Normal",
+    "maxTeams": 16
   },
   {
     "id": "nobuild",
     "name": "No Build",
-    "description": "Fortnite Battle Royale without building mechanics. Pure shooting and tactics.",
-    "scoringType": "Normal"
+    "description": "Fortnite Battle Royale without building mechanics. Up to 16 numbered squads compete; the last squad standing wins.",
+    "scoringType": "Normal",
+    "maxTeams": 16
   },
   {
     "id": "solo",

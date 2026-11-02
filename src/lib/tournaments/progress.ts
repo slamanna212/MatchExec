@@ -90,32 +90,51 @@ async function progressCumulative(tx: Executor, tournament: TournamentRow): Prom
   };
 }
 
-async function progressSingleElimination(tx: Executor, tournament: TournamentRow, after: AfterCommit): Promise<ProgressResult> {
-  const tournamentId = tournament.id;
-  const { maxWinnersRound } = await getCurrentRoundInfo(tx, tournamentId);
+interface SingleEliminationState {
+  maxWinnersRound: number;
+  /** Why the tournament cannot advance right now (the 400 message), or null. */
+  blocked: string | null;
+  completed: Awaited<ReturnType<typeof listDecidedMatches>>;
+  byeTeams: string[];
+  /** True when advancing finishes the tournament: one decided match and no bye team still to play. */
+  isFinal: boolean;
+}
 
-  if (!(await isRoundComplete(tx, tournamentId, maxWinnersRound, 'winners'))) {
-    throw new TournamentError(`Round ${maxWinnersRound} is not complete yet`, 400);
+/** Read-only look at the current round of a single-elimination bracket; shared by progression and the progress hint. */
+async function inspectSingleElimination(ex: Executor, tournamentId: string): Promise<SingleEliminationState> {
+  const { maxWinnersRound } = await getCurrentRoundInfo(ex, tournamentId);
+  const stalled = (blocked: string): SingleEliminationState => ({ maxWinnersRound, blocked, completed: [], byeTeams: [], isFinal: false });
+
+  if (!(await isRoundComplete(ex, tournamentId, maxWinnersRound, 'winners'))) {
+    return stalled(`Round ${maxWinnersRound} is not complete yet`);
   }
 
   // A drawn match is complete but has no winner. Advancing anyway would leave both its teams out of the next round (and
   // could crown the wrong champion), so stall until it is rescored.
-  const [drawn] = await tx.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(matches)
+  const [drawn] = await ex.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(matches)
     .innerJoin(tournamentMatches, eq(matches.id, tournamentMatches.match_id))
     .where(and(
       eq(tournamentMatches.tournament_id, tournamentId), eq(tournamentMatches.round, maxWinnersRound), eq(tournamentMatches.bracket_type, 'winners'),
       eq(matches.status, 'complete'), sql`${matches.winner_team} is null`,
     ));
   if (drawn && drawn.n > 0) {
-    throw new TournamentError(`Round ${maxWinnersRound} has a match that ended in a draw; rescore one of its maps to decide a winner`, 400);
+    return stalled(`Round ${maxWinnersRound} has a match that ended in a draw; rescore one of its maps to decide a winner`);
   }
 
-  const completed = await listDecidedMatches(tx, tournamentId, maxWinnersRound, 'winners');
-  if (completed.length === 0) throw new TournamentError('No completed matches found to progress from', 400);
+  const completed = await listDecidedMatches(ex, tournamentId, maxWinnersRound, 'winners');
+  if (completed.length === 0) return stalled('No completed matches found to progress from');
 
   // Teams that had a bye into this round still have to play: the tournament is over only when one match finished AND no bye teams remain.
-  const byeTeams = await listByeTeamIds(tx, tournamentId, maxWinnersRound, 'winners');
-  if (completed.length === 1 && byeTeams.length === 0) {
+  const byeTeams = await listByeTeamIds(ex, tournamentId, maxWinnersRound, 'winners');
+  return { maxWinnersRound, blocked: null, completed, byeTeams, isFinal: completed.length === 1 && byeTeams.length === 0 };
+}
+
+async function progressSingleElimination(tx: Executor, tournament: TournamentRow, after: AfterCommit): Promise<ProgressResult> {
+  const tournamentId = tournament.id;
+  const { maxWinnersRound, blocked, completed, isFinal } = await inspectSingleElimination(tx, tournamentId);
+  if (blocked) throw new TournamentError(blocked, 400);
+
+  if (isFinal) {
     await completeTournament(tx, tournamentId);
     if (completed[0].winner_team) await queueTournamentWinnerNotification(tx, tournamentId, completed[0].winner_team);
     return { message: 'Tournament completed!', winner: completed[0].winner_team, tournamentId };
@@ -145,8 +164,8 @@ async function progressSingleElimination(tx: Executor, tournament: TournamentRow
 
 const bracketLabel = (b: DeBracket) => (b === 'winners' ? 'winners bracket' : b === 'losers' ? 'losers bracket' : 'grand final');
 
-async function progressDoubleElimination(tx: Executor, tournament: TournamentRow, after: AfterCommit): Promise<ProgressResult> {
-  const tournamentId = tournament.id;
+/** Read-only plan for the next double-elimination step; shared by progression and the progress hint. */
+async function planDoubleEliminationStep(tx: Executor, tournamentId: string) {
   const rows = await tx.select({
     bracket_type: tournamentMatches.bracket_type, round: tournamentMatches.round, team1_id: tournamentMatches.team1_id,
     team2_id: tournamentMatches.team2_id, status: matches.status, winner_team: matches.winner_team,
@@ -168,7 +187,12 @@ async function progressDoubleElimination(tx: Executor, tournament: TournamentRow
   }
   for (const id of await listByeTeamIds(tx, tournamentId, 1, 'winners')) entered.add(id);
 
-  const plan = planDoubleElimination([...entered], bracketMatches);
+  return planDoubleElimination([...entered], bracketMatches);
+}
+
+async function progressDoubleElimination(tx: Executor, tournament: TournamentRow, after: AfterCommit): Promise<ProgressResult> {
+  const tournamentId = tournament.id;
+  const plan = await planDoubleEliminationStep(tx, tournamentId);
 
   if (plan.champion) {
     await completeTournament(tx, tournamentId);
@@ -195,4 +219,39 @@ async function progressDoubleElimination(tx: Executor, tournament: TournamentRow
   }
   const summary = [...groups].map(([name, n]) => `${n} ${n === 1 ? 'match' : 'matches'} (${name})`).join(', ');
   return { message: `Generated ${summary}`, matchCount: generated.length, tournamentId };
+}
+
+/** What the "next round" action of a running tournament would do right now (read-only; mirrors `progressTournament`). */
+export interface ProgressHint {
+  canAdvance: boolean;
+  /** True when advancing finishes the tournament, so the UI can say "Finish Tournament". */
+  willComplete: boolean;
+  /** Why it cannot advance yet, or null. */
+  reason: string | null;
+}
+
+export async function getProgressHint(ex: Executor, tournament: Pick<TournamentRow, 'id' | 'status' | 'format'>): Promise<ProgressHint | null> {
+  if (tournament.status !== 'battle') return null;
+  const id = tournament.id;
+
+  if (tournament.format === 'cumulative-points') {
+    const [counts] = await ex.select({
+      total: sql<number>`count(*)`.mapWith(Number),
+      incomplete: sql<number>`count(*) filter (where ${matches.status} <> 'complete')`.mapWith(Number),
+    }).from(matches).where(eq(matches.tournament_id, id));
+    if (!counts || counts.total === 0) return { canAdvance: false, willComplete: true, reason: 'No matches found for this tournament' };
+    if (counts.incomplete > 0) return { canAdvance: false, willComplete: true, reason: 'Not all tournament matches are complete yet' };
+    return { canAdvance: true, willComplete: true, reason: null };
+  }
+
+  if (tournament.format === 'double-elimination') {
+    const plan = await planDoubleEliminationStep(ex, id);
+    if (plan.champion) return { canAdvance: true, willComplete: true, reason: null };
+    if (plan.matches.length === 0) return { canAdvance: false, willComplete: false, reason: plan.waiting ?? 'No progression available at this time' };
+    return { canAdvance: true, willComplete: false, reason: null };
+  }
+
+  const state = await inspectSingleElimination(ex, id);
+  if (state.blocked) return { canAdvance: false, willComplete: false, reason: state.blocked };
+  return { canAdvance: true, willComplete: state.isFinal, reason: null };
 }

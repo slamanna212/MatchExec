@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger/client';
 import { StageRing } from './StageRing';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
+import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 
 interface Stats {
   totalMatches: number;
@@ -92,6 +93,7 @@ function getStatusBadge(status: string) {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return '—';
+  if (isUnscheduled(dateStr)) return UNSCHEDULED_LABEL;
   const date = new Date(dateStr);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }

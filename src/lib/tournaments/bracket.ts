@@ -16,6 +16,7 @@ import {
 } from '../matches';
 import type { AfterCommit } from '../matches/effects';
 import { logger } from '../logger';
+import { UNSCHEDULED_START } from '../../../shared/schedule';
 import {
   filterTournamentMaps, matchTitle, pairTeams, plannedMatchName, selectMapsForMatch, type GameMapLite, type GameModeLite,
 } from './bracket-math';
@@ -73,7 +74,7 @@ export interface GeneratedMatch {
   player_notifications?: boolean;
 }
 
-const FAR_FUTURE = new Date('2099-12-31T23:59:59.999Z');
+const FAR_FUTURE = UNSCHEDULED_START;
 const TOURNAMENT_TEAM_COLORS = { blue: '#4A90E2', red: '#E04A4A' } as const;
 
 // ─── mode / map pool ─────────────────────────────────────────────────────────
@@ -107,7 +108,13 @@ async function loadContext(ex: Executor, tournamentId: string): Promise<BracketC
   const tournament = await getTournament(ex, tournamentId);
   if (!tournament) throw new TournamentError('Tournament not found', 404);
   const { gameModes, gameMaps } = await fetchGameData(ex, tournament.game_id, tournament.game_mode_id ?? '');
-  return { tournament, gameModes, tournamentMaps: filterTournamentMaps(gameMaps) };
+  // Maps switched off for tournaments on the Games page (`tournament_enabled`) never enter the pool; the name filter
+  // additionally drops custom / workshop maps that were never flagged.
+  const tournamentMaps = filterTournamentMaps(gameMaps.filter((m) => m.tournament_enabled));
+  if (tournamentMaps.length === 0) {
+    throw new TournamentError('No tournament-eligible maps found. Enable maps for tournaments on the Games page.');
+  }
+  return { tournament, gameModes, tournamentMaps };
 }
 
 // ─── byes ────────────────────────────────────────────────────────────────────
@@ -125,6 +132,11 @@ export async function listByeTeamIds(ex: Executor, tournamentId: string, round: 
 }
 
 // ─── generation ──────────────────────────────────────────────────────────────
+
+/** Players a tournament match is expected to field: both teams at full size (5v5 -> 10), 12 when the mode has no team size. */
+export function tournamentMatchCapacity(teamSize: number | null | undefined): number {
+  return teamSize && teamSize > 0 ? teamSize * 2 : 12;
+}
 
 function buildMatch(
   ctx: BracketContext,
@@ -144,7 +156,7 @@ function buildMatch(
     map_id: selectedMaps[0],
     maps: selectedMaps,
     rounds_per_match: tournament.rounds_per_match,
-    max_participants: 12,
+    max_participants: tournamentMatchCapacity(primaryMode.team_size),
     status: 'assign',
     match_type: 'tournament',
     tournament_id: tournament.id,

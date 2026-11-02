@@ -133,6 +133,8 @@ const theme = createTheme({
     DateTimePicker: {
       styles: INPUT_STYLES,
       defaultProps: {
+        // Same en-US style the detail pages use (Mantine's default is DD/MM/YYYY HH:mm).
+        valueFormat: 'MM/DD/YYYY h:mm A',
         popoverProps: {
           classNames: { dropdown: 'date-picker-dropdown' },
         },

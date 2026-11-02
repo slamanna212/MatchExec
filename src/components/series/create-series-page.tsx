@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Container, Stack, Button, Stepper, Group, Text, TextInput, Divider } from '@mantine/core';
@@ -37,13 +37,17 @@ export function CreateSeriesPage(): JSX.Element {
 
   const { form, update, clear, pickedEvents, setPickedEvents } = useSeriesForm();
   const [submitting, setSubmitting] = useState<'create' | 'activate' | null>(null);
+  // Set once the series exists: clearing the form then must not bounce the user back to step 1 (see below).
+  const createdRef = useRef(false);
 
   const canProceed = (s: number) => (s === 1 ? form.name.trim().length > 0 : true);
 
   // A direct link to a later step (or a cleared form) without a name goes back to Details.
   const missingName = step > 1 && !canProceed(1);
   useEffect(() => {
-    if (missingName) navigate('/series/create?step=1', { replace: true });
+    // After a successful create the form is cleared before the redirect to the new series lands; without this guard
+    // that redirect would be overridden by this one and the user would end up on an empty Details form.
+    if (missingName && !createdRef.current) navigate('/series/create?step=1', { replace: true });
   }, [missingName, navigate]);
 
   const goTo = (s: number) => {
@@ -131,6 +135,7 @@ export function CreateSeriesPage(): JSX.Element {
         notificationHelper.update(nid, { type: 'success', message: 'Series created!' });
       }
 
+      createdRef.current = true;
       clear();
       navigate(`/series/${id}`);
     } catch (err) {

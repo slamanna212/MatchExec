@@ -58,6 +58,34 @@ export const apiNotFound: NotFoundHandler = (c) => {
   return c.text('Not found', 404);
 };
 
+/** Routes that deliberately treat an unreadable body as "no body" (generate from the stored teams) or answer it themselves. */
+const LENIENT_JSON_ROUTES: RegExp[] = [
+  /^\/api\/tournaments\/[^/]+\/generate-matches$/,
+  /^\/api\/settings\/backup(\/config)?$/,
+  /^\/api\/auth\//,
+];
+
+/**
+ * Rejects a malformed JSON body with a 400 before any route runs. Routes wrap their handlers in try/catch and would
+ * otherwise turn the SyntaxError from `c.req.json()` into a generic 500. An empty body is let through (several routes
+ * treat it as `{}`), and the parsed text stays cached on the request so routes do not pay for a second read.
+ */
+export const jsonBodyGuard: MiddlewareHandler = async (c, next) => {
+  const method = c.req.method;
+  if (LENIENT_JSON_ROUTES.some((re) => re.test(c.req.path))) return next();
+  if ((method === 'POST' || method === 'PUT' || method === 'PATCH') && (c.req.header('content-type') ?? '').includes('application/json')) {
+    const text = await c.req.text();
+    if (text.trim() !== '') {
+      try {
+        JSON.parse(text);
+      } catch {
+        return c.json({ error: 'Invalid JSON body' }, 400);
+      }
+    }
+  }
+  return next();
+};
+
 /** API responses must never be cached (polling relies on fresh data). Endpoints may override by setting the header themselves. */
 export const noStore: MiddlewareHandler = async (c, next) => {
   await next();

@@ -51,6 +51,8 @@ function DocLink({ href }: { href: string }) {
 
 export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, docLink }: PageHeaderProps): JSX.Element {
   const parentCrumb = breadcrumbs?.[0];
+  // Pages such as scoring / assign pass the match name as both the last link and the title; showing it twice reads as a bug.
+  const repeatsLastCrumb = !!breadcrumbs?.length && breadcrumbs[breadcrumbs.length - 1].title === title;
 
   return (
     <div style={{ marginBottom: 'var(--mantine-spacing-xl)' }}>
@@ -67,7 +69,7 @@ export function PageHeader({ icon: Icon, title, subtitle, action, breadcrumbs, d
                 <Text key={i} size="sm" c="dimmed">{crumb.title}</Text>
               )
             )}
-            <Text size="sm" c="dimmed">{title}</Text>
+            {!repeatsLastCrumb && <Text size="sm" c="dimmed">{title}</Text>}
           </Breadcrumbs>
 
           {/* Mobile: single back link */}

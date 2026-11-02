@@ -169,7 +169,11 @@ interface MatchParticipant {
   avatar_url?: string | null;
   joined_at: string;
   signup_data: Record<string, unknown>;
-  team_assignment?: 'reserve' | 'blue' | 'red';
+  team_assignment?: 'reserve' | 'blue' | 'red' | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  team_color?: string | null;
+  team_order?: number | null;
   receives_map_codes?: boolean;
 }
 
@@ -302,6 +306,7 @@ export function MatchContentPanel({
             participants={participants}
             loading={participantsLoading}
             matchStatus={match.status}
+            scoringType={match.scoring_type ?? 'Normal'}
             signupConfig={signupConfig}
             parseDbTimestamp={parseDbTimestamp}
           />

@@ -3,6 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { MantineProvider } from '@mantine/core';
+import { MemoryRouter } from 'react-router';
 import { PageHeader } from '../../../src/components/PageHeader';
 
 function renderWithMantine(element: React.ReactElement): HTMLDivElement {
@@ -93,6 +94,38 @@ describe('PageHeader', () => {
     expect(heading).not.toBeNull();
     expect(heading?.textContent).toBe('Dashboard');
     container.remove();
+  });
+
+  describe('breadcrumbs', () => {
+    const trail = (container: HTMLElement) =>
+      Array.from(container.querySelector('.mantine-Breadcrumbs-root')?.children ?? [])
+        .map((el) => el.textContent ?? '')
+        .filter((t) => t && t !== '/');
+
+    it('ends the trail with the page title', () => {
+      const container = renderWithMantine(
+        <MemoryRouter>
+          <PageHeader icon={MockIcon} title="Create Match" breadcrumbs={[{ title: 'Matches', href: '/matches' }]} />
+        </MemoryRouter>
+      );
+      expect(trail(container)).toEqual(['Matches', 'Create Match']);
+      container.remove();
+    });
+
+    it('does not repeat the last crumb when the title is the same (match name as parent link and title)', () => {
+      const container = renderWithMantine(
+        <MemoryRouter>
+          <PageHeader
+            icon={MockIcon}
+            title="QA Valorant Match"
+            subtitle="Scoring"
+            breadcrumbs={[{ title: 'Matches', href: '/matches' }, { title: 'QA Valorant Match', href: '/matches/m1' }]}
+          />
+        </MemoryRouter>
+      );
+      expect(trail(container)).toEqual(['Matches', 'QA Valorant Match']);
+      container.remove();
+    });
   });
 
   it('is a function component', () => {

@@ -75,7 +75,7 @@ describe('match DTOs', () => {
 
     const parts = (await appRequest(`/api/matches/${matchId}/participants`)).data;
     expect(keys(parts)).toEqual(expect.arrayContaining(['participants']));
-    expect(keys(parts.participants[0])).toEqual(['avatar_url', 'discord_user_id', 'id', 'joined_at', 'receives_map_codes', 'signup_data', 'team_assignment', 'team_id', 'user_id', 'username']);
+    expect(keys(parts.participants[0])).toEqual(['avatar_url', 'discord_user_id', 'id', 'joined_at', 'receives_map_codes', 'signup_data', 'team_assignment', 'team_color', 'team_id', 'team_name', 'team_order', 'user_id', 'username']);
     expectTypes(parts.participants[0], { iso: ['joined_at'], bool: ['receives_map_codes'] });
 
     const games = (await appRequest(`/api/matches/${matchId}/games`)).data;

@@ -1,6 +1,7 @@
 import type { Client } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import { logger } from '../../../src/lib/logger/server';
+import { isUnscheduled } from '../../../shared/schedule';
 
 /**
  * Sends a DM to a Discord user. Swallows errors silently if the user has DMs disabled.
@@ -42,7 +43,7 @@ export function buildSignupWelcomeEmbed(
     `• **Game:** ${gameName}`,
     `• **Type:** ${eventType}`,
   ];
-  if (startDate) {
+  if (startDate && !isUnscheduled(startDate)) {
     const ts = Math.floor(new Date(startDate).getTime() / 1000);
     if (!isNaN(ts)) eventDetailsLines.push(`• **When:** <t:${ts}:F> (<t:${ts}:R>)`);
   }

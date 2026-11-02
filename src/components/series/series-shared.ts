@@ -1,4 +1,5 @@
 import { parseDbTimestamp } from '@/lib/utils/dates';
+import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 import type { SeriesScoringConfig } from '@/lib/series';
 
 /** Client-side shapes of the series API responses (see src/lib/series/summary.ts). */
@@ -109,16 +110,19 @@ export function isEventFinished(status: string | null | undefined): boolean {
 }
 
 export function formatShortDate(ts: string | null | undefined): string | null {
+  if (isUnscheduled(ts)) return UNSCHEDULED_LABEL;
   return parseDbTimestamp(ts)?.toLocaleDateString('en-US') ?? null;
 }
 
 export function formatShortDateTime(ts: string | null | undefined): string | null {
+  if (isUnscheduled(ts)) return UNSCHEDULED_LABEL;
   return parseDbTimestamp(ts)?.toLocaleString('en-US', {
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
   }) ?? null;
 }
 
 export function formatFullDateTime(ts: string | null | undefined): string | null {
+  if (isUnscheduled(ts)) return UNSCHEDULED_LABEL;
   return parseDbTimestamp(ts)?.toLocaleString('en-US', {
     year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
   }) ?? null;

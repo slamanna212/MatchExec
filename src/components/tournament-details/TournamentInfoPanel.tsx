@@ -57,15 +57,21 @@ export function TournamentInfoPanel({
     });
   };
 
+  // The server says whether advancing is possible and whether it finishes the tournament (the last round).
+  const hint = tournament.progress_hint;
+  const advanceLabel = hint?.willComplete ? 'Finish Tournament' : 'Next Round';
+
   const confirmNextRound = () => {
     modals.openConfirmModal({
-      title: 'Next Round',
+      title: advanceLabel,
       children: (
         <Text size="sm">
-          Are you sure you want to advance to the next round? This will progress the tournament to the next set of matches.
+          {hint?.willComplete
+            ? `Are you sure you want to finish "${tournament.name}"? This will mark the tournament as complete and announce the winner.`
+            : 'Are you sure you want to advance to the next round? This will progress the tournament to the next set of matches.'}
         </Text>
       ),
-      labels: { confirm: 'Next Round', cancel: 'Cancel' },
+      labels: { confirm: advanceLabel, cancel: 'Cancel' },
       confirmProps: { color: 'green' },
       onConfirm: () => { void onProgressTournament(); },
     });
@@ -86,14 +92,20 @@ export function TournamentInfoPanel({
   };
 
   /** Primary (filled, full-width) next-step action for the current status. */
-  const getPrimaryAction = (): { label: string; onClick: () => void } | null => {
+  const getPrimaryAction = (): { label: string; onClick: () => void; disabled?: boolean; title?: string } | null => {
     switch (tournament.status) {
       case 'created': return { label: 'Open Signups', onClick: () => onStatusTransition('gather') };
       case 'gather': return { label: 'Close Signups', onClick: confirmCloseSignups };
       case 'assign': return hasBracket
         ? { label: 'Start Tournament', onClick: () => onStatusTransition('battle') }
         : { label: 'Generate Bracket', onClick: () => { void onGenerateBracket(); } };
-      case 'battle': return { label: 'Next Round', onClick: confirmNextRound };
+      case 'battle': return {
+        label: advanceLabel,
+        onClick: confirmNextRound,
+        // Only disable when the server explicitly says it cannot advance; with no hint (older server) stay clickable.
+        disabled: hint ? !hint.canAdvance : false,
+        title: hint && !hint.canAdvance ? (hint.reason ?? undefined) : undefined,
+      };
       default: return null;
     }
   };
@@ -234,17 +246,20 @@ export function TournamentInfoPanel({
           <Card withBorder radius="md" padding="lg" shadow="sm">
             <Stack gap="xs">
               {primary && (
-                <Button variant="filled" color="violet" fullWidth onClick={primary.onClick}>
-                  {primary.label}
-                </Button>
+                <>
+                  <Button variant="filled" color="violet" fullWidth onClick={primary.onClick} disabled={primary.disabled}>
+                    {primary.label}
+                  </Button>
+                  {primary.disabled && primary.title && <Text size="xs" c="dimmed" ta="center">{primary.title}</Text>}
+                </>
               )}
               <Group grow gap="xs">
                 {showAssignTeams && (
-                  <Button size="sm" variant="light" color="violet" onClick={onAssignTeams}>Assign Teams</Button>
+                  <Button size="sm" px="xs" variant="light" color="violet" onClick={onAssignTeams}>Assign Teams</Button>
                 )}
-                <Button size="sm" variant="light" color="violet" onClick={onEdit}>Edit Tournament</Button>
+                <Button size="sm" px="xs" variant="light" color="violet" onClick={onEdit}>Edit Tournament</Button>
                 {showEnd && (
-                  <Button size="sm" variant="light" color="red" onClick={confirmEndTournament}>End Tournament</Button>
+                  <Button size="sm" px="xs" variant="light" color="red" onClick={confirmEndTournament}>End Tournament</Button>
                 )}
               </Group>
               {showDelete && (

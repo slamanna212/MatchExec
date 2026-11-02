@@ -14,7 +14,7 @@ import {
   Anchor
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import type { Tournament, TournamentTeam, TournamentTeamMember } from '@/shared/types';
+import type { Tournament, TournamentProgressHint, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentInfoPanel } from '@/components/tournament-details/TournamentInfoPanel';
 import { TournamentContentPanel } from '@/components/tournament-details/TournamentContentPanel';
 import type { CumulativeStanding } from '@/components/tournament/leaderboard-view';
@@ -31,6 +31,7 @@ interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at
   updated_at: string;
   start_time?: string;
   teams?: TeamWithMembers[];
+  progress_hint?: TournamentProgressHint | null;
 }
 
 interface TeamWithMembers extends TournamentTeam {

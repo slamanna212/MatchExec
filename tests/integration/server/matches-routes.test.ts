@@ -96,15 +96,41 @@ describe('POST /api/matches', () => {
     expect(await pg().select().from(matches)).toHaveLength(0);
   });
 
-  it('refuses an unknown game now that foreign keys are enforced, and stores nothing', async () => {
+  it('refuses an unknown game with a 400 (not a 500 from the foreign key), and stores nothing', async () => {
     const res = await json('/api/matches', 'POST', { name: 'Test Match', gameId: 'invalid-game-id', startDate: new Date().toISOString() });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/Unknown game "invalid-game-id"/);
     expect(await pg().select().from(matches)).toHaveLength(0);
   });
 
-  it('rejects malformed JSON bodies without a 2xx', async () => {
+  it('refuses a map that does not exist for the game, and stores nothing', async () => {
+    const res = await json('/api/matches', 'POST', { name: 'Test Match', gameId, maps: ['totally-fake-map'], startDate: new Date().toISOString() });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/Unknown map "totally-fake-map"/);
+    expect(await pg().select().from(matches)).toHaveLength(0);
+  });
+
+  it('rejects malformed JSON bodies with a 400', async () => {
     const res = await appRequest('/api/matches', { method: 'POST', body: '{nope', headers: { 'content-type': 'application/json' } });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(400);
+    expect(res.data).toEqual({ error: 'Invalid JSON body' });
+  });
+
+  it.each([
+    ['POST', '/api/channels'],
+    ['POST', '/api/series'],
+    ['PUT', '/api/matches/anything'],
+    ['POST', '/api/matches/anything/transition'],
+    ['POST', '/api/tournaments'],
+  ])('rejects malformed JSON with a 400 on %s %s too', async (method, path) => {
+    const res = await appRequest(path, { method, body: '{nope', headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(400);
+    expect(res.data).toEqual({ error: 'Invalid JSON body' });
+  });
+
+  it('still accepts an empty JSON body where routes treat it as {}', async () => {
+    const res = await appRequest('/api/matches/anything/transition', { method: 'POST', body: '', headers: { 'content-type': 'application/json' } });
+    expect(res.status).not.toBe(400);
   });
 });
 

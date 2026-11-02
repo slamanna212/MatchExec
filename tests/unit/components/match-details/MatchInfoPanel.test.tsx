@@ -9,6 +9,7 @@ vi.mock('@mantine/modals', () => ({
   modals: { openConfirmModal: vi.fn() },
 }));
 
+import { modals } from '@mantine/modals';
 import { MatchInfoPanel } from '../../../../src/components/match-details/MatchInfoPanel';
 import type { MatchWithGameDetails } from '../../../../shared/types';
 
@@ -159,6 +160,42 @@ describe('MatchInfoPanel', () => {
       />
     );
     expect(container.textContent).toContain('Delete Match');
+  });
+
+  it('asks for confirmation before closing signups, and only then transitions', () => {
+    const onStatusTransition = vi.fn();
+    vi.mocked(modals.openConfirmModal).mockClear();
+    const container = renderWithMantine(
+      <MatchInfoPanel
+        match={makeMatch({ status: 'gather' })}
+        mapDetails={{}} mapNotes={{}}
+        formatMapName={id => id}
+        parseDbTimestamp={parseTs}
+        onStatusTransition={onStatusTransition}
+      />
+    );
+    const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Close Signups');
+    expect(button).toBeTruthy();
+    act(() => { button!.click(); });
+    expect(onStatusTransition).not.toHaveBeenCalled();
+    expect(modals.openConfirmModal).toHaveBeenCalledTimes(1);
+    const config = vi.mocked(modals.openConfirmModal).mock.calls[0][0];
+    expect(config.title).toBe('Close Signups');
+    config.onConfirm?.();
+    expect(onStatusTransition).toHaveBeenCalledWith('assign');
+  });
+
+  it('shows "Unscheduled" instead of the 2099 placeholder start date', () => {
+    const container = renderWithMantine(
+      <MatchInfoPanel
+        match={makeMatch({ start_date: '2099-12-31T23:59:59.999Z' })}
+        mapDetails={{}} mapNotes={{}}
+        formatMapName={id => id}
+        parseDbTimestamp={(ts) => (ts ? new Date(ts) : null)}
+      />
+    );
+    expect(container.textContent).toContain('Unscheduled');
+    expect(container.textContent).not.toContain('2099');
   });
 
   it('shows a Series row linking to the series when the match belongs to one', async () => {

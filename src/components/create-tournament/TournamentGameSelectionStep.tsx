@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { Text, Stack, Grid, Card, Avatar, Group, Badge, Button } from '@mantine/core';
 import type { GameWithIcon } from './useTournamentForm';
+import { plural } from '@/lib/utils/plural';
 
 interface TournamentGameSelectionStepProps {
   games: GameWithIcon[];
@@ -52,8 +53,8 @@ export function TournamentGameSelectionStep({
                   <Text fw={500}>{game.name}</Text>
                   <Text size="sm" c="dimmed">{game.genre}</Text>
                   <Group gap="xs" mt="xs">
-                    <Badge size="xs" variant="light">{game.mapCount} maps</Badge>
-                    <Badge size="xs" variant="light">{game.modeCount} modes</Badge>
+                    <Badge size="xs" variant="light">{plural(game.mapCount, 'map')}</Badge>
+                    <Badge size="xs" variant="light">{plural(game.modeCount, 'mode')}</Badge>
                   </Group>
                 </div>
               </Group>

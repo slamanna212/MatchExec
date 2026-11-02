@@ -4,7 +4,7 @@ import {
   validateRequiredFields, validateMaxLength, validateNumberRange, validateEnum, validatePositionScoringOverride, type ValidationResult,
 } from '../utils/validation';
 import { cleanMapId } from '../utils/map-utils';
-import { getGameMaxSignups, getMap, getMode, getModeScoringType } from '../games';
+import { getGame, getGameMaxSignups, getMap, getMode, getModeScoringType } from '../games';
 import { createMatch as insertMatch, getMatchWithGame, type MatchWithGame } from './matches';
 import type { Announcement } from '../../../lib/db/schema/types';
 
@@ -63,7 +63,7 @@ export async function resolveModeFromMaps(ex: Executor, gameId: string, maps: st
   let scoringType: string | null = null;
   for (const mapId of maps) {
     const map = await getMap(ex, gameId, cleanMapId(String(mapId)));
-    if (!map) continue;
+    if (!map) return { modeId: null, error: `Unknown map "${String(mapId)}" for game "${gameId}"` };
     const rowScoring = map.mode_id ? ((await getModeScoringType(ex, gameId, map.mode_id)) ?? null) : null;
     if (modeId === null) {
       modeId = map.mode_id as string;
@@ -81,6 +81,9 @@ export async function resolveModeFromMaps(ex: Executor, gameId: string, maps: st
  * (what createMatchTeams used to do lazily at the assign transition).
  */
 export async function createMatchFromRequest(ex: Executor, body: MatchRequestBody): Promise<{ match: MatchWithGame } | { error: string }> {
+  // A game that does not exist would otherwise fail on the foreign key and surface as a generic 500.
+  if (!(await getGame(ex, body.gameId))) return { error: `Unknown game "${body.gameId}"` };
+
   const mode = await resolveModeFromMaps(ex, body.gameId, body.maps);
   if (mode.error) return { error: mode.error };
 
