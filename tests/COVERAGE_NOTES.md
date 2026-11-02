@@ -28,7 +28,7 @@ navigation. Hardest to test; would need `@testing-library/react` + layout mocks.
 Real-time match dashboard showing participant lists, scores, and status. Gap:
 Untested. Needs fetch mock and state-machine transitions rendered via component.
 
-### 5. `src/lib/scoring-functions.ts` — 1345 lines, **67% statement coverage**
+### 5. `src/lib/scoring-functions.ts` (historical: replaced by `src/lib/matches/*` and `src/lib/scoring/*` in v0.10) — 1345 lines, **67% statement coverage**
 The largest single file. The existing `scoring-functions.test.ts` covers main
 paths, but ~430 lines remain untested. Gaps: edge cases in
 `calculateMapWinner`, double-elimination bracket scoring, tiebreaker logic, and

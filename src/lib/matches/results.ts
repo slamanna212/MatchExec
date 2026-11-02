@@ -166,7 +166,7 @@ async function recomputeWinnerAfterRescore(ex: Executor, matchId: string): Promi
  * first score and runs the next-map / completion side effects; the other gets GameAlreadyScoredError.
  *
  * Re-scoring (`result.rescore`) replaces the placements and recomputes a complete match's winner_team without
- * re-firing notification / completion side effects. Activity-feed writes (still SQLite) run after the commit.
+ * re-firing notification / completion side effects. Activity-feed writes run after the commit.
  */
 export async function saveMatchResult(ex: Executor, matchGameId: string, result: MatchResult, outerAfter?: AfterCommit): Promise<void> {
   // A caller that already holds the transaction passes its own AfterCommit and runs it once ITS transaction commits: the

@@ -2,8 +2,8 @@
 
 ## BUG-001: Malformed FK Constraint on `matches` Table
 
-**Status**: Open  
-**Severity**: Medium (no runtime impact with FK=OFF; breaks FK enforcement if enabled)  
+**Status**: Resolved in v0.10 (SQLite was replaced by PostgreSQL; the baseline schema in `lib/db/schema/` has no FK from `matches` to `game_maps`, and foreign keys are enforced)  
+**Severity**: Medium (historical: no runtime impact with FK=OFF)  
 **Discovered**: Testing Phase I (foreign-keys.test.ts)
 
 ### Description

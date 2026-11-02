@@ -265,7 +265,7 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build Next.js application
+      - name: Build application
         id: build
         run: pnpm run build
         continue-on-error: true
@@ -274,9 +274,9 @@ jobs:
         run: |
           echo "## Build" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.build.outcome }}" = "success" ]; then
-            echo "✅ Next.js build succeeded" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Build succeeded" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ Next.js build failed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Build failed" >> $GITHUB_STEP_SUMMARY
           fi
       - name: Fail if build failed
         if: steps.build.outcome == 'failure'

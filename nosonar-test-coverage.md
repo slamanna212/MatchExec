@@ -41,10 +41,8 @@ Note: clicking the card is done via `container.querySelector('[style*="dashed"]'
 
 Mocks needed:
 ```ts
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => ({ get: () => '1' }),
-}));
+// Render inside <MemoryRouter> from react-router (Next's useRouter/useSearchParams no longer exist);
+// mock `useNavigate` from 'react-router' only if a test needs to assert navigation.
 vi.mock('@/lib/logger/client', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/notifications', () => ({ showError: vi.fn(), showSuccess: vi.fn() }));
 // mock fetch globally
@@ -62,18 +60,16 @@ Because `handleMapSelect` is a closure inside the component, the simplest approa
 ### Step 3: `MatchEditPage` smoke test
 **New file**: `tests/unit/components/MatchEditPage.test.tsx`
 
-The page uses `use(params)` (React 19 `use()` with a Promise). This requires wrapping in Suspense.
+The page reads `matchId` with `useParams()` from react-router (no params prop), so render it inside a router.
 
 Mocks needed (same as above plus):
 ```ts
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
-}));
+// Render inside <MemoryRouter initialEntries={['/matches/test-match/edit']}> with a <Route path="/matches/:matchId/edit">.
 ```
 
-Import: `import MatchEditPage from '../../../src/app/matches/[matchId]/edit/page';`
+Import: `import MatchEditPage from '../../../src/client/pages/matches/[matchId]/edit/page';`
 
-The page component accepts `params: Promise<{ matchId: string }>`. Render with `<Suspense><MatchEditPage params={Promise.resolve({ matchId: 'test-match' })} /></Suspense>`.
+Render it with a `MemoryRouter`/`Routes` pair that supplies `matchId: 'test-match'`.
 
 Test: renders without throwing.
 
@@ -82,7 +78,7 @@ Test: renders without throwing.
 
 Mocks needed:
 ```ts
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// Render inside <MemoryRouter>.
 vi.mock('@/lib/logger/client', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/notifications', () => ({ showError: vi.fn(), showSuccess: vi.fn() }));
 vi.mock('framer-motion', () => ({ motion: { div: ({ children, ...p }: any) => <div {...p}>{children}</div> } }));

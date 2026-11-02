@@ -1,28 +1,38 @@
 # MatchExec Match Bot
 
-A Discord match and tournament management bot built with Next.js, React, Mantine, and multi-process architecture managed by PM2 (development) or s6-overlay (production/Docker).
+A Discord match and tournament management bot: a Vite + React single-page app, a Hono API server, and Discord bot / scheduler / stats worker processes on PostgreSQL 18 (Drizzle ORM). PM2 runs the processes in development, s6-overlay in the Docker image.
 
-**Features**: Match scheduling, tournament brackets (single/double elimination), team management, scoring system, voice announcements, Discord integration, multi-game support (Overwatch 2, Valorant, Marvel Rivals, League of Legends, R6 Siege, Counter-Strike 2).
+**Features**: Match scheduling, tournament brackets (single/double elimination), team management, scoring system, voice announcements, Discord integration, backups/restore, multi-game support (10 games: Assetto Corsa Competizione, Counter-Strike 2, Fortnite, League of Legends, Mario Kart 8 Deluxe, Marvel Rivals, Overwatch 2, R6 Siege, Rocket League, Valorant).
 
 ## Architecture
 
-This project uses a multi-process architecture with different process managers for different environments:
+One codebase, one Docker image, several processes. `MATCHEXEC_SERVICES` selects which ones a container runs, so the same image works as an all-in-one container (Unraid / `docker run`) and as split Kubernetes deployments.
 
-**Development**: PM2 manages all processes with hot reload
-**Production/Docker**: s6-overlay manages processes in containerized environments
+**Development**: PM2 runs the processes with hot reload; Postgres runs in Docker (`compose.dev.yml`).
+**Production/Docker**: s6-overlay supervises the processes; Postgres is embedded in the image unless `DATABASE_URL` is set.
 
-### Core Processes
+### Processes
 
-1. **Web App** (`src/app/`): Next.js application with Mantine UI components
-2. **Discord Bot** (`processes/discord-bot/`): Discord.js bot for match commands
-3. **Scheduler** (`processes/scheduler/`): Cron jobs for match management
+1. **Web client** (`src/client/`, `src/components/`): Vite + React 19 + React Router 7 SPA with Mantine 9 and Tailwind 4. In development Vite serves it on port 3000 with HMR and proxies `/api` and `/uploads` to the Hono server on port 3001. In production it is built to `dist/client` and served by the Hono server on port 3000.
+2. **Web server** (`src/server/`): Hono app (`app.ts`), one router per domain in `routes/`, middleware in `middleware/` (auth, welcome-flow redirect, rate limit, maintenance, degraded mode), `static.ts` (SPA + SPA fallback), `http.ts` (`HttpError`, `onError`). Bundled to `dist/server.js`.
+3. **Discord bot** (`processes/discord-bot/`): Discord.js bot; polls the queue tables and handles interactions.
+4. **Scheduler** (`processes/scheduler/`): cron jobs (reminders, match start, avatar refresh, update check, feed cleanup, automatic backups).
+5. **Stats processor** (`processes/stats-processor/`): scorecard image extraction (AI providers) and stat image generation.
+6. **Migrator** (`lib/db/migrate-cli.ts`, bundle `dist/migrate.js`): oneshot. Applies Drizzle migrations, imports a legacy SQLite database if one is found, seeds game data.
+
+Every non-migrate process waits for the schema (`waitForSchema` / `waitForSystemReady`) before it starts, so start order does not matter. The bot and scheduler take a Postgres advisory-lock leader guard (`lib/db/leader.ts`) and exit if another instance holds it, so they are always exactly one replica.
+
+### Services and `MATCHEXEC_SERVICES`
+
+Comma list from `web,bot,scheduler,stats,migrate`, default `all`. In the Docker image the s6 graph is static (`s6-overlay/s6-rc.d`: `postgres`, `migrate`, `web`, `bot`, `scheduler`, `stats`); `s6-overlay/cont-init.d/20-setup-environment` writes marker files for the selected services and every `run` script exits quietly when its marker is missing. `migrate` also runs whenever any other service runs unless `MATCHEXEC_RUN_MIGRATIONS=false`.
 
 ## Development
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 24+ (the Docker image uses Node 26)
 - pnpm (pinned via `packageManager`; enable with `corepack enable`)
-- PM2 (installed as dependency)
+- Docker (for the dev Postgres container)
+- PM2 (installed as a dependency)
 
 ### Setup
 ```bash
@@ -31,18 +41,17 @@ pnpm install
 
 ### Running in Development
 ```bash
-# Start all processes with hot reload
-pnpm run dev:all
+# Start Postgres (compose.dev.yml, waits until healthy) and all processes with hot reload.
+# Web UI: http://localhost:3000 (Vite), API: http://localhost:3001 (Hono)
+pnpm dev:all
 
-# View logs from all processes
-pnpm run dev:logs
-
-# Stop all processes
-pnpm run dev:stop
-
-# Restart all processes
-pnpm run dev:restart
+pnpm dev:logs        # logs from all processes
+pnpm dev:stop        # stop PM2 apps and the Postgres container (data kept in a named volume)
+pnpm dev:restart     # (re)start everything
+pnpm dev:db:reset    # DESTROY the dev database volume and start a fresh Postgres (welcome flow runs again)
 ```
+
+The dev database is `postgres://matchexec:matchexec@127.0.0.1:5432/matchexec` (the default `DATABASE_URL` when `NODE_ENV=development`). If `./app_data/data/matchexec.db` exists and has not been imported yet, the first `pnpm dev:all` imports it (copy in `./app_data/backups`, original renamed `matchexec.db.migrated-<date>`).
 
 ## Debugging Workflow
 
@@ -61,25 +70,31 @@ This workflow is strongly preferred over extensive autonomous exploration with n
 
 ```bash
 # View recent logs from all processes
-pnpm run dev:logs | tail -100
+pnpm dev:logs | tail -100
 
-# Check Discord bot logs
-tail -50 ./app_data/data/logs/discord-bot.log
-
-# Check scheduler logs
-tail -50 ./app_data/data/logs/scheduler.log
+# Per-process log files (PM2 writes <name>-out.log and <name>-error.log)
+tail -50 ./app_data/data/logs/discord-bot-out.log
+tail -50 ./app_data/data/logs/scheduler-out.log
+tail -50 ./app_data/data/logs/server-out.log
+tail -50 ./app_data/data/logs/db-migrator-out.log
 
 # Check PM2 process status
 pnpm exec pm2 status
 
-# Query database directly
-sqlite3 ./app_data/data/matchexec.db "SELECT * FROM matches ORDER BY id DESC LIMIT 5;"
+# Query the dev database directly
+docker compose -f compose.dev.yml exec postgres psql -U matchexec matchexec -c "SELECT id, status FROM matches ORDER BY created_at DESC LIMIT 5;"
 
 # Check for errors in logs
-pnpm run dev:logs | grep -i error
+pnpm dev:logs | grep -i error
+
+# Migration / import progress (also what /api/db-status reports)
+docker compose -f compose.dev.yml exec postgres psql -U matchexec matchexec -c "SELECT phase, message, progress FROM system_status;"
 
 # Monitor logs in real-time
-pnpm run dev:logs --lines 0
+pnpm dev:logs --lines 0
+
+# Inside the all-in-one Docker container (superuser is "abc", Unix socket)
+docker exec -it MatchExec psql -U abc -h /run/postgresql -d matchexec
 ```
 
 ### Example Interaction
@@ -87,8 +102,8 @@ pnpm run dev:logs --lines 0
 **User**: "Match creation is broken, getting a 500 error"
 
 **Claude**: "Can you run these commands and paste the output?
-1. `pnpm run dev:logs | grep -A 5 'error'`
-2. `tail -50 ./app_data/data/logs/discord-bot.log`
+1. `pnpm dev:logs | grep -A 5 'error'`
+2. `tail -50 ./app_data/data/logs/server-error.log`
 3. Check browser console for any errors"
 
 **User**: [pastes results]
@@ -97,188 +112,153 @@ pnpm run dev:logs --lines 0
 
 ## Production Using Docker
 
-The production Docker container uses s6-overlay as the init system to manage all processes.
+The image runs s6-overlay as the init system. With `DATABASE_URL` unset it also runs an embedded PostgreSQL 18 (installed from Alpine's `postgresql18` package), so a plain `docker run` is a complete install.
 
 ### Building and Running
 ```bash
-# Build the container
 docker build -t matchexec .
 
-# Run with environment file
-docker run -p 3000:3000 -v $(pwd)/app_data:/app/app_data --stop-timeout 30 matchexec
+# Run with an env file and a data volume. --stop-timeout 30 lets Postgres shut down cleanly (Docker's default is 10 s).
+docker run -p 3000:3000 --stop-timeout 30 --env-file .env -v $(pwd)/app_data:/app/app_data matchexec
 
-# Run for testing (no data persistence)
+# Throwaway test (no persistence)
 docker run --rm -p 3000:3000 matchexec
 ```
 
+Data layout under `/app/app_data`: `postgres/` (PGDATA, `chmod 0700` enforced on every boot), `backups/` (`auto/`, `pre-upgrade/`, `pre-restore/`, `pre-postgres-<date>.db` safety copy of an imported SQLite DB), `data/` (legacy `matchexec.db` before import, which is renamed `matchexec.db.migrated-<date>` afterwards). On Unraid use `/mnt/cache/appdata` rather than `/mnt/user` (FUSE hurts Postgres) and `PUID=99 PGID=100`.
+
 ### s6-overlay Process Management
 
-The container uses s6-overlay v3 to manage processes:
-
-- **Automatic service startup**: All processes start automatically via s6 supervision
-- **Process dependencies**: Services wait for database migration to complete
-- **Graceful shutdown**: Proper signal handling for clean container stops
-- **Process restart**: Failed processes are automatically restarted
-- **User management**: Processes run as non-root user for security
-
-### Embedded PostgreSQL and service selection (Docker)
-
-One image, two modes. With `DATABASE_URL` unset the container runs its own PostgreSQL 18 (Alpine `postgresql18` package, data in
-`/app/app_data/postgres`, Unix socket `/run/postgresql`, role `abc`); with it set, no embedded server starts. `MATCHEXEC_SERVICES`
-(`all` or a comma list of `web,bot,scheduler,stats,migrate`) selects what runs. Boot sequence: `cont-init.d/20-setup-environment`
-(resolve services/DB, write markers in `/run/matchexec/selected/`), `30-postgres-init` (initdb, PG major check, managed config), then
-s6-rc: `postgres` -> `migrate` -> `web`, `bot`, `scheduler`, `stats`. s6-rc compiles its graph BEFORE cont-init runs, so every service
-always exists and each run script idles (`s6-svc -O .`) when its marker is missing. If `migrate` fails in an all-in-one container the
-web service starts in degraded mode (`MATCHEXEC_DEGRADED`, loading screen shows the error) and bot/scheduler/stats stay stopped.
-Run containers with `--stop-timeout 30` (Unraid). Web binds to `BIND_HOST` (default `0.0.0.0`), never `HOSTNAME`.
+- **Service graph**: `postgres` (only when embedded) -> `migrate` (oneshot) -> `web`, `bot`, `scheduler`, `stats`. Service directories live in `s6-overlay/s6-rc.d/`, boot scripts in `s6-overlay/cont-init.d/` (`10-adduser`, `20-setup-environment`, `25-fix-data-permissions`, `30-postgres-init`), helper scripts in `s6-overlay/matchexec/` (`main`, `migrate`).
+- **Embedded Postgres**: initdb on first boot (`--username=abc`, builtin `C.UTF-8` collation, data checksums), Unix socket only, URL `postgresql://abc@/matchexec?host=/run/postgresql`. Tuned with `PG_SHARED_BUFFERS` (default 128MB) and `PG_MAX_CONNECTIONS` (default 50). The container refuses to start if `PG_VERSION` is a different major than the image (see `docs/postgres-major-upgrade.md`); there is no automatic `pg_upgrade`.
+- **Shutdown**: apps stop first, then Postgres gets SIGINT (fast shutdown). `S6_SERVICES_GRACETIME=8000`, `S6_KILL_GRACETIME=1500`; use `--stop-timeout 30`.
+- **Degraded mode**: when `migrate` fails in a multi-service container (for example the SQLite import preflight found problems), the container keeps running, `web` starts with `MATCHEXEC_DEGRADED=true` (`src/server/middleware/degraded.ts`), serves the SPA and `/api/db-status` with the error, `/api/health` returns 503, everything else under `/api` and `/uploads` returns 503. The next start retries. A migrate-only container (`MATCHEXEC_SERVICES=migrate`, the Helm Job) fails hard with exit code 1.
+- **Healthcheck**: `/api/health` (includes DB connectivity), start period 180 s.
+- **BIND_HOST**: interface the web server binds to (default `0.0.0.0`). `HOSTNAME` is not used (Kubernetes sets it to the pod name).
+- **Users**: PUID/PGID (default 1001) own the data; embedded Postgres runs as that user. The image starts as root because s6 needs it, then services drop to `abc`.
+- **Kubernetes**: see `kubernetes/README.md` (Helm chart in `kubernetes/helm/matchexec`, `mode: aio | split`).
 
 ### Adding Process Dependencies (Docker)
 
-When a Discord bot, scheduler or stats-processor process needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
+When a Discord bot, scheduler, stats-processor or server bundle needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
 
-1. **Add the package to `package.json`** as a normal dependency (Dependabot/pnpm update manages versions here)
-2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs`, `esbuild.scheduler.config.mjs` or `esbuild.stats-processor.config.mjs`)
+1. **Add the package to `package.json`** as a normal dependency
+2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs`, `esbuild.scheduler.config.mjs`, `esbuild.stats-processor.config.mjs`, `esbuild.server.config.mjs`)
 3. **Add the package name** to the `PROCESS_DEPS` array in `scripts/collect-process-deps.mjs`
 
-The collect script follows pnpm's symlinks and automatically traces transitive dependencies; you only need to add the top-level package name. Versions come from the installed `node_modules/` (managed by `pnpm-lock.yaml`), so there's nothing else to keep in sync. Today only natives and discord.js/voice packages (`@napi-rs/canvas`, `discord.js`, `@discordjs/*`, `@snazzah/davey`, `bufferutil`) are external; everything else, including `pg` and `drizzle-orm`, is bundled into `dist/*.js`. The runtime image only contains `dist/`, `drizzle/`, `migrations/legacy-sqlite/` (importer), `data/`, `public/`, `package.json` and those collected modules.
+The collect script follows pnpm's symlinks and traces transitive dependencies; you only need to add the top-level package name (nested `node_modules` and `optionalDependencies` are traced too). Today only natives and discord.js/voice packages (`@napi-rs/canvas`, `discord.js`, `@discordjs/*`, `@snazzah/davey`, `bufferutil`) are external; everything else, including `pg` and `drizzle-orm`, is bundled into `dist/*.js`. The runtime image only contains `dist/`, `drizzle/`, `migrations/legacy-sqlite/` (importer), `data/`, `public/`, `package.json` and those collected modules.
 
-**When you DON'T need to update the collect script:**
-- Pure JS packages that esbuild can bundle (just don't add them to `external`)
-- Dev dependencies (not in the Docker image)
+**You DON'T need to touch the collect script** for pure JS packages esbuild can bundle (don't add them to `external`) or dev dependencies.
 
-**Testing:** After changes, build the Docker image and verify all processes start:
+**Testing:** After changes, build the image and verify all processes start:
 ```bash
 docker build -t matchexec:test .
 docker run --rm -p 3000:3000 matchexec:test
 ```
 
+The `postgresql18` package is installed with `apk`; its minor/patch updates only arrive when the image is rebuilt (Dependabot cannot see apk packages), and a major bump is a deliberate Dockerfile edit.
+
 ## Project Structure
 
+```
 ├── src/
-│   ├── app/                      # Next.js application
-│   │   ├── api/                  # REST API routes (47+ endpoints)
-│   │   │   ├── matches/          # Match management endpoints
-│   │   │   ├── tournaments/      # Tournament endpoints
-│   │   │   ├── games/            # Game data endpoints
-│   │   │   ├── channels/         # Discord channel endpoints
-│   │   │   └── settings/         # Settings endpoints
-│   │   ├── matches/              # Match pages (create, history, dashboard)
-│   │   ├── tournaments/          # Tournament pages
-│   │   ├── settings/             # Settings pages (Discord, Announcer, UI, Scheduler)
-│   │   ├── welcome/              # First-time setup wizard
-│   │   └── layout.tsx            # Root layout with Mantine provider
-│   ├── components/               # React components
-│   │   ├── scoring/              # Scoring system components
-│   │   └── ...                   # Match/tournament UI components
-│   └── lib/                      # Utilities (database-init, notifications, scoring, brackets)
+│   ├── client/                   # Vite SPA: index.html, main.tsx, routes.tsx (React Router table), root-layout.tsx, providers.tsx, globals.css
+│   │   └── pages/                # One page.tsx per route (matches, tournaments, series, games, channels, feed, settings, welcome, login, dev, info)
+│   ├── components/               # React components (scoring/, setup/, create-match/, create-tournament/, match-details/, series/, stats/, ...)
+│   ├── hooks/                    # React hooks
+│   ├── server/                   # Hono server
+│   │   ├── index.ts              # serve(app) on PORT (3000 prod / 3001 dev), BIND_HOST
+│   │   ├── app.ts                # middleware + router mounting, exports AppType
+│   │   ├── http.ts               # HttpError, onError, jsonOk/jsonError, noStore
+│   │   ├── static.ts             # dist/client static files + SPA fallback
+│   │   ├── middleware/           # auth, welcome, rate-limit, maintenance, degraded
+│   │   └── routes/               # one Hono router per domain (matches, tournaments, series, games, channels, settings, backup, scorecards, stats, feed, uploads, system, health, auth, welcome-flow, debug)
+│   └── lib/                      # Domain modules (all take an Executor first): matches/, tournaments/, series/, stats/, scoring/, queues/, settings.ts, games.ts, discord-queues.ts, feed-helpers.ts, logger/, ...
+├── lib/
+│   ├── db/                       # index.ts (pool, db, Executor), schema/*.ts (Drizzle), migrate.ts + migrate-cli.ts, seed.ts, leader.ts, system-status.ts, errors.ts
+│   ├── import-sqlite/            # One-time SQLite -> Postgres importer (permanent, see Conventions)
+│   ├── backup.ts, restore.ts, maintenance.ts, backup-crypto.ts, storage.ts   # backups, restore + quiesce, blobs
+│   └── discord-bot-service.ts, signup-forms.ts, version-*.ts
 ├── processes/
-│   ├── discord-bot/              # Discord bot process
-│   │   ├── index.ts              # Main bot implementation
-│   │   └── modules/              # Modular bot features (voice, events, reminders, etc.)
-│   └── scheduler/                # Cron scheduler process
-├── lib/db/                       # (Postgres migration, WIP) Drizzle schema (schema/*.ts), pool/db module, migrate.ts, seed.ts, system-status.ts
-├── drizzle/                      # (Postgres migration, WIP) generated Drizzle SQL migrations (0000_baseline.sql); `pnpm db:generate` / `pnpm db:migrate`
-├── migrations/legacy-sqlite/     # SQLite migrations (still used by the current runtime; later only by the SQLite importer). Database migrations (27 files; 019-022 scoring rewrite, 024 series event uniques, 025 setup phase persistence (grid_position, qualifying_time_ms), 026 scorecard position suggestions, 027 backfill matches.mode_id, 028 name backfilled tournament match_teams; there is no 023)
-├── data/games/                   # Game data (6 games with modes/maps)
+│   ├── discord-bot/              # index.ts, modules/ (announcement, event, reminder, queue-processor, interaction, voice, scorecard, winner-vote, ...), utils/
+│   ├── scheduler/                # index.ts, jobs/ (auto-backup, check-for-update, update-avatars)
+│   └── stats-processor/          # index.ts, modules/ (ai-extractor, stat-image-generator, providers/)
+├── shared/                       # Types and helpers shared by client, server and processes
+├── drizzle/                      # Generated Drizzle SQL migrations (0000_baseline.sql + meta/)
+├── migrations/legacy-sqlite/     # The 27 old SQLite migrations; used ONLY by the importer
+├── data/games/                   # Game data (10 games with modes/maps), seeded at startup
+├── kubernetes/                   # Helm chart (aio / split modes), Grafana dashboard, README
 ├── s6-overlay/                   # Docker init system config
-└── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
+├── scripts/                      # collect-process-deps.mjs, import-sqlite.ts, update-helm-version.mjs, dev helpers
+├── docs/                         # postgres-major-upgrade.md, keyboard-shortcuts.md, scoring-rewrite-plan.md (historical)
+├── compose.dev.yml               # Dev-only Postgres 18
+├── docker-compose.yml            # Example all-in-one deployment
+├── drizzle.config.ts             # drizzle-kit config
+├── vite.config.mts               # Vite (client) config incl. dev proxy
+├── esbuild.*.config.mjs          # Bundles for server, discord-bot, scheduler, stats-processor, migrate, import-sqlite
+├── ecosystem.config.js           # Unified PM2 configuration (dev/prod)
+└── tests/                        # Vitest (see Testing)
+```
 
 ## Database
 
-The project uses SQLite for data persistence with automated migrations and seeding at startup.
+PostgreSQL 18 through Drizzle ORM (`drizzle-orm` with `pg`; PGlite in tests). Schema source of truth: `lib/db/schema/*.ts` (grouped by domain: matches, tournaments, series, discord, settings, games, stats, system, blobs, control, queues, types). Explicit snake_case column names; TS property keys equal the column names, so selected rows serialise to the same JSON keys the API returns.
 
-**IMPORTANT**: This project uses the standard `sqlite3` library, NOT `better-sqlite3`. All database connections should use the callback-based API of sqlite3.
+- **Connection**: `DATABASE_URL`. In development it defaults to `postgres://matchexec:matchexec@127.0.0.1:5432/matchexec` (`compose.dev.yml`). In the Docker image, unset means embedded Postgres over the Unix socket. `PG_POOL_MAX` (default 10) sizes the pool per process.
+- **Drizzle conventions**: booleans are `boolean`, timestamps `timestamptz`, JSON columns `jsonb` with `.$type<>()`, identity columns are `GENERATED BY DEFAULT AS IDENTITY`. `updated_at` columns use `$onUpdate(...)`, so raw-SQL updates must set `updated_at` themselves. **Foreign keys are enforced**; children cascade through `ON DELETE CASCADE`, so deletes do not need manual child cleanup (exceptions are documented in the schema: `discord_deletion_queue`, `discord_match_messages`, `discord_events`, `team_voice_channels` and the `auto_voice_channels` table deliberately have no FK to `matches`; `matches`/`match_games`/`tournaments` have no FK to `game_modes`/`game_maps` because the seeder replaces those rows).
+- **Schema changes**: edit the TS schema, then `pnpm db:generate` (drizzle-kit writes a new SQL file under `drizzle/`), and commit both. The baseline is `drizzle/0000_baseline.sql`. The migrations table is `public.__drizzle_migrations` (in `public` so it travels with `pg_dump --schema=public`).
+- **Migrate and seed**: `lib/db/migrate.ts` (`runMigrations`) takes a `pg_advisory_lock`, takes a pre-upgrade `pg_dump` into `backups/pre-upgrade/` when pending migrations hit a non-empty database (a failed dump aborts the upgrade; `MATCHEXEC_SKIP_PREUPGRADE_DUMP=true` overrides), applies migrations, runs the SQLite importer if a legacy `.db` is found, then seeds `data/games/*` (each game's `game.json` has a `dataVersion`; it re-seeds only when that changes; each game seeds in one transaction). The seeder also inserts the default `app_settings` rows and `stats_settings`.
+- **`system_status`** (single row): `phase` (`starting|migrating|seeding|importing|ready|error`), `message`, `progress`, `imported_from_sqlite`, `report` (importer report). Replaces the old `.db-status.json`; `/api/db-status` and the loading screen read it, which works across pods.
+- **`blobs`**: uploaded event images, scorecard screenshots and stat images (bytea, 10 MB cap, unique `path`). Written through `lib/storage.ts`; `GET /uploads/*` serves them with immutable caching and an ETag. Included in backups.
+- **`control` schema**: `control.maintenance` and `control.workers` coordinate restores (quiesce). Excluded from dumps.
 
-**Database Location**: The SQLite database file is located at `./app_data/data/matchexec.db` (relative to project root). Always use this path when creating Node.js scripts for database operations.
+### Core tables
 
-### Schema
+- **Matches**: `matches`, `match_participants`, `match_games`, `match_teams` (N-team rows per match), `match_game_placements` (unified results)
+- **Tournaments**: `tournaments`, `tournament_participants`, `tournament_teams`, `tournament_team_members`, `tournament_matches`, `tournament_round_byes`
+- **Series**: `series`, `series_events`
+- **Games**: `games`, `game_modes` (with `scoring_type` and `setup_components`), `game_maps`, `game_stat_definitions`
+- **Discord**: 19 queue/job tables (`discord_*_queue`, `discord_bot_requests`, `stats_*_queue`), `discord_channels`, `discord_match_messages`, `discord_settings`
+- **Stats**: `scorecard_submissions`, `scorecard_player_stats`, `stats_settings`
+- **Settings**: `app_settings`, `announcer_settings`, `ui_settings`, `scheduler_settings`, `voices`
+- **System**: `system_status`, `blobs`, `data_versions`, `activity_feed`
 
-Core tables include:
-
-- **Matches**: `matches`, `match_participants`, `match_games` (with results/scoring)
-- **Teams/Results** (new): `match_teams` (N-team rows per match), `match_game_placements` (unified results)
-- **Tournaments**: `tournaments`, `tournament_participants`, `tournament_teams`, `tournament_matches`, `tournament_bracket_nodes`
-- **Series** (new): `series`, `series_events`
-- **Games**: `games`, `game_modes` (with `scoring_type` and `setup_components`), `game_maps`
-- **Discord**: `discord_queues`, `discord_voice_channels`, `channels` (text/voice management)
-- **Settings**: `settings`, `announcer_settings`, `ui_settings` (configuration)
-- **System**: `migrations`, `data_versions` (tracking)
-
-### Migrations
-
-Database migrations are executed once at application startup. Migration files are stored in `/migrations/` and run in alphabetical order. Each migration is tracked to prevent duplicate execution.
-
-### Data Seeding
-
-Game data is automatically seeded from JSON files in `/data/games/` (Overwatch 2, Valorant, Marvel Rivals, League of Legends, R6 Siege, Counter-Strike 2). Each game directory contains:
-
-- `game.json`: Game metadata with `dataVersion` field
-- `modes.json`: Available game modes
-- `maps.json`: Maps per mode
-
-The seeder checks `dataVersion` and only re-seeds when changed, preventing duplicates.
-
-### Migration and Seeding
-
-Database migrations and seeding use `lib/db/migrate.ts`, which records progress in the `system_status` table for the loading screen UI. The migration process is handled differently based on the environment:
+### Migration commands
 
 ```bash
-# Run migrations and seeding manually
-pnpm run migrate
-
-# Development (PM2 runs migrate-background.ts as a oneshot process)
-pnpm run dev:all
-
-# Production with PM2 (runs migrate-background.ts then starts processes)
-pnpm run prod:start
-
-# Docker (s6-overlay runs migrate-background.ts as a oneshot service)
-docker run matchexec
+pnpm migrate        # run migrations + import (if a legacy .db exists) + seeding (alias: pnpm db:migrate)
+pnpm db:generate    # generate a new Drizzle migration after editing lib/db/schema
 ```
+
+Individual processes only connect to the database; migrations run once at startup (PM2 oneshot `db-migrator` in dev, the s6 `migrate` oneshot in Docker, a pre-install/pre-upgrade Job in Kubernetes split mode).
 
 ### Usage
 
 ```typescript
-import { getDbInstance } from './src/lib/database-init';
+import { db } from '../../lib/db';           // lazy singleton; getDb(), getPool(), closeDb() also exported
+import { games } from '../../lib/db/schema';
+import { eq } from 'drizzle-orm';
 
-// Get database instance (migrations should already be run)
-const db = await getDbInstance();
-
-// Use database instance
-const games = await db.all('SELECT * FROM games');
+const rows = await db.select().from(games).where(eq(games.id, 'overwatch2'));
 ```
 
-Individual processes only connect to the database - migrations run once at startup for performance and reliability.
-
-### Environment-Specific Migration Handling
-
-- **Development**: PM2 ecosystem config runs `migrate-background.ts` as a oneshot process, then starts all services
-- **Production (PM2)**: Same as development but without hot-reload/watch mode
-- **Docker**: s6-overlay runs `migrate-background.ts` as a oneshot service dependency; all other services wait for it to complete
-
-### PM2 Configuration
-
-The project uses a unified PM2 configuration in `ecosystem.config.js` that adapts based on the `NODE_ENV` environment variable:
-
-- **Development mode**: Set `NODE_ENV=development` (done automatically by `pnpm run dev:all`)
-  - Process names get `-dev` suffix
-  - Web app runs with `pnpm run dev` for hot reload
-  - Discord bot and scheduler watch for file changes
-- **Production mode**: Default when `NODE_ENV` is not set or set to `production`
-  - Process names have no suffix
-  - Web app runs compiled `server.js`
-  - No file watching
+Application code does not write SQL strings against `db`; use the domain modules in `src/lib/` (they take an `Executor` first) and Drizzle's builder, with `sql` templates for the occasional expression.
 
 ## Conventions
 
-- **Transactions**: `db.transaction(async (tx) => ...)` from `lib/db`; pass `tx` explicitly as the first argument of domain functions (`Executor` type).
-- **SQLite importer is permanent (plan D3)**: `lib/import-sqlite/` always imports legacy `.db` files into the CURRENT Drizzle schema. `mappings.ts` has one typed mapping per table (every column must be listed), so any schema change must update it; its fixture tests (`tests/integration/import`, `tests/unit/import-sqlite`) stay in the suite.
-- **Foreign keys are enforced** by Postgres (cascade / set null as declared in `lib/db/schema`).
+- **Drizzle and `Executor`**: every domain function takes an `Executor` (`Db | Tx`, from `lib/db`) as its first argument and runs on it. Never reach for the global `db` inside code that may run in a transaction.
+- **Transactions**: use `db.transaction(async (tx) => { ... })` and pass `tx` explicitly to everything inside. There is no shared connection and no `withTransaction`. Take row locks (`SELECT ... FOR UPDATE`) on the aggregate row (`lockMatch`, `lockTournament`, `lockSeries`) for read-check-write flows; lock order is tournament -> matches. Work that must not run inside the tx (Discord I/O waits, activity-feed writes) goes through `AfterCommit` (`src/lib/matches/effects.ts`); optional steps run in `bestEffort` savepoints.
+- **Queue inserts inside the business transaction**: any Discord queue row caused by a state change is enqueued with the same `tx` (`enqueue*` in `src/lib/queues/enqueue.ts`), so it commits or rolls back with the change.
+- **Worker claim contract** (`src/lib/queues/worker.ts`): workers claim with `claimJobs` (`UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *`; a claim counts as an attempt), then `completeJob`, `failJob` (exponential backoff, `max_attempts`, `permanent` skips retries) or `releaseJob`. Abandoned claims are reset by `resetAbandonedClaims`. Wrap polling ticks in `nonOverlapping`. Queue columns are `attempts`, `last_error`, `claimed_at`, `claimed_by`, `next_attempt_at`, `processed_at`, `external_message_id`.
 - **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/matches/scoreboard.ts`.
+- **Schema changes must keep the SQLite importer working (plan D3)**: `lib/import-sqlite/` imports legacy `.db` files (restores of old backups too, indefinitely) into the CURRENT Drizzle schema. `mappings.ts` has one typed mapping per table (every column must be listed, so a schema change is a compile error until it is updated), and its fixture tests (`tests/integration/import`, `tests/unit/import-sqlite`) stay in the suite permanently.
+- **`control` schema DDL must stay idempotent**: control tables are created in the baseline, and a restored older dump replays later migrations, so any migration touching the `control` schema must be idempotent (`IF NOT EXISTS`, etc.).
+- **API routes are native Hono handlers** in `src/server/routes/*`. Throw `HttpError` for error responses (`onError` renders `{ error }`); keep response shapes stable (timestamps are ISO strings, booleans real booleans, JSON columns real objects).
+- **Dependencies**: `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080` (7 days), so pnpm refuses packages published in the last week; Dependabot (`.github/dependabot.yml`, target branch `dev`) has a matching 7-day `cooldown`. Do not use `minimumReleaseAgeExclude` unless a security fix forces it, and log it. Install scripts are allow-listed in `allowBuilds`. Use `pnpm`/`pnpm exec`/`pnpm dlx`, never `npm`/`npx`.
 
 ## Authentication (opt-in)
 
-Disabled unless `ADMIN_PASSWORD` is set. When set, `src/proxy.ts` calls `authGate` (`src/lib/auth.ts`) and requires an HMAC-signed session cookie for all pages and `/api/*` except `/login`, `/api/auth/*`, `/api/health`, `/api/db-status`, `/api/welcome-flow`. Env vars (see `.env.example`):
+Disabled unless `ADMIN_PASSWORD` is set. When set, the Hono middleware `src/server/middleware/auth.ts` (`authGate`, mounted in `src/server/app.ts`; shared helpers in `src/lib/auth-shared.ts`, routes in `src/server/routes/auth.ts`) requires an HMAC-signed session cookie for all pages and `/api/*` except `/login`, `/api/auth/*`, `/api/health`, `/api/db-status`, `/api/welcome-flow`, static assets (`/static/*`, images, manifest) and `/uploads/*` (Discord embeds link to uploads). HTML navigations are redirected to `/login?next=`, API calls get 401. In development the Vite plugin `serverNavigationGate` relays the redirects from the Hono server. Env vars (see `.env.example`):
 - `ADMIN_PASSWORD` - enables auth
 - `AUTH_SECRET` - cookie signing secret (default: hash of password)
 - `AUTH_SESSION_DAYS` - session lifetime (default 7)
@@ -294,14 +274,15 @@ Disabled unless `ADMIN_PASSWORD` is set. When set, `src/proxy.ts` calls `authGat
 - **`Position`** — race/ranking order. Points awarded by finishing position via a spread.
 
 Key tables:
-- **`match_teams`** — N-team rows per match (replaces hardcoded blue/red). FFA/Position modes get one row per participant at assign-phase.
-- **`match_game_placements`** — unified result table. `entity_type` ∈ `('team', 'participant')`. Replaces legacy `winner_id`, `position_results` etc. on `match_games` (dual-write during transition; legacy columns remain until Phase 8 cleanup).
-- **`matches.position_scoring_override`** — optional per-match points spread (JSON).
+- **`match_teams`** — N-team rows per match. FFA/Position modes get one row per participant at assign-phase.
+- **`match_game_placements`** — unified result table. `entity_type` ∈ `('team', 'participant')`. The legacy dual-written columns (`winner_id`, `position_results`, `blue/red_team_voice_channel`, `team_assignment`, ...) no longer exist; where the UI still needs a legacy-shaped value it is derived from placements and teams.
+- **`matches.position_scoring_override`** — optional per-match points spread (jsonb).
 - **`game_modes.setup_components`** — JSON array of assign-phase UI components. Defaults: Normal→`["teams"]`, FFA→`["confirm_participants"]`, Position→`["grid_order"]`. Racing modes override to `["qualifying","grid_order"]`.
 
-Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispatcher), `confirm-participants.tsx`, `grid-order.tsx`, `qualifying.tsx`, `classes.tsx`.
+Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispatcher), `confirm-participants.tsx`, `grid-order.tsx`, `qualifying.tsx`, `classes.tsx`. Pure scoring calculations live in `src/lib/scoring/` (`position.ts`, `winners.ts`).
 
 ### Match System
+- Domain module `src/lib/matches/` (barrel `index.ts`): creation, transitions (`transitions.ts`), teams, participants/signups, results (`results.ts`, `submit-result.ts`), winner votes, voice channels, map codes
 - Match creation with customizable rounds, rulesets (casual/competitive), and team assignment
 - `scoring_type`-aware scoring: Normal (team), FFA (participant winner), Position (ranked spread)
 - Match state management (created → gather → assign → battle → complete/cancelled)
@@ -309,19 +290,26 @@ Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispa
 - Voice channel integration and announcements (per `match_teams.voice_channel_id`)
 
 ### Tournament System
+- Domain module `src/lib/tournaments/` (bracket math, generation, progression, standings, transitions)
 - **Single elimination** and **double elimination** bracket formats (Normal/team modes)
 - **Cumulative points** format for FFA/Position tournaments — leaderboard-based, no bracket
-- Automated bracket generation and progression
-- Team-based tournament management
-- Tournament-specific match scheduling
-- Bracket visualization and navigation
+- Automated bracket generation and progression (serialised by a tournament row lock)
+- Team-based tournament management, tournament-specific match scheduling, bracket visualization
 
 ### Series System
-- Top-level entity for multi-event championships and seasons
+- Top-level entity for multi-event championships and seasons (`src/lib/series/`)
 - Series owns an event schedule: each `series_event` links to a `match` or `tournament` with a `points_multiplier`
-- Standings computed on demand by summing `match_game_placements.points_awarded` across all series events
-- API: `src/app/api/series/` (CRUD + events + standings)
+- Standings computed on demand (`getSeriesStandings`) from placements, per event, with a breakdown
+- API: `src/server/routes/series.ts` (CRUD + events + standings)
 - UI: `/series`, `/series/create`, `/series/[seriesId]`, `/series/[seriesId]/edit`, `/series/history`
+
+### Backups and Restore
+- `lib/backup.ts`: `pg_dump --format=custom --compress=zstd --schema=public` to `*.partial`, renamed on success. Automatic backups run from the scheduler (`processes/scheduler/jobs/auto-backup.ts`; default daily 04:00 container TZ, keep 14 daily + 4 weekly; on by default for embedded Postgres, off for external `DATABASE_URL`). Settings live in `app_settings`.
+- Manual backup/restore: `src/server/routes/backup.ts` (mounted under `/api/settings`), page `src/client/pages/settings/backup-restore/page.tsx`. Optional AES-256-GCM wrapper (`lib/backup-crypto.ts`, `MEXECBAK` header).
+- Restore (`lib/restore.ts`) accepts PostgreSQL dumps (`PGDMP`), encrypted backups and legacy SQLite `.db` files (via the importer). It quiesces workers through `control.maintenance` / `control.workers`, takes a pre-restore dump, swaps schemas, and rolls back on any failure.
+
+### SQLite Import (upgrade from v0.8.x)
+On first start with a legacy `matchexec.db` present, the migrate step makes a safety copy (`backups/pre-postgres-<timestamp>.db`), imports everything in ONE transaction (preflight fails by default on inconsistent data; `MATCHEXEC_IMPORT_ALLOW_LOSSY=true` lets it apply and report repairs), verifies standings/results against the source, moves uploads into `blobs`, then renames the file to `matchexec.db.migrated-<timestamp>` (never deletes it). CLI: `dist/import-sqlite.js` / `scripts/import-sqlite.ts`.
 
 ### Discord Integration
 - Modular bot architecture (`processes/discord-bot/modules/`):
@@ -329,24 +317,25 @@ Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispa
   - `event-handler`: Server events management
   - `announcement-handler`: Match/tournament announcements with embeds
   - `reminder-handler`: Player notifications
-  - `queue-processor`: Async Discord operations
+  - `queue-processor`: Async Discord operations (claims jobs from the queue tables)
   - `interaction-handler`: Slash commands
+  - `scorecard-handler`, `stats-report-handler`, `winner-vote-handler`: stats and result flows
   - `settings-manager`: Bot configuration
+- Event images are read through `processes/discord-bot/utils/image-source.ts` (`/uploads/*` from `blobs`, everything else from `public/`)
 - Queue-based operations for reliability
 
 ### API Architecture
-47+ REST endpoints in `src/app/api/`:
-- Match management (CRUD, participants, games, scoring, transitions)
-- Tournament operations (brackets, teams, matches)
-- Game data (modes, maps)
-- Channel management
-- Settings configuration
-- Health/stats monitoring
+Hono routers in `src/server/routes/`, mounted in `src/server/app.ts`:
+- Match management (CRUD, participants, games, scoring, transitions, scorecards, stats)
+- Tournament operations (brackets, teams, matches, standings)
+- Series, game data (modes, maps), channel management, settings (incl. backup/restore), feed, uploads
+- Health (`/api/health`, `/api/health/ready`), `/api/db-status`, `/api/metrics` (Prometheus), `/api/version`
+- `AppType` is exported from `app.ts` for typed clients; pages use `fetch`
 
 ### UI Features
 - Welcome flow for first-time setup
-- Settings pages (Discord, Announcer, UI, Application, Scheduler)
-- Match and tournament dashboards with history
+- Settings pages (Discord, Announcer, UI, Application, Scheduler, Stats, Backup/Restore)
+- Match and tournament dashboards with history; polling-based live updates
 - Scoring interface with format-specific components
 - Map customization (codes, notes)
 - Logo behavior: On desktop (md+, ≥992px), clicking the logo collapses/expands the sidebar. On mobile, clicking the logo navigates to home.
@@ -372,7 +361,6 @@ Only messages at or above the configured level are displayed.
 ```typescript
 import { logger } from '@/lib/logger';
 
-// Log at different levels
 logger.debug('Detailed debug information');
 logger.info('System started successfully');
 logger.warning('Configuration missing, using defaults');
@@ -382,13 +370,13 @@ logger.critical('Database connection lost');
 
 ### Configuration
 
-Log level is configured via the Application Settings page (`/settings/application`) and stored in the `app_settings` table:
+Log level is configured via the Application Settings page (`/settings/application`) and stored in `app_settings`:
 
 ```sql
 SELECT setting_value FROM app_settings WHERE setting_key = 'log_level';
 ```
 
-The logger automatically reloads the level from the database every 5 seconds (cached for performance).
+The logger reloads the level from the database every 5 seconds (cached).
 
 ### API Endpoint
 
@@ -397,121 +385,128 @@ The logger automatically reloads the level from the database every 5 seconds (ca
 
 ### Implementation Details
 
-- **Location**: `src/lib/logger.ts`
-- **Color Detection**: Automatically detects terminal color support
-- **Performance**: 5-second cache to minimize database queries
-- **Fallback**: Defaults to 'warning' level if database unavailable
+- **Location**: `src/lib/logger/` (`base.ts`, `server.ts` used by the server and processes, `client.ts` for the browser, `index.ts` re-exports the server logger)
+- **Fallback**: Defaults to `warning` if the database is unavailable
 - **Format**: `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`
 
 ### Important Notes
 
-- **CLI Scripts**: Standalone utility scripts (e.g., `scripts/*.js`, `add-test-participants.js`) intentionally use native `console` methods as they run outside the application context
-- **Database Init**: `lib/database-init.ts` uses `console.error` for initialization failures since the logger depends on the database being initialized first
-- **All Application Code**: The entire running application (web app, Discord bot, scheduler) uses the centralized logger
+- **CLI scripts** (`scripts/*.js`, `lib/db/migrate*.ts`, `lib/db/seed.ts`, `lib/import-sqlite/*`) intentionally use native `console` methods (see the ESLint `no-console` exceptions in `eslint.config.mjs`)
+- **All application code** (web server, Discord bot, scheduler, stats processor) uses the centralized logger
+- In the Docker image there are no log files; all services write to the container log. In development PM2 writes `./app_data/data/logs/<process>-{out,error}.log`.
 
 ## Testing
 
 ### IMPORTANT: When modifying source code, always update the corresponding tests. If a function's behavior changes, its test expectations must be updated too.
 
 ### Test Framework
-- **Vitest** with `pool: 'forks'` and `fileParallelism: true`
-- Config: `vitest.config.ts`
-- Setup file: `tests/setup.ts` (no database setup: every test that needs Postgres calls `setupPgTestFile()` from `tests/utils/pg-test-db.ts`; PGlite by default, real Postgres when `TEST_DATABASE_URL` is set; `pnpm test:pg` runs the whole suite against Postgres 18)
+- **Vitest** with `pool: 'forks'` and `fileParallelism: true`, `happy-dom` environment
+- Config: `vitest.config.mts`; setup: `tests/setup.ts` (sets a non-existent `CLIENT_DIR` so server tests do not depend on a local build)
+- **PGlite per test file**: every test that needs a database calls `setupPgTestFile({ seed?, resetBetweenTests? })` from `tests/utils/pg-test-db.ts`. It creates a fresh in-process PGlite, applies the Drizzle migrations and injects it with `setDbForTesting`, so domain modules and Hono routes share one connection. With `seed: true` the reference tables (games, modes, maps, settings, voices) are kept between resets.
+- **Real Postgres**: set `TEST_DATABASE_URL` (admin connection) and each file runs in its own `CREATE DATABASE mxtest_...`. `pnpm test:pg` does that against `postgres://postgres:postgres@127.0.0.1:55432/postgres` (start one with `docker run --rm -p 55432:5432 -e POSTGRES_PASSWORD=postgres postgres:18-alpine`). The concurrency tests (row locks, job claiming, leader lock) only run on real Postgres. CI runs the whole suite on both.
 
 ### Running Tests
 ```bash
-pnpm run test              # Run all tests
-pnpm run test:unit         # Unit tests only
-pnpm run test:integration  # Integration tests only
-pnpm run test:coverage     # With coverage report
+pnpm test              # Run all tests (PGlite)
+pnpm test:pg           # Run all tests against real Postgres 18 (TEST_DATABASE_URL)
+pnpm test:unit         # Excludes tests/integration
+pnpm test:integration  # tests/integration only
+pnpm test:coverage     # With coverage report
 ```
 
 ### Test Structure
 ```
 tests/
-├── setup.ts                          # React act() flag only
+├── setup.ts                          # Global hooks / env
+├── mocks/discord.ts                  # mockDiscordClient, createMockChannel()
 ├── utils/
-│   ├── pg-test-db.ts                 # setupPgTestFile(), getPgTestDb() (PGlite or TEST_DATABASE_URL)
-│   ├── pg-fixtures.ts                # seedBasicTestData(), createMatch(), createTournament(), ... (Drizzle)
-│   └── app-request.ts                # appRequest(): call the Hono app in-process
-├── mocks/
-│   └── discord.ts                    # mockDiscordClient, createMockChannel()
+│   ├── pg-test-db.ts                 # setupPgTestFile(), getPgTestDb(), isRealPostgres
+│   ├── pg-fixtures.ts                # createGame/createGameMode/createMatch/createTournament/seedBasicTestData (Drizzle, typed)
+│   ├── pg-{queue,series,stats,tournament}-fixtures.ts
+│   ├── app-request.ts                # appRequest(path, { json, headers }) -> { status, headers, data, response } via app.request()
+│   ├── pg-bin.ts, pg-real-db.ts      # pg_dump/pg_restore helpers for backup tests (native tools or docker shims)
+│   └── legacy-sqlite.ts, import-harness.ts   # Build legacy .db fixtures for the importer tests
 ├── unit/
-│   ├── validation.test.ts            # validateRequiredFields, safeJSONParse/Stringify
-│   ├── lib/pg-scoring-position.test.ts # Pure scoring calculations (src/lib/scoring/*)
-│   ├── lib/pg-tournament-*.test.ts   # Tournament bracket / transitions / notifications (Postgres harness)
-│   ├── lib/pg-matches-domain.test.ts # Matches domain on Postgres (teams, participants, voice, votes, scheduler queries)
-│   └── discord-bot/
-│       ├── announcement-handler.test.ts
-│       ├── queue-processor.test.ts
-│       └── voice-handler.test.ts
+│   ├── lib/                          # Domain modules (pg-*.test.ts), pure helpers, logger, backup, maintenance
+│   ├── discord-bot/                  # Handlers, queue processor, image-source, ...
+│   ├── scheduler/                    # Cron jobs, auto-backup, update check
+│   ├── stats-processor/              # AI extractor, stat image generator, providers
+│   ├── import-sqlite/                # Importer coercion, mappings, uploads, status DTO
+│   ├── components/ hooks/ create-*/  # React component tests (render inside MemoryRouter when routing is used)
+│   └── validation.test.ts, shared/, utils/
 └── integration/
-    ├── api/                          # API route handler tests
-    │   ├── matches.test.ts
-    │   ├── match-participants.test.ts
-    │   ├── match-results.test.ts
-    │   ├── match-transitions.test.ts
-    │   ├── tournaments.test.ts
-    │   ├── games.test.ts
-    │   └── settings.test.ts
-    ├── database/
-    │   ├── migrations.test.ts
-    │   ├── schema.test.ts
-    │   └── seeder.test.ts
-    └── queues/
-        └── queue-contracts.test.ts
-
+    ├── server/                       # Hono route tests through app.request() (matches, tournaments, series, scorecards, backup-restore, auth, static, degraded, ...), incl. *-concurrency tests
+    ├── database/                     # pg-baseline, pg-migrations, pg-schema, pg-seeder, pg-seed-data
+    ├── import/                       # SQLite importer: clean import, preflight, lossy, atomicity, v0.7 upgrade, WAL, migrate flow
+    └── queues/pg-queue-contracts.test.ts
 ```
 
+(`pg-` in a file name is descriptive only; every test uses the same PGlite harness.)
+
 ### Key Source-to-Test Mappings
-| Source File | Test File |
-|-------------|-----------|
-| `src/lib/utils/validation.ts` | `tests/unit/validation.test.ts` |
-| `src/lib/scoring/*.ts` | `tests/unit/lib/pg-scoring-position.test.ts` |
-| `src/lib/matches/*.ts` | `tests/unit/lib/pg-matches-domain.test.ts`, `tests/integration/server/match*.test.ts` |
-| `src/lib/tournaments/bracket-math.ts` (pure) | `tests/unit/lib/tournament-bracket-math.test.ts` |
-| `src/lib/tournaments/*` (bracket, progress, transitions) | `tests/unit/lib/pg-tournament-*.test.ts`, `tests/integration/server/tournament*.test.ts` |
-| `processes/discord-bot/modules/announcement-handler.ts` | `tests/unit/discord-bot/announcement-handler.test.ts` |
-| `processes/discord-bot/modules/voice-handler.ts` | `tests/unit/discord-bot/voice-handler.test.ts` |
-| `src/server/routes/matches.ts` | `tests/integration/server/matches.test.ts`, `match-lifecycle.test.ts`, `matches-concurrency.test.ts` |
-| `src/server/routes/tournaments.ts` | `tests/integration/server/tournaments.test.ts` |
-| `src/app/api/settings/*/route.ts` | `tests/integration/api/settings.test.ts` |
-| `src/app/api/games/*/route.ts` | `tests/integration/api/games.test.ts` |
+| Source | Test |
+|--------|------|
+| `src/lib/utils/validation.ts` | `tests/unit/validation.test.ts`, `tests/unit/lib/validation-edge-cases.test.ts` |
+| `src/lib/matches/*`, `src/lib/scoring/*` | `tests/unit/lib/pg-matches-domain.test.ts`, `pg-scoring-*.test.ts`, `pg-match-*.test.ts`, `tests/integration/server/matches*.test.ts`, `match-lifecycle.test.ts` |
+| `src/lib/tournaments/*` | `tests/unit/lib/pg-tournament-*.test.ts`, `tournament-bracket-math.test.ts`, `double-elimination.test.ts`, `tests/integration/server/tournament*.test.ts` |
+| `src/lib/series/*` | `tests/unit/lib/pg-series-domain.test.ts`, `series-validation.test.ts`, `tests/integration/server/series*.test.ts` |
+| `src/lib/queues/*`, `src/lib/discord-queues.ts` | `tests/unit/lib/pg-discord-queues.test.ts`, `tests/integration/queues/pg-queue-contracts.test.ts`, `tests/integration/server/discord-queues-concurrency.test.ts` |
+| `src/lib/settings.ts`, `src/server/routes/settings.ts` | `tests/unit/lib/pg-settings.test.ts`, `tests/integration/server/settings.test.ts` |
+| `src/server/middleware/*` | `tests/integration/server/{auth,welcome,rate-limit,degraded}.test.ts` |
+| `lib/backup.ts`, `lib/restore.ts`, `lib/maintenance.ts` | `tests/unit/lib/{backup,maintenance}.test.ts`, `tests/integration/server/backup-restore-*.test.ts` |
+| `lib/import-sqlite/*` | `tests/integration/import/*`, `tests/unit/import-sqlite/*` |
+| `lib/db/*` | `tests/integration/database/pg-*.test.ts` |
+| `processes/discord-bot/modules/*` | `tests/unit/discord-bot/*.test.ts` |
+| `processes/scheduler/*` | `tests/unit/scheduler/*.test.ts` |
+| `processes/stats-processor/*` | `tests/unit/stats-processor/*.test.ts` |
 
 ### Known Issues
-- **DB isolation**: `setupPgTestFile()` injects the per-file Postgres database into `lib/db` (`setDbForTesting`), so Hono routes, domain modules and processes share the connection the test seeds through `getPgTestDb()`.
-- **Phase 8 pending**: Legacy columns (`matches.blue_team_voice_channel`, `matches.red_team_voice_channel`, `match_games.winner_id` etc., `match_participants.team_assignment`) are still present and dual-written alongside the new `match_teams` / `match_game_placements` tables. Migration `029_drop_legacy_columns.sql` and the corresponding code cleanup are deferred to a follow-on PR after this branch is validated in production.
+- **TypeScript is pinned to 6.0.3**: `typescript-eslint` 8.72 does not support TypeScript 7 (it throws at load), so `pnpm lint` would not run. `tsc` 7 typechecks the repo cleanly; move when typescript-eslint supports it. Dependabot ignores `typescript` semver-major.
+- **Lint warnings**: `pnpm lint` has 0 errors and ~330 warnings (complexity, nested ternaries, explicit module boundary types, `react-refresh/only-export-components`). The three React Compiler rules of `eslint-plugin-react-hooks` 7 (`set-state-in-effect`, `purity`, `immutability`) are set to `warn` because they flag intentional fetch-on-mount/polling effects.
+- **Kubernetes Pod Security `restricted` is not supported**: the image's s6 init needs root before it drops to PUID/PGID. Use a `baseline` namespace or an exemption.
+- **Postgres minor/patch updates need an image rebuild** (apk package, invisible to Dependabot); major upgrades are manual (`docs/postgres-major-upgrade.md`).
+- Two moderate dev-only `pnpm audit` findings are accepted (`esbuild` via drizzle-kit's loader, `minimatch` via eslint).
 
 ### Writing Tests
-- Use `getTestDb()` for direct DB operations in tests
-- Use `createMockRequest()` / `parseResponse()` / `createRouteParams()` for API tests
-- Use `seedBasicTestData()` to get a game + mode for test setup
-- Use `createMatch()` / `createTournament()` from fixtures for quick entity creation
+- Call `setupPgTestFile()` at the top of any test that touches the database; use `getPgTestDb()` for direct access
+- Use `appRequest()` (or `app.request()`) to test Hono routes against the real app
+- Use `seedBasicTestData()` / `createMatch()` / `createTournament()` from `tests/utils/pg-fixtures.ts`
 - Discord bot tests require `vi.mock()` at the top of each file (mocks don't work in setup files)
-- `handleStatusTransition()` does NOT validate transitions - it only routes to handlers. Transition validation is in the API route layer.
+- Mocks of `@/lib/feed-helpers` should spread the real module (`importOriginal`) and override only what they need
+- Tests that need real row-lock behaviour belong in `*-concurrency.test.ts` and are skipped without `TEST_DATABASE_URL`
+- `transitionMatch()` validates and routes status changes (CAS under the match row lock); the API route layer only maps errors to HTTP statuses
 
 ## Technology Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, Mantine 9
-- **Backend**: Express (API server), Discord.js 14, node-cron
+- **Frontend**: React 19.3, Vite, React Router 7, TypeScript, Tailwind CSS 4, Mantine 9
+- **Backend**: Hono (API server), Discord.js 14, node-cron
+- **Database**: PostgreSQL 18, Drizzle ORM, `pg`; PGlite for tests
 - **Process Management**: PM2 (dev), s6-overlay v3 (Docker)
-- **Database**: SQLite3 (callback-based API)
 - **Voice**: @discordjs/voice, ffmpeg-static
-- **Development**: tsx, ESLint
+- **Tooling**: Node 26 (Docker image; 24+ for development), pnpm, tsx, esbuild, Vitest, ESLint
 
 ## Scripts
 
 **Development**:
-- `pnpm run dev:all` - Start all processes (web + bot + scheduler) with PM2
-- `pnpm run dev:logs` - View logs from all processes
-- `pnpm run dev:stop/restart` - Control PM2 processes
+- `pnpm dev:all` - Postgres (compose.dev.yml) + all processes with PM2
+- `pnpm dev:logs` - View logs from all processes
+- `pnpm dev:stop` / `pnpm dev:restart` - Control PM2 processes and the Postgres container
+- `pnpm dev:db:reset` - Wipe and recreate the dev database
+- `pnpm dev` / `pnpm dev:server` - Vite client / Hono server on their own
 
 **Production**:
-- `pnpm run prod:start` - Start with PM2
-- `docker build -t matchexec .` - Build Docker container
+- `pnpm prod:start` - Start the built bundles with PM2 (`pnpm build` first, `DATABASE_URL` required)
+- `docker build -t matchexec .` - Build the container
+
+**Database**:
+- `pnpm migrate` (`db:migrate`) - Run migrations/import/seeding manually
+- `pnpm db:generate` - Generate a Drizzle migration from schema changes
+
+**Quality**:
+- `pnpm build` - Build client, server and all process bundles into `dist/`
+- `pnpm typecheck` - `tsc --noEmit`
+- `pnpm lint` - ESLint check
+- `pnpm test`, `pnpm test:pg`, `pnpm test:coverage`
 
 **Utilities**:
-- `pnpm run migrate` - Run migrations/seeding manually
-- `pnpm run build` - Build Next.js app
-- `pnpm run lint` - ESLint check
-- `pnpm run version:patch/minor/major` - Bump version
+- `pnpm version:patch/minor/major` - Bump version (also updates `kubernetes/helm/matchexec/Chart.yaml` via `scripts/update-helm-version.mjs`; for an explicit version run `pnpm version 0.10.0 --no-git-tag-version`, add `--no-git-checks` on a dirty tree)

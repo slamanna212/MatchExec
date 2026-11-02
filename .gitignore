@@ -13,10 +13,6 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
-
 # production
 /build
 /dist
@@ -39,18 +35,15 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # database
 /app/data/
 /app_data/
 matchexec.db
 *.db
-.db-status.json
 
 # uploaded files
 /public/uploads/
-app_data/data/.db-status.json
 
 !.env.example
 .playwright-mcp/

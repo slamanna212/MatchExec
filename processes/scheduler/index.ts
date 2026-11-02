@@ -24,8 +24,8 @@ import {
 
 /**
  * Token sent as x-internal-token when calling the web API with opt-in auth on.
- * Mirrors getInternalToken() in src/lib/auth.ts (which uses Web Crypto and
- * next/server, so it isn't imported here). Returns null when auth is off.
+ * Mirrors getInternalToken() in src/lib/auth.ts (which uses Web Crypto, so it isn't
+ * imported here). Returns null when auth is off.
  */
 function getInternalApiToken(): string | null {
   if (process.env.INTERNAL_API_TOKEN) return process.env.INTERNAL_API_TOKEN;
