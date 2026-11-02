@@ -1,5 +1,5 @@
 # Builder stage - uses TARGETPLATFORM by default for correct musl binaries
-FROM node:26-alpine AS builder
+FROM node:26-alpine AS dependencies
 
 WORKDIR /app
 
@@ -11,11 +11,18 @@ COPY package.json ./
 # Node 25+ no longer bundles Corepack, so install it first
 RUN npm install -g corepack && corepack enable && corepack install
 
-# Fetch dependencies into the pnpm store (cached until the lockfile changes),
-# then install from the store without network access
+# Keep the fetched store in a layer: CI exports layers, not cache-mount contents.
+# A fresh builder can therefore restore fetch and still install offline.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm fetch
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --offline
+RUN pnpm fetch
+RUN pnpm install --frozen-lockfile --offline
+
+# Runtime dependency collection does not depend on application source or dev pruning.
+FROM dependencies AS runtime-dependencies
+COPY scripts/collect-process-deps.mjs ./scripts/
+RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
+
+FROM dependencies AS builder
 
 # Copy source code files in order of change frequency (least to most likely to change)
 COPY shared ./shared
@@ -33,37 +40,27 @@ COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrate
 # Build the Vite client (dist/client), the Hono server and the process bundles
 RUN pnpm run build
 
-# Prune dev dependencies while we still have build tools (needed for native modules on ARM)
-RUN pnpm prune --prod
+# Vite already copied public into dist/client. Preserve bot paths using links, while
+# keeping public/uploads a separate directory for legacy importer mounts.
+RUN node -e 'const fs = require("node:fs"); for (const name of fs.readdirSync("public")) { fs.rmSync("public/" + name, { recursive: true, force: true }); if (name !== "uploads") fs.symlinkSync("/app/dist/client/" + name, "public/" + name); } fs.mkdirSync("public/uploads", { recursive: true });' && \
+    chmod -R a-w /app/dist/client /app/data
 
-# Collect only the process-specific deps (and their transitive deps) from node_modules
-RUN node scripts/collect-process-deps.mjs /tmp/process-deps/node_modules
+FROM node:26-alpine AS s6-download
+ARG S6_OVERLAY_VERSION=3.2.3.2
+ARG TARGETARCH
+RUN apk add --no-cache curl xz && mkdir /overlay && \
+    case "$TARGETARCH" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; esac && \
+    curl -fL "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" -o /tmp/noarch.tar.xz && \
+    curl -fL "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${arch}.tar.xz" -o /tmp/arch.tar.xz && \
+    tar -C /overlay -Jxpf /tmp/noarch.tar.xz && tar -C /overlay -Jxpf /tmp/arch.tar.xz
 
 FROM node:26-alpine AS runner
 WORKDIR /app
 
-# Install required packages for s6-overlay and runtime
-RUN apk add --no-cache \
-    bash \
-    coreutils \
-    shadow \
-    tzdata \
-    git \
-    curl \
-    ffmpeg
-
-# Embedded PostgreSQL 18 (all-in-one mode) plus the client tools (pg_dump / pg_restore for backups, psql, pg_isready).
-# Installed from the same Alpine release as the node base image, so musl and every shared library agree. The package
-# name pins the MAJOR (a new major is a deliberate edit here plus the upgrade notes in docs/postgres-major-upgrade.md);
-# minors/patches arrive with each image rebuild. Dependabot cannot see apk packages, so rebuild regularly.
-RUN apk add --no-cache postgresql18 postgresql18-client
-
-# Install s6-overlay
-ARG S6_OVERLAY_VERSION=3.2.3.2
-ARG S6_OVERLAY_ARCH=x86_64
-
-RUN curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" | tar -C / -Jxpf - && \
-    curl -L "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_OVERLAY_ARCH}.tar.xz" | tar -C / -Jxpf -
+# Include embedded PostgreSQL and client tools for migrations, backups and restores.
+# Bash/shadow support startup and PUID/PGID; BusyBox supplies the shell utilities.
+RUN apk add --no-cache bash shadow tzdata ffmpeg postgresql18 postgresql18-client
+COPY --from=s6-download /overlay/ /
 
 # Set s6-overlay environment variables
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
@@ -79,7 +76,6 @@ RUN addgroup -g 1001 abc && \
 # Copy bundled server + processes + Vite client (dist/client), built by esbuild/vite
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
-RUN chmod -R a-w /app/public /app/dist/client
 
 # Drizzle SQL migrations (applied by dist/migrate.js)
 COPY --from=builder /app/drizzle ./drizzle
@@ -87,14 +83,13 @@ COPY --from=builder /app/drizzle ./drizzle
 # Runtime data read from the working directory (cwd = /app): game data for the seeder (read-only), and the legacy
 # SQLite migrations used by the one-time importer. Application code itself is fully bundled in dist/.
 COPY --from=builder --chown=abc:abc /app/data ./data
-RUN chmod -R a-w /app/data
 COPY --from=builder /app/migrations ./migrations
 
 # Copy package files for reference
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 
 # Copy process-specific dependencies (auto-collected with transitive deps)
-COPY --from=builder /tmp/process-deps/node_modules ./node_modules/
+COPY --from=runtime-dependencies /tmp/process-deps/node_modules ./node_modules/
 
 # Copy s6-overlay configuration (service graph, boot scripts, helper scripts)
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
@@ -122,7 +117,7 @@ ENV S6_KILL_GRACETIME=1500
 # /api/health reports database connectivity (503 when it is down or the container is in degraded mode).
 # The start period covers first-boot initdb + migrations + a possible SQLite import.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
-  CMD curl -fsS "http://localhost:${PORT:-3000}/api/health" || exit 1
+  CMD ["node", "/etc/matchexec/healthcheck.cjs"]
 
 # Main process: stays idle for the all-in-one container; in a "migrate only" container (MATCHEXEC_SERVICES=migrate, e.g. a
 # Kubernetes Job) it exits with the migration's exit code so the Job completes.

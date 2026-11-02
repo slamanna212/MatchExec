@@ -20,3 +20,21 @@ build
 tmp
 temp
 public/uploads
+
+# Local state and development artifacts (exclusions, not an input allowlist)
+.env
+.env.*
+!.env.example
+app_data
+uploads
+logs
+*.log
+.playwright-mcp
+playwright-report
+test-results
+.claude
+.agents
+.codex
+.aws
+.github
+.husky

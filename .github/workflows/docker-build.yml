@@ -48,6 +48,13 @@ jobs:
         cache-from: type=gha,scope=${{ matrix.platform }}
         cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
         
+    - name: Smoke-test image on native architecture
+      env:
+        IMAGE_REF: ghcr.io/${{ github.actor }}/matchexec:dev-${{ matrix.platform }}
+      run: |
+        docker pull "$IMAGE_REF"
+        bash scripts/test-container-image.sh "$IMAGE_REF"
+
   merge:
     runs-on: ${{ github.actor == 'slamanna212' && 'rapture-matchexec' || 'ubuntu-latest' }}
     needs: build
