@@ -36,9 +36,10 @@ export const migrationHooks = {
    */
   async preUpgradeDump(_ctx: { pool: Pool; pendingMigrations: number }): Promise<void> {},
   /**
-   * TODO(Stage 5): import a legacy SQLite database (DATABASE_PATH / app_data/data/matchexec.db) into the fresh
-   * schema, inside one transaction, updating system_status phase 'importing'. Return true when an import ran.
-   * Called after migrations are applied and before seeding.
+   * Imports a legacy SQLite database (DATABASE_PATH / app_data/data/matchexec.db) into the fresh schema, inside one
+   * transaction, updating system_status phase 'importing'. Returns true when an import ran. Called after migrations are
+   * applied and before seeding. The real implementation (lib/import-sqlite) is installed by migrate-cli.ts and the import
+   * CLI so that bundles which only wait for the schema (web) do not carry it; this default is a no-op.
    */
   async importLegacySqlite(_ctx: { db: Db; pool: Pool }): Promise<boolean> {
     return false;

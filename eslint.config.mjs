@@ -101,6 +101,7 @@ const eslintConfig = [
       "lib/db/migrate.ts",
       "lib/db/migrate-cli.ts",
       "lib/db/seed.ts",
+      "lib/import-sqlite/*.ts",
       "migrations/**/*.{js,ts}",
       "src/lib/logger/base.ts"
     ],

@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
-import { DatabaseLoadingScreen } from './DatabaseLoadingScreen';
+import { DatabaseLoadingScreen, type DatabaseStatus } from './DatabaseLoadingScreen';
 import { logger } from '@/lib/logger/client';
 
-interface DatabaseStatus {
-  ready: boolean;
-  progress: string;
-  timestamp: number;
-}
 
 interface DatabaseStatusWrapperProps {
   children: React.ReactNode;

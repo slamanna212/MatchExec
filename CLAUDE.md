@@ -262,6 +262,7 @@ The project uses a unified PM2 configuration in `ecosystem.config.js` that adapt
 ## Conventions
 
 - **Transactions**: `db.transaction(async (tx) => ...)` from `lib/db`; pass `tx` explicitly as the first argument of domain functions (`Executor` type).
+- **SQLite importer is permanent (plan D3)**: `lib/import-sqlite/` always imports legacy `.db` files into the CURRENT Drizzle schema. `mappings.ts` has one typed mapping per table (every column must be listed), so any schema change must update it; its fixture tests (`tests/integration/import`, `tests/unit/import-sqlite`) stay in the suite.
 - **Foreign keys are enforced** by Postgres (cascade / set null as declared in `lib/db/schema`).
 - **`matches.winner_team` has three ID spaces**: tournament matches -> `tournament_teams.id`; standalone Normal -> `match_teams.id`; FFA/Position -> `match_participants.id`. Use `resolveWinnerEntity` in `src/lib/matches/scoreboard.ts`.
 

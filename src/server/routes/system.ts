@@ -15,6 +15,34 @@ import { logger } from '@/lib/logger';
 
 // ─── /api/db-status ──────────────────────────────────────────────────────────
 
+export interface DbStatusImportInfo {
+  /** Table the SQLite importer is working on (phase 'importing'). */
+  table?: string;
+  /** Failure summary of a failed SQLite import (phase 'error'). */
+  error?: { message: string; issues: Array<{ table: string; id: string | null; detail: string }>; issuesTotal: number; repairs: number };
+}
+
+/** Extra fields for the loading screen, taken from system_status.report (written by the importer, plan 5.4). */
+export function importProgress(phase: string, report: Record<string, unknown> | null): DbStatusImportInfo {
+  if (!report) return {};
+  if (phase === 'importing') {
+    const table = (report.importing as { table?: string | null } | undefined)?.table;
+    return table ? { table } : {};
+  }
+  if (phase === 'error' && typeof report.error === 'string') {
+    const issues = Array.isArray(report.issues) ? (report.issues as Array<{ table: string; id: string | null; detail: string }>) : [];
+    return {
+      error: {
+        message: report.error.split('\n')[0].slice(0, 500),
+        issues: issues.slice(0, 10).map((i) => ({ table: i.table, id: i.id, detail: i.detail })),
+        issuesTotal: typeof report.issuesTotal === 'number' ? report.issuesTotal : issues.length,
+        repairs: Array.isArray(report.repairs) ? report.repairs.length + (typeof report.repairsTruncated === 'number' ? report.repairsTruncated : 0) : 0,
+      },
+    };
+  }
+  return {};
+}
+
 export const dbStatus = new Hono().get('/', async (c) => {
   try {
     let row = null;
@@ -30,6 +58,7 @@ export const dbStatus = new Hono().get('/', async (c) => {
       timestamp: row.updated_at.getTime(),
       phase: row.phase,
       percent: row.progress,
+      ...importProgress(row.phase, row.report),
     });
   } catch (error) {
     logger.error('Error reading database status:', error);

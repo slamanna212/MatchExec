@@ -102,6 +102,47 @@ describe('DatabaseLoadingScreen', () => {
     container.remove();
   });
 
+  async function renderWithStatus(data: object): Promise<HTMLDivElement> {
+    mockFetch(data);
+    let container!: HTMLDivElement;
+    await act(async () => {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+      createRoot(container).render(<MantineProvider><DatabaseLoadingScreen /></MantineProvider>);
+      await Promise.resolve();
+    });
+    return container;
+  }
+
+  it('shows the phase, the table being imported and the progress bar during a SQLite import (plan 5.4)', async () => {
+    const container = await renderWithStatus({
+      ready: false, progress: 'Importing match_games (26/58)...', timestamp: 1, phase: 'importing', percent: 52, table: 'match_games',
+    });
+    expect(container.textContent).toContain('Importing your existing data');
+    expect(container.textContent).toContain('Importing match_games (26/58)...');
+    expect(container.textContent).toContain('Current table: match_games');
+    expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+    container.remove();
+  });
+
+  it('shows the error summary when the import failed', async () => {
+    const container = await renderWithStatus({
+      ready: false, progress: 'Legacy import failed: boom', timestamp: 1, phase: 'error', percent: 0,
+      error: {
+        message: 'The legacy SQLite database cannot be imported as-is: 2 problem(s) found.',
+        issues: [{ table: 'match_games', id: 'g1', detail: 'match_id=m9 -> matches does not exist' }],
+        issuesTotal: 12, repairs: 0,
+      },
+    });
+    expect(container.textContent).toContain('Something went wrong');
+    expect(container.textContent).toContain('The import of your previous (SQLite) database failed');
+    expect(container.textContent).toContain('cannot be imported as-is');
+    expect(container.textContent).toContain('match_games [g1]: match_id=m9 -> matches does not exist');
+    expect(container.textContent).toContain('and 11 more');
+    expect(container.textContent).toContain('MATCHEXEC_IMPORT_ALLOW_LOSSY=true');
+    container.remove();
+  });
+
   it('is a function component', () => {
     expect(typeof DatabaseLoadingScreen).toBe('function');
   });

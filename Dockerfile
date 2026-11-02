@@ -28,7 +28,7 @@ COPY processes ./processes
 COPY src ./src
 COPY public ./public
 COPY ecosystem.config.js vite.config.mts tsconfig.json ./
-COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrate.config.mjs esbuild.server.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
+COPY esbuild.discord-bot.config.mjs esbuild.scheduler.config.mjs esbuild.migrate.config.mjs esbuild.import-sqlite.config.mjs esbuild.server.config.mjs esbuild.stats-processor.config.mjs eslint.config.mjs ./
 
 # Build the Vite client (dist/client), the Hono server and the process bundles
 RUN pnpm run build
