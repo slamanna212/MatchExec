@@ -52,6 +52,12 @@ RUN apk add --no-cache \
     curl \
     ffmpeg
 
+# Embedded PostgreSQL 18 (all-in-one mode) plus the client tools (pg_dump / pg_restore for backups, psql, pg_isready).
+# Installed from the same Alpine release as the node base image, so musl and every shared library agree. The package
+# name pins the MAJOR (a new major is a deliberate edit here plus the upgrade notes in docs/postgres-major-upgrade.md);
+# minors/patches arrive with each image rebuild. Dependabot cannot see apk packages, so rebuild regularly.
+RUN apk add --no-cache postgresql18 postgresql18-client
+
 # Install s6-overlay
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG S6_OVERLAY_ARCH=x86_64
@@ -78,17 +84,11 @@ RUN chmod -R a-w /app/public /app/dist/client
 # Drizzle SQL migrations (applied by dist/migrate.js)
 COPY --from=builder /app/drizzle ./drizzle
 
-# Copy runtime dependencies and application files (needed by processes and migrations)
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/shared ./shared
+# Runtime data read from the working directory (cwd = /app): game data for the seeder (read-only), and the legacy
+# SQLite migrations used by the one-time importer. Application code itself is fully bundled in dist/.
 COPY --from=builder --chown=abc:abc /app/data ./data
 RUN chmod -R a-w /app/data
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/scripts ./scripts
-
-# Copy migration runner script directly from host with execute permissions
-COPY --chmod=755 scripts/run-migrations.sh ./scripts/
 
 # Copy package files for reference
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
@@ -96,9 +96,10 @@ COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
 # Copy process-specific dependencies (auto-collected with transitive deps)
 COPY --from=builder /tmp/process-deps/node_modules ./node_modules/
 
-# Copy s6-overlay configuration
+# Copy s6-overlay configuration (service graph, boot scripts, helper scripts)
 COPY --chmod=755 s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d/
 COPY --chmod=755 s6-overlay/cont-init.d /etc/cont-init.d/
+COPY --chmod=755 s6-overlay/matchexec /etc/matchexec/
 
 # Create app_data directory and set ownership
 RUN mkdir -p /app/app_data/data /app/logs && \
@@ -111,12 +112,21 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
 ENV TZ=UTC
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+# Docker kills the container 10 s after SIGTERM by default. Apps stop first (they hold the DB), then Postgres does a fast
+# shutdown; keep the budget inside that window. Unraid / large databases: also run with `--stop-timeout 30`.
+ENV S6_SERVICES_GRACETIME=8000
+ENV S6_KILL_GRACETIME=1500
+
+# /api/health reports database connectivity (503 when it is down or the container is in degraded mode).
+# The start period covers first-boot initdb + migrations + a possible SQLite import.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT:-3000}/api/health" || exit 1
+
+# Main process: stays idle for the all-in-one container; in a "migrate only" container (MATCHEXEC_SERVICES=migrate, e.g. a
+# Kubernetes Job) it exits with the migration's exit code so the Job completes.
+CMD ["/etc/matchexec/main"]
 
 # s6-overlay requires root to start its supervision tree; individual services drop to abc (uid 1001) via s6 service config
 # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint

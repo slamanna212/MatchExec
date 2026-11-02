@@ -1,0 +1,11 @@
+#!/command/with-contenv bash
+# Embedded PostgreSQL (all-in-one mode). Stopped last: web/bot/scheduler/stats depend on migrate, which depends on this.
+# SIGINT (down-signal) = "fast shutdown": clients are disconnected, a checkpoint is written, no crash recovery next boot.
+if [ ! -e /run/matchexec/selected/postgres ]; then
+    echo "[postgres] not used (DATABASE_URL is set), idling"
+    s6-svc -O .
+    exit 0
+fi
+export PGDATA=/app/app_data/postgres
+cd /app/app_data || exit 1
+exec s6-setuidgid abc postgres -D "$PGDATA"

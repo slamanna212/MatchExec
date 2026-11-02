@@ -1,6 +1,0 @@
-#!/command/with-contenv bash
-
-echo "Starting Discord bot..."
-
-cd /app
-exec s6-setuidgid abc node dist/discord-bot.js

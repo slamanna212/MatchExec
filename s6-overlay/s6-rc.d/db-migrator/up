@@ -1,1 +1,0 @@
-s6-setuidgid abc /bin/bash /app/scripts/run-migrations.sh

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { apiNotFound, noStore, onError } from './http';
 import { authGate } from './middleware/auth';
+import { degradedGate } from './middleware/degraded';
 import { maintenanceGate } from './middleware/maintenance';
 import { welcomeFlow } from './middleware/welcome';
 import { redirectDevPages, serveClientFiles, spaFallback } from './static';
@@ -26,6 +27,9 @@ app.onError(onError);
 app.notFound(apiNotFound);
 
 app.use('/api/*', noStore);
+
+// Degraded mode (failed migration in the all-in-one container): only the SPA, health and db-status are served.
+app.use('*', degradedGate);
 
 // Backup restore (plan 6.4): in-flight request counter + 503 for writes while a restore drains / swaps the data.
 app.use('*', maintenanceGate);

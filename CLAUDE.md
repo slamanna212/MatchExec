@@ -105,7 +105,7 @@ The production Docker container uses s6-overlay as the init system to manage all
 docker build -t matchexec .
 
 # Run with environment file
-docker run -p 3000:3000 --env-file .env matchexec
+docker run -p 3000:3000 -v $(pwd)/app_data:/app/app_data --stop-timeout 30 matchexec
 
 # Run for testing (no data persistence)
 docker run --rm -p 3000:3000 matchexec
@@ -121,25 +121,35 @@ The container uses s6-overlay v3 to manage processes:
 - **Process restart**: Failed processes are automatically restarted
 - **User management**: Processes run as non-root user for security
 
+### Embedded PostgreSQL and service selection (Docker)
+
+One image, two modes. With `DATABASE_URL` unset the container runs its own PostgreSQL 18 (Alpine `postgresql18` package, data in
+`/app/app_data/postgres`, Unix socket `/run/postgresql`, role `abc`); with it set, no embedded server starts. `MATCHEXEC_SERVICES`
+(`all` or a comma list of `web,bot,scheduler,stats,migrate`) selects what runs. Boot sequence: `cont-init.d/20-setup-environment`
+(resolve services/DB, write markers in `/run/matchexec/selected/`), `30-postgres-init` (initdb, PG major check, managed config), then
+s6-rc: `postgres` -> `migrate` -> `web`, `bot`, `scheduler`, `stats`. s6-rc compiles its graph BEFORE cont-init runs, so every service
+always exists and each run script idles (`s6-svc -O .`) when its marker is missing. If `migrate` fails in an all-in-one container the
+web service starts in degraded mode (`MATCHEXEC_DEGRADED`, loading screen shows the error) and bot/scheduler/stats stay stopped.
+Run containers with `--stop-timeout 30` (Unraid). Web binds to `BIND_HOST` (default `0.0.0.0`), never `HOSTNAME`.
+
 ### Adding Process Dependencies (Docker)
 
-When a Discord bot or scheduler process needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
+When a Discord bot, scheduler or stats-processor process needs a new npm package that **cannot be bundled by esbuild** (native modules, packages with dynamic requires), you need to:
 
 1. **Add the package to `package.json`** as a normal dependency (Dependabot/pnpm update manages versions here)
-2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs` or `esbuild.scheduler.config.mjs`)
+2. **Mark it as `external`** in the relevant esbuild config (`esbuild.discord-bot.config.mjs`, `esbuild.scheduler.config.mjs` or `esbuild.stats-processor.config.mjs`)
 3. **Add the package name** to the `PROCESS_DEPS` array in `scripts/collect-process-deps.mjs`
 
-The collect script automatically traces transitive dependencies — you only need to add the top-level package name. Versions are pulled from the main `node_modules/` (managed by `package-lock.json`), so there's nothing else to keep in sync.
+The collect script follows pnpm's symlinks and automatically traces transitive dependencies; you only need to add the top-level package name. Versions come from the installed `node_modules/` (managed by `pnpm-lock.yaml`), so there's nothing else to keep in sync. Today only natives and discord.js/voice packages (`@napi-rs/canvas`, `discord.js`, `@discordjs/*`, `@snazzah/davey`, `bufferutil`) are external; everything else, including `pg` and `drizzle-orm`, is bundled into `dist/*.js`. The runtime image only contains `dist/`, `drizzle/`, `migrations/legacy-sqlite/` (importer), `data/`, `public/`, `package.json` and those collected modules.
 
 **When you DON'T need to update the collect script:**
 - Pure JS packages that esbuild can bundle (just don't add them to `external`)
-- Packages already in Next.js standalone output (e.g., `sqlite3` — used by the web app)
 - Dev dependencies (not in the Docker image)
 
 **Testing:** After changes, build the Docker image and verify all processes start:
 ```bash
 docker build -t matchexec:test .
-docker run --rm -p 3000:3000 --env-file .env matchexec:test
+docker run --rm -p 3000:3000 matchexec:test
 ```
 
 ## Project Structure

@@ -1,0 +1,15 @@
+#!/command/with-contenv bash
+# Container main process (CMD). Services are supervised by s6; this only decides how long the container lives.
+#   - migrate-only container (MATCHEXEC_SERVICES=migrate): exit with the migration's exit code (Kubernetes Job).
+#   - everything else: stay idle; the container ends when s6 is told to stop (docker stop) or a stage-2 failure halts it.
+if [ "$(cat /run/matchexec/services.list 2>/dev/null)" = "migrate" ]; then
+    for _ in $(seq 1 7200); do
+        if [ -s /run/matchexec/migrate.exitcode ]; then
+            exit "$(cat /run/matchexec/migrate.exitcode)"
+        fi
+        sleep 0.5
+    done
+    echo "[main] migrate did not finish in time"
+    exit 1
+fi
+exec s6-pause

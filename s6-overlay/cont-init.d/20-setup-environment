@@ -1,21 +1,78 @@
 #!/command/with-contenv bash
+# Resolves what this container runs and exports it to every s6 service (via /run/s6/container_environment).
+#
+#   MATCHEXEC_SERVICES   all (default) or a comma list of: web, bot, scheduler, stats, migrate
+#   DATABASE_URL         unset/empty -> embedded Postgres on a Unix socket; set -> external database, no embedded Postgres
+#
+# Selection is communicated through marker files in /run/matchexec/selected/. All services always exist in the s6 service
+# graph (s6-rc compiles it BEFORE cont-init.d runs, so the graph cannot be edited here); each run script checks its marker
+# and idles when its service is not selected.
+
+set -u
+ENVDIR=/run/s6/container_environment
+SEL=/run/matchexec/selected
+ALL_SERVICES="web bot scheduler stats migrate"
+
+setenv() { printf '%s' "$2" > "$ENVDIR/$1"; }
 
 echo "Setting up MatchExec environment..."
+mkdir -p "$ENVDIR" /run/matchexec /tmp/matchexec
+rm -rf "$SEL"
+mkdir -p "$SEL"
 
-# Ensure environment variables are set correctly
-export NODE_ENV=${NODE_ENV:-production}
-export PORT=${PORT:-3000}
-export HOSTNAME=${HOSTNAME:-0.0.0.0}
-export DATABASE_PATH=${DATABASE_PATH:-/app/app_data/data/matchexec.db}
+# ----- services -----
+requested=$(printf '%s' "${MATCHEXEC_SERVICES:-all}" | tr 'A-Z' 'a-z' | tr -d '[:space:]')
+[ -n "$requested" ] || requested=all
+list=""
+if [ "$requested" = "all" ]; then
+    list="$ALL_SERVICES"
+else
+    IFS=',' read -ra items <<< "$requested"
+    for item in "${items[@]}"; do
+        [ -n "$item" ] || continue
+        case " $ALL_SERVICES " in
+            *" $item "*) list="$list $item" ;;
+            *)
+                echo "ERROR: unknown service '$item' in MATCHEXEC_SERVICES='${MATCHEXEC_SERVICES}'. Valid: all, or a comma list of web,bot,scheduler,stats,migrate."
+                exit 1
+                ;;
+        esac
+    done
+fi
+list=$(printf '%s\n' $list | sort -u | tr '\n' ' ')
+for svc in $list; do : > "$SEL/$svc"; done
+printf '%s' "$(printf '%s\n' $list | paste -sd, -)" > /run/matchexec/services.list
+setenv MATCHEXEC_SERVICES "$requested"
 
-# Create necessary directories with correct permissions
-mkdir -p /app/app_data/data
-mkdir -p /app/logs
-mkdir -p /tmp/matchexec
+# ----- database -----
+if [ -z "${DATABASE_URL:-}" ]; then
+    embedded=true
+    setenv DATABASE_URL "postgresql://abc@/matchexec?host=/run/postgresql"
+    : > "$SEL/postgres"
+else
+    embedded=false
+fi
+setenv MATCHEXEC_EMBEDDED_PG "$embedded"
 
-# Set ownership for all directories
-chown -R abc:abc /app/app_data
-chown -R abc:abc /app/logs
-chown -R abc:abc /tmp/matchexec
+# ----- migrations: run by the "migrate" service, or automatically alongside any other service unless disabled -----
+if [ ! -e "$SEL/migrate" ]; then
+    if [ "$embedded" = true ]; then
+        : > "$SEL/migrate"   # nobody else could create the schema in an all-in-one container
+    elif [ "${MATCHEXEC_RUN_MIGRATIONS:-true}" != "false" ]; then
+        : > "$SEL/migrate"   # advisory-locked, safe if several containers start together
+    fi
+fi
 
+# ----- directories -----
+mkdir -p /app/app_data /app/logs
+chown abc:abc /app/app_data /app/logs /tmp/matchexec 2>/dev/null || true
+
+{
+    echo "MATCHEXEC_SERVICES=$requested"
+    echo "MATCHEXEC_EMBEDDED_PG=$embedded"
+    [ "$embedded" = true ] && echo "DATABASE_URL=postgresql://abc@/matchexec?host=/run/postgresql"
+} > /run/matchexec/env
+
+echo "Services:  $(cat /run/matchexec/services.list)  (migrate: $([ -e "$SEL/migrate" ] && echo yes || echo no))"
+echo "Database:  $([ "$embedded" = true ] && echo 'embedded PostgreSQL (Unix socket)' || echo 'external (DATABASE_URL)')"
 echo "Environment setup completed"

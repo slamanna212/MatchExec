@@ -1,0 +1,15 @@
+#!/command/with-contenv bash
+if [ ! -e /run/matchexec/selected/bot ]; then
+    echo "[bot] not selected (MATCHEXEC_SERVICES=${MATCHEXEC_SERVICES:-all}), idling"
+    s6-svc -O .
+    exit 0
+fi
+if [ -e /run/matchexec/migrate.failed ]; then
+    echo "[bot] database migration failed, not starting (see the web UI or the migrate log above)"
+    s6-svc -O .
+    exit 0
+fi
+
+echo "Starting Discord bot..."
+cd /app
+exec s6-setuidgid abc node dist/discord-bot.js

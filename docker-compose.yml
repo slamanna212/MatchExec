@@ -10,7 +10,10 @@ services:
       - TZ=UTC
     volumes:
       - ./app_data:/app/app_data
+      # Only needed once when upgrading from v0.8.x: the importer moves these files into the database. New installs can drop it.
       - ./uploads:/app/public/uploads
     security_opt:
       - no-new-privileges:true
+    # Postgres needs a moment to shut down cleanly; Docker's default is 10 s.
+    stop_grace_period: 30s
     restart: unless-stopped

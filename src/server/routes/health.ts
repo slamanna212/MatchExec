@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@lib/db';
 import { getAppSetting } from '@/lib/settings';
 import { logger } from '@/lib/logger';
+import { isDegraded } from '../middleware/degraded';
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -27,6 +28,9 @@ const NO_HEARTBEAT: ServiceStatus = { status: 'down', message: 'No heartbeat rec
 
 export const health = new Hono()
   .get('/', async (c) => {
+    if (isDegraded()) {
+      return c.json({ status: 'degraded', timestamp: new Date().toISOString(), error: 'Database migration failed; see the web UI for details' }, 503);
+    }
     try {
       await db.execute(sql`select 1`);
       return c.json({

@@ -1,0 +1,52 @@
+#!/command/with-contenv bash
+# "migrate" oneshot: Drizzle migrations + SQLite import (if a legacy .db is found) + seeding, via dist/migrate.js.
+# Embedded mode: waits for the postgres service and creates the database on first use.
+#
+# On failure:
+#   - migrate-only container (MATCHEXEC_SERVICES=migrate, e.g. a Kubernetes Job): exit non-zero so the Job fails.
+#   - otherwise: write /run/matchexec/migrate.failed and exit 0 (degraded mode). The web service then starts and serves the
+#     loading screen with the error that dist/migrate.js stored in system_status; bot/scheduler/stats stay idle.
+rm -f /run/matchexec/migrate.failed /run/matchexec/migrate.exitcode
+
+if [ ! -e /run/matchexec/selected/migrate ]; then
+    echo "[migrate] not selected (MATCHEXEC_SERVICES=${MATCHEXEC_SERVICES:-all}, MATCHEXEC_RUN_MIGRATIONS=${MATCHEXEC_RUN_MIGRATIONS:-true}), skipping"
+    echo 0 > /run/matchexec/migrate.exitcode
+    exit 0
+fi
+
+fail() {
+    echo "[migrate] FAILED: $1"
+    echo 1 > /run/matchexec/migrate.exitcode
+    if [ "$(cat /run/matchexec/services.list)" = "migrate" ]; then
+        exit 1
+    fi
+    echo "[migrate] continuing in degraded mode: the web UI will show the error; bot, scheduler and stats stay stopped until the next start"
+    : > /run/matchexec/migrate.failed
+    exit 0
+}
+
+if [ -e /run/matchexec/selected/postgres ]; then
+    echo "[migrate] waiting for the embedded Postgres..."
+    ready=0
+    for _ in $(seq 1 240); do
+        if s6-setuidgid abc pg_isready -q -h /run/postgresql -d postgres; then ready=1; break; fi
+        sleep 0.5
+    done
+    [ "$ready" = 1 ] || fail "embedded Postgres did not become ready within 120 s (see the postgres log above)"
+    exists=$(s6-setuidgid abc psql -h /run/postgresql -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname = 'matchexec'" 2>&1)
+    if [ "$exists" != "1" ]; then
+        echo "[migrate] creating database matchexec"
+        s6-setuidgid abc createdb -h /run/postgresql matchexec || fail "could not create database matchexec"
+    fi
+fi
+
+cd /app || exit 1
+echo "[migrate] running dist/migrate.js"
+s6-setuidgid abc node dist/migrate.js
+rc=$?
+echo "$rc" > /run/matchexec/migrate.exitcode
+if [ "$rc" -ne 0 ]; then
+    fail "dist/migrate.js exited with status $rc"
+fi
+echo "[migrate] done"
+exit 0

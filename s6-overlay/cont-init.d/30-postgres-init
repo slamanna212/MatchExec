@@ -1,0 +1,80 @@
+#!/command/with-contenv bash
+# Embedded PostgreSQL preparation (only when DATABASE_URL is unset). Runs as root after 10-adduser / 20-setup-environment.
+#
+#   - first boot: initdb as abc into /app/app_data/postgres (builtin C.UTF-8 collation: stable across Alpine upgrades)
+#   - every boot: refuse a different Postgres major (plan 7.3), chown + chmod 0700 PGDATA, rewrite the managed config
+
+if [ ! -e /run/matchexec/selected/postgres ]; then
+    echo "External database configured, skipping embedded PostgreSQL setup"
+    exit 0
+fi
+
+PGDATA=/app/app_data/postgres
+SOCKET_DIR=/run/postgresql
+DOCS_URL="https://github.com/Slamanna212/MatchExec/blob/main/docs/postgres-major-upgrade.md"
+BIN_MAJOR=$(postgres --version | grep -oE '[0-9]+' | head -n 1)
+
+mkdir -p "$SOCKET_DIR"
+chown abc:abc "$SOCKET_DIR"
+chmod 0755 "$SOCKET_DIR"
+
+if [ -s "$PGDATA/PG_VERSION" ]; then
+    DATA_MAJOR=$(tr -d '[:space:]' < "$PGDATA/PG_VERSION")
+    if [ "$DATA_MAJOR" != "$BIN_MAJOR" ]; then
+        cat <<MSG
+
+======================================================================================
+MatchExec cannot start: PostgreSQL major version mismatch.
+
+  Database files in $PGDATA were created by PostgreSQL $DATA_MAJOR.
+  This image ships PostgreSQL $BIN_MAJOR, which cannot open them.
+
+Nothing was changed. To upgrade: dump the database with the OLD image, start this image
+on an empty volume and restore the dump. Step by step:
+  $DOCS_URL
+(Settings > Backup & Restore backups, or pg_dump from the old container, can be restored.)
+======================================================================================
+
+MSG
+        exit 1
+    fi
+elif [ -e "$PGDATA" ] && [ -n "$(ls -A "$PGDATA" 2>/dev/null)" ]; then
+    echo "ERROR: $PGDATA is not empty but has no PG_VERSION file. Refusing to initialise a database there; move or clear it."
+    exit 1
+fi
+
+mkdir -p "$PGDATA"
+chown abc:abc "$PGDATA"
+chmod 0700 "$PGDATA"
+
+if [ ! -s "$PGDATA/PG_VERSION" ]; then
+    echo "Initialising a new PostgreSQL $BIN_MAJOR cluster in $PGDATA"
+    s6-setuidgid abc initdb -D "$PGDATA" --username=abc --auth-local=trust --auth-host=reject \
+        --encoding=UTF8 --locale-provider=builtin --locale=C.UTF-8 --data-checksums || exit 1
+fi
+
+# A previous container killed hard leaves postmaster.pid behind; its PID can collide with an unrelated process in this
+# new PID namespace and make Postgres refuse to start. Nothing of ours is running yet, so it is stale.
+rm -f "$PGDATA/postmaster.pid"
+
+chown -R abc:abc "$PGDATA"
+chmod 0700 "$PGDATA"
+
+# Managed configuration, rewritten on every boot (environment variables win over manual edits of this file).
+cat > "$PGDATA/postgresql.auto.conf" <<CONF
+# Managed by MatchExec (cont-init.d/30-postgres-init); regenerated on every start.
+listen_addresses = ''
+unix_socket_directories = '$SOCKET_DIR'
+shared_buffers = '${PG_SHARED_BUFFERS:-128MB}'
+max_connections = ${PG_MAX_CONNECTIONS:-50}
+max_wal_size = '512MB'
+checkpoint_timeout = '15min'
+timezone = 'UTC'
+log_timezone = 'UTC'
+CONF
+cat > "$PGDATA/pg_hba.conf" <<HBA
+# Managed by MatchExec; the server only listens on a Unix socket inside the container.
+local all all trust
+HBA
+chown abc:abc "$PGDATA/postgresql.auto.conf" "$PGDATA/pg_hba.conf"
+echo "Embedded PostgreSQL $BIN_MAJOR ready at $PGDATA"

@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+if [ ! -e /run/matchexec/selected/web ]; then
+    echo "[web] not selected (MATCHEXEC_SERVICES=${MATCHEXEC_SERVICES:-all}), idling"
+    s6-svc -O .
+    exit 0
+fi
+
+cd /app
+# Failed migration / SQLite import: still serve the loading screen with the error from system_status (degraded mode)
+# instead of nothing. The other services stay idle until the next boot.
+if [ -e /run/matchexec/migrate.failed ]; then
+    echo "[web] migration failed, starting in DEGRADED mode (loading screen with the error only)"
+    export MATCHEXEC_DEGRADED=true
+fi
+echo "Starting MatchExec web server..."
+exec s6-setuidgid abc node dist/server.js

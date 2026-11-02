@@ -40,7 +40,5 @@ chown -R abc:abc /app/logs
 mkdir -p /home/abc/.cache/pnpm
 chown -R abc:abc /home/abc/.cache/pnpm 2>/dev/null || true
 
-# Set permissions only on data directories (not the entire app)
-chown -R abc:abc /app/app_data /app/logs
 # Only make run scripts executable
 find /app -name "*.sh" -type f -exec chmod +x {} \;

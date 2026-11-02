@@ -11,7 +11,7 @@
  *   unset + NODE_ENV=development -> postgres://matchexec:matchexec@127.0.0.1:5432/matchexec (compose.dev.yml).
  *   unset otherwise             -> error on first use.
  * In the all-in-one image the s6 setup exports DATABASE_URL for the embedded server as
- *   postgresql:///matchexec?host=/run/postgresql   (Unix socket; see Stage 7).
+ *   postgresql://abc@/matchexec?host=/run/postgresql   (Unix socket; the user must be explicit, the s6 services have no $USER).
  */
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { PgDatabase, PgQueryResultHKT, PgTransaction } from 'drizzle-orm/pg-core';
@@ -31,7 +31,7 @@ export type Executor = Db | Tx;
 
 export const DEV_DATABASE_URL = 'postgres://matchexec:matchexec@127.0.0.1:5432/matchexec';
 /** Connection string the embedded-Postgres image uses (documented here; exported by the s6 service). */
-export const EMBEDDED_DATABASE_URL = 'postgresql:///matchexec?host=/run/postgresql';
+export const EMBEDDED_DATABASE_URL = 'postgresql://abc@/matchexec?host=/run/postgresql';
 
 export function resolveDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
   if (env.DATABASE_URL) return env.DATABASE_URL;
