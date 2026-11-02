@@ -35,7 +35,11 @@ export class UpdateCheckJob {
     this.db = db;
   }
 
-  async checkForUpdate(): Promise<void> {
+  /**
+   * Check GitHub for a newer release. The daily schedule skips the check when one ran in the last 23 hours; a manual
+   * "Check Now" passes `force` to bypass that, otherwise it would silently do nothing after any recent check.
+   */
+  async checkForUpdate(opts: { force?: boolean } = {}): Promise<void> {
     try {
       if ((await getAppSetting('update_check_enabled', this.db)) === 'false') {
         logger.debug('Update check disabled, skipping');
@@ -43,7 +47,7 @@ export class UpdateCheckJob {
       }
 
       const lastRunValue = await getAppSetting('update_check_last_run', this.db);
-      if (lastRunValue) {
+      if (lastRunValue && !opts.force) {
         const lastRun = new Date(lastRunValue).getTime();
         const hoursSince = (Date.now() - lastRun) / (1000 * 60 * 60);
         if (hoursSince < CHECK_INTERVAL_HOURS) {

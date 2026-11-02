@@ -24,7 +24,7 @@ import { PageHeader } from '@/components/PageHeader';
 import type { GameMode, GameMapWithMode, SelectedMapCard } from '@/components/create-match/useMatchForm';
 import { MapSelector } from '@/components/create-match/MapSelector';
 import { SelectedMapsList } from '@/components/create-match/SelectedMapsList';
-import { cleanMapId } from '@/lib/utils/map-utils';
+import { cleanMapId, formatMapName, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
 
 interface MatchData {
   id: string;
@@ -160,8 +160,8 @@ export default function EditMatchPage() {
       if (!allMapsRes.ok) return [];
       const allMapsData: MapDetail[] = await allMapsRes.json();
 
-      const mapsById: Record<string, MapDetail> = {};
-      allMapsData.forEach(m => { mapsById[m.id] = m; });
+      // Includes the mode-specific ids the (name-deduplicated) maps endpoint does not list, e.g. `battleisland-standard`.
+      const mapsById: Record<string, MapDetail> = indexMapsWithModeVariants(allMapsData, modes);
 
       // Also build a lookup by base ID (without mode suffix)
       const mapsByBaseId: Record<string, MapDetail[]> = {};
@@ -176,7 +176,7 @@ export default function EditMatchPage() {
         const { modeId, modeName } = resolveMapMode(mapId, mapDetail, modes);
         return {
           id: mapId,
-          name: mapDetail?.name || mapId,
+          name: mapDetail?.name || formatMapName(mapId),
           modeId,
           modeName,
           imageUrl: mapDetail?.imageUrl

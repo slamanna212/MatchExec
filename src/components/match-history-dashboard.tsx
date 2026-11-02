@@ -167,7 +167,7 @@ export function MatchHistoryDashboard(): JSX.Element {
       if (silent && etagRef.current) {
         headers['If-None-Match'] = etagRef.current;
       }
-      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=0`, { headers });
+      const response = await fetch(`/api/matches?status=finished&limit=${PAGE_SIZE}&offset=0`, { headers });
 
       if (response.status === 304) return;
 
@@ -193,7 +193,7 @@ export function MatchHistoryDashboard(): JSX.Element {
     const nextPage = page + 1;
     setLoadingMore(true);
     try {
-      const response = await fetch(`/api/matches?status=complete&limit=${PAGE_SIZE}&offset=${nextPage * PAGE_SIZE}`);
+      const response = await fetch(`/api/matches?status=finished&limit=${PAGE_SIZE}&offset=${nextPage * PAGE_SIZE}`);
       if (response.ok) {
         const data = await response.json();
         setMatches(prev => [...prev, ...data]);

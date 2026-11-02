@@ -1,6 +1,7 @@
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
 import { getDiscordSettings } from '../../../src/lib/settings';
+import { DEFAULT_ANNOUNCER_VOICE } from '../../../shared/announcer';
 
 export class SettingsManager {
   async loadSettings(): Promise<DiscordSettings | null> {
@@ -19,7 +20,7 @@ export class SettingsManager {
         event_duration_minutes: settings.event_duration_minutes,
         match_reminder_minutes: settings.match_reminder_minutes,
         player_reminder_minutes: settings.player_reminder_minutes,
-        announcer_voice: settings.announcer_voice ?? undefined,
+        announcer_voice: settings.announcer_voice || DEFAULT_ANNOUNCER_VOICE,
         voice_announcements_enabled: settings.voice_announcements_enabled,
         signup_dm_enabled: settings.signup_dm_enabled,
         commander_dm_enabled: settings.commander_dm_enabled,

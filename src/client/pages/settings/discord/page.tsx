@@ -7,6 +7,7 @@ import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { discordIdError } from '@/shared/discord-ids';
 
 interface DiscordSettings {
   application_id?: string;
@@ -33,6 +34,13 @@ export default function DiscordSettingsPage() {
       voice_channel_category_id: '',
       signup_dm_enabled: true,
       commander_dm_enabled: true,
+    },
+    // Optional here (the setup flow requires the first two); a filled-in value must be a real Discord ID.
+    validate: {
+      application_id: (v) => discordIdError(v, 'Application ID'),
+      guild_id: (v) => discordIdError(v, 'Guild ID'),
+      announcement_role_id: (v) => discordIdError(v, 'Announcement role ID'),
+      voice_channel_category_id: (v) => discordIdError(v, 'Voice channel category ID'),
     },
   });
 
@@ -108,9 +116,10 @@ export default function DiscordSettingsPage() {
           });
         }
       } else {
+        const body = await response.json().catch(() => ({} as { error?: string }));
         notificationHelper.error({
           title: 'Save Failed',
-          message: 'Failed to save Discord settings.'
+          message: body.error || 'Failed to save Discord settings.'
         });
       }
     } catch (error) {

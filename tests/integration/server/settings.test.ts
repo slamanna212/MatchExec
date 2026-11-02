@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { DEFAULT_ANNOUNCER_VOICE, DEFAULT_MATCH_START_DELAY_SECONDS } from '../../../shared/announcer';
+import { DEFAULT_CHANNEL_REFRESH_CRON } from '../../../shared/scheduler';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { appRequest } from '../../utils/app-request';
@@ -7,7 +9,8 @@ import { getAppSetting, setAppSetting } from '../../../src/lib/settings';
 import { resetRateLimits } from '../../../src/server/middleware/rate-limit';
 import { logger } from '@/lib/logger';
 
-const checkForUpdate = vi.fn().mockResolvedValue(undefined);
+// The real job records a run when it reads a release; the route relies on that to tell success from a swallowed failure.
+const checkForUpdate = vi.fn().mockImplementation(async () => { await setAppSetting('update_check_last_run', new Date().toISOString()); });
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
 vi.mock('@/lib/discord-bot-restart', () => ({ restartDiscordBot: vi.fn().mockResolvedValue(undefined) }));
@@ -44,7 +47,7 @@ describe('Discord settings', () => {
 
   it('persists updates, masks the token and restarts the bot', async () => {
     const res = await put('/api/settings/discord', {
-      bot_token: ' secret-token ', guild_id: ' g1 ', announcement_role_id: 'role', mention_everyone: true,
+      bot_token: ' secret-token ', guild_id: ' 111111111111111111 ', announcement_role_id: '222222222222222222', mention_everyone: true,
       event_duration_minutes: 60, voice_announcements_enabled: true, winner_vote_enabled: false,
     });
     expect(res.status).toBe(200);
@@ -53,7 +56,7 @@ describe('Discord settings', () => {
 
     const get = await appRequest('/api/settings/discord');
     expect(get.data).toMatchObject({
-      bot_token: '••••••••', guild_id: 'g1', announcement_role_id: 'role', mention_everyone: true, event_duration_minutes: 60,
+      bot_token: '••••••••', guild_id: '111111111111111111', announcement_role_id: '222222222222222222', mention_everyone: true, event_duration_minutes: 60,
       voice_announcements_enabled: true, winner_vote_enabled: false,
     });
     const [row] = await getPgTestDb().select().from(discordSettings);
@@ -61,11 +64,33 @@ describe('Discord settings', () => {
   });
 
   it('does not overwrite the token with the masked placeholder', async () => {
-    await put('/api/settings/discord', { bot_token: 'real', guild_id: 'g' });
-    await put('/api/settings/discord', { bot_token: '••••••••', guild_id: 'g2' });
+    await put('/api/settings/discord', { bot_token: 'real', guild_id: '111111111111111111' });
+    await put('/api/settings/discord', { bot_token: '••••••••', guild_id: '222222222222222222' });
     const [row] = await getPgTestDb().select().from(discordSettings);
     expect(row.bot_token).toBe('real');
-    expect(row.guild_id).toBe('g2');
+    expect(row.guild_id).toBe('222222222222222222');
+  });
+
+  it.each([
+    ['application_id', 'abc', /Application ID must be a Discord ID/],
+    ['guild_id', 'not-a-number', /Guild ID must be a Discord ID/],
+    ['announcement_role_id', '12', /Announcement role ID must be a Discord ID/],
+    ['voice_channel_category_id', '1411105248592007188 and more', /Voice channel category ID must be a Discord ID/],
+  ])('rejects a malformed %s and changes nothing', async (field, value, message) => {
+    const res = await put('/api/settings/discord', { [field]: value });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(message);
+    expect(restartDiscordBot).not.toHaveBeenCalled();
+    expect(await getPgTestDb().select().from(discordSettings)).toHaveLength(0);
+  });
+
+  it('lets the optional ID fields be blank (announcement role / voice category) and real IDs through', async () => {
+    const ok = await put('/api/settings/discord', {
+      application_id: '1416929161225961502', guild_id: '1411040188053983383', announcement_role_id: '', voice_channel_category_id: '1411105248592007188',
+    });
+    expect(ok.status).toBe(200);
+    const [row] = await getPgTestDb().select().from(discordSettings);
+    expect(row).toMatchObject({ application_id: '1416929161225961502', guild_id: '1411040188053983383', announcement_role_id: '' });
   });
 
   it('accepts numeric strings for durations and falls back to defaults for falsy values', async () => {
@@ -100,7 +125,7 @@ describe('Discord settings', () => {
 describe('Announcer settings', () => {
   it('returns defaults, then persisted values', async () => {
     expect((await appRequest('/api/settings/announcer')).data).toEqual({
-      announcer_voice: 'wrestling-announcer', voice_announcements_enabled: false, match_start_delay_seconds: 45,
+      announcer_voice: DEFAULT_ANNOUNCER_VOICE, voice_announcements_enabled: false, match_start_delay_seconds: DEFAULT_MATCH_START_DELAY_SECONDS,
     });
     const res = await put('/api/settings/announcer', { announcer_voice: 'male', voice_announcements_enabled: true, match_start_delay_seconds: 12 });
     expect(res.data).toEqual({ success: true });
@@ -158,9 +183,39 @@ describe('Scheduler settings', () => {
   it('updates with valid expressions (including step syntax) and returns the row', async () => {
     const res = await put('/api/settings/scheduler', { match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
     expect(res.status).toBe(200);
-    expect(res.data).toMatchObject({ id: 1, match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
+    expect(res.data).toEqual({ match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
     const [row] = await getPgTestDb().select().from(schedulerSettings);
     expect(row.match_check_cron).toBe('*/30 * * * * *');
+  });
+
+  it.each(['* * * * * *', '*/1 * * * * *', '*/5 * * * * *', '*/9 * * * * *'])('rejects %s as too frequent', async (match_check_cron) => {
+    const res = await put('/api/settings/scheduler', { match_check_cron });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/more often than every 10 seconds/);
+    expect(await getPgTestDb().select().from(schedulerSettings)).toHaveLength(0);
+  });
+
+  it.each(['0 */1 * * * *', '*/10 * * * * *', '30 * * * * *'])('accepts %s', async (match_check_cron) => {
+    expect((await put('/api/settings/scheduler', { match_check_cron })).status).toBe(200);
+  });
+
+  it('the first save of one schedule keeps the other at the default the page showed, and the shape never changes', async () => {
+    const before = (await appRequest('/api/settings/scheduler')).data;
+    expect(Object.keys(before).sort()).toEqual(['channel_refresh_cron', 'match_check_cron']);
+
+    // Only the match check is sent; the channel refresh must stay daily, not become the table's own default.
+    const res = await put('/api/settings/scheduler', { match_check_cron: '0 */2 * * * *' });
+    expect(res.data).toEqual({ match_check_cron: '0 */2 * * * *', channel_refresh_cron: DEFAULT_CHANNEL_REFRESH_CRON });
+    const after = (await appRequest('/api/settings/scheduler')).data;
+    expect(after).toEqual(res.data);
+    const [row] = await getPgTestDb().select().from(schedulerSettings);
+    expect(row.channel_refresh_cron).toBe(DEFAULT_CHANNEL_REFRESH_CRON);
+  });
+
+  it('the aggregate returns the same two fields as GET /scheduler, with or without a stored row', async () => {
+    expect((await appRequest('/api/settings')).data.scheduler).toEqual((await appRequest('/api/settings/scheduler')).data);
+    await put('/api/settings/scheduler', { match_check_cron: '0 */3 * * * *' });
+    expect((await appRequest('/api/settings')).data.scheduler).toEqual((await appRequest('/api/settings/scheduler')).data);
   });
 });
 
@@ -232,6 +287,30 @@ describe('Update check', () => {
     await setAppSetting('update_check_last_run', new Date(Date.now() - 120_000).toISOString());
     expect((await appRequest('/api/settings/update-check', { method: 'POST' })).status).toBe(200);
   });
+
+  it('POST forces the check (so it is not skipped by the schedule throttle) and reports the run time', async () => {
+    checkForUpdate.mockClear();
+    const res = await appRequest('/api/settings/update-check', { method: 'POST' });
+    expect(checkForUpdate).toHaveBeenCalledWith({ force: true });
+    expect(res.data.checked_at).toBe(await getAppSetting('update_check_last_run'));
+  });
+
+  it('POST answers 502, not success, when the job could not read a release', async () => {
+    checkForUpdate.mockClear();
+    checkForUpdate.mockImplementationOnce(async () => undefined); // GitHub unreachable: the job swallows it and records nothing
+    await setAppSetting('update_check_last_run', new Date(Date.now() - 3_600_000).toISOString());
+    const res = await appRequest('/api/settings/update-check', { method: 'POST' });
+    expect(res.status).toBe(502);
+    expect(res.data.error).toMatch(/GitHub/);
+  });
+
+  it('POST answers 400 when update checks are turned off', async () => {
+    await setAppSetting('update_check_enabled', 'false');
+    checkForUpdate.mockClear();
+    const res = await appRequest('/api/settings/update-check', { method: 'POST' });
+    expect(res.status).toBe(400);
+    expect(checkForUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/settings (aggregate)', () => {
@@ -251,7 +330,15 @@ describe('GET /api/settings (aggregate)', () => {
     await put('/api/settings/discord', { bot_token: 'tok', announcer_voice: 'v1', voice_announcements_enabled: true });
     const res = await appRequest('/api/settings');
     expect(res.data.discord.bot_token).toBe('••••••••');
-    expect(res.data.announcer).toEqual({ announcer_voice: 'v1', voice_announcements_enabled: true });
+    expect(res.data.announcer).toEqual({ announcer_voice: 'v1', voice_announcements_enabled: true, match_start_delay_seconds: DEFAULT_MATCH_START_DELAY_SECONDS });
+  });
+
+  it('the aggregate (what the Announcer page loads) carries exactly what GET /announcer returns, including the delay', async () => {
+    const check = async () => expect((await appRequest('/api/settings')).data.announcer).toEqual((await appRequest('/api/settings/announcer')).data);
+    await check(); // nothing stored yet: both fall back to the same defaults
+    await put('/api/settings/announcer', { announcer_voice: 'male', voice_announcements_enabled: true, match_start_delay_seconds: 12 });
+    await check();
+    expect((await appRequest('/api/settings')).data.announcer.match_start_delay_seconds).toBe(12);
   });
 
   it('returns 500 with the shared error shape when the database fails', async () => {

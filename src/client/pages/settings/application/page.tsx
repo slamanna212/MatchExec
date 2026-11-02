@@ -172,7 +172,8 @@ export default function ApplicationSettingsPage() {
         return;
       }
       if (!res.ok) {
-        notificationHelper.error({ title: 'Check Failed', message: 'Could not reach GitHub to check for updates.' });
+        const body = await res.json().catch(() => ({} as { error?: string }));
+        notificationHelper.error({ title: 'Check Failed', message: body.error ?? 'Could not reach GitHub to check for updates.' });
         return;
       }
       const ucData = await (await fetch('/api/settings/update-check')).json();

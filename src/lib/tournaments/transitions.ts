@@ -3,7 +3,7 @@
  * validates, flips the status with a compare-and-set, and writes every Discord queue row and match update the new
  * status causes inside the SAME transaction. Activity-feed writes run after commit.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, notInArray } from 'drizzle-orm';
 import type { Db, Executor } from '../../../lib/db';
 import { matches, tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
 import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
@@ -12,7 +12,7 @@ import { logFeedEvent } from '../feed-helpers';
 import { logger } from '../logger';
 import { enqueueAnnouncement, enqueueDeletion, enqueueStatusUpdate } from '../discord-queues';
 import { listAllMessages } from '../discord-messages';
-import { casMatchStatus, handleTournamentAssignTransition, initializeMatchGames } from '../matches';
+import { casMatchStatus, handleCancelledTransition, handleTournamentAssignTransition, initializeMatchGames } from '../matches';
 import { AfterCommit, bestEffort } from '../matches/effects';
 import { genId } from '../matches/ids';
 import { countTeamMemberUsers, countTeamMembers, countTeams } from './teams';
@@ -143,8 +143,33 @@ export async function handleBattleTransition(ex: Executor, tournamentId: string,
   }));
 }
 
+/**
+ * Cancel every match of a tournament that never finished (waiting, or still being played). Without this, ending or
+ * cancelling a tournament left those matches live: they kept showing as active, kept their voice channels and Discord
+ * posts, and blocked the tournament from being deleted. Each goes through the normal cancel effects (Discord message
+ * and voice channel cleanup, feed event). Matches that already finished are left alone.
+ */
+export async function cancelUnfinishedMatches(ex: Executor, tournamentId: string, after: AfterCommit): Promise<number> {
+  const open = await ex.select({ id: matches.id, status: matches.status }).from(matches)
+    .where(and(eq(matches.tournament_id, tournamentId), notInArray(matches.status, ['complete', 'cancelled'])))
+    .orderBy(asc(matches.id));
+  let cancelled = 0;
+  for (const m of open) {
+    const ok = await bestEffort(ex, `Error cancelling tournament match ${m.id}`, async (sp) => {
+      if (!(await casMatchStatus(sp, m.id, m.status, 'cancelled'))) return false;
+      await handleCancelledTransition(sp, m.id, after);
+      return true;
+    }, false);
+    if (ok) cancelled++;
+  }
+  if (cancelled > 0) logger.debug(`Cancelled ${cancelled} unfinished match(es) of tournament ${tournamentId}`);
+  return cancelled;
+}
+
+/** Effects of a tournament ending (finished or cancelled): its unfinished matches, its Discord event, the feed. */
 export async function handleEndTransition(ex: Executor, tournamentId: string, status: 'complete' | 'cancelled', after: AfterCommit): Promise<void> {
   const name = (await getTournamentName(ex, tournamentId)) ?? tournamentId;
+  await cancelUnfinishedMatches(ex, tournamentId, after);
   await bestEffort(ex, 'Error queuing Discord event deletion', async (sp) => {
     // Only tournaments that actually have a Discord event need a deletion job.
     const hasEvent = (await listAllMessages(sp, tournamentId)).some((m) => m.discord_event_id);

@@ -7,6 +7,7 @@ import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { DEFAULT_ANNOUNCER_VOICE, DEFAULT_MATCH_START_DELAY_SECONDS } from '@/shared/announcer';
 
 interface AnnouncerSettings {
   announcer_voice?: string;
@@ -70,9 +71,9 @@ export default function AnnouncerSettingsPage() {
 
   const form = useForm<AnnouncerSettings>({
     initialValues: {
-      announcer_voice: 'wrestling-announcer',
+      announcer_voice: DEFAULT_ANNOUNCER_VOICE,
       voice_announcements_enabled: false,
-      match_start_delay_seconds: 45,
+      match_start_delay_seconds: DEFAULT_MATCH_START_DELAY_SECONDS,
     },
   });
 

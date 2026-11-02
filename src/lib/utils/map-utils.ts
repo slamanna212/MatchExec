@@ -11,6 +11,31 @@ export function cleanMapId(mapId: string): string {
 }
 
 /**
+ * Index the maps endpoint's rows by id, also by every mode-specific id.
+ *
+ * `GET /api/games/:id/maps` lists a game whose maps work in every mode once per map name, under the first mode's id
+ * (e.g. `battleisland-nobuild`, mode "All Modes"). A match that picked the same map in another mode stores
+ * `battleisland-standard`, which is not in that list, so looking it up by id found nothing and the raw id was shown.
+ * Here each such map also gets an entry per mode (never replacing a row that already exists under that id).
+ */
+export function indexMapsWithModeVariants<T extends { id: string; modeName?: string }>(
+  maps: T[],
+  modes: ReadonlyArray<{ id: string; name: string }>,
+): Record<string, T & { modeName?: string; mode_id?: string }> {
+  const byId: Record<string, T & { modeName?: string; mode_id?: string }> = {};
+  for (const map of maps) byId[map.id] = map;
+  for (const map of maps) {
+    if (map.modeName !== 'All Modes') continue; // only the name-deduplicated rows stand for several modes
+    const base = map.id.replace(/-[^-]+$/, '');
+    for (const mode of modes) {
+      const key = `${base}-${mode.id}`;
+      if (!byId[key]) byId[key] = { ...map, id: key, modeName: mode.name, mode_id: mode.id };
+    }
+  }
+  return byId;
+}
+
+/**
  * Generate image URL for a map
  */
 export function getMapImageUrl(gameId: string, mapId: string): string {

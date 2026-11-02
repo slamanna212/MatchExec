@@ -54,39 +54,63 @@ describe('POST /api/channels', () => {
 
   it('validates input', async () => {
     expect((await post({ channel_type: 'text' })).status).toBe(400);
-    expect((await post({ discord_channel_id: 'dc-999' })).status).toBe(400);
-    const invalid = await post({ discord_channel_id: 'dc-999', channel_type: 'invalid' });
+    expect((await post({ discord_channel_id: '999999999999999999' })).status).toBe(400);
+    const invalid = await post({ discord_channel_id: '999999999999999999', channel_type: 'invalid' });
     expect(invalid.status).toBe(400);
     expect(invalid.data.error).toBe('Channel type must be text or voice');
-    const voice = await post({ discord_channel_id: 'dc-999', channel_type: 'voice' });
+    const voice = await post({ discord_channel_id: '999999999999999999', channel_type: 'voice' });
     expect(voice.status).toBe(400);
     expect(voice.data.error).toBe('Voice channels are automatically created and cannot be manually added');
   });
 
   it('returns 400 when no guild is configured', async () => {
-    const res = await post({ discord_channel_id: 'dc-999', channel_type: 'text' });
+    const res = await post({ discord_channel_id: '999999999999999999', channel_type: 'text', send_announcements: true });
     expect(res.status).toBe(400);
     expect(res.data.error).toBe('Discord guild not configured');
   });
 
   it('creates a text channel with the given flags (others default to false)', async () => {
     await configureGuild();
-    const res = await post({ discord_channel_id: 'dc-new', channel_type: 'text', send_announcements: true, send_health_alerts: 1 });
+    const res = await post({ discord_channel_id: '111111111111111111', channel_type: 'text', send_announcements: true, send_health_alerts: 1 });
     expect(res.status).toBe(200);
     expect(res.data).toMatchObject({ success: true, message: 'Channel created successfully' });
     const [row] = await getPgTestDb().select().from(discordChannels).where(eq(discordChannels.id, res.data.id));
     expect(row).toMatchObject({
-      guild_id: 'guild-123', discord_channel_id: 'dc-new', name: 'Channel dc-new', type: 0, channel_type: 'text',
+      guild_id: 'guild-123', discord_channel_id: '111111111111111111', name: 'Channel 111111111111111111', type: 0, channel_type: 'text',
       send_announcements: true, send_reminders: false, send_match_start: false, send_signup_updates: false, send_health_alerts: true,
     });
   });
 
   it('returns 409 for a duplicate discord channel id', async () => {
     await configureGuild();
-    await addChannel('existing', { discord_channel_id: 'dc-dup' });
-    const res = await post({ discord_channel_id: 'dc-dup', channel_type: 'text' });
+    await addChannel('existing', { discord_channel_id: '222222222222222222' });
+    const res = await post({ discord_channel_id: '222222222222222222', channel_type: 'text', send_reminders: true });
     expect(res.status).toBe(409);
     expect(res.data.error).toBe('Channel already exists');
+  });
+
+  it.each(['abc', 'not-a-channel', '123', '12345678901234567890123', '1411105312588697712x', '-1411105312588697712'])('rejects %s as a channel ID, and stores nothing', async (id) => {
+    await configureGuild();
+    const res = await post({ discord_channel_id: id, channel_type: 'text', send_announcements: true });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/Channel ID must be a Discord ID/);
+    expect(await getPgTestDb().select().from(discordChannels)).toHaveLength(0);
+  });
+
+  it('trims the channel ID', async () => {
+    await configureGuild();
+    const res = await post({ discord_channel_id: '  1411105312588697712  ', channel_type: 'text', send_announcements: true });
+    expect(res.status).toBe(200);
+    const [row] = await getPgTestDb().select().from(discordChannels);
+    expect(row.discord_channel_id).toBe('1411105312588697712');
+  });
+
+  it('rejects a channel with no notification type ticked, and stores nothing', async () => {
+    await configureGuild();
+    const res = await post({ discord_channel_id: '1411105312588697712', channel_type: 'text' });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toBe('Pick at least one notification type for this channel');
+    expect(await getPgTestDb().select().from(discordChannels)).toHaveLength(0);
   });
 
   it('returns 400 for malformed JSON', async () => {
@@ -103,6 +127,15 @@ describe('PUT /api/channels/:channelId', () => {
     const long = await put('x'.repeat(101), {});
     expect(long.status).toBe(400);
     expect(long.data.error).toBe('Invalid ID');
+  });
+
+  it('refuses to clear every notification type (delete the channel instead)', async () => {
+    await configureGuild();
+    await addChannel('ch-txt', { send_reminders: true });
+    const res = await put('ch-txt', {});
+    expect(res.status).toBe(400);
+    expect(res.data.error).toBe('Pick at least one notification type for this channel');
+    expect((await getPgTestDb().select().from(discordChannels).where(eq(discordChannels.id, 'ch-txt')))[0].send_reminders).toBe(true);
   });
 
   it('rejects voice channels', async () => {

@@ -373,6 +373,30 @@ describe('tournament match teams and cumulative-points', () => {
     expect(notice.winning_team_name).toBe('Tie: Ann, Ben');
   });
 
+  it('cumulative FFA: results carry no points, so wins order the standings and every player shows the rounds they played', async () => {
+    const game = await createGame();
+    const mode = await createGameMode(game.id, { scoring_type: 'FFA', team_size: null });
+    const t = await createTournament(game.id, { id: 'ffa', game_mode_id: mode.id, format: 'cumulative-points', status: 'battle' });
+    const [m] = await pg().insert(matches).values({ id: 'ffa-m', game_id: game.id, mode_id: mode.id, name: 'M', start_date: new Date(), start_time: new Date(), tournament_id: t.id, status: 'complete' }).returning();
+    for (const [id, name] of [['a', 'Ann'], ['b', 'Ben'], ['c', 'Cat'], ['d', 'Dan']]) {
+      await pg().insert(matchParticipants).values({ id, match_id: m.id, user_id: id, discord_user_id: `d${id}`, username: name });
+    }
+    await pg().insert(matchGames).values([{ id: 'ffa-g1', match_id: m.id, round: 1, status: 'completed' }, { id: 'ffa-g2', match_id: m.id, round: 2, status: 'completed' }]);
+    // FFA stores a placement for the winner only, with no points.
+    await pg().insert(matchGamePlacements).values([
+      { id: 'w1', match_game_id: 'ffa-g1', entity_type: 'participant', entity_id: 'a', position: 1, is_winner: true },
+      { id: 'w2', match_game_id: 'ffa-g2', entity_type: 'participant', entity_id: 'a', position: 1, is_winner: true },
+    ]);
+
+    const rows = (await appRequest('/api/tournaments/ffa/standings')).data.standings as Array<{ username: string; rank: number; total_points: number; matches_played: number; first_places: number }>;
+    const byName = Object.fromEntries(rows.map((r) => [r.username, r]));
+    expect(byName.Ann).toMatchObject({ rank: 1, first_places: 2, total_points: 0, matches_played: 2 });
+    for (const name of ['Ben', 'Cat', 'Dan']) expect(byName[name]).toMatchObject({ rank: 2, first_places: 0, matches_played: 2 });
+
+    const { data } = await progressBracket(t.id);
+    expect(data.winner).toBe('Ann');
+  });
+
   it('standings aggregate one Discord user across two matches and share ranks on ties; the leaderboard lists per-game placements', async () => {
     const game = await createGame();
     const mode = await createGameMode(game.id, { scoring_type: 'Position', team_size: null });

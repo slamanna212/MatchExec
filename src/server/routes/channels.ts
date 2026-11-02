@@ -7,7 +7,15 @@ import {
   updateChannelFlags,
 } from '@/lib/discord-channels';
 import { getAnyDiscordSettings, getDiscordSettings } from '@/lib/settings';
+import { discordIdError } from '@/shared/discord-ids';
 import { jsonError } from '../http';
+
+const NOTIFICATION_FLAGS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts'] as const;
+
+/** A channel that receives nothing is dead weight (and what the "add" form produced when no box was ticked). */
+function noNotificationTypes(body: Record<string, unknown>): string | null {
+  return NOTIFICATION_FLAGS.some((flag) => Boolean(body[flag])) ? null : 'Pick at least one notification type for this channel';
+}
 
 async function readBody(c: Context): Promise<Record<string, any>> {
   const body = await c.req.json();
@@ -64,14 +72,18 @@ export const channels = new Hono()
       if (channelType === 'voice') {
         return jsonError(c, 'Voice channels are automatically created and cannot be manually added', 400);
       }
-      if (await channelExistsByDiscordId(db, discordChannelId)) return jsonError(c, 'Channel already exists', 409);
+      const idError = discordIdError(discordChannelId, 'Channel ID', true);
+      if (idError) return jsonError(c, idError, 400);
+      const noFlags = noNotificationTypes(body);
+      if (noFlags) return jsonError(c, noFlags, 400);
+      if (await channelExistsByDiscordId(db, discordChannelId.trim())) return jsonError(c, 'Channel already exists', 409);
 
       const guildId = (await getAnyDiscordSettings(db))?.guild_id;
       if (!guildId) return jsonError(c, 'Discord guild not configured', 400);
 
       const id = await createChannel(db, {
         guild_id: guildId,
-        discord_channel_id: discordChannelId,
+        discord_channel_id: discordChannelId.trim(),
         channel_type: 'text',
         send_announcements: Boolean(body.send_announcements ?? false),
         send_reminders: Boolean(body.send_reminders ?? false),
@@ -130,6 +142,8 @@ export const channels = new Hono()
       const channel = await getChannel(db, channelId);
       if (!channel) return jsonError(c, 'Channel not found', 404);
       if (channel.channel_type !== 'text') return jsonError(c, 'Notification settings only apply to text channels', 400);
+      const noFlags = noNotificationTypes(body);
+      if (noFlags) return jsonError(c, noFlags, 400);
 
       await updateChannelFlags(db, channelId, {
         send_announcements: Boolean(body.send_announcements ?? false),

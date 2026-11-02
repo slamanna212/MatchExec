@@ -1,5 +1,5 @@
 /** `tournaments`: reads, list, create, edit, delete, status compare-and-set and the tournament-level row lock. */
-import { and, asc, desc, eq, getTableColumns, inArray, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import { games, matches, tournamentParticipants, tournaments } from '../../../lib/db/schema';
 import type { AnnouncementConfig, PositionScoringConfig } from '../../../lib/db/schema/types';
@@ -91,14 +91,21 @@ export type TournamentListRow = TournamentWithGame & {
 };
 
 export interface ListTournamentsOptions {
-  /** `complete` lists finished tournaments; anything else lists every tournament EXCEPT finished ones. */
+  /**
+   * `complete` = completed tournaments only, `cancelled` = cancelled only, `finished` = completed or cancelled (history);
+   * anything else lists every tournament still in play (not complete, not cancelled).
+   */
   status?: string | null;
   limit?: number | null;
   offset?: number;
 }
 
 export async function listTournaments(ex: Executor, opts: ListTournamentsOptions = {}): Promise<TournamentListRow[]> {
-  const where = opts.status === 'complete' ? eq(tournaments.status, 'complete') : ne(tournaments.status, 'complete');
+  let where;
+  if (opts.status === 'complete') where = eq(tournaments.status, 'complete');
+  else if (opts.status === 'cancelled') where = eq(tournaments.status, 'cancelled');
+  else if (opts.status === 'finished') where = inArray(tournaments.status, ['complete', 'cancelled']);
+  else where = notInArray(tournaments.status, ['complete', 'cancelled']);
   const query = ex
     .select({ ...withGame, participant_count: participantCount, has_bracket: hasBracket })
     .from(tournaments).leftJoin(games, eq(tournaments.game_id, games.id))

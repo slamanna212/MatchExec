@@ -52,6 +52,14 @@ describe('GET /api/matches', () => {
     expect((await appRequest('/api/matches?limit=1&offset=1')).data.map((m: any) => m.id)).toEqual(['m-created']);
   });
 
+  it("shows each match's own cap, falling back to the game's signup cap only when the match has none", async () => {
+    await createMatch(gameId, modeId, { id: 'own-cap', max_participants: 10 });
+    await createMatch(gameId, modeId, { id: 'no-cap', max_participants: null });
+    const list = (await appRequest('/api/matches')).data as Array<{ id: string; max_participants: number | null }>;
+    expect(list.find((m) => m.id === 'own-cap')?.max_participants).toBe(10);
+    expect(list.find((m) => m.id === 'no-cap')?.max_participants).toBe(8); // the fixture game allows 8 signups
+  });
+
   it('returns game fields, participant counts, series refs and a working ETag', async () => {
     const m = await createMatch(gameId, modeId, { id: 'm1', maps: ['a-map'], map_codes: { 'a-map': 'XYZ' } });
     await addPlayers(m.id, 2);

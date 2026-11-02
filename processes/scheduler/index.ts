@@ -9,6 +9,7 @@ import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
+import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON } from '../../shared/scheduler';
 import { getHealthAlertLastSent, markHealthAlertSent } from '../../src/lib/health-alerts';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
 import { db as pgDb, closeDb, type Executor } from '../../lib/db';
@@ -115,8 +116,8 @@ class MatchExecScheduler {
         logger.debug('⚠️ No scheduler settings found, using defaults');
         // Use default settings if none exist
         const defaultSettings = {
-          match_check_cron: '0 */1 * * * *',
-          channel_refresh_cron: '0 0 0 * * *'
+          match_check_cron: DEFAULT_MATCH_CHECK_CRON,
+          channel_refresh_cron: DEFAULT_CHANNEL_REFRESH_CRON,
         };
 
         this.startCronJob('Match Check & Reminders', defaultSettings.match_check_cron, this.checkMatchStartTimes.bind(this));

@@ -182,7 +182,12 @@ export const tournaments = new Hono()
   .put('/:tournamentId', (c) => guard(c, 'Error updating tournament', 'Failed to update tournament', async () => {
     const id = c.req.param('tournamentId');
     if (!validId(id)) return jsonError(c, 'Invalid ID', 400);
-    if (!(await getTournament(db, id))) return jsonError(c, 'Tournament not found', 404);
+    const existing = await getTournament(db, id);
+    if (!existing) return jsonError(c, 'Tournament not found', 404);
+    // Same rule as matches: once it is over, a tournament's details are fixed.
+    if (existing.status === 'complete' || existing.status === 'cancelled') {
+      return jsonError(c, `A ${existing.status} tournament cannot be edited`, 403);
+    }
 
     const body = await c.req.json();
     for (const check of [

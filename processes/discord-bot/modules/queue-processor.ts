@@ -29,6 +29,7 @@ import {
   recordExternalResult, releaseJob, resetAbandonedClaims,
   type CompleteOptions, type ExternalResultQueue, type FailOptions, type QueueName, type QueueRow,
 } from '../../../src/lib/discord-queues';
+import { DEFAULT_MATCH_START_DELAY_SECONDS } from '../../../shared/announcer';
 
 // Queue rows come from the Discord queues module (src/lib/queues): claimed atomically, retried with backoff,
 // abandoned claims reset. Match and tournament data are read through the matches / tournaments domains (Postgres).
@@ -891,7 +892,7 @@ export class QueueProcessor {
     try {
       if (announcement.announcement_type === 'welcome') {
         const settings = await getAnyDiscordSettings();
-        const delaySecs = settings?.match_start_delay_seconds ?? 45;
+        const delaySecs = settings?.match_start_delay_seconds ?? DEFAULT_MATCH_START_DELAY_SECONDS;
         const elapsedSecs = (Date.now() - announcement.created_at.getTime()) / 1000;
         if (elapsedSecs < delaySecs) {
           await this.release('voiceAnnouncement', announcement.id, Math.ceil(delaySecs - elapsedSecs) * 1000);

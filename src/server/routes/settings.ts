@@ -4,6 +4,9 @@
  */
 import { Hono, type Context } from 'hono';
 import { logger } from '@/lib/logger';
+import { DEFAULT_ANNOUNCER_VOICE, DEFAULT_MATCH_START_DELAY_SECONDS } from '@/shared/announcer';
+import { discordIdError } from '@/shared/discord-ids';
+import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON, MIN_CRON_INTERVAL_SECONDS } from '@/shared/scheduler';
 import { validateNumberRange } from '@/lib/utils/validation';
 import { restartDiscordBot } from '@/lib/discord-bot-restart';
 import {
@@ -31,6 +34,11 @@ const DISCORD_DURATION_FIELDS: Array<{ key: string; min: number; max: number }> 
   { key: 'player_reminder_minutes', min: 1, max: 10080 },
 ];
 
+/** Fields that hold a Discord ID (all optional here: the setup flow's own form requires the first three). */
+const DISCORD_ID_FIELDS = [
+  ['application_id', 'Application ID'], ['guild_id', 'Guild ID'], ['announcement_role_id', 'Announcement role ID'], ['voice_channel_category_id', 'Voice channel category ID'],
+] as const;
+
 const DISCORD_STRING_FIELDS = ['application_id', 'guild_id', 'announcement_role_id', 'voice_channel_category_id'] as const;
 const DISCORD_BOOLEAN_FIELDS = [
   ['mention_everyone', false], ['voice_announcements_enabled', false], ['winner_vote_enabled', true],
@@ -49,7 +57,7 @@ function buildDiscordPatch(body: Record<string, any>): DiscordSettingsPatch {
   for (const [key, fallback] of DISCORD_NUMBER_FIELDS) {
     if (body[key] !== undefined) patch[key] = Number(body[key] || fallback);
   }
-  if (body.announcer_voice !== undefined) patch.announcer_voice = String(body.announcer_voice || 'wrestling-announcer').trim();
+  if (body.announcer_voice !== undefined) patch.announcer_voice = String(body.announcer_voice || DEFAULT_ANNOUNCER_VOICE).trim();
   for (const [key] of DISCORD_BOOLEAN_FIELDS) {
     if (body[key] !== undefined) patch[key] = Boolean(body[key]);
   }
@@ -70,7 +78,7 @@ function safeDiscordSettings(settings: DiscordRow) {
     event_duration_minutes: settings?.event_duration_minutes || 45,
     match_reminder_minutes: settings?.match_reminder_minutes || 10,
     player_reminder_minutes: settings?.player_reminder_minutes || 120,
-    announcer_voice: settings?.announcer_voice || 'wrestling-announcer',
+    announcer_voice: settings?.announcer_voice || DEFAULT_ANNOUNCER_VOICE,
     voice_announcements_enabled: settings ? Boolean(settings.voice_announcements_enabled) : false,
     voice_channel_category_id: settings?.voice_channel_category_id || '',
     winner_vote_enabled: settings?.winner_vote_enabled ?? true,
@@ -92,6 +100,10 @@ const discord = new Hono()
     checkRateLimit(clientKey(c, 'discord-settings'), 20, 10 * 60 * 1000);
     try {
       const body = await readBody(c);
+      for (const [key, label] of DISCORD_ID_FIELDS) {
+        const idError = discordIdError(body[key], label);
+        if (idError) return jsonError(c, idError, 400);
+      }
       for (const field of DISCORD_DURATION_FIELDS) {
         if (body[field.key] !== undefined) {
           const check = validateNumberRange(body[field.key], field.min, field.max, field.key);
@@ -112,15 +124,19 @@ const discord = new Hono()
 
 // ─── Announcer settings (stored on discord_settings) ─────────────────────────
 
+/** The announcer fields as the settings page and `GET /announcer` return them (stored value, else the shared default). */
+function announcerSettings(row: { announcer_voice?: string | null; voice_announcements_enabled?: boolean | null; match_start_delay_seconds?: number | null } | null | undefined) {
+  return {
+    announcer_voice: row?.announcer_voice || DEFAULT_ANNOUNCER_VOICE,
+    voice_announcements_enabled: Boolean(row?.voice_announcements_enabled),
+    match_start_delay_seconds: row?.match_start_delay_seconds ?? DEFAULT_MATCH_START_DELAY_SECONDS,
+  };
+}
+
 const announcer = new Hono()
   .get('/', async (c) => {
     try {
-      const result = await getAnyDiscordSettings();
-      return c.json({
-        announcer_voice: result?.announcer_voice || 'wrestling-announcer',
-        voice_announcements_enabled: Boolean(result?.voice_announcements_enabled),
-        match_start_delay_seconds: result?.match_start_delay_seconds ?? 45,
-      });
+      return c.json(announcerSettings(await getAnyDiscordSettings()));
     } catch (error) {
       logger.error('Error fetching announcer settings:', error);
       return jsonError(c, 'Failed to fetch announcer settings');
@@ -209,21 +225,40 @@ function validateCronExpression(cronExpression: string, fieldName: string): { va
   return { valid: true };
 }
 
+/** The seconds part decides the fastest rate: `*` is every second, a step below the minimum is too frequent. */
+function validateCronInterval(cronExpression: string, fieldName: string): { valid: boolean; error?: string } {
+  const seconds = cronExpression.split(' ')[0];
+  const step = /^\*\/(\d+)$/.exec(seconds);
+  if (seconds === '*' || (step && Number(step[1]) < MIN_CRON_INTERVAL_SECONDS)) {
+    return { valid: false, error: `${fieldName} would run more often than every ${MIN_CRON_INTERVAL_SECONDS} seconds. Use a fixed seconds value (e.g. 0) or a larger step.` };
+  }
+  return { valid: true };
+}
+
 function validateCronFields(body: Record<string, unknown>): { valid: boolean; error?: string } {
   for (const field of ['match_check_cron', 'channel_refresh_cron']) {
     if (body[field] && typeof body[field] === 'string') {
       const validation = validateCronExpression(body[field] as string, field);
       if (!validation.valid) return validation;
+      const interval = validateCronInterval(body[field] as string, field);
+      if (!interval.valid) return interval;
     }
   }
   return { valid: true };
 }
 
+/** The two schedules the page edits, as stored or else the shared defaults (the same shape before and after the first save). */
+function schedulerView(row: { match_check_cron?: string | null; channel_refresh_cron?: string | null } | null | undefined) {
+  return {
+    match_check_cron: row?.match_check_cron || DEFAULT_MATCH_CHECK_CRON,
+    channel_refresh_cron: row?.channel_refresh_cron || DEFAULT_CHANNEL_REFRESH_CRON,
+  };
+}
+
 const scheduler = new Hono()
   .get('/', async (c) => {
     try {
-      const settings = await getSchedulerSettings();
-      return c.json(settings ?? { match_check_cron: '0 */1 * * * *', channel_refresh_cron: '0 0 0 * * *' });
+      return c.json(schedulerView(await getSchedulerSettings()));
     } catch (error) {
       logger.error('Error fetching scheduler settings:', error);
       return jsonError(c, 'Failed to fetch scheduler settings');
@@ -239,7 +274,7 @@ const scheduler = new Hono()
         match_check_cron: body.match_check_cron || undefined,
         channel_refresh_cron: body.channel_refresh_cron || undefined,
       });
-      return c.json(updated);
+      return c.json(schedulerView(updated));
     } catch (error) {
       logger.error('Error updating scheduler settings:', error);
       return jsonError(c, 'Failed to update scheduler settings');
@@ -340,8 +375,16 @@ const updateCheck = new Hono()
         const secondsSince = (Date.now() - new Date(lastRun).getTime()) / 1000;
         if (secondsSince < UPDATE_CHECK_RATE_LIMIT_SECONDS) return jsonError(c, 'Rate limited — wait before checking again', 429);
       }
-      await new UpdateCheckJob().checkForUpdate();
-      return c.json({ success: true, checked_at: new Date().toISOString() });
+      if ((await getAppSetting('update_check_enabled')) === 'false') return jsonError(c, 'Update checks are turned off', 400);
+      const startedAt = Date.now();
+      // Manual checks bypass the schedule's own 23-hour throttle.
+      await new UpdateCheckJob().checkForUpdate({ force: true });
+      // The job swallows GitHub failures (and ignores pre-releases), recording a run only when it read a release.
+      const ranAt = await getAppSetting('update_check_last_run');
+      if (!ranAt || new Date(ranAt).getTime() < startedAt) {
+        return jsonError(c, 'Could not read the latest release from GitHub. Try again later.', 502);
+      }
+      return c.json({ success: true, checked_at: ranAt });
     } catch (error) {
       logger.error('Error running update check:', error);
       return jsonError(c, 'Failed to run update check');
@@ -359,16 +402,9 @@ export const settings = new Hono()
       const safeDiscord = safeDiscordSettings(discordRow);
       return c.json({
         discord: safeDiscord,
-        announcer: {
-          announcer_voice: safeDiscord.announcer_voice,
-          voice_announcements_enabled: safeDiscord.voice_announcements_enabled,
-        },
+        announcer: announcerSettings(discordRow),
         ui: uiRow ?? { auto_refresh_interval_seconds: 10 },
-        scheduler: schedulerRow ?? {
-          match_check_cron: '0 */1 * * * *',
-          cleanup_check_cron: '0 0 2 * * *',
-          channel_refresh_cron: '0 0 0 * * *',
-        },
+        scheduler: schedulerView(schedulerRow),
         voices,
       });
     } catch (error) {

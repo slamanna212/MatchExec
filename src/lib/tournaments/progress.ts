@@ -19,6 +19,7 @@ import { planDoubleElimination, type DeBracket, type DeMatch } from './double-el
 import { playerLabel, queueTournamentWinnerNotification } from './notifications';
 import { getCumulativeStandings } from './standings';
 import { findTeamIdForPlayer } from './teams';
+import { handleEndTransition } from './transitions';
 import { casTournamentStatus, lockTournament, lockTournamentMatches, TournamentError, type TournamentRow } from './tournaments';
 
 export type ProgressResult = Record<string, unknown> & { message: string; tournamentId: string };
@@ -32,7 +33,7 @@ export async function progressTournament(db: Db, tournamentId: string): Promise<
     if (tournament.status !== 'battle') throw new TournamentError('Tournament must be in battle phase to progress', 400);
     await lockTournamentMatches(tx, tournamentId);
 
-    if (tournament.format === 'cumulative-points') return progressCumulative(tx, tournament);
+    if (tournament.format === 'cumulative-points') return progressCumulative(tx, tournament, after);
     if (tournament.format === 'double-elimination') return progressDoubleElimination(tx, tournament, after);
     if (tournament.format === 'single-elimination') return progressSingleElimination(tx, tournament, after);
     throw new TournamentError('Invalid tournament format', 400);
@@ -41,10 +42,15 @@ export async function progressTournament(db: Db, tournamentId: string): Promise<
   return result;
 }
 
-async function completeTournament(ex: Executor, tournamentId: string): Promise<void> {
+/**
+ * Finish a tournament that ran to its end. Shares `handleEndTransition` with the manual End Tournament path, so the
+ * feed shows "Tournament Completed" and the tournament's Discord event is cleaned up either way.
+ */
+async function completeTournament(ex: Executor, tournamentId: string, after: AfterCommit): Promise<void> {
   if (!(await casTournamentStatus(ex, tournamentId, 'battle', 'complete'))) {
     throw new TournamentError('Tournament is no longer in battle phase', 409);
   }
+  await handleEndTransition(ex, tournamentId, 'complete', after);
 }
 
 /**
@@ -52,7 +58,7 @@ async function completeTournament(ex: Executor, tournamentId: string): Promise<v
  * points; a points tie is broken by more 1st-place finishes. If players are still level after that, there is no single
  * winner and the tie is announced instead (winner is null in the response).
  */
-async function progressCumulative(tx: Executor, tournament: TournamentRow): Promise<ProgressResult> {
+async function progressCumulative(tx: Executor, tournament: TournamentRow, after: AfterCommit): Promise<ProgressResult> {
   const tournamentId = tournament.id;
   const [counts] = await tx.select({
     total: sql<number>`count(*)`.mapWith(Number),
@@ -66,7 +72,7 @@ async function progressCumulative(tx: Executor, tournament: TournamentRow): Prom
   const topFirsts = top.length > 0 ? Math.max(...top.map((s) => s.first_places)) : 0;
   const leaders = top.filter((s) => s.first_places === topFirsts);
 
-  await completeTournament(tx, tournamentId);
+  await completeTournament(tx, tournamentId, after);
 
   if (leaders.length === 1) {
     const winner = leaders[0];
@@ -135,7 +141,7 @@ async function progressSingleElimination(tx: Executor, tournament: TournamentRow
   if (blocked) throw new TournamentError(blocked, 400);
 
   if (isFinal) {
-    await completeTournament(tx, tournamentId);
+    await completeTournament(tx, tournamentId, after);
     if (completed[0].winner_team) await queueTournamentWinnerNotification(tx, tournamentId, completed[0].winner_team);
     return { message: 'Tournament completed!', winner: completed[0].winner_team, tournamentId };
   }
@@ -195,7 +201,7 @@ async function progressDoubleElimination(tx: Executor, tournament: TournamentRow
   const plan = await planDoubleEliminationStep(tx, tournamentId);
 
   if (plan.champion) {
-    await completeTournament(tx, tournamentId);
+    await completeTournament(tx, tournamentId, after);
     await queueTournamentWinnerNotification(tx, tournamentId, plan.champion);
     return { message: 'Tournament completed!', winner: plan.champion, tournamentId };
   }

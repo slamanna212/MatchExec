@@ -3,6 +3,7 @@ import { Card, Text } from '@mantine/core';
 import { IconTrophy } from '@tabler/icons-react';
 import { EmptyState } from '../EmptyState';
 import { RankedTable } from '../shared/RankedTable';
+import { plural } from '@/lib/utils/plural';
 
 export interface CumulativeStanding {
   rank: number;
@@ -11,6 +12,8 @@ export interface CumulativeStanding {
   total_points: number;
   matches_played: number;
   best_position: number | null;
+  /** Maps won. FFA results carry no points, so wins are the real score there. */
+  first_places?: number;
 }
 
 interface LeaderboardViewProps {
@@ -48,6 +51,7 @@ export function LeaderboardView({ standings }: LeaderboardViewProps): JSX.Elemen
           <Text size="xs" c="dimmed">
             {e.matches_played} {e.matches_played === 1 ? 'round' : 'rounds'} played
             {e.best_position != null && ` · best finish P${e.best_position}`}
+            {!!e.first_places && ` · ${plural(e.first_places, 'win')}`}
           </Text>
         </>
       )}

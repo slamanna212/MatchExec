@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { DEFAULT_ANNOUNCER_VOICE } from '../../../shared/announcer';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { discordSettings } from '../../../lib/db/schema';
@@ -49,11 +50,12 @@ describe('SettingsManager', () => {
     });
   });
 
-  it('leaves optional text fields undefined when null', async () => {
+  it('leaves optional text fields undefined when null, and uses the default announcer voice when none is stored', async () => {
     await getPgTestDb().insert(discordSettings).values({ id: 1, guild_id: 'g', bot_token: 't' });
     const settings = await manager.loadSettings();
     expect(settings?.announcement_role_id).toBeUndefined();
-    expect(settings?.announcer_voice).toBeUndefined();
+    // The settings page shows this voice as selected, so the bot must use it rather than silently falling back to another.
+    expect(settings?.announcer_voice).toBe(DEFAULT_ANNOUNCER_VOICE);
   });
 
   it('returns null (and logs) when the query fails', async () => {

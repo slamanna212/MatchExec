@@ -7,6 +7,7 @@ import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON } from '@/shared/scheduler';
 
 interface SchedulerSettings {
   match_check_cron: string;
@@ -17,8 +18,8 @@ export default function SchedulerSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings>({
-    match_check_cron: '0 */1 * * * *',
-    channel_refresh_cron: '0 0 0 * * *',
+    match_check_cron: DEFAULT_MATCH_CHECK_CRON,
+    channel_refresh_cron: DEFAULT_CHANNEL_REFRESH_CRON,
   });
 
   useEffect(() => {

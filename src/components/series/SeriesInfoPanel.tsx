@@ -101,29 +101,27 @@ export function SeriesInfoPanel({
           </Stack>
         </Card>
 
-        {/* Actions card (MatchActionsCard structure) */}
-        <Card withBorder radius="md" padding="lg" shadow="sm">
-          <Stack gap="xs">
-            {series.status === 'created' && (
-              <Button fullWidth variant="filled" color="violet" onClick={onActivate}>Activate Series</Button>
-            )}
-            {series.status === 'active' && (
-              <Button fullWidth variant="filled" color="violet" onClick={onAddEvent}>Add Event</Button>
-            )}
-            <Group grow gap="xs">
-              <Button size="sm" px="xs" variant="light" color="violet" onClick={onEdit}>Edit Series</Button>
-              {series.status === 'active' && (
-                <Button size="sm" px="xs" variant="light" color="blue" onClick={onComplete}>Complete Series</Button>
+        {/* Actions card (MatchActionsCard structure). A finished series is read-only, so it has no actions. */}
+        {!finished && (
+          <Card withBorder radius="md" padding="lg" shadow="sm">
+            <Stack gap="xs">
+              {series.status === 'created' && (
+                <Button fullWidth variant="filled" color="violet" onClick={onActivate}>Activate Series</Button>
               )}
-            </Group>
-            {!finished && (
-              <>
-                <Divider />
-                <Button variant="subtle" color="red" fullWidth size="sm" onClick={onCancel}>Cancel Series</Button>
-              </>
-            )}
-          </Stack>
-        </Card>
+              {series.status === 'active' && (
+                <Button fullWidth variant="filled" color="violet" onClick={onAddEvent}>Add Event</Button>
+              )}
+              <Group grow gap="xs">
+                <Button size="sm" px="xs" variant="light" color="violet" onClick={onEdit}>Edit Series</Button>
+                {series.status === 'active' && (
+                  <Button size="sm" px="xs" variant="light" color="blue" onClick={onComplete}>Complete Series</Button>
+                )}
+              </Group>
+              <Divider />
+              <Button variant="subtle" color="red" fullWidth size="sm" onClick={onCancel}>Cancel Series</Button>
+            </Stack>
+          </Card>
+        )}
       </Stack>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { plural } from '../../src/lib/utils/plural';
+import { plural } from '../../../../src/lib/utils/plural';
 
 describe('plural', () => {
   it('uses the singular only for exactly one', () => {

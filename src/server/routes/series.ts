@@ -77,6 +77,10 @@ export const seriesRoutes = new Hono()
     const seriesId = c.req.param('seriesId');
     const series = await getSeriesById(db, seriesId);
     if (!series) return jsonError(c, 'Series not found', 404);
+    // Same rule as matches: once it is over, a series' details are fixed.
+    if (series.status === 'complete' || series.status === 'cancelled') {
+      return jsonError(c, `A ${series.status} series cannot be edited`, 403);
+    }
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
     const validationError = validateSeriesBody(body, true);

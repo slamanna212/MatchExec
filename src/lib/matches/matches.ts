@@ -1,5 +1,5 @@
 /** The `matches` table: reads for the API / bot / scheduler, creation, editing, deletion and the status compare-and-set. */
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import {
   gameMaps, gameModes, games, matchParticipants, matches, tournamentMatches, tournaments,
@@ -100,7 +100,10 @@ export async function getMatchScoringType(ex: Executor, matchId: string): Promis
 // ─── Listing ─────────────────────────────────────────────────────────────────
 
 export interface ListMatchesOptions {
-  /** Empty = everything except completed matches (the dashboard default). A single `complete` = history. */
+  /**
+   * Empty = every match still in play (the dashboard default: not complete, not cancelled).
+   * A single `complete` = completed matches only, `cancelled` = cancelled only, `finished` = completed or cancelled (history).
+   */
   statuses?: string[];
   excludeTournament?: boolean;
   limit?: number | null;
@@ -125,7 +128,9 @@ export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): 
   let statusFilter;
   if (statuses.length > 1) statusFilter = inArray(matches.status, statuses as MatchStatus[]);
   else if (statuses[0] === 'complete') statusFilter = eq(matches.status, 'complete');
-  else statusFilter = ne(matches.status, 'complete');
+  else if (statuses[0] === 'cancelled') statusFilter = eq(matches.status, 'cancelled');
+  else if (statuses[0] === 'finished') statusFilter = inArray(matches.status, ['complete', 'cancelled']);
+  else statusFilter = notInArray(matches.status, ['complete', 'cancelled']);
 
   const participantCount = sql<number>`(SELECT count(*) FROM ${matchParticipants} WHERE ${matchParticipants.match_id} = ${matches.id})`.mapWith(Number);
   const mapName = sql<string | null>`(SELECT ${gameMaps.name} FROM ${gameMaps} WHERE ${gameMaps.id} = ${matches.map_id} AND ${gameMaps.game_id} = ${matches.game_id} LIMIT 1)`;
@@ -133,8 +138,9 @@ export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): 
   let query = ex
     .select({
       ...matchColumns,
-      // The list shows the game's signup cap and the bracket position from tournament_matches (same as before).
-      max_participants: games.max_signups,
+      // The cap is the match's own (a tournament match is sized for two full teams), the same number the details page
+      // shows, falling back to the game's signup cap when a match has none; the bracket position comes from tournament_matches.
+      max_participants: sql<number | null>`coalesce(${matches.max_participants}, ${games.max_signups})`.mapWith((v) => (v === null || v === undefined ? null : Number(v))),
       tournament_round: tournamentMatches.round,
       tournament_bracket_type: tournamentMatches.bracket_type,
       game_name: games.name, game_icon: games.icon_url, game_color: games.color, map_codes_supported: games.map_codes_supported,

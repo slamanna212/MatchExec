@@ -19,14 +19,17 @@ export interface CumulativeStandingRow {
 }
 
 /**
- * Competition ranking (1, 1, 3) for rows already sorted by points: equal totals share a rank. Pure.
+ * Competition ranking (1, 1, 3) for rows already sorted by points, then first-place finishes: rows share a rank only
+ * when both match. First places break a points tie because FFA results carry no points (a win is just a 1st place),
+ * so without it every player of an FFA tournament would be tied for first. Pure.
  */
-export function assignRanks<T extends { total_points: number }>(rows: T[]): Array<T & { rank: number }> {
-  let lastPoints: number | null = null;
+export function assignRanks<T extends { total_points: number; first_places?: number }>(rows: T[]): Array<T & { rank: number }> {
+  let last: { points: number; firsts: number } | null = null;
   let lastRank = 0;
   return rows.map((r, idx) => {
-    const rank = lastPoints !== null && r.total_points === lastPoints ? lastRank : idx + 1;
-    lastPoints = r.total_points;
+    const firsts = r.first_places ?? 0;
+    const rank = last !== null && r.total_points === last.points && firsts === last.firsts ? lastRank : idx + 1;
+    last = { points: r.total_points, firsts };
     lastRank = rank;
     return { ...r, rank };
   });
@@ -35,7 +38,9 @@ export function assignRanks<T extends { total_points: number }>(rows: T[]): Arra
 /**
  * Cumulative-points standings, aggregated per player across every match of the tournament. The stable key is
  * COALESCE(discord_user_id, user_id, participant id) because match_participants.id differs for the same player in each
- * match. Equal point totals share a rank. Players without any placement sort after those with one (NULLS LAST).
+ * match. Equal point totals and first-place counts share a rank. Players without any placement sort after those with one
+ * (NULLS LAST). `matches_played` counts the completed maps of the player's matches, so a player who finished unplaced
+ * (FFA stores a placement for the winner only) still shows the rounds they played.
  */
 export async function getCumulativeStandings(ex: Executor, tournamentId: string): Promise<CumulativeStandingRow[]> {
   const mp = matchParticipants;
@@ -54,7 +59,7 @@ export async function getCumulativeStandings(ex: Executor, tournamentId: string)
       discord_user_id: sql<string | null>`max(${mp.discord_user_id})`,
       user_id: sql<string | null>`max(${mp.user_id})`,
       total_points: totalPoints,
-      matches_played: sql<number>`count(distinct ${mgp.match_game_id})`.mapWith(Number),
+      matches_played: sql<number>`count(distinct ${matchGames.id})`.mapWith(Number),
       best_position: bestPosition,
       first_places: firstPlaces,
     })

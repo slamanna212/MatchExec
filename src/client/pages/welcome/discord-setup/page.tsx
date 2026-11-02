@@ -4,6 +4,7 @@ import { useForm } from '@mantine/form';
 import { IconArrowRight, IconExternalLink } from '@tabler/icons-react';
 import { useState } from 'react';
 import { logger } from '@/lib/logger/client';
+import { discordIdError } from '@/shared/discord-ids';
 
 interface DiscordSettings {
   application_id: string;
@@ -108,9 +109,10 @@ export default function DiscordSetupPage() {
       mention_everyone: false,
     },
     validate: {
-      application_id: (v) => (!v ? 'Application ID is required' : null),
+      application_id: (v) => discordIdError(v, 'Application ID', true),
       bot_token: (v) => (!v ? 'Bot token is required' : null),
-      guild_id: (v) => (!v ? 'Guild ID is required' : null),
+      guild_id: (v) => discordIdError(v, 'Guild ID', true),
+      announcement_role_id: (v) => discordIdError(v, 'Announcement role ID'),
     },
   });
 
@@ -139,7 +141,8 @@ export default function DiscordSetupPage() {
         });
         navigate('/welcome/channels-setup');
       } else {
-        setError('Failed to save Discord settings. Please check your values and try again.');
+        const body = await response.json().catch(() => ({} as { error?: string }));
+        setError(body.error || 'Failed to save Discord settings. Please check your values and try again.');
       }
     } catch (err) {
       logger.error('Error saving Discord settings:', err);
@@ -233,7 +236,7 @@ export default function DiscordSetupPage() {
           <InputCard
             num={2}
             title="Bot Token"
-            sub="Stays on this machine. Encrypted at rest."
+            sub="Stays on this machine, stored in your database. Hidden once saved."
           >
             <PasswordInput
               placeholder="••••••••••••••••••••••••••••"

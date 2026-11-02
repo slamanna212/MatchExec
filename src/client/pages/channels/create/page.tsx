@@ -16,6 +16,7 @@ import { IconArrowLeft, IconArrowRight, IconCheck, IconHash } from '@tabler/icon
 import { PageHeader } from '@/components/PageHeader';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
+import { discordIdError } from '@/shared/discord-ids';
 
 interface CreateChannelForm {
   discord_channel_id: string;
@@ -25,6 +26,8 @@ interface CreateChannelForm {
   send_signup_updates: boolean;
   send_health_alerts: boolean;
 }
+
+const NOTIFICATION_KEYS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts'] as const;
 
 export default function CreateChannelPage() {
   const navigate = useNavigate();
@@ -41,11 +44,7 @@ export default function CreateChannelPage() {
       send_health_alerts: false,
     },
     validate: {
-      discord_channel_id: (value) => {
-        if (!value.trim()) return 'Channel ID is required';
-        if (!/^\d{17,19}$/.test(value.trim())) return 'Invalid Discord channel ID format';
-        return null;
-      },
+      discord_channel_id: (value) => discordIdError(value, 'Channel ID', true),
     },
   });
 
@@ -74,6 +73,11 @@ export default function CreateChannelPage() {
       if (validation.hasErrors) {
         return;
       }
+    }
+
+    if (currentStep === 1 && !NOTIFICATION_KEYS.some((key) => form.values[key])) {
+      showError('Pick at least one notification type for this channel');
+      return;
     }
 
     if (currentStep < totalSteps - 1) {

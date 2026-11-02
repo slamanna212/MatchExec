@@ -4,6 +4,7 @@
  * here. Every function takes an `Executor` first so it can run inside a transaction.
  */
 import { eq, inArray, asc } from 'drizzle-orm';
+import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON } from '../../shared/scheduler';
 import { db as defaultDb, type Executor } from '../../lib/db';
 import { appSettings, discordSettings, schedulerSettings, uiSettings, voices } from '../../lib/db/schema';
 
@@ -106,7 +107,7 @@ export async function getSchedulerSettings(ex: Executor = defaultDb): Promise<Sc
   return rows[0];
 }
 
-/** Update the cron expressions on the singleton row (creating it with defaults first when missing). */
+/** Update the cron expressions on the singleton row. A missing row is created with the shared defaults for whatever was not supplied. */
 export async function updateSchedulerCrons(
   crons: { match_check_cron?: string; channel_refresh_cron?: string },
   ex: Executor = defaultDb,
@@ -118,7 +119,7 @@ export async function updateSchedulerCrons(
   };
   const [row] = await ex
     .insert(schedulerSettings)
-    .values({ id: SINGLETON_ID, ...set })
+    .values({ id: SINGLETON_ID, match_check_cron: DEFAULT_MATCH_CHECK_CRON, channel_refresh_cron: DEFAULT_CHANNEL_REFRESH_CRON, ...set })
     .onConflictDoUpdate({ target: schedulerSettings.id, set })
     .returning();
   return row;

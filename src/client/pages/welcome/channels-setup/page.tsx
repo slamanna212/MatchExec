@@ -10,6 +10,7 @@ import {
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { showSuccess, showError } from '@/lib/notifications';
+import { discordIdError } from '@/shared/discord-ids';
 
 interface DiscordChannel {
   id: string;
@@ -102,11 +103,7 @@ export default function ChannelsSetupPage() {
       send_match_start: false, send_signup_updates: false, send_health_alerts: false,
     },
     validate: {
-      discord_channel_id: (v) => {
-        if (!v.trim()) return 'Channel ID is required';
-        if (!/^\d{17,19}$/.test(v.trim())) return 'Invalid Discord channel ID format';
-        return null;
-      },
+      discord_channel_id: (v) => discordIdError(v, 'Channel ID', true),
     },
   });
 
@@ -137,6 +134,11 @@ export default function ChannelsSetupPage() {
   }, [fetchChannels, fetchVoiceCategoryId]);
 
   const saveVoiceCategoryId = async () => {
+    const idError = discordIdError(voiceCategoryId, 'Voice channel category ID');
+    if (idError) {
+      showError(idError);
+      return;
+    }
     setSavingCategory(true);
     try {
       const res = await fetch('/api/settings/discord', {
@@ -145,7 +147,7 @@ export default function ChannelsSetupPage() {
         body: JSON.stringify({ voice_channel_category_id: voiceCategoryId }),
       });
       if (res.ok) showSuccess('Voice channel category saved!');
-      else showError('Failed to save voice channel category');
+      else showError((await res.json().catch(() => ({} as { error?: string }))).error || 'Failed to save voice channel category');
     } catch (err) {
       logger.error('Error saving voice category ID:', err);
       showError('An error occurred while saving');
@@ -173,6 +175,11 @@ export default function ChannelsSetupPage() {
   const handleCreateChannel = async () => {
     const validation = createForm.validate();
     if (validation.hasErrors) return;
+    if (!createForm.values.send_announcements && !createForm.values.send_reminders && !createForm.values.send_match_start
+      && !createForm.values.send_signup_updates && !createForm.values.send_health_alerts) {
+      showError('Pick at least one notification type for this channel');
+      return;
+    }
     setCreateLoading(true);
     try {
       const res = await fetch('/api/channels', {

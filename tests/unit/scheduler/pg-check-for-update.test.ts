@@ -50,6 +50,34 @@ describe('UpdateCheckJob', () => {
     job = new UpdateCheckJob(getPgTestDb());
   });
 
+  describe('checkForUpdate — manual "Check Now" (force)', () => {
+    const releaseResponse = () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v99.0.0' }) });
+
+    it('skips a scheduled run that follows a recent one (23 hour throttle)', async () => {
+      await setAppSetting('update_check_last_run', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+      await job.checkForUpdate();
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('force bypasses the throttle, asks GitHub and records the run', async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await setAppSetting('update_check_last_run', before);
+      (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(releaseResponse());
+
+      await job.checkForUpdate({ force: true });
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect((await getRow('latest_version')).setting_value).toBe('v99.0.0');
+      expect(new Date((await getRow('update_check_last_run')).setting_value as string).getTime()).toBeGreaterThan(new Date(before).getTime());
+    });
+
+    it('force still respects the "update checks are off" switch', async () => {
+      await setAppSetting('update_check_enabled', 'false');
+      await job.checkForUpdate({ force: true });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkForUpdate', () => {
     it('does nothing when update_check_enabled is false', async () => {
       await setAppSetting('update_check_enabled', 'false');
