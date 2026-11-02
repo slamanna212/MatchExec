@@ -8,9 +8,14 @@ import { activityFeed, discordSettings, matchParticipants, matches, series, tour
 /** If any of these has rows the database already holds real data and a legacy import is refused. */
 export const CORE_TABLES = [matches, tournaments, series, matchParticipants, tournamentTeams, discordSettings, activityFeed] as const;
 
-/** `$DATABASE_PATH` (deprecated, only read here), then ./app_data/data/matchexec.db, then the Docker path. */
+/**
+ * `$DATABASE_PATH` (deprecated, only read here) when set — it is then the only candidate, so pointing it at a
+ * missing file disables auto-import. Otherwise ./app_data/data/matchexec.db, then the Docker path.
+ */
 export function findLegacyFile(env: Record<string, string | undefined> = process.env, cwd = process.cwd()): string | null {
-  const candidates = [env.DATABASE_PATH, path.join(cwd, 'app_data', 'data', 'matchexec.db'), '/app/app_data/data/matchexec.db'];
+  const candidates = env.DATABASE_PATH
+    ? [env.DATABASE_PATH]
+    : [path.join(cwd, 'app_data', 'data', 'matchexec.db'), '/app/app_data/data/matchexec.db'];
   for (const c of candidates) {
     if (c && fs.existsSync(c) && fs.statSync(c).isFile()) return path.resolve(c);
   }

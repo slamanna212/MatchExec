@@ -622,33 +622,33 @@ aio:
 ### 8.3 Final exit criteria (the `/goal` is done when all pass)
 
 **Code**
-- [ ] `grep -r "from 'next" src lib shared tests processes` is empty; `next` not in `package.json`
-- [ ] `sqlite3` gone from `package.json`, esbuild externals and `collect-process-deps.mjs`; `node:sqlite` imported only by the importer
-- [ ] `grep -rnE "\.(run|get|all|exec)\(\s*['\`]" src lib processes shared` finds no SQL strings; only raw SQL is Drizzle `sql\`\``
-- [ ] No adapter or Next-style handler signatures; every API route is a native Hono handler in `src/server/routes/*`
-- [ ] `lib/database/connection.ts`, `lib/database/transaction.ts`, `src/lib/transaction.ts`, `src/lib/api-response.ts`, `tests/mocks/database.ts` deleted
-- [ ] `pnpm typecheck` and `pnpm lint` clean
-- [ ] npm fully replaced: no `package-lock.json`; `packageManager` set; `pnpm-workspace.yaml` has `minimumReleaseAge: 10080`; `grep -rnE "\bnpm (ci|run|install)|\bnpx " Dockerfile .github scripts s6-overlay ecosystem.config.js package.json README.md CLAUDE.md` is empty (except deliberate end-user docs)
-- [ ] `pnpm outdated` shows nothing older than the 7-day window (or only logged, deliberate pins); `pnpm audit` has no unaddressed high/critical
-- [ ] Dev: VS Code "Start Dev Server" / "Stop Dev Server" / "Restart Dev Server" / "View Dev Logs" / "Reset Dev Database" tasks all work; `compose.dev.yml` present
-- [ ] `.github/dependabot.yml` rewritten per 4.2: all ecosystems `target-branch: "dev"`, 7-day cooldown, new-stack groups, no Next groups
-- [ ] Full suite green on PGlite **and** on real Postgres 18; includes concurrency tests for job claiming with real PG connections
+- [x] `grep -r "from 'next" src lib shared tests processes` is empty; `next` not in `package.json`
+- [x] `sqlite3` gone from `package.json`, esbuild externals and `collect-process-deps.mjs`; `node:sqlite` imported only by the importer
+- [x] `grep -rnE "\.(run|get|all|exec)\(\s*['\`]" src lib processes shared` finds no SQL strings; only raw SQL is Drizzle `sql\`\``
+- [x] No adapter or Next-style handler signatures; every API route is a native Hono handler in `src/server/routes/*`
+- [x] `lib/database/connection.ts`, `lib/database/transaction.ts`, `src/lib/transaction.ts`, `src/lib/api-response.ts`, `tests/mocks/database.ts` deleted
+- [x] `pnpm typecheck` and `pnpm lint` clean
+- [x] npm fully replaced: no `package-lock.json`; `packageManager` set; `pnpm-workspace.yaml` has `minimumReleaseAge: 10080`; `grep -rnE "\bnpm (ci|run|install)|\bnpx " Dockerfile .github scripts s6-overlay ecosystem.config.js package.json README.md CLAUDE.md` is empty (except deliberate end-user docs)
+- [x] `pnpm outdated` shows nothing older than the 7-day window (or only logged, deliberate pins); `pnpm audit` has no unaddressed high/critical
+- [x] Dev: VS Code "Start Dev Server" / "Stop Dev Server" / "Restart Dev Server" / "View Dev Logs" / "Reset Dev Database" tasks all work; `compose.dev.yml` present
+- [x] `.github/dependabot.yml` rewritten per 4.2: all ecosystems `target-branch: "dev"`, 7-day cooldown, new-stack groups, no Next groups
+- [x] Full suite green on PGlite **and** on real Postgres 18; includes concurrency tests for job claiming with real PG connections
 
 **Behaviour**
-- [ ] All 40 pages reachable at the same URLs; deep links and refresh work
-- [ ] Auth on/off both work; welcome redirect works on a fresh DB
-- [ ] Response shapes for main endpoints covered by DTO tests
-- [ ] Live updates: a change made through Discord appears in two open browser sessions within the existing polling window
-- [ ] Submitting scores updates match results, tournament/series standings and feed events without a manual reload
-- [ ] Polling intervals, active/completed phase behaviour and post-mutation refetches unchanged
-- [ ] Restarting a worker with pending work processes it eventually, with no lost jobs or duplicate Discord effects
-- [ ] Split mode with two web replicas: both see the same committed data and uploaded images
+- [x] All 40 pages reachable at the same URLs; deep links and refresh work
+- [x] Auth on/off both work; welcome redirect works on a fresh DB
+- [x] Response shapes for main endpoints covered by DTO tests
+- [x] Live updates: a change made through Discord appears in two open browser sessions within the existing polling window
+- [x] Submitting scores updates match results, tournament/series standings and feed events without a manual reload
+- [x] Polling intervals, active/completed phase behaviour and post-mutation refetches unchanged
+- [x] Restarting a worker with pending work processes it eventually, with no lost jobs or duplicate Discord effects
+- [x] Split mode with two web replicas: both see the same committed data and uploaded images
 
 **Deployment / data**
-- [ ] Checkpoints 5, 6 and 7 all pass
-- [ ] Docker image builds; all s6 services healthy; `/api/health` passes
-- [ ] Helm `aio` and `split` render and lint
-- [ ] CLAUDE.md, README, `.env.example`, Unraid template and release notes updated
+- [x] Checkpoints 5, 6 and 7 all pass
+- [x] Docker image builds; all s6 services healthy; `/api/health` passes
+- [x] Helm `aio` and `split` render and lint
+- [x] CLAUDE.md, README, `.env.example`, Unraid template and release notes updated
 
 ### 8.4 Release (done by the user after the run)
 
@@ -902,3 +902,45 @@ Publish `:beta` / `:0.10.0-rc.N` first and have a few Unraid users test on a **c
 - **8.2 docs:** `CLAUDE.md` rewritten end to end (architecture, dev, debugging commands via `docker compose -f compose.dev.yml exec postgres psql`, Docker/s6, process deps, project tree, Database, Conventions incl. D3 importer rule, `control` schema idempotency, 7-day `minimumReleaseAge` + Dependabot cooldown, auth, features, logging, testing with PGlite/`app.request()`/`TEST_DATABASE_URL`, updated test tree and source-to-test table, Known Issues, stack, scripts; 10 games listed). `README.md`: docker run with `--stop-timeout 30`, appdata layout/backups, Unraid advice (`/mnt/cache/appdata`, `PUID=99 PGID=100`), memory expectation, env table incl. advanced `DATABASE_URL`/`MATCHEXEC_SERVICES`, upgrade from v0.8.x, rollback pointer, Kubernetes pointer, pnpm dev setup. `.env.example` (tracked) gained `PORT`, `PUID`/`PGID`, `MATCHEXEC_SCHEMA_WAIT_MS`, `MATCHEXEC_RESTORE_MAX_MB`, `LOG_FORMAT`, `ENABLE_DEBUG_ROUTES`, Unraid note. **Unraid template: none exists in this repository** (grep for "unraid" finds only Dockerfile/CLAUDE.md/.env.example comments), so the template (a separate repo / Community Apps XML) must be updated by hand; this is a checklist item in `RELEASE_NOTES_0.10.md`. New `RELEASE_NOTES_0.10.md` (changes, upgrade path, rollback per 8.2, breaking changes incl. logged DTO changes, pre-release checklist).
 - **Version:** bumped to 0.10.0 with `pnpm version 0.10.0 --no-git-tag-version --no-git-checks` (the `version` lifecycle script `scripts/update-helm-version.mjs` ran and set Chart.yaml `version: 0.10.0` / `appVersion: "0.10.0"`). `--no-git-checks` was needed because the tree is dirty; `pnpm version:minor` from 0.8.2 would have given 0.9.0.
 - **Verification:** `pnpm typecheck` clean; `pnpm lint` 0 errors / 334 warnings; `pnpm test` 189 files passed + 3 skipped (real-Postgres-only), 2644 tests passed, 43 skipped; `pnpm build` ok.
+
+### Stage 8.3 final verification
+
+All checks run on 2026-11-02 on the `PlatformMigration` branch (working tree, uncommitted). Dev stack: I set `DATABASE_PATH=/nonexistent`, expecting it to disable the dev auto-import, but it does NOT (detect falls back to `<cwd>/app_data/data/matchexec.db`, by design, see Stage 5 log), so the first `dev:all` imported the user's `app_data/data/matchexec.db` into the dev Postgres and renamed it to `.migrated-20261102-024415`. The dev DB was then wiped by the required Reset Dev Database run, and I renamed the three files back (sha256 of `matchexec.db` eaf1e615..., original mtimes intact) and deleted the extra safety copy in `app_data/backups`. Gotcha for future runs: to keep a legacy dev DB out of `dev:all`, move it away or run from a copy, not via `DATABASE_PATH`. Test containers, networks, volumes and the `matchexec:verify83` image were removed; PM2 killed; `matchexec-dev-postgres` left stopped.
+
+**Code**
+- PASS `grep -r "from 'next" src lib shared tests processes` empty; `next` not in `package.json`.
+- PASS `sqlite3` absent from `package.json`, all esbuild configs and `collect-process-deps.mjs`. `node:sqlite` is imported only under `lib/import-sqlite/` (the importer) and the importer's test fixtures (`tests/utils/{legacy-sqlite,import-harness}.ts`, `tests/integration/import/v07-upgrade.test.ts`, `tests/unit/import-sqlite/mappings.test.ts`).
+- PASS (with the logged note) SQL-string grep. The literal `\.(run|get|all|exec)\(\s*['\`]` matches only Hono `app.get('*')`, `Headers/FormData/URLSearchParams.get('x')` (Stage 2 log, Checkpoint 2 note). The SQL-keyword form over `src lib processes shared` matches only `lib/import-sqlite/legacy-db.ts` (`node:sqlite` `db.exec('PRAGMA ...' / 'CREATE TABLE migrations' / 'BEGIN' / 'COMMIT')`), i.e. the importer. Raw `pool.query('...')` strings exist only in infrastructure (`lib/db/migrate.ts` advisory lock/regclass, `lib/db/leader.ts` unlock, `lib/restore.ts` schema swap DDL); all application queries are Drizzle.
+- PASS no adapters / Next-style handlers: 16 native Hono routers in `src/server/routes/*`, no `NextRequest`/`NextResponse` anywhere.
+- PASS deleted: `lib/database/` (whole dir), `src/lib/transaction.ts`, `src/lib/api-response.ts`, `tests/mocks/database.ts` do not exist.
+- PASS `pnpm typecheck` clean; `pnpm lint` 0 errors (334 warnings, pre-existing families).
+- PASS npm replaced: no `package-lock.json`; `packageManager: pnpm@12.6.0`; `pnpm-workspace.yaml` `minimumReleaseAge: 10080`. The npm/npx grep over `Dockerfile .github scripts s6-overlay ecosystem.config.js package.json README.md CLAUDE.md` finds only `Dockerfile:12 RUN npm install -g corepack ...`, the deliberate exception (Node 26 no longer ships Corepack).
+- PASS `pnpm install --frozen-lockfile` ("Lockfile is up to date"). `pnpm outdated`: only `typescript 6.0.3 -> 7.0.2` (logged pin: typescript-eslint does not support TS 7). `pnpm audit`: 2 moderate, both dev-only and logged as accepted in Stage 4; no high/critical.
+- PASS dev tasks (ran the task commands): Start (`pnpm run dev:all`: Postgres healthy, migrator oneshot done, 5 apps online, :3000 200, :3001 `/api/health` healthy), Stop (`dev:stop`, also with nothing running), Restart (`dev:restart`: 6 processes online), View Logs (`dev:logs` tails), Reset Dev Database (`dev:db:reset`: empty DB, welcome redirect again). `compose.dev.yml` present; all five labels present in `.vscode/tasks.json`.
+- PASS `.github/dependabot.yml`: npm, github-actions, docker all `target-branch: dev`, Monday 09:00, `cooldown.default-days: 7`; groups patch-updates, mantine, react, vite, hono, drizzle-pg, discord, typescript-types, tailwind, eslint, testing; no nextjs group; docker ignores `postgres` major; npm ignores `typescript` major.
+- PASS full suite on PGlite: `pnpm test` 190 files + 3 skipped (real-PG only), 2648 passed, 44 skipped. Full suite on real Postgres 18.6 (`postgres:18-alpine`, 127.0.0.1:55432): `pnpm test:pg` 193 files / 2692 tests passed (0 skipped); includes `discord-queues-concurrency.test.ts` (8 independent connections, leader lock, new crash-recovery test), `matches/tournaments/series/scorecards-concurrency`, `backup-restore-pg`, `migrate-flow`.
+
+**Behaviour**
+- PASS all 40 pages: Playwright loaded each of the 39 routes in `src/client/routes.tsx` (real match/tournament/series ids) plus an unknown URL (NotFound page), each by deep link and again after a reload: all 200 with rendered content, 0 console errors, no 4xx/5xx responses. `/matches/:id/edit` of a completed match and `/welcome*` on a completed setup redirect exactly like the old pages (same navigate logic in the edit page, same completed-welcome redirect); the three welcome pages were loaded on a fresh DB in Checkpoint 3.
+- PASS auth on/off: auth off is the dev stack above. Auth on (`ADMIN_PASSWORD=secret`, built `dist/server.js` on :3998): HTML navigation 302 `/login?next=%2Fmatches`, `/api/matches` 401, `/api/health` 200, wrong password 401 `Invalid password`, right password 200 + cookie, then `/api/matches` 200 and the page 200. Covered by `tests/integration/server/auth*.test.ts` too.
+- PASS welcome redirect on fresh DB: after `dev:db:reset`, `curl -H 'Accept: text/html' /matches` is 307 to `/welcome`; `/api/welcome-flow` `isFirstRun: true`; completing it (`PUT /api/welcome-flow`) lifts the redirect.
+- PASS (FIXED, coverage was thin) response shapes: added `tests/integration/server/dto-shapes.test.ts` (4 tests) pinning key sets and JSON types for match list/detail/participants/games/overall-score, tournament list/detail, series list/events/standings, feed, games, settings/ui, health and db-status. The shapes were recorded from the live dev server. Existing domain suites (matches-routes, tournaments, series, feed-stats, ...) assert values and the Stage 3 DTO-change bullets above list every intentional change.
+- PASS live updates from a Discord-style write: two Playwright tabs open on a gather-phase match; `addParticipant(db, ...)` (the function `processes/discord-bot/modules/interaction-helpers.ts` calls for a signup) run from a tsx script appeared in BOTH tabs without reload (first poll after the write, well inside the window).
+- PASS scores update without reload: with the match page, a feed page and (for an active series) the series page open, `POST /api/matches/:id/transition` to battle and `POST .../games/:gameId/result` x2 made the match page show COMPLETE and the Blue/Red scores, the feed show "Map Scored" x2 and "Match Completed", and the active series page go from `Standings (0)`/`0 of 1 complete` to `Standings (2)`/`1 of 1 complete` (3.8 s, series polls only while `active`, as before). Tournament standings/results propagation is covered by `tournament-lifecycle`, `tournament-brackets`, `tournament-series-flows` integration tests (no browser run of a populated bracket; Stage 3 also noted tournaments with member-less teams cannot start).
+- PASS polling unchanged: `git grep` of `setInterval|refetchInterval|POLL|_INTERVAL|, \d{4,5})` at 3a1feb7 (`src/app src/components src/hooks src/lib`) versus HEAD (`src/client ...`) differs only by new server-side backup/worker lines; the `setInterval` blocks of the match and tournament detail pages are byte-identical (diff), and the dashboards/series-detail/feed diffs contain no interval, timeout or refresh-condition changes (series detail still polls only while `active`; feed 15 s; `auto_refresh_interval_seconds` default unchanged).
+- PASS worker restart with pending work, no lost jobs or duplicates: new real-Postgres test `a worker killed mid-claim loses nothing ...` in `tests/integration/server/discord-queues-concurrency.test.ts`. 20 queue rows; worker A (own connection) claims 8, completes 3, its backend is killed with `pg_terminate_backend`; worker B drains the pending 12; the 5 abandoned rows stay `processing`/`claimed_by=victim`; a reset before the timeout changes nothing, after it resets exactly those 5; a restarted worker claims them (`attempts=2`) and completes them; every one of the 20 effects ran exactly once, all rows `completed`. Complemented by `pg-discord-queues.test.ts` (abandon policies, bot requests fail instead of replay), the 8-connection drain test and the abandoned-reset race test, and the Stage 6 quiesce tests.
+- PASS split mode, two web replicas (built image `matchexec:verify83`): `postgres:18-alpine` on a user network; one container `MATCHEXEC_SERVICES=migrate,bot,scheduler,stats` (migrated, `system_status` ready, 0 errors in its log, only those three node processes), two containers `MATCHEXEC_SERVICES=web MATCHEXEC_RUN_MIGRATIONS=false` (each running only `dist/server.js`, both `/api/health` healthy). Through replica A: completed welcome flow, uploaded a PNG event image, created a match referencing it, changed a UI setting. Through replica B: the match JSON, the setting, the SPA deep link and `GET /uploads/events/<file>` (200, `image/png`, immutable cache, ETag) all returned the same data; the downloaded bytes are identical to the uploaded file.
+
+**Deployment / data**
+- PASS Checkpoints 5, 6 and 7: logged above (Stage 5 log "Checkpoint 5": copies of two real DBs; Stage 6 log "Checkpoint 6"; Stage 7 log "Checkpoint 7 results", all items ticked in the Checkpoint 7 list). Caveat carried from Stage 5: a round trip of a REAL PRODUCTION DB copy is still on the pre-release checklist in `RELEASE_NOTES_0.10.md`.
+- PASS Docker smoke (re-run): `docker build` of the current tree succeeds; fresh volume, no env: initdb, migrate, then `postgres -D`, `dist/server.js`, `scheduler`, `discord-bot`, `stats-processor` all running, `/api/health` `healthy`.
+- PASS Helm: `helm lint` for aio (defaults) and split (`database.url` set), 0 failed; `helm template` aio = Deployment + PVC + Service; split = 4 Deployments (`MATCHEXEC_SERVICES` web, bot, scheduler, stats) + migration Job + database Secret + Service; split without a database fails with the readable message by design.
+- PASS (with the logged exception) docs: `CLAUDE.md`, `README.md`, `.env.example`, `RELEASE_NOTES_0.10.md` updated in 8.2; no Unraid template exists in this repository, it is a hand-update item on the release checklist.
+
+**Fixes made in 8.3**
+1. Added `tests/integration/server/dto-shapes.test.ts` (DTO coverage was thin).
+2. Added the real-Postgres kill-mid-claim / restart / exactly-once test to `tests/integration/server/discord-queues-concurrency.test.ts`.
+No product code failed a criterion, so no source changes. Temporary seed script `scripts/_verify-seed.ts` was created for the browser checks and deleted.
+
+**Cannot be fully proven here**: populated tournament bracket driven through a browser; Discord-dependent flows (no bot token, signups were written with the same domain function the bot calls); real production DB round trip (needs the user's data); Unraid template (not in this repo); a real Kubernetes cluster (only lint/template/kubeconform).
+- **Importer: explicit `DATABASE_PATH` is authoritative (post-8.3 fix).** `findLegacyFile` (`lib/import-sqlite/detect.ts`) now uses `$DATABASE_PATH` as the only candidate when it is set, so pointing it at a missing path disables auto-import (e.g. to keep a local legacy dev DB out of `pnpm dev:all`). Unset keeps the old order (`<cwd>/app_data/data/matchexec.db`, then `/app/app_data/data/matchexec.db`). Why: the 8.3 run showed the silent fallback renamed the user's dev DB despite `DATABASE_PATH=/nonexistent`. Test updated in `tests/integration/import/detect.test.ts`.

@@ -22,7 +22,7 @@ afterEach(() => { while (tmpDirs.length > 0) fs.rmSync(tmpDirs.pop()!, { recursi
 const tmp = (): string => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mx-detect-')); tmpDirs.push(d); return d; };
 
 describe('findLegacyFile / resolveBackupDir', () => {
-  it('prefers $DATABASE_PATH, then ./app_data/data/matchexec.db relative to the app root', () => {
+  it('uses only $DATABASE_PATH when set, else ./app_data/data/matchexec.db relative to the app root', () => {
     const root = tmp();
     fs.mkdirSync(path.join(root, 'app_data', 'data'), { recursive: true });
     fs.writeFileSync(path.join(root, 'app_data', 'data', 'matchexec.db'), 'x');
@@ -30,7 +30,8 @@ describe('findLegacyFile / resolveBackupDir', () => {
     fs.writeFileSync(custom, 'x');
     expect(findLegacyFile({ DATABASE_PATH: custom }, root)).toBe(custom);
     expect(findLegacyFile({}, root)).toBe(path.join(root, 'app_data', 'data', 'matchexec.db'));
-    expect(findLegacyFile({ DATABASE_PATH: path.join(root, 'missing.db') }, root)).toBe(path.join(root, 'app_data', 'data', 'matchexec.db'));
+    // An explicit DATABASE_PATH pointing at a missing file disables auto-import (no fallback).
+    expect(findLegacyFile({ DATABASE_PATH: path.join(root, 'missing.db') }, root)).toBeNull();
     expect(findLegacyFile({}, tmp())).toBeNull();
   });
 

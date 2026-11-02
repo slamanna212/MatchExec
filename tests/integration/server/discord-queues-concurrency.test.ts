@@ -141,6 +141,52 @@ describe.skipIf(!url)('discord queues: real Postgres concurrency', () => {
     expect(claimed.length + rest.length).toBe(60);
   }, 60_000);
 
+  it('a worker killed mid-claim loses nothing: abandoned claims are reset and every job is processed exactly once', async () => {
+    const TOTAL = 20;
+    await seedAnnouncements(TOTAL);
+    const effects = new Map<string, number>(); // id -> times the "Discord effect" ran
+    const process_ = async (w: Db, id: string) => {
+      if (await completeJob(w, 'announcement', id)) effects.set(id, (effects.get(id) ?? 0) + 1);
+    };
+
+    // Worker A claims a batch, runs the effect for only some of it, then its backend is killed (crash / OOM / SIGKILL).
+    const victimPool = new Pool({ connectionString: testUrl, max: 1 });
+    victimPool.on('error', () => undefined); // the killed backend emits a FATAL 57P01 on the idle client
+    const victim = drizzle(victimPool, { schema }) as unknown as Db;
+    const claimedByVictim = await claimJobs(victim, 'announcement', { limit: 8, workerId: 'victim' });
+    expect(claimedByVictim).toHaveLength(8);
+    for (const r of claimedByVictim.slice(0, 3)) await process_(victim, r.id);
+    const victimPid = ((await victim.execute(sql`SELECT pg_backend_pid() AS pid`)) as unknown as { rows: Array<{ pid: number }> }).rows[0]!.pid;
+    await workers[0]!.execute(sql`SELECT pg_terminate_backend(${victimPid})`);
+    await victimPool.end().catch(() => undefined);
+
+    // A surviving worker drains what is still pending. The 5 jobs the victim claimed but never finished stay 'processing'.
+    const survivor = workers[1]!;
+    for (;;) {
+      const batch = await claimJobs(survivor, 'announcement', { limit: 6, workerId: 'survivor' });
+      if (batch.length === 0) break;
+      for (const r of batch) await process_(survivor, r.id);
+    }
+    const stuck = await workers[0]!.select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.status, 'processing'));
+    expect(stuck.map((r) => r.id).sort()).toEqual(claimedByVictim.slice(3).map((r) => r.id).sort());
+    expect(stuck.every((r) => r.claimed_by === 'victim')).toBe(true);
+
+    // Before the abandon timeout nothing is touched (a slow-but-alive worker is never raced)...
+    expect(await resetAbandonedClaims(survivor, ['announcement'])).toBe(0);
+    // ...after it, the restarted worker's tick resets exactly the abandoned claims and finishes them once.
+    expect(await resetAbandonedClaims(survivor, ['announcement'], new Date(Date.now() + 60 * 60 * 1000))).toBe(5);
+    const restarted = workers[2]!;
+    const again = await claimJobs(restarted, 'announcement', { limit: 50, workerId: 'restarted' });
+    expect(again.map((r) => r.id).sort()).toEqual(stuck.map((r) => r.id).sort());
+    expect(again.every((r) => r.attempts === 2)).toBe(true);
+    for (const r of again) await process_(restarted, r.id);
+
+    expect(effects.size).toBe(TOTAL);
+    expect([...effects.values()].every((n) => n === 1)).toBe(true);
+    const finalStatus = await workers[0]!.select({ status: discordAnnouncementQueue.status }).from(discordAnnouncementQueue);
+    expect(finalStatus.every((r) => r.status === 'completed')).toBe(true);
+  }, 60_000);
+
   it('a stats job is claimed by only one of several stats processors', async () => {
     await workers[0]!.execute(sql`INSERT INTO match_games (id, match_id) VALUES ('mg', 'm') ON CONFLICT DO NOTHING`);
     await workers[0]!.execute(sql`INSERT INTO scorecard_submissions (id, match_id, match_game_id, team_side, screenshot_url) VALUES ('s1', 'm', 'mg', 'blue', '/x') ON CONFLICT DO NOTHING`);
