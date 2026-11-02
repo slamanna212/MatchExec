@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction, ButtonInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
 import { waitForSystemReady } from '../../lib/db/system-status';
 import type { DiscordSettings } from '../../shared/types';
 import { getVersionInfo } from '../../lib/version-server';
@@ -22,6 +22,7 @@ import { StatsReportHandler } from './modules/stats-report-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 import { db as pgDb, closeDb } from '../../lib/db';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
+import { beginJob, isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { nonOverlapping } from '../../src/lib/discord-queues';
 import { listGames } from '../../src/lib/games';
 
@@ -45,6 +46,7 @@ class MatchExecBot {
   private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
   private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
   private leaderLock: LeaderLock | null = null;
+  private workerControl: WorkerControl | null = null;
   private runQueueTick = nonOverlapping(
     async () => { await this.queueProcessor?.processAllQueues(); },
     (error) => logger.error('❌ Error processing queues:', error),
@@ -102,6 +104,16 @@ class MatchExecBot {
     this.client.on('interactionCreate', async (interaction) => {
       if (!this.isReady || !this.settings) return;
 
+      // A backup restore is draining or swapping the data: tell the user instead of failing half way through.
+      if (isPaused()) {
+        if (interaction.isRepliable()) {
+          await interaction.reply({ content: 'MatchExec is restoring a backup right now. Please try again in a minute.', flags: MessageFlags.Ephemeral }).catch(() => undefined);
+        }
+        return;
+      }
+
+      // Counts as in-flight work: a restore waits for the interaction to finish
+      const endJob = beginJob();
       try {
         if (interaction.isChatInputCommand()) {
           await this.handleSlashCommand(interaction);
@@ -114,6 +126,8 @@ class MatchExecBot {
         }
       } catch (error) {
         logger.error('Error handling interaction:', error);
+      } finally {
+        endJob();
       }
     });
 
@@ -196,6 +210,16 @@ class MatchExecBot {
       // Exactly one bot per database: hold a Postgres advisory lock for the life of the process (exits if held)
       this.leaderLock ??= await requireLeaderLock('discord-bot', { log: (message) => logger.critical(message) });
 
+      // Backup restore coordination (plan 6.4): heartbeat into control.workers, pause while a restore runs, reload settings after
+      this.workerControl ??= startWorkerControl({
+        service: 'bot',
+        onResume: async () => {
+          logger.info('♻️ Restore finished: reloading Discord settings');
+          await this.reloadSettings();
+        },
+        log: (message, error) => logger.debug(`[worker-control] ${message}`, error),
+      });
+
       // Check if welcome flow is completed
       const welcomeCompleted = await this.checkWelcomeFlowCompleted();
       if (!welcomeCompleted) {
@@ -266,28 +290,32 @@ class MatchExecBot {
     }
   }
 
+  private async reloadSettings() {
+    if (!this.settingsManager) return;
+    const newSettings = await this.settingsManager.loadSettings();
+    if (newSettings) {
+      this.settings = newSettings;
+      this.voiceHandler?.updateSettings(newSettings);
+      this.eventHandler?.updateSettings(newSettings);
+      this.announcementHandler?.updateSettings(newSettings);
+      this.reminderHandler?.updateSettings(newSettings);
+      this.interactionHandler?.updateSettings(newSettings);
+      this.queueProcessor?.updateSettings(newSettings);
+      this.queueProcessor?.updateVoiceHandler(this.voiceHandler);
+      this.scorecardHandler?.updateSettings(newSettings);
+    }
+  }
+
   private startPeriodicTasks() {
     // Settings reload every 30 seconds
     setInterval(async () => {
-      if (this.settingsManager) {
-        const newSettings = await this.settingsManager.loadSettings();
-        if (newSettings) {
-          this.settings = newSettings;
-          this.voiceHandler?.updateSettings(newSettings);
-          this.eventHandler?.updateSettings(newSettings);
-          this.announcementHandler?.updateSettings(newSettings);
-          this.reminderHandler?.updateSettings(newSettings);
-          this.interactionHandler?.updateSettings(newSettings);
-          this.queueProcessor?.updateSettings(newSettings);
-          this.queueProcessor?.updateVoiceHandler(this.voiceHandler);
-          this.scorecardHandler?.updateSettings(newSettings);
-        }
-      }
+      if (isPaused()) return;
+      await this.reloadSettings();
     }, 30000);
 
     // Discord bot heartbeat every 5 minutes
     setInterval(async () => {
-      if (this.isReady) {
+      if (this.isReady && !isPaused()) {
         try {
           const now = new Date().toISOString();
           await setAppSetting('discord_bot_last_heartbeat', now);
@@ -323,7 +351,7 @@ class MatchExecBot {
   }
 
   private async processVoiceChannelEmptiness() {
-    if (!this.voiceChannelEmptinessMonitor || !this.isReady) return;
+    if (!this.voiceChannelEmptinessMonitor || !this.isReady || isPaused()) return;
 
     try {
       await this.voiceChannelEmptinessMonitor.runCheck();
@@ -421,6 +449,7 @@ class MatchExecBot {
       this.client.destroy();
     }
 
+    await this.workerControl?.stop();
     await this.leaderLock?.release();
 
     // Close database connection

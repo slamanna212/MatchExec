@@ -497,7 +497,8 @@ export type FeedEventType =
   | 'tournament_cancelled'
   | 'ai_error'
   | 'health_alert'
-  | 'update_available';
+  | 'update_available'
+  | 'backup_failed';
 
 export type FeedPriority = 1 | 2 | 3 | 4;
 

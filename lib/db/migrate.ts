@@ -11,7 +11,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate as migrateNodePg } from 'drizzle-orm/node-postgres/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import type { Pool } from 'pg';
-import { getPool, schema, type Db } from './index';
+import { createBackup, pruneNewest, PgToolError } from '../backup';
+import { getPool, resolveDatabaseUrl, schema, type Db } from './index';
 import { seedDatabase, type SeedOptions } from './seed';
 import { setSystemStatus } from './system-status';
 
@@ -27,14 +28,34 @@ export function resolveMigrationsFolder(): string {
 }
 
 /**
- * Extension points filled in by later stages. They are deliberately no-ops now.
+ * Extension points: `preUpgradeDump` (Stage 6, implemented here) and `importLegacySqlite` (Stage 5; a no-op until the migrate
+ * entrypoint or the import CLI installs the real importer).
  */
 export const migrationHooks = {
   /**
-   * TODO(Stage 6): take a pre-upgrade `pg_dump` (lib/backup) into MATCHEXEC_BACKUP_DIR.
-   * Called only when the database already has applied migrations AND there are pending ones.
+   * Pre-upgrade safety dump (plan 6.2): `pg_dump` into `$MATCHEXEC_BACKUP_DIR/pre-upgrade/` before pending migrations are
+   * applied to a database that already has data. Called only when migrations were applied before AND some are pending.
+   *
+   * A failing dump aborts the upgrade (nothing has been changed yet; fix the cause or set MATCHEXEC_SKIP_PREUPGRADE_DUMP=true).
+   * The one exception is a missing pg_dump binary in development, where the client tools are often not installed.
    */
-  async preUpgradeDump(_ctx: { pool: Pool; pendingMigrations: number }): Promise<void> {},
+  async preUpgradeDump(ctx: { pool: Pool; pendingMigrations: number }): Promise<void> {
+    if (process.env.MATCHEXEC_SKIP_PREUPGRADE_DUMP === 'true') {
+      log('pre-upgrade dump skipped (MATCHEXEC_SKIP_PREUPGRADE_DUMP=true)');
+      return;
+    }
+    try {
+      const backup = await createBackup('pre-upgrade', { databaseUrl: resolveDatabaseUrl() });
+      pruneNewest('pre-upgrade');
+      log(`pre-upgrade backup written: ${backup.path} (${backup.size} bytes)`);
+    } catch (e) {
+      if (e instanceof PgToolError && e.reason === 'missing-binary' && process.env.NODE_ENV === 'development') {
+        log(`WARNING: pre-upgrade dump skipped in development: ${e.message}`);
+        return;
+      }
+      throw new Error(`Could not take the pre-upgrade backup, so ${ctx.pendingMigrations} pending migration(s) were NOT applied: ${(e as Error).message} (set MATCHEXEC_SKIP_PREUPGRADE_DUMP=true to upgrade without a backup)`, { cause: e });
+    }
+  },
   /**
    * Imports a legacy SQLite database (DATABASE_PATH / app_data/data/matchexec.db) into the fresh schema, inside one
    * transaction, updating system_status phase 'importing'. Returns true when an import ran. Called after migrations are
@@ -73,6 +94,10 @@ export interface RunMigrationsOptions {
   migrationsFolder?: string;
   seed?: boolean;
   seedOptions?: SeedOptions;
+  /** Backup restore: the pre-restore dump already exists, so don't dump the just-restored data again. */
+  skipPreUpgradeDump?: boolean;
+  /** Backup restore: never import a legacy SQLite file found on disk. */
+  skipLegacyImport?: boolean;
 }
 
 /**
@@ -92,7 +117,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}): Promise
     try {
       const applied = await appliedMigrationCount(pool);
       const pending = expected.count - applied;
-      if (applied > 0 && pending > 0) {
+      if (applied > 0 && pending > 0 && !options.skipPreUpgradeDump) {
         log(`${pending} pending migration(s) on an existing database`);
         await migrationHooks.preUpgradeDump({ pool, pendingMigrations: pending });
       }
@@ -102,7 +127,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}): Promise
       await migrateNodePg(db, { migrationsFolder, migrationsTable: MIGRATIONS_TABLE, migrationsSchema: MIGRATIONS_SCHEMA });
 
       await setSystemStatus({ phase: 'migrating', message: 'Schema up to date', progress: 40 }, db as unknown as Db);
-      await migrationHooks.importLegacySqlite({ db: db as unknown as Db, pool });
+      if (!options.skipLegacyImport) await migrationHooks.importLegacySqlite({ db: db as unknown as Db, pool });
 
       if (options.seed !== false) {
         await setSystemStatus({ phase: 'seeding', message: 'Seeding game data...', progress: 70 }, db as unknown as Db);

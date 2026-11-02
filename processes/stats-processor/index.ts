@@ -2,6 +2,7 @@ import { logger } from '../../src/lib/logger/server';
 import { setAppSetting } from '../../src/lib/settings';
 import { db as pgDb } from '../../lib/db';
 import { waitForSystemReady } from '../../lib/db/system-status';
+import { isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { claimJobs, makeWorkerId, nonOverlapping, releaseJob, resetAbandonedClaims } from '../../src/lib/discord-queues';
 import { AIExtractor } from './modules/ai-extractor';
 import { StatImageGenerator } from './modules/stat-image-generator';
@@ -12,6 +13,7 @@ class StatsProcessor {
   private imageGenerator: StatImageGenerator | null = null;
   private intervals: ReturnType<typeof setInterval>[] = [];
   private readonly workerId = makeWorkerId('stats-processor');
+  private workerControl: WorkerControl | null = null;
   // A poll never starts while the previous one is still running (AI extraction can take minutes)
   private runExtractionTick = nonOverlapping(
     () => this.processExtractionQueue(),
@@ -30,6 +32,12 @@ class StatsProcessor {
       await waitForSystemReady();
 
       this.isRunning = true;
+
+      // Backup restore coordination (plan 6.4): heartbeat into control.workers; ticks pause themselves (nonOverlapping)
+      this.workerControl = startWorkerControl({
+        service: 'stats',
+        log: (message, error) => logger.debug(`[worker-control] ${message}`, error),
+      });
 
       this.aiExtractor = new AIExtractor(pgDb);
       this.imageGenerator = new StatImageGenerator(pgDb);
@@ -57,7 +65,7 @@ class StatsProcessor {
 
       // Heartbeat every 5 minutes
       const heartbeatInterval = setInterval(async () => {
-        if (!this.isRunning) return;
+        if (!this.isRunning || isPaused()) return;
         try {
           const now = new Date().toISOString();
           await setAppSetting('stats_processor_last_heartbeat', now);
@@ -114,7 +122,7 @@ class StatsProcessor {
     for (const interval of this.intervals) {
       clearInterval(interval);
     }
-    process.exit(0);
+    void (this.workerControl?.stop() ?? Promise.resolve()).finally(() => process.exit(0));
   }
 }
 

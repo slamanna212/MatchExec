@@ -15,6 +15,7 @@
 import { hostname } from 'node:os';
 import { and, asc, eq, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
+import { beginJob, isPaused } from '../../../lib/maintenance';
 import {
   EXTERNAL_RESULT_QUEUES, QUEUE_NAMES, queueConfig, workerColumns,
   type ExternalResultQueue, type FinalStatus, type QueueName, type QueueRow,
@@ -248,18 +249,24 @@ export async function countFailed(ex: Executor, queues: readonly QueueName[]): P
 /**
  * Wrap a periodic task so a tick never starts while the previous one is still running (no overlapping ticks).
  * Errors are passed to `onError` and never escape (so a `setInterval` callback cannot reject unhandled).
+ *
+ * Restore coordination (plan 6.4): a tick is skipped while a backup restore is draining or running (`isPaused()`), and a
+ * running tick counts as in-flight work so the restore waits for it to finish before it touches the database.
+ * Returns false when the tick was skipped (previous run still going, or maintenance).
  */
 export function nonOverlapping(task: () => Promise<unknown>, onError: (err: unknown) => void = () => {}): () => Promise<boolean> {
   let running = false;
   return async () => {
-    if (running) return false;
+    if (running || isPaused()) return false;
     running = true;
+    const endJob = beginJob();
     try {
       await task();
     } catch (error) {
       onError(error);
     } finally {
       running = false;
+      endJob();
     }
     return true;
   };

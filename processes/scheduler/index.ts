@@ -3,6 +3,8 @@ import * as cron from 'node-cron';
 import { createHash } from 'crypto';
 import { logger } from '../../src/lib/logger/server';
 import { AvatarUpdateJob } from './jobs/update-avatars';
+import { AutoBackupJob } from './jobs/auto-backup';
+import { isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { UpdateCheckJob } from './jobs/check-for-update';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
@@ -45,6 +47,8 @@ class MatchExecScheduler {
   private avatarUpdateJob: AvatarUpdateJob | null = null;
   private updateCheckJob: UpdateCheckJob | null = null;
   private leaderLock: LeaderLock | null = null;
+  private workerControl: WorkerControl | null = null;
+  private autoBackupJob: AutoBackupJob | null = null;
 
   async start() {
     logger.debug('🕐 Starting MatchExec Scheduler...');
@@ -59,6 +63,18 @@ class MatchExecScheduler {
 
       this.isRunning = true;
 
+      // Backup restore coordination (plan 6.4): heartbeat into control.workers, pause cron work during a restore,
+      // reload the cron schedules (settings may have changed) when it ends.
+      this.workerControl = startWorkerControl({
+        service: 'scheduler',
+        onResume: async () => {
+          logger.info('♻️ Restore finished: reloading scheduler settings');
+          await this.reloadSettings();
+          await this.autoBackupJob?.refresh();
+        },
+        log: (message, error) => logger.debug(`[worker-control] ${message}`, error),
+      });
+
       // Send initial heartbeat for health monitoring
       try {
         const now = new Date().toISOString();
@@ -70,7 +86,11 @@ class MatchExecScheduler {
 
       // Load and start cron jobs
       await this.loadSchedulerSettings();
-      
+
+      // Automatic database backups (schedule and retention come from the backup settings; re-read every minute)
+      this.autoBackupJob = new AutoBackupJob();
+      await this.autoBackupJob.start();
+
       logger.debug('✅ Scheduler started successfully');
       
       this.keepAlive();
@@ -86,6 +106,10 @@ class MatchExecScheduler {
   private async loadSchedulerSettings() {
     try {
       const settings = await getSchedulerSettings();
+
+      // Stop existing cron jobs (this runs again after a backup restore)
+      this.cronJobs.forEach(job => job.stop());
+      this.cronJobs = [];
 
       if (!settings) {
         logger.debug('⚠️ No scheduler settings found, using defaults');
@@ -109,10 +133,6 @@ class MatchExecScheduler {
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
-
-      // Stop existing cron jobs
-      this.cronJobs.forEach(job => job.stop());
-      this.cronJobs = [];
 
       // Start new cron jobs based on settings
       this.startCronJob('Match Check & Reminders', settings.match_check_cron, this.checkMatchStartTimes.bind(this));
@@ -145,7 +165,10 @@ class MatchExecScheduler {
           logger.debug(`✅ ${name} completed`);
         }, (error) => logger.error(`❌ ${name} failed:`, error));
         const job = cron.schedule(cronExpression, async () => {
-          if (!(await run())) logger.warning(`⏭️ Skipping ${name}: previous run still in progress`);
+          if (!(await run())) {
+            if (isPaused()) logger.debug(`⏭️ Skipping ${name}: backup restore in progress`);
+            else logger.warning(`⏭️ Skipping ${name}: previous run still in progress`);
+          }
         }, {
           timezone: 'UTC'
         });
@@ -474,7 +497,7 @@ class MatchExecScheduler {
   private keepAlive() {
     // Keep the process alive and persist heartbeat for health monitoring
     setInterval(async () => {
-      if (this.isRunning) {
+      if (this.isRunning && !isPaused()) {
         logger.debug('🕐 Scheduler heartbeat');
 
         // Persist heartbeat timestamp to database for health monitoring
@@ -489,7 +512,7 @@ class MatchExecScheduler {
 
     // Check discord bot heartbeat every 2 minutes
     setInterval(async () => {
-      if (this.isRunning) {
+      if (this.isRunning && !isPaused()) {
         await this.checkDiscordBotHeartbeat();
       }
     }, 120000); // Every 2 minutes
@@ -556,6 +579,9 @@ class MatchExecScheduler {
     // Stop all cron jobs
     this.cronJobs.forEach(job => job.stop());
     this.cronJobs = [];
+    this.autoBackupJob?.stop();
+    await this.workerControl?.stop();
+    this.workerControl = null;
 
     await this.leaderLock?.release().catch(() => {});
     this.leaderLock = null;

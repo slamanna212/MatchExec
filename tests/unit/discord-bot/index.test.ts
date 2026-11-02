@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Restore coordination (control.workers heartbeat) needs a real pool: not under test here
+vi.mock('../../../lib/maintenance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../lib/maintenance')>()),
+  startWorkerControl: vi.fn(() => ({ workerId: 'test', tick: async () => undefined, stop: async () => undefined })),
+}));
+
+
 vi.mock('../../../src/lib/logger/server', () => ({
   logger: {
     debug: vi.fn(),

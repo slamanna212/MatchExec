@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { apiNotFound, noStore, onError } from './http';
 import { authGate } from './middleware/auth';
+import { maintenanceGate } from './middleware/maintenance';
 import { welcomeFlow } from './middleware/welcome';
 import { redirectDevPages, serveClientFiles, spaFallback } from './static';
 import { auth } from './routes/auth';
@@ -25,6 +26,9 @@ app.onError(onError);
 app.notFound(apiNotFound);
 
 app.use('/api/*', noStore);
+
+// Backup restore (plan 6.4): in-flight request counter + 503 for writes while a restore drains / swaps the data.
+app.use('*', maintenanceGate);
 
 // Uploaded files (event images, scorecard screenshots, stat images) are served before the auth gate: the old Next matcher
 // excluded image extensions from it, and Discord embeds link straight to these URLs.

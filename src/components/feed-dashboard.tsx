@@ -41,6 +41,7 @@ import {
   IconCalendar,
   IconUsersGroup,
   IconDownload,
+  IconDatabaseExport,
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
@@ -77,6 +78,7 @@ const EVENT_ICONS: Record<string, { icon: React.ComponentType<{ size: number }>,
   ai_error:                 { icon: IconBrain,      color: 'orange'  },
   health_alert:             { icon: IconHeartbeat,  color: 'red'     },
   update_available:         { icon: IconDownload,   color: 'orange'  },
+  backup_failed:            { icon: IconDatabaseExport, color: 'red' },
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 /**
  * `/api/settings/*` (discord, announcer, ui, scheduler, log-level, feed-retention, update-check) plus the aggregate
- * `GET /api/settings`. Backup/restore are still the old Next routes (Stage 6); `/stats` lives in `stats.ts`.
+ * `GET /api/settings`. `/stats` lives in `stats.ts`, `/backup` and `/restore` in `backup.ts`.
  */
 import { Hono, type Context } from 'hono';
 import { logger } from '@/lib/logger';
@@ -13,6 +13,7 @@ import {
 import { UpdateCheckJob } from '../../../processes/scheduler/jobs/check-for-update';
 import { jsonError } from '../http';
 import { statsSettingsRoutes } from './stats';
+import { backupRoutes, restoreRoutes } from './backup';
 import { clientKey, checkRateLimit } from '../middleware/rate-limit';
 
 const MASK = '••••••••';
@@ -382,4 +383,6 @@ export const settings = new Hono()
   .route('/log-level', logLevel)
   .route('/feed-retention', feedRetention)
   .route('/update-check', updateCheck)
-  .route('/stats', statsSettingsRoutes);
+  .route('/stats', statsSettingsRoutes)
+  .route('/backup', backupRoutes)
+  .route('/restore', restoreRoutes);
