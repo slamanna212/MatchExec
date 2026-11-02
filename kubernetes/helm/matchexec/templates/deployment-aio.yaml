@@ -1,0 +1,4 @@
+{{- include "matchexec.validate" . -}}
+{{- if eq .Values.mode "aio" -}}
+{{ include "matchexec.deployment" (dict "ctx" . "component" "aio" "cfg" .Values.aio "services" "all" "process" "") }}
+{{- end }}

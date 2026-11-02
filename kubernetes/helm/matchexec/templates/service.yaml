@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: {{ include "matchexec.fullname" . }}
   labels:
-    {{- include "matchexec.labels" . | nindent 4 }}
+    {{- include "matchexec.labels" (dict "ctx" . "component" (include "matchexec.webComponent" .)) | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -25,4 +25,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "matchexec.selectorLabels" . | nindent 4 }}
+    {{- include "matchexec.selectorLabels" (dict "ctx" . "component" (include "matchexec.webComponent" .)) | nindent 4 }}

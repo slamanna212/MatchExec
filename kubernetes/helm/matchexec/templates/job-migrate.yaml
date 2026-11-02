@@ -1,0 +1,52 @@
+{{- if and (eq .Values.mode "split") .Values.migrations.job -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "matchexec.fullname" . }}-migrate
+  labels:
+    {{- include "matchexec.labels" (dict "ctx" . "component" "migrate") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "matchexec.selectorLabels" (dict "ctx" . "component" "migrate") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "matchexec.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "matchexec.commonEnv" (dict "ctx" . "services" "migrate") | nindent 12 }}
+            {{- include "matchexec.databaseEnv" . | nindent 12 }}
+            {{- if .Values.migrations.skipPreUpgradeDump }}
+            - name: MATCHEXEC_SKIP_PREUPGRADE_DUMP
+              value: "true"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+      {{- include "matchexec.scheduling" . | nindent 6 }}
+{{- end }}

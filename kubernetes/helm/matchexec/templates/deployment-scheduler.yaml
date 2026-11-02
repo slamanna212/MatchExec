@@ -1,0 +1,3 @@
+{{- if and (eq .Values.mode "split") .Values.scheduler.enabled -}}
+{{ include "matchexec.deployment" (dict "ctx" . "component" "scheduler" "cfg" .Values.scheduler "services" "scheduler" "process" "scheduler") }}
+{{- end }}

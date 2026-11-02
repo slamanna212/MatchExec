@@ -4,7 +4,7 @@ kind: Ingress
 metadata:
   name: {{ include "matchexec.fullname" . }}
   labels:
-    {{- include "matchexec.labels" . | nindent 4 }}
+    {{- include "matchexec.labels" (dict "ctx" . "component" (include "matchexec.webComponent" .)) | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

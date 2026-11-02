@@ -10,17 +10,24 @@ MatchExec has been deployed!
   Then visit: http://localhost:3000
 {{- end }}
 
-2. Health endpoints:
-   - Liveness:  /api/health
-   - Readiness: /api/health/ready
-   - Metrics:   /api/metrics
+2. Mode: {{ .Values.mode }}
+{{- if eq .Values.mode "aio" }}
+   One pod with embedded Postgres; data lives on the PVC mounted at /app/app_data.
+{{- else }}
+   web x{{ .Values.web.replicas }}, bot/scheduler/stats x1, external Postgres{{ if .Values.migrations.job }}, migrations via pre-upgrade Job{{ end }}.
+{{- end }}
+
+3. Health endpoints (web):
+   - Health:  /api/health
+   - Readiness detail: /api/health/ready
+   - Metrics: /api/metrics
 
 {{- if .Values.metrics.serviceMonitor.enabled }}
 
-3. Prometheus ServiceMonitor is enabled — metrics will be scraped automatically.
+4. Prometheus ServiceMonitor is enabled — metrics will be scraped automatically.
 {{- end }}
 {{- if .Values.metrics.grafana.dashboardConfigMap }}
 
-4. Grafana dashboard ConfigMap deployed — configure your Grafana sidecar to
+5. Grafana dashboard ConfigMap deployed — configure your Grafana sidecar to
    pick up ConfigMaps with label: {{ .Values.metrics.grafana.labels | toJson }}
 {{- end }}

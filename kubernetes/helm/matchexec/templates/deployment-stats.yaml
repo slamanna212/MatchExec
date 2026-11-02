@@ -1,0 +1,3 @@
+{{- if and (eq .Values.mode "split") .Values.stats.enabled -}}
+{{ include "matchexec.deployment" (dict "ctx" . "component" "stats" "cfg" .Values.stats "services" "stats" "process" "stats-processor") }}
+{{- end }}

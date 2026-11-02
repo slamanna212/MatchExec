@@ -14,11 +14,11 @@ image:
 # -- Image pull secrets for private registries
 imagePullSecrets: []
 
-# -- Seconds to wait for graceful shutdown before SIGKILL
+# -- Seconds to wait for graceful shutdown before SIGKILL (split-mode pods)
 terminationGracePeriodSeconds: 30
 
 # -- Name of an existing Secret to load as environment variables.
-# Use this to reference a Secret you manage outside of this chart
+# Application secrets (DISCORD_BOT_TOKEN etc.), loaded into every pod. Use this to reference a Secret you manage outside of this chart
 # (e.g. sealed-secrets, external-secrets).
 existingSecret: ""
 
@@ -72,19 +72,142 @@ ingress:
     #   hosts:
     #     - matchexec.example.com
 
-persistence:
-  # -- Enable persistent storage for the SQLite database
+# -- Timezone (auto-backup schedule runs in this TZ)
+timezone: UTC
+
+# -- PUID / PGID the application (and embedded Postgres in aio mode) run as inside the container.
+# The image starts as root (s6-overlay) and drops to this user; see the README.
+puid: 1001
+pgid: 1001
+
+# -- Pod / container security contexts. Leave empty: the image's init system needs root at start
+# (it chowns the data volume and drops privileges itself). Do not set runAsNonRoot or readOnlyRootFilesystem.
+podSecurityContext: {}
+securityContext: {}
+
+# ---------------------------------------------------------------------------
+# Deployment mode
+# ---------------------------------------------------------------------------
+# aio:   one pod, one PVC, embedded Postgres 18 (simple, single node).
+# split: web / bot / scheduler / stats as separate Deployments + an external
+#        Postgres (database.url or database.existingSecret) + a migration Job.
+mode: aio
+
+database:
+  # -- split mode: Postgres connection URL (stored in a chart-managed Secret).
+  # Ignored in aio mode (embedded Postgres, no DATABASE_URL).
+  url: ""
+  # -- split mode: existing Secret holding the connection URL (preferred over url)
+  existingSecret: ""
+  # -- Key inside existingSecret. CloudNativePG's "<cluster>-app" Secret uses "uri".
+  existingSecretKey: DATABASE_URL
+
+aio:
+  persistence:
+    # -- Persist PGDATA and backups (/app/app_data). Disabling it loses all data on pod restart.
+    enabled: true
+    # -- Use an existing PVC (e.g. the SQLite chart's old data PVC to auto-import it on first boot)
+    existingClaim: ""
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    # -- Add helm.sh/resource-policy: keep so the PVC (and database) survives helm uninstall
+    keep: false
+  # -- Extra time for the fast Postgres shutdown on stop
+  terminationGracePeriodSeconds: 60
+  postgres:
+    # -- PG_SHARED_BUFFERS (image default 128MB)
+    sharedBuffers: ""
+    # -- PG_MAX_CONNECTIONS (image default 50)
+    maxConnections: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+      ephemeral-storage: 1Gi
+
+web:
+  # -- Web replicas (stateless; uploads live in Postgres). Split mode only.
+  replicas: 2
+  # -- RollingUpdate or Recreate
+  strategy: RollingUpdate
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+      ephemeral-storage: 500Mi
+
+# bot and scheduler are ALWAYS exactly one replica with strategy Recreate (no replicas key on purpose).
+bot:
   enabled: true
-  # -- Use an existing PVC instead of creating one
-  existingClaim: ""
-  # -- Storage class (use "-" for default)
-  storageClass: ""
-  # -- Access mode
-  accessMode: ReadWriteOnce
-  # -- Volume size
-  size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+      ephemeral-storage: 500Mi
+
+scheduler:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+      ephemeral-storage: 500Mi
+
+stats:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+      ephemeral-storage: 500Mi
+
+migrations:
+  # -- split mode: run migrations in a Helm pre-install/pre-upgrade hook Job.
+  # When false, the web pods migrate on start and the other services wait for the schema.
+  job: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  # -- Skip the pre-upgrade pg_dump the migrator makes before applying migrations. The Job's disk is
+  # ephemeral, so a dump there is lost; rely on your database's own backups (e.g. CloudNativePG).
+  skipPreUpgradeDump: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+      ephemeral-storage: 1Gi
+
+backups:
+  persistence:
+    # -- split mode: PVC for the scheduler's auto-backups (/app/app_data/backups).
+    # Without it backups are written to the pod's ephemeral disk. aio mode keeps backups on the aio PVC.
+    enabled: false
+    existingClaim: ""
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    keep: false
 
 probes:
+  # web / aio (HTTP /api/health)
   liveness:
     initialDelaySeconds: 15
     periodSeconds: 30
@@ -99,17 +222,18 @@ probes:
     initialDelaySeconds: 5
     periodSeconds: 5
     timeoutSeconds: 5
-    # -- Allow up to 60s for initial startup (migrations, seeding)
-    failureThreshold: 12
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 1Gi
-    ephemeral-storage: 500Mi
+    # -- 5 minutes: aio runs initdb, migrations and (first boot) the SQLite import before serving
+    failureThreshold: 60
+  # bot / scheduler / stats (exec: pgrep -f dist/<process>.js)
+  worker:
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  workerStartup:
+    periodSeconds: 5
+    # -- Workers wait for the schema (migration Job) before starting
+    failureThreshold: 120
 
 metrics:
   serviceMonitor:

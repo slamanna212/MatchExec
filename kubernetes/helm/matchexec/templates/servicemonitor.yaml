@@ -4,14 +4,14 @@ kind: ServiceMonitor
 metadata:
   name: {{ include "matchexec.fullname" . }}
   labels:
-    {{- include "matchexec.labels" . | nindent 4 }}
+    {{- include "matchexec.labels" (dict "ctx" . "component" (include "matchexec.webComponent" .)) | nindent 4 }}
     {{- with .Values.metrics.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "matchexec.selectorLabels" . | nindent 6 }}
+      {{- include "matchexec.selectorLabels" (dict "ctx" . "component" (include "matchexec.webComponent" .)) | nindent 6 }}
   endpoints:
     - port: http
       path: /api/metrics

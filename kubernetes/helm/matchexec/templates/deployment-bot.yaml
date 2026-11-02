@@ -1,0 +1,3 @@
+{{- if and (eq .Values.mode "split") .Values.bot.enabled -}}
+{{ include "matchexec.deployment" (dict "ctx" . "component" "bot" "cfg" .Values.bot "services" "bot" "process" "discord-bot") }}
+{{- end }}
