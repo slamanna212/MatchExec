@@ -5,9 +5,8 @@
 import { AttachmentBuilder } from 'discord.js';
 import { logger } from '../../../src/lib/logger/server';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
-import { safePublicPath } from './utils';
+import { loadImage, imageExtension } from '../utils/image-source';
 import * as path from 'path';
-import * as fs from 'fs';
 import { db as pgDb } from '../../../lib/db';
 import { findMapByIdOrName, getGameDisplay, getModeScoringType } from '../../../src/lib/games';
 import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
@@ -265,24 +264,13 @@ export async function attachEventImage(imageUrl: string): Promise<AttachmentBuil
   }
 
   try {
-    const imagePath = safePublicPath(imageUrl);
-    if (!imagePath) {
-      logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
-      return undefined;
-    }
-
-    if (fs.existsSync(imagePath)) {
-      const imageBuffer = await fs.promises.readFile(imagePath);
-
-      if (!imageBuffer || imageBuffer.length === 0) {
-        logger.error(`❌ Match start image buffer is empty`);
-        return undefined;
-      }
-
-      return new AttachmentBuilder(imageBuffer, {
-        name: `match_start_image.${path.extname(imagePath).slice(1)}`
+    const image = await loadImage(imageUrl);
+    if (image) {
+      return new AttachmentBuilder(image.buffer, {
+        name: `match_start_image.${imageExtension(image)}`
       });
     }
+    logger.warning(`⚠️ Match start image not found: ${imageUrl}`);
   } catch (error) {
     logger.error(`❌ Error handling match start image ${imageUrl}:`, error);
   }

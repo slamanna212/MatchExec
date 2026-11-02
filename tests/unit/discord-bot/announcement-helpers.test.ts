@@ -17,15 +17,11 @@ vi.mock('discord.js', () => ({
   }),
 }));
 
-const fsMocks = vi.hoisted(() => ({
-  existsSync: vi.fn<() => boolean>(),
-  promises: { readFile: vi.fn() },
-}));
+const imageMocks = vi.hoisted(() => ({ loadImage: vi.fn() }));
 
-vi.mock('fs', () => ({
-  default: fsMocks,
-  existsSync: fsMocks.existsSync,
-  promises: fsMocks.promises,
+vi.mock('../../../processes/discord-bot/utils/image-source', async (orig) => ({
+  ...(await orig<typeof import('../../../processes/discord-bot/utils/image-source')>()),
+  loadImage: imageMocks.loadImage,
 }));
 
 import {
@@ -223,23 +219,16 @@ describe('attachEventImage', () => {
     expect(result).toBeUndefined();
   });
 
-  it('returns undefined when image file does not exist', async () => {
-    fsMocks.existsSync.mockReturnValue(false);
+  it('returns undefined when image does not exist', async () => {
+    imageMocks.loadImage.mockResolvedValue(null);
     const result = await attachEventImage('/uploads/missing.png');
     expect(result).toBeUndefined();
   });
 
-  it('returns AttachmentBuilder when image exists and has content', async () => {
-    fsMocks.existsSync.mockReturnValue(true);
-    fsMocks.promises.readFile.mockResolvedValue(Buffer.from('fake-image-data'));
-    const result = await attachEventImage('/uploads/image.png');
+  it('returns AttachmentBuilder when image exists', async () => {
+    imageMocks.loadImage.mockResolvedValue({ buffer: Buffer.from('x'), filename: 'image.png', contentType: 'image/png' });
+    const result = await attachEventImage('/uploads/image.png') as unknown as { name: string };
     expect(result).toBeDefined();
-  });
-
-  it('returns undefined when image buffer is empty', async () => {
-    fsMocks.existsSync.mockReturnValue(true);
-    fsMocks.promises.readFile.mockResolvedValue(Buffer.alloc(0));
-    const result = await attachEventImage('/uploads/empty.png');
-    expect(result).toBeUndefined();
+    expect(result.name).toBe('match_start_image.png');
   });
 });

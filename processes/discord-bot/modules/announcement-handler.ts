@@ -31,6 +31,7 @@ import {
 } from './announcement-helpers';
 import type { WinnerKind } from './announcement-helpers';
 import { safePublicPath, capTitle } from './utils';
+import { loadImage, imageExtension } from '../utils/image-source';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
 import { db as pgDb } from '../../../lib/db';
 import { findMapByIdOrName, findMapByIdPattern, getGameDisplay, getMode } from '../../../src/lib/games';
@@ -405,29 +406,16 @@ export class AnnouncementHandler {
     }
 
     try {
-      const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
-
-      if (fs.existsSync(imagePath)) {
-        const extension = path.extname(imagePath).slice(1);
-        const fileName = `event_image.${extension}`;
-
-        // Read file and create attachment with explicit buffer
-        const imageBuffer = await fs.promises.readFile(imagePath);
-
-        // Ensure buffer is valid before creating attachment
-        if (!imageBuffer || imageBuffer.length === 0) {
-          logger.error(`❌ Image buffer is empty or null for ${imagePath}`);
-          return undefined;
-        }
-
-        const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
+      const image = await loadImage(eventImageUrl);
+      if (image) {
+        const fileName = `event_image.${imageExtension(image)}`;
+        const attachment = new AttachmentBuilder(image.buffer, { name: fileName });
         embed.setImage(`attachment://${fileName}`);
 
-        logger.debug(`✅ Created image attachment: ${fileName} (${imageBuffer.length} bytes)`);
+        logger.debug(`✅ Created image attachment: ${fileName} (${image.buffer.length} bytes)`);
         return attachment;
       }
-        logger.warning(`⚠️ Event image not found: ${imagePath}`);
-
+      logger.warning(`⚠️ Event image not found: ${eventImageUrl}`);
     } catch (error) {
       logger.error(`❌ Error handling event image ${eventImageUrl}:`, error);
     }
@@ -775,24 +763,13 @@ export class AnnouncementHandler {
     if (!imageUrl || !imageUrl.trim()) return undefined;
 
     try {
-      const imagePath = safePublicPath(imageUrl);
-      if (!imagePath) {
-        logger.error(`❌ Invalid image path rejected: ${imageUrl}`);
-        return undefined;
-      }
-
-      if (fs.existsSync(imagePath)) {
-        const imageBuffer = await fs.promises.readFile(imagePath);
-
-        if (!imageBuffer || imageBuffer.length === 0) {
-          logger.error(`❌ Reminder image buffer is empty`);
-          return undefined;
-        }
-
-        return new AttachmentBuilder(imageBuffer, {
-          name: `reminder_image.${path.extname(imagePath).slice(1)}`
+      const image = await loadImage(imageUrl);
+      if (image) {
+        return new AttachmentBuilder(image.buffer, {
+          name: `reminder_image.${imageExtension(image)}`
         });
       }
+      logger.warning(`⚠️ Reminder image not found: ${imageUrl}`);
     } catch (error) {
       logger.error(`❌ Error handling reminder image ${imageUrl}:`, error);
     }

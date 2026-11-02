@@ -5,8 +5,7 @@ import type { StatsReportHandler } from './stats-report-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
-import fs from 'fs';
-import path from 'path';
+import { loadImage, imageExtension } from '../utils/image-source';
 import type { DiscordSettings } from '../../../shared/types';
 import { getAnyDiscordSettings } from '../../../src/lib/settings';
 import type { AnnouncementHandler } from './announcement-handler';
@@ -247,26 +246,25 @@ function buildClosedSignupEmbed(existingEmbed: EmbedBuilder | null): EmbedBuilde
 /**
  * Recreates attachment for event image
  */
-function recreateAttachment(eventImageUrl: string | null | undefined, updatedEmbed: EmbedBuilder): AttachmentBuilder | undefined {
+async function recreateAttachment(eventImageUrl: string | null | undefined, updatedEmbed: EmbedBuilder): Promise<AttachmentBuilder | undefined> {
   if (!eventImageUrl || !eventImageUrl.trim()) {
     return undefined;
   }
 
   try {
-    const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
-
-    if (!fs.existsSync(imagePath)) {
-      logger.warning(`⚠️ Tournament image not found for reattachment: ${imagePath}`);
+    const image = await loadImage(eventImageUrl);
+    if (!image) {
+      logger.warning(`⚠️ Tournament image not found for reattachment: ${eventImageUrl}`);
       return undefined;
     }
 
-    const ext = path.extname(imagePath).slice(1);
-    const attachment = new AttachmentBuilder(imagePath, {
+    const ext = imageExtension(image);
+    const attachment = new AttachmentBuilder(image.buffer, {
       name: `tournament_image.${ext}`
     });
 
     updatedEmbed.setImage(`attachment://tournament_image.${ext}`);
-    logger.debug(`📎 Recreated attachment for tournament image: ${imagePath}`);
+    logger.debug(`📎 Recreated attachment for tournament image: ${eventImageUrl}`);
 
     return attachment;
   } catch (error) {
@@ -1207,7 +1205,7 @@ export class QueueProcessor {
 
       const { maps, changed: mapsChanged } = await this.updateEmbedMapsField(existingEmbed, matchData.maps);
 
-      const attachment = this.createEventAttachment(matchData.event_image_url ?? undefined, existingEmbed);
+      const attachment = await this.createEventAttachment(matchData.event_image_url ?? undefined, existingEmbed);
 
       await message.edit({
         content: null,
@@ -1495,7 +1493,7 @@ export class QueueProcessor {
         }
 
         const updatedEmbed = this.createClosedSignupEmbed(message);
-        const attachment = this.createEventAttachment(eventImageUrl, updatedEmbed);
+        const attachment = await this.createEventAttachment(eventImageUrl, updatedEmbed);
 
         await message.edit({
           content: null,
@@ -1542,24 +1540,19 @@ export class QueueProcessor {
     return updatedEmbed;
   }
 
-  private createEventAttachment(eventImageUrl: string | undefined, embed: EmbedBuilder): AttachmentBuilder | undefined {
+  private async createEventAttachment(eventImageUrl: string | undefined, embed: EmbedBuilder): Promise<AttachmentBuilder | undefined> {
     if (!eventImageUrl || !eventImageUrl.trim()) {
       return undefined;
     }
 
     try {
-      const imagePath = path.join(process.cwd(), 'public', eventImageUrl.replace(/^\//, ''));
-
-      if (fs.existsSync(imagePath)) {
-        const extension = path.extname(imagePath).slice(1);
-        const fileName = `event_image.${extension}`;
-
+      const image = await loadImage(eventImageUrl);
+      if (image) {
+        const fileName = `event_image.${imageExtension(image)}`;
         embed.setImage(`attachment://${fileName}`);
-
-        return new AttachmentBuilder(imagePath, { name: fileName });
-      } 
-        logger.warning(`⚠️ Event image not found for reattachment: ${imagePath}`);
-      
+        return new AttachmentBuilder(image.buffer, { name: fileName });
+      }
+      logger.warning(`⚠️ Event image not found for reattachment: ${eventImageUrl}`);
     } catch (error) {
       logger.error(`❌ Error recreating attachment for ${eventImageUrl}:`, error);
     }
@@ -1620,7 +1613,7 @@ export class QueueProcessor {
       logger.debug(`🔄 Updating tournament message ${messageRecord.message_id}`);
 
       const updatedEmbed = this.buildUpdatedTournamentEmbed(message);
-      const attachment = recreateAttachment(tournamentData?.event_image_url, updatedEmbed);
+      const attachment = await recreateAttachment(tournamentData?.event_image_url, updatedEmbed);
 
       await this.editTournamentMessage(message, updatedEmbed, attachment);
 
