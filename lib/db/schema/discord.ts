@@ -14,14 +14,24 @@ export const announcementRoleSettings = pgTable('announcement_role_settings', {
   unique('announcement_role_settings_game_id_role_id_unique').on(t.game_id, t.role_id),
 ]);
 
+/** Match cleanup deadlines survive deletion and late channel creation. */
+export const voiceCleanupSchedules = pgTable('voice_cleanup_schedules', {
+  match_id: text('match_id').primaryKey(),
+  cleanup_after: timestamp('cleanup_after', { withTimezone: true, mode: 'date' }).notNull(),
+});
+
 export const autoVoiceChannels = pgTable('auto_voice_channels', {
   id: text('id').primaryKey(),
   match_id: text('match_id').notNull(),
   channel_id: text('channel_id').notNull(),
   team_name: text('team_name').notNull(),
+  cleanup_after: timestamp('cleanup_after', { withTimezone: true, mode: 'date' }),
+  next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
+  cleanup_attempts: integer('cleanup_attempts').notNull().default(0),
+  last_error: text('last_error'),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
-  index('idx_auto_voice_channels_channel_id').on(t.channel_id),
+  unique('auto_voice_channels_channel_id_unique').on(t.channel_id),
   index('idx_auto_voice_channels_match_id').on(t.match_id),
 ]);
 

@@ -191,7 +191,7 @@ describe('voice channels', () => {
     throw new Error('no bot request appeared');
   }
 
-  it('skips creation without a category, then creates, records and tracks channels via the bot', async () => {
+  it('skips creation without a category, then requests channels without owning their persistence', async () => {
     const mode = await createGameMode(gameId, { scoring_type: 'Normal' });
     const m = await createMatch(gameId, mode.id, { id: 'vc', name: 'Final' });
     await createMatchTeams(db, m.id);
@@ -204,12 +204,12 @@ describe('voice channels', () => {
       answerBot({ success: true, blueChannelId: 'vc-b', redChannelId: 'vc-r', channelIds: ['vc-b', 'vc-r'] }),
     ]);
     expect((req.data as any).channelNames).toEqual(['Final - Blue Team', 'Final - Red Team']);
-    expect((await getMatchTeams(db, m.id)).map((t) => t.voice_channel_id)).toEqual(['vc-b', 'vc-r', null]);
-    expect((await pg().select().from(autoVoiceChannels)).map((c) => c.team_name).sort()).toEqual(['blue', 'red']);
+    expect((await getMatchTeams(db, m.id)).map((t) => t.voice_channel_id)).toEqual([null, null, null]);
+    expect(await pg().select().from(autoVoiceChannels)).toHaveLength(0); // simulated response does not run the bot
 
     await deleteMatchVoiceChannels(db, m.id);
     expect(await pg().select().from(autoVoiceChannels)).toHaveLength(0);
-    expect((await pg().select().from(discordBotRequests).where(eq(discordBotRequests.type, 'voice_channel_delete'))).map((r) => (r.data as any).channelId).sort()).toEqual(['vc-b', 'vc-r']);
+    expect((await pg().select().from(discordBotRequests).where(eq(discordBotRequests.type, 'voice_channel_delete'))).map((r) => (r.data as any).channelId).sort()).toEqual([]);
     expect(await deleteMatchVoiceChannels(db, m.id)).toBe(true);
   });
 

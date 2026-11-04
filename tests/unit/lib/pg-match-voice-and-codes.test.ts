@@ -180,7 +180,7 @@ describe('deleteMatchVoiceChannels', () => {
     expect(await pg().select().from(discordBotRequests)).toHaveLength(0);
   });
 
-  it('queues one deletion request per tracked channel and removes the tracking rows', async () => {
+  it('schedules cleanup and retains tracking until deletion is confirmed', async () => {
     const m = await createMatch(gameId, modeId);
     await pg().insert(autoVoiceChannels).values([
       { id: 'av-a', match_id: m.id, channel_id: 'ch_a', team_name: 'blue' },
@@ -189,8 +189,10 @@ describe('deleteMatchVoiceChannels', () => {
     ]);
     expect(await deleteMatchVoiceChannels(db, m.id)).toBe(true);
     const reqs = await pg().select().from(discordBotRequests).where(eq(discordBotRequests.type, 'voice_channel_delete'));
-    expect(reqs.map((r) => (r.data as { channelId: string }).channelId).sort()).toEqual(['ch_a', 'ch_b', 'ch_c']);
-    expect(await pg().select().from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, m.id))).toHaveLength(0);
+    expect(reqs).toHaveLength(0);
+    const tracked = await pg().select().from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, m.id));
+    expect(tracked).toHaveLength(3);
+    expect(tracked.every((r) => r.cleanup_after instanceof Date)).toBe(true);
   });
 
   it('is idempotent: the second call queues nothing more', async () => {
@@ -198,7 +200,8 @@ describe('deleteMatchVoiceChannels', () => {
     await pg().insert(autoVoiceChannels).values({ id: 'av-idem', match_id: m.id, channel_id: 'ch_idem', team_name: 'blue' });
     expect(await deleteMatchVoiceChannels(db, m.id)).toBe(true);
     expect(await deleteMatchVoiceChannels(db, m.id)).toBe(true);
-    expect(await pg().select().from(discordBotRequests)).toHaveLength(1);
+    expect(await pg().select().from(discordBotRequests)).toHaveLength(0);
+    expect(await pg().select().from(autoVoiceChannels)).toHaveLength(1);
   });
 });
 
@@ -230,7 +233,7 @@ describe('VoiceChannelService.setupMatchVoiceChannels', () => {
     expect(await VoiceChannelService.setupMatchVoiceChannels(m.id)).toBe(false);
   });
 
-  it('points the first two teams at the created channels and tracks them', async () => {
+  it('accepts the bot result without duplicating bot-owned tracking or assignments', async () => {
     await pg().insert(discordSettings).values({ id: 1, guild_id: 'g', bot_token: 't', voice_channel_category_id: 'cat' });
     const m = await createMatch(gameId, modeId);
     await createMatchTeams(db, m.id);
@@ -245,8 +248,8 @@ describe('VoiceChannelService.setupMatchVoiceChannels', () => {
     }
     expect(await done).toBe(true);
     const teams = await pg().select().from(matchTeams).where(eq(matchTeams.match_id, m.id)).orderBy(asc(matchTeams.team_order));
-    expect(teams.map((t) => t.voice_channel_id)).toEqual(['vc-blue-123', 'vc-red-456', null]);
-    expect((await pg().select().from(autoVoiceChannels)).map((c) => c.team_name).sort()).toEqual(['blue', 'red']);
+    expect(teams.map((t) => t.voice_channel_id)).toEqual([null, null, null]);
+    expect(await pg().select().from(autoVoiceChannels)).toHaveLength(0); // ownership belongs to the bot, not this RPC waiter
   });
 });
 

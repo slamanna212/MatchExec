@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDiscordClient, resetDiscordMocks } from '../../mocks/discord';
 import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
 import { eq } from 'drizzle-orm';
-import { autoVoiceChannels } from '../../../lib/db/schema';
+import { autoVoiceChannels, discordSettings } from '../../../lib/db/schema';
 import { createMatch, seedBasicTestData } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -15,6 +15,7 @@ vi.mock('../../../src/lib/logger/server', () => ({
   },
 }));
 
+import { deleteMatch, scheduleVoiceCleanup, trackAutoVoiceChannels } from '../../../src/lib/matches';
 import { VoiceChannelEmptinessMonitor } from '../../../processes/discord-bot/modules/voice-channel-emptiness-monitor';
 
 type MockVoiceChannel = {
@@ -44,7 +45,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
   };
 
   const insertTrackedChannel = async (matchId: string, channelId: string, teamName: string) => {
-    await getPgTestDb().insert(autoVoiceChannels).values({ id: `avc_${matchId}_${channelId}`, match_id: matchId, channel_id: channelId, team_name: teamName });
+    await getPgTestDb().insert(autoVoiceChannels).values({ id: `avc_${matchId}_${channelId}`, match_id: matchId, channel_id: channelId, team_name: teamName, cleanup_after: new Date(0) });
   };
 
   beforeEach(async () => {
@@ -147,7 +148,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
     expect(red.delete).not.toHaveBeenCalled();
   });
 
-  it('handles missing or fetch-failed channels as empty and still cleans up', async () => {
+  it('retains all channels when a fetch fails instead of treating uncertainty as empty', async () => {
     const { game, mode } = await seedBasicTestData();
     const match = await createMatch(game.id, mode.id, { status: 'complete' });
 
@@ -162,8 +163,8 @@ describe('VoiceChannelEmptinessMonitor', () => {
     await monitor.runCheck();
 
     const rows = await getPgTestDb().select({ channel_id: autoVoiceChannels.channel_id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, match.id));
-    expect(rows).toHaveLength(0);
-    expect(existing.delete).toHaveBeenCalledTimes(1);
+    expect(rows).toHaveLength(2);
+    expect(existing.delete).not.toHaveBeenCalled();
   });
 
   it('prunes stale in-memory state when tracked rows disappear', async () => {
@@ -200,6 +201,7 @@ describe('VoiceChannelEmptinessMonitor', () => {
 
     const channel = createVoiceChannel('voice-battle-1', 0);
     await insertTrackedChannel(match.id, channel.id, 'all');
+    await getPgTestDb().update(autoVoiceChannels).set({ cleanup_after: null }).where(eq(autoVoiceChannels.match_id, match.id));
 
     await monitor.runCheck();
     await monitor.runCheck();
@@ -209,4 +211,81 @@ describe('VoiceChannelEmptinessMonitor', () => {
     expect(rows).toHaveLength(1);
     expect(channel.delete).not.toHaveBeenCalled();
   });
+  it('honors the saved deadline, survives a monitor restart, and never extends it', async () => {
+    const ex = getPgTestDb();
+    const { game, mode } = await seedBasicTestData();
+    const match = await createMatch(game.id, mode.id, { status: 'complete' });
+    await ex.insert(discordSettings).values({ id: 1, guild_id: 'g', bot_token: 't', voice_channel_cleanup_delay_minutes: 10 });
+    const channel = createVoiceChannel('delayed', 0);
+    await trackAutoVoiceChannels(ex, match.id, [{ channelId: channel.id, teamName: 'all' }]);
+    await scheduleVoiceCleanup(ex, match.id);
+    const [before] = await ex.select().from(autoVoiceChannels);
+    await ex.update(discordSettings).set({ voice_channel_cleanup_delay_minutes: 0 });
+    await scheduleVoiceCleanup(ex, match.id);
+    expect((await ex.select().from(autoVoiceChannels))[0].cleanup_after).toEqual(before.cleanup_after);
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(channel.delete).not.toHaveBeenCalled();
+    await ex.update(autoVoiceChannels).set({ cleanup_after: new Date(0) });
+    monitor = new VoiceChannelEmptinessMonitor(mockDiscordClient as any);
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(channel.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains only failed deletions, backs off, then retries after restart', async () => {
+    const ex = getPgTestDb();
+    const { game, mode } = await seedBasicTestData();
+    const match = await createMatch(game.id, mode.id, { status: 'complete' });
+    const first = createVoiceChannel('success', 0);
+    const second = createVoiceChannel('retry', 0);
+    second.delete.mockRejectedValueOnce(Object.assign(new Error('Missing Permissions'), { code: 50013 }));
+    await insertTrackedChannel(match.id, first.id, 'blue');
+    await insertTrackedChannel(match.id, second.id, 'red');
+    await monitor.runCheck(); await monitor.runCheck();
+    const rows = await ex.select().from(autoVoiceChannels);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ channel_id: second.id, cleanup_attempts: 1, last_error: 'Missing Permissions' });
+    monitor = new VoiceChannelEmptinessMonitor(mockDiscordClient as any);
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(second.delete).toHaveBeenCalledTimes(1);
+    await ex.update(autoVoiceChannels).set({ next_attempt_at: new Date(0) });
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(second.delete).toHaveBeenCalledTimes(2);
+    expect(await ex.select().from(autoVoiceChannels)).toHaveLength(0);
+  });
+
+  it('cleans deleted matches and preserves the deadline for channels recorded afterward', async () => {
+    const ex = getPgTestDb();
+    const { game, mode } = await seedBasicTestData();
+    const match = await createMatch(game.id, mode.id, { status: 'battle' });
+    await ex.insert(discordSettings).values({ id: 1, guild_id: 'g', bot_token: 't', voice_channel_cleanup_delay_minutes: 0 });
+    await deleteMatch(ex, match.id);
+    const channel = createVoiceChannel('late', 0);
+    await trackAutoVoiceChannels(ex, match.id, [{ channelId: channel.id, teamName: 'all' }]);
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(channel.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('only treats explicit Unknown Channel errors as confirmed absence', async () => {
+    const ex = getPgTestDb();
+    await insertTrackedChannel('deleted-match', 'gone', 'all');
+    mockDiscordClient.channels.fetch.mockRejectedValue(Object.assign(new Error('Unknown Channel'), { code: 10003 }));
+    await monitor.runCheck(); await monitor.runCheck();
+    expect(await ex.select().from(autoVoiceChannels)).toHaveLength(0);
+  });
+
+  it('does not overlap checks or delete when someone joins during the final recheck', async () => {
+    await insertTrackedChannel('deleted-match', 'joining', 'all');
+    const channel = createVoiceChannel('joining', 0);
+    let release!: () => void;
+    mockDiscordClient.channels.fetch.mockImplementationOnce(async () => { await new Promise<void>((r) => { release = r; }); return channel; });
+    const first = monitor.runCheck();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await monitor.runCheck(); // must not advance the empty-check counter
+    release(); await first;
+    expect(channel.delete).not.toHaveBeenCalled();
+    mockDiscordClient.channels.fetch.mockResolvedValueOnce(channel).mockImplementationOnce(async () => { channel.members.size = 1; return channel; });
+    await monitor.runCheck();
+    expect(channel.delete).not.toHaveBeenCalled();
+  });
+
 });

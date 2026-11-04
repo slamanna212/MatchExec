@@ -36,6 +36,7 @@ export const MAPPINGS: TableMapping[] = [
   defineMapping(schema.autoVoiceChannels, 'auto_voice_channels', {
     columns: {
       id: SAME, match_id: SAME, channel_id: SAME, team_name: SAME, created_at: SAME,
+      cleanup_after: DEFAULT, next_attempt_at: DEFAULT, cleanup_attempts: DEFAULT, last_error: DEFAULT,
     },
   }),
   defineMapping(schema.dataVersions, 'data_versions', {

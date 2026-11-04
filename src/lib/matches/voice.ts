@@ -1,8 +1,9 @@
 /** Voice-channel state tied to matches: auto-created channel tracking, announcement alternation and channel lookups. */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, isNotNull, notInArray, or, getTableColumns } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { autoVoiceChannels, matchTeams, matchVoiceAlternation, matches } from '../../../lib/db/schema';
+import { autoVoiceChannels, matchTeams, matchVoiceAlternation, matches, voiceCleanupSchedules, discordChannels, teamVoiceChannels } from '../../../lib/db/schema';
 import { genId } from './ids';
+import { getAnyDiscordSettings } from '../settings';
 
 export type AutoVoiceChannelRow = typeof autoVoiceChannels.$inferSelect;
 
@@ -13,7 +14,7 @@ export async function listAutoVoiceChannels(ex: Executor, matchId: string): Prom
 /** Track auto-created channels for later cleanup. `team_name` is 'blue' | 'red' | 'teamN' | 'all'. */
 export async function trackAutoVoiceChannels(ex: Executor, matchId: string, channels: Array<{ channelId: string; teamName: string }>): Promise<void> {
   if (channels.length === 0) return;
-  await ex.insert(autoVoiceChannels).values(channels.map((c) => ({ id: genId('auto_voice'), match_id: matchId, channel_id: c.channelId, team_name: c.teamName })));
+  await ex.insert(autoVoiceChannels).values(channels.map((c) => ({ id: genId('auto_voice'), match_id: matchId, channel_id: c.channelId, team_name: c.teamName }))).onConflictDoNothing({ target: autoVoiceChannels.channel_id });
 }
 
 export async function clearAutoVoiceChannels(ex: Executor, matchId: string): Promise<void> {
@@ -62,10 +63,39 @@ export async function listTeamVoiceChannelIds(ex: Executor, matchId: string): Pr
   return [...new Set(rows.map((r) => r.voice_channel_id).filter((id): id is string => !!id))];
 }
 
-/** Auto-created channels of matches that are complete or cancelled (candidates for the emptiness monitor). */
-export async function listFinishedMatchVoiceChannels(ex: Executor): Promise<Array<{ match_id: string; channel_id: string }>> {
-  return ex.select({ match_id: autoVoiceChannels.match_id, channel_id: autoVoiceChannels.channel_id })
-    .from(autoVoiceChannels).innerJoin(matches, eq(matches.id, autoVoiceChannels.match_id))
-    .where(inArray(matches.status, ['complete', 'cancelled']))
+/** Include missing matches: tracking intentionally has no cascading match foreign key. */
+export async function listFinishedMatchVoiceChannels(ex: Executor): Promise<AutoVoiceChannelRow[]> {
+  return ex.select(getTableColumns(autoVoiceChannels)).from(autoVoiceChannels)
+    .leftJoin(matches, eq(matches.id, autoVoiceChannels.match_id))
+    .where(or(inArray(matches.status, ['complete', 'cancelled']), isNull(matches.id), isNotNull(autoVoiceChannels.cleanup_after)))
     .orderBy(asc(autoVoiceChannels.created_at), asc(autoVoiceChannels.id));
+}
+
+/** Snapshot the delay once; retries and repeated lifecycle calls cannot move the deadline. */
+export async function scheduleVoiceCleanup(ex: Executor, matchId: string, immediate = false): Promise<void> {
+  if (immediate) {
+    await ex.update(autoVoiceChannels).set({ cleanup_after: new Date() })
+      .where(and(eq(autoVoiceChannels.match_id, matchId), isNull(autoVoiceChannels.cleanup_after)));
+    return;
+  }
+  const delay = (await getAnyDiscordSettings(ex))?.voice_channel_cleanup_delay_minutes ?? 10;
+  await ex.insert(voiceCleanupSchedules).values({ match_id: matchId, cleanup_after: new Date(Date.now() + delay * 60_000) })
+    .onConflictDoNothing();
+  const [schedule] = await ex.select().from(voiceCleanupSchedules).where(eq(voiceCleanupSchedules.match_id, matchId));
+  await ex.update(autoVoiceChannels).set({ cleanup_after: schedule.cleanup_after })
+    .where(and(eq(autoVoiceChannels.match_id, matchId), isNull(autoVoiceChannels.cleanup_after)));
+}
+
+export async function forgetVoiceChannel(ex: Executor, channelId: string): Promise<void> {
+  await ex.delete(autoVoiceChannels).where(eq(autoVoiceChannels.channel_id, channelId));
+}
+
+/** Never remove permanent channels or channels currently assigned to an active match. */
+export async function protectedVoiceChannelIds(ex: Executor): Promise<Set<string>> {
+  const configured = await ex.select({ id: discordChannels.discord_channel_id }).from(discordChannels);
+  const assigned = await ex.select({ id: matchTeams.voice_channel_id }).from(matchTeams)
+    .innerJoin(matches, eq(matches.id, matchTeams.match_id)).where(notInArray(matches.status, ['complete', 'cancelled']));
+  const legacy = await ex.select({ id: teamVoiceChannels.channel_id }).from(teamVoiceChannels)
+    .innerJoin(matches, eq(matches.id, teamVoiceChannels.match_id)).where(notInArray(matches.status, ['complete', 'cancelled']));
+  return new Set([...configured, ...assigned, ...legacy].map((r) => r.id).filter((id): id is string => !!id));
 }

@@ -13,8 +13,8 @@ import { findGlobalVoiceChannelId } from '../discord-channels';
 import { enqueueBotRequest, enqueueVoiceAnnouncement, getBotRequest } from '../discord-queues';
 import { getModeScoringTypeAndMaxTeams } from '../games';
 import { getAnyDiscordSettings } from '../settings';
-import { getBlueRedChannels, clearAutoVoiceChannels, listAutoVoiceChannels, nextFirstTeam, trackAutoVoiceChannels } from './voice';
-import { getMatchTeams, MAX_VOICE_CHANNELS_PER_MATCH, setTeamVoiceChannel } from './teams';
+import { getBlueRedChannels, scheduleVoiceCleanup, nextFirstTeam, trackAutoVoiceChannels } from './voice';
+import { getMatchTeams, MAX_VOICE_CHANNELS_PER_MATCH } from './teams';
 
 export interface VoiceChannelCreationResult {
   success: boolean;
@@ -114,18 +114,9 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
   }
 }
 
-/** Queue deletion of the match's auto-created channels and forget them. Runs on the caller's executor. */
+/** Schedule durable cleanup; the bot retains ownership until Discord confirms deletion. */
 export async function deleteMatchVoiceChannels(ex: Executor, matchId: string): Promise<boolean> {
-  const channels = await listAutoVoiceChannels(ex, matchId);
-  if (channels.length === 0) {
-    logger.debug(`No auto-created voice channels to delete for match ${matchId}`);
-    return true;
-  }
-  for (const channel of channels) {
-    await enqueueBotRequest(ex, 'voice_channel_delete', { channelId: channel.channel_id, matchId });
-  }
-  await clearAutoVoiceChannels(ex, matchId);
-  logger.debug(`Auto-created voice channels queued for deletion for match ${matchId}`);
+  await scheduleVoiceCleanup(ex, matchId);
   return true;
 }
 
@@ -152,17 +143,7 @@ export const VoiceChannelService = {
         logger.debug(`Voice channels not created for match ${matchId}: ${result.message || 'Unknown reason'}`);
         return false;
       }
-      const channelIds = result.channelIds ?? [result.blueChannelId, result.redChannelId].filter((id): id is string => Boolean(id));
-      await db.transaction(async (tx) => {
-        const activeTeams = (await getMatchTeams(tx, matchId)).filter((t) => !t.is_reserve);
-        if (channelIds.length === 1 && activeTeams.length > 1) {
-          for (const team of activeTeams) await setTeamVoiceChannel(tx, team.id, channelIds[0]); // shared FFA / Position lobby
-        } else {
-          for (let i = 0; i < activeTeams.length && i < channelIds.length; i++) await setTeamVoiceChannel(tx, activeTeams[i].id, channelIds[i]);
-        }
-        await trackVoiceChannels(tx, matchId, channelIds[0], channelIds[1], channelIds.slice(2));
-      });
-      logger.debug(`${channelIds.length} voice channel(s) created for match ${matchId}: ${channelIds.join(', ')}`);
+      // The bot persists ownership and team assignments even when this caller times out.
       return true;
     } catch (error) {
       logger.error('Error setting up voice channels:', error);

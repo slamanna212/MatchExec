@@ -45,6 +45,17 @@ describe('Discord settings', () => {
     });
   });
 
+
+  it('round-trips a zero cleanup delay and defaults to ten minutes', async () => {
+    expect((await appRequest('/api/settings/discord')).data.voice_channel_cleanup_delay_minutes).toBe(10);
+    expect((await put('/api/settings/discord', { voice_channel_cleanup_delay_minutes: 0 })).status).toBe(200);
+    expect((await appRequest('/api/settings/discord')).data.voice_channel_cleanup_delay_minutes).toBe(0);
+  });
+
+  it.each([-1, 10081, 1.5, '10', null])('rejects invalid cleanup delay %s', async (value) => {
+    expect((await put('/api/settings/discord', { voice_channel_cleanup_delay_minutes: value })).status).toBe(400);
+  });
+
   it('persists updates, masks the token and restarts the bot', async () => {
     const res = await put('/api/settings/discord', {
       bot_token: ' secret-token ', guild_id: ' 111111111111111111 ', announcement_role_id: '222222222222222222', mention_everyone: true,

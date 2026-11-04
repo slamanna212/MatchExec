@@ -19,7 +19,7 @@ function fullLegacyDb(): DatabaseSync {
   return db;
 }
 
-const NOT_IMPORTED_PG_TABLES = ['system_status', 'blobs', 'maintenance', 'workers'];
+const NOT_IMPORTED_PG_TABLES = ['system_status', 'blobs', 'maintenance', 'workers', 'voice_cleanup_schedules'];
 const pgTables = (Object.values(schema) as unknown[]).filter((t) => t instanceof PgTable).map((t) => getTableConfig(t as PgTable).name);
 
 describe('importer mappings', () => {

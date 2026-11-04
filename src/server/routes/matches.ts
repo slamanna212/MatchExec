@@ -156,7 +156,7 @@ export const matches = new Hono()
       if (!existing) return jsonError(c, 'Match not found', 404);
 
       // Queue Discord message deletion in the same transaction as the delete (the bot reads the message rows after the
-      // match is gone). Child rows cascade; voice channels are cleaned up by the scheduler when it detects orphans.
+      // match is gone). Child rows cascade; voice cleanup is scheduled durably before removing the match.
       await db.transaction(async (tx) => {
         await enqueueDeletion(tx, matchId);
         // Action items for the match go first: once the row is gone the feed's FK clears match_id and they could no longer be found

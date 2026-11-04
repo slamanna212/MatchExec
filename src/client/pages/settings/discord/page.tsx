@@ -1,4 +1,4 @@
-import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, Skeleton, Switch } from '@mantine/core';
+import { Card, Text, Stack, TextInput, Button, Group, PasswordInput, Checkbox, Skeleton, Switch, NumberInput } from '@mantine/core';
 import { SettingsSaveButton } from '@/components/SettingsSaveButton';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
@@ -16,6 +16,7 @@ interface DiscordSettings {
   announcement_role_id?: string;
   mention_everyone?: boolean;
   voice_channel_category_id?: string;
+  voice_channel_cleanup_delay_minutes?: number;
   signup_dm_enabled?: boolean;
   commander_dm_enabled?: boolean;
 }
@@ -32,6 +33,7 @@ export default function DiscordSettingsPage() {
       announcement_role_id: '',
       mention_everyone: false,
       voice_channel_category_id: '',
+      voice_channel_cleanup_delay_minutes: 10,
       signup_dm_enabled: true,
       commander_dm_enabled: true,
     },
@@ -60,6 +62,7 @@ export default function DiscordSettingsPage() {
             announcement_role_id: data.discord.announcement_role_id || '',
             mention_everyone: data.discord.mention_everyone || false,
             voice_channel_category_id: data.discord.voice_channel_category_id || '',
+            voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes ?? 10,
             signup_dm_enabled: data.discord.signup_dm_enabled !== undefined ? data.discord.signup_dm_enabled : true,
             commander_dm_enabled: data.discord.commander_dm_enabled !== undefined ? data.discord.commander_dm_enabled : true,
           });
@@ -111,6 +114,7 @@ export default function DiscordSettingsPage() {
             announcement_role_id: refreshedData.announcement_role_id || '',
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
+            voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes ?? 10,
             signup_dm_enabled: refreshedData.signup_dm_enabled !== undefined ? refreshedData.signup_dm_enabled : true,
             commander_dm_enabled: refreshedData.commander_dm_enabled !== undefined ? refreshedData.commander_dm_enabled : true,
           });
@@ -247,6 +251,12 @@ export default function DiscordSettingsPage() {
                     disabled={loading}
                   />
 
+                  <NumberInput
+                    label="Voice channel cleanup delay (minutes)"
+                    description="After a match finishes, is cancelled, or is deleted, wait this long and then remove channels once everyone has left."
+                    min={0} max={10080} allowDecimal={false}
+                    {...form.getInputProps('voice_channel_cleanup_delay_minutes')}
+                  />
                   <TextInput
                     label="Voice Channel Category ID"
                     placeholder="Category ID for auto-created voice channels"

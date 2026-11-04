@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getPgTestDb, isRealPostgres, setupPgTestFile } from '../../utils/pg-test-db';
@@ -21,7 +23,7 @@ describe('Drizzle migrations (PGlite or TEST_DATABASE_URL)', () => {
     const t = await rows<{ s: string; n: number }>(sql`SELECT table_schema AS s, count(*)::int AS n FROM information_schema.tables WHERE table_schema IN ('public','control') AND table_type = 'BASE TABLE' GROUP BY table_schema`);
     const by = Object.fromEntries(t.map((r) => [r.s, r.n]));
     expect(by.control).toBe(2);
-    expect(by.public).toBe(61); // 59 domain-ish tables + system_status + blobs + __drizzle_migrations (see pg-schema test for exact list)
+    expect(by.public).toBe(62); // 60 domain-ish tables + system_status + blobs + __drizzle_migrations (see pg-schema test for exact list)
   });
 
   it('is idempotent: re-running the migrator is a no-op', async () => {
@@ -36,4 +38,21 @@ describe('Drizzle migrations (PGlite or TEST_DATABASE_URL)', () => {
     const n = await rows<{ n: number }>(sql.raw(`SELECT count(*)::int AS n FROM "${MIGRATIONS_SCHEMA}"."${MIGRATIONS_TABLE}"`));
     expect(n[0].n).toBe(getExpectedLatestMigration().count);
   });
+});
+
+
+it('upgrades duplicate tracking and restores legacy deletion ownership before RPC purging', async () => {
+  const client = new PGlite();
+  try {
+    await client.exec(await readFile('drizzle/0000_baseline.sql', 'utf8'));
+    await client.exec(`INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name) VALUES
+      ('a', 'gone', 'duplicate', 'blue'), ('b', 'gone', 'duplicate', 'blue');
+      INSERT INTO discord_bot_requests (id, type, data, status) VALUES
+      ('legacy', 'voice_channel_delete', '{"matchId":"gone","channelId":"forgotten"}', 'completed');`);
+    await client.exec(await readFile('drizzle/0001_durable_voice_cleanup.sql', 'utf8'));
+    await client.exec(await readFile('drizzle/0002_voice_cleanup_schedule.sql', 'utf8'));
+    const result = await client.query<{ channel_id: string }>('SELECT channel_id FROM auto_voice_channels ORDER BY channel_id');
+    expect(result.rows.map((r) => r.channel_id)).toEqual(['duplicate', 'forgotten']);
+    await expect(client.exec("INSERT INTO auto_voice_channels (id, match_id, channel_id, team_name) VALUES ('c', 'gone', 'duplicate', 'blue')")).rejects.toThrow();
+  } finally { await client.close(); }
 });

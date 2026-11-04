@@ -195,11 +195,11 @@ describe('handleCompleteTransition / handleCancelledTransition', () => {
   it('both queue the cleanup of auto-created voice channels', async () => {
     for (const handler of [handleCompleteTransition, handleCancelledTransition]) {
       const m = await createMatch(gameId, modeId, { status: 'battle' });
-      await pg().insert(autoVoiceChannels).values({ id: `av-${m.id}`, match_id: m.id, channel_id: 'chan-1', team_name: 'all' });
+      await pg().insert(autoVoiceChannels).values({ id: `av-${m.id}`, match_id: m.id, channel_id: `chan-${m.id}`, team_name: 'all' });
       await run((a) => handler(db, m.id, a));
       const reqs = (await pg().select().from(discordBotRequests)).filter((r) => (r.data as { matchId?: string }).matchId === m.id);
-      expect(reqs.map((r) => r.type)).toEqual(['voice_channel_delete']);
-      expect(await pg().select().from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, m.id))).toHaveLength(0);
+      expect(reqs).toHaveLength(0);
+      expect((await pg().select().from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, m.id)))[0].cleanup_after).toBeInstanceOf(Date);
     }
   });
 

@@ -12,9 +12,9 @@ const rows = async <T>(q: ReturnType<typeof sql>): Promise<T[]> =>
   ((await getPgTestDb().execute(q)) as unknown as { rows: T[] }).rows;
 
 describe('Drizzle schema vs database', () => {
-  it('every declared table (62) exists, with every declared column', async () => {
+  it('every declared table (63) exists, with every declared column', async () => {
     const declared = (Object.values(schema) as unknown[]).filter((v): v is PgTable => v instanceof PgTable);
-    expect(declared).toHaveLength(62);
+    expect(declared).toHaveLength(63);
     const cols = await rows<{ s: string; t: string; c: string }>(sql`SELECT table_schema AS s, table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema IN ('public','control')`);
     const present = new Set(cols.map((r) => `${r.s}.${r.t}.${r.c}`));
     for (const table of declared) {

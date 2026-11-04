@@ -8,7 +8,7 @@ import {
   discordAnnouncementQueue, discordBotRequests, discordSettings, discordMatchWinnerQueue, discordVoiceAnnouncementQueue,
   discordStatsReportQueue, discordHealthAlertQueue, discordScorecardPromptQueue, discordWinnerVoteQueue, discordDeletionQueue,
   discordReminderQueue, discordMapCodeQueue, discordScoreNotificationQueue, discordStatusUpdateQueue, discordMatchMessages, matches,
-  matchGames,
+  matchGames, autoVoiceChannels, matchTeams,
 } from '../../../lib/db/schema';
 import {
   enqueueAnnouncement, enqueueBotRequest, enqueueDeletion, enqueueHealthAlert, enqueueMapCode, enqueueMatchReminder,
@@ -235,10 +235,70 @@ describe('bot requests', () => {
   it('cleans up already-created channels when a later one fails, and fails the request (never replayed)', async () => {
     const id = await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A', 'B'] });
     const del = vi.fn();
+    client.channels.fetch.mockResolvedValue({ delete: del, members: { size: 0 } });
     client.guilds.fetch.mockResolvedValue({ channels: { create: vi.fn().mockResolvedValueOnce({ id: 'c1', delete: del }).mockRejectedValueOnce(new Error('limit')) } });
     await make().qp.processDiscordBotRequests();
     expect(del).toHaveBeenCalled();
     expect(await one(discordBotRequests, id)).toMatchObject({ status: 'failed', result: { success: false, message: 'limit' } });
+  });
+
+
+  it('persists ownership and team assignments without any web caller, and reuses channels on duplicate setup', async () => {
+    await db.insert(matchTeams).values([
+      { id: 'b', match_id: 'm1', team_name: 'Blue', team_order: 0 },
+      { id: 'r', match_id: 'm1', team_name: 'Red', team_order: 1 },
+    ]);
+    const create = vi.fn().mockResolvedValueOnce({ id: 'late-b', delete: vi.fn() }).mockResolvedValueOnce({ id: 'late-r', delete: vi.fn() });
+    client.guilds.fetch.mockResolvedValue({ channels: { create } });
+    await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A', 'B'] });
+    const qp = make().qp;
+    await qp.processDiscordBotRequests();
+    expect((await db.select().from(autoVoiceChannels)).map((r) => r.channel_id).sort()).toEqual(['late-b', 'late-r']);
+    expect((await db.select().from(matchTeams)).map((r) => r.voice_channel_id).sort()).toEqual(['late-b', 'late-r']);
+    await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A', 'B'] });
+    await qp.processDiscordBotRequests();
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('records channels even when the web caller has already timed out', async () => {
+    await db.update(discordSettings).set({ voice_channel_category_id: 'cat' });
+    const { createMatchVoiceChannels } = await import('../../../src/lib/matches/voice-channels');
+    let time = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => { time += 31_000; return time; });
+    try {
+      expect(await createMatchVoiceChannels('m1')).toMatchObject({ success: false, message: 'Voice channel creation timed out' });
+    } finally { clock.mockRestore(); }
+    const create = vi.fn().mockResolvedValueOnce({ id: 'late-one', delete: vi.fn() }).mockResolvedValueOnce({ id: 'late-two', delete: vi.fn() });
+    client.guilds.fetch.mockResolvedValue({ channels: { create } });
+    await make().qp.processDiscordBotRequests();
+    expect((await db.select().from(autoVoiceChannels)).map((r) => r.channel_id).sort()).toEqual(['late-one', 'late-two']);
+  });
+
+  it('retains failed rollback ownership and schedules it for cleanup', async () => {
+    const failed = { id: 'stranded', members: { size: 0 }, delete: vi.fn().mockRejectedValue(new Error('network down')) };
+    client.channels.fetch.mockResolvedValue(failed);
+    const create = vi.fn().mockResolvedValueOnce(failed).mockRejectedValueOnce(new Error('limit'));
+    client.guilds.fetch.mockResolvedValue({ channels: { create } });
+    await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A', 'B'] });
+    await make().qp.processDiscordBotRequests();
+    const [row] = await db.select().from(autoVoiceChannels);
+    expect(row.channel_id).toBe('stranded');
+    expect(row.cleanup_after).toBeInstanceOf(Date);
+  });
+
+  it('schedules channels when a match disappears during creation and refuses new creation afterward', async () => {
+    const create = vi.fn().mockImplementation(async () => {
+      await db.delete(matches).where(eq(matches.id, 'm1'));
+      return { id: 'raced', delete: vi.fn() };
+    });
+    client.guilds.fetch.mockResolvedValue({ channels: { create } });
+    const qp = make().qp;
+    await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A'] });
+    await qp.processDiscordBotRequests();
+    expect((await db.select().from(autoVoiceChannels))[0].cleanup_after).toBeInstanceOf(Date);
+    await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A'] });
+    await qp.processDiscordBotRequests();
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('delete request completes; unknown types fail; old finished requests are purged', async () => {
@@ -250,7 +310,7 @@ describe('bot requests', () => {
     const old = 'old';
     await db.insert(discordBotRequests).values({ id: old, type: 'voice_test', status: 'completed', updated_at: new Date(Date.now() - 2 * 3600_000) });
     await make().qp.processDiscordBotRequests();
-    expect(chan.delete).toHaveBeenCalled();
+    expect(chan.delete).not.toHaveBeenCalled(); // legacy request hands off to delayed cleanup
     expect((await one(discordBotRequests, del)).status).toBe('completed');
     expect(await one(discordBotRequests, unknown)).toMatchObject({ status: 'failed' });
     expect(await one(discordBotRequests, old)).toBeUndefined();

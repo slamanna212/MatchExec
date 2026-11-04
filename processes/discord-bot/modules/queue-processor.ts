@@ -3,7 +3,7 @@ import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import type { StatsReportHandler } from './stats-report-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
-import { isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
 import { loadImage, imageExtension } from '../utils/image-source';
 import type { DiscordSettings } from '../../../shared/types';
@@ -17,7 +17,7 @@ import { logger } from '../../../src/lib/logger/server';
 import { capTitle } from './utils';
 import { cleanMapId } from '../../../src/lib/utils/map-utils';
 import { db as pgDb, type Executor } from '../../../lib/db';
-import { discordAnnouncementQueue, discordPlayerReminderQueue, discordReminderQueue } from '../../../lib/db/schema';
+import { discordAnnouncementQueue, discordPlayerReminderQueue, discordReminderQueue, matches } from '../../../lib/db/schema';
 import { getGameDisplay, getMapNameById } from '../../../src/lib/games';
 import { areAllMapNotificationsSent, getMatch, getMatchName, mapIdsOf } from '../../../src/lib/matches';
 import { getTournamentAnnouncementContext, getTournamentEventImage } from '../../../src/lib/tournaments';
@@ -29,6 +29,9 @@ import {
   recordExternalResult, releaseJob, resetAbandonedClaims,
   type CompleteOptions, type ExternalResultQueue, type FailOptions, type QueueName, type QueueRow,
 } from '../../../src/lib/discord-queues';
+import { deleteTrackedVoiceChannel } from './voice-channel-emptiness-monitor';
+import { listAutoVoiceChannels, scheduleVoiceCleanup, trackAutoVoiceChannels } from '../../../src/lib/matches/voice';
+import { getMatchTeams, setTeamVoiceChannel } from '../../../src/lib/matches/teams';
 import { DEFAULT_MATCH_START_DELAY_SECONDS } from '../../../shared/announcer';
 
 // Queue rows come from the Discord queues module (src/lib/queues): claimed atomically, retried with backoff,
@@ -63,7 +66,27 @@ type RequestHandler = (processor: QueueProcessor, request: BotRequest) => Promis
 /**
  * Handles voice channel creation requests
  */
+function voiceTeamName(index: number, count: number): string {
+  if (count === 1) return 'all';
+  return ['blue', 'red'][index] ?? `team${index + 1}`;
+}
+
+function voiceTeamOrder(name: string): number {
+  if (name === 'all' || name === 'blue') return 0;
+  if (name === 'red') return 1;
+  return Number(name.replace('team', '')) - 1;
+}
+
+const creatingMatches = new Map<string, Promise<void>>();
 async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const key = String((request.data as { matchId?: string })?.matchId);
+  const previous = creatingMatches.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(() => createVoiceChannels(processor, request));
+  creatingMatches.set(key, current);
+  try { await current; } finally { if (creatingMatches.get(key) === current) creatingMatches.delete(key); }
+}
+
+async function createVoiceChannels(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const requestData = (request.data ?? {}) as {
     matchId?: string; categoryId?: string; blueChannelName?: string; redChannelName?: string;
     isSingleTeam?: boolean; channelNames?: string[];
@@ -79,7 +102,20 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
   logger.debug(`Creating ${channelNames.length} voice channel(s) for match ${matchId} in category ${categoryId}`);
 
   try {
-    const settings = await getAnyDiscordSettings();
+    const ex = processor['queueDb'];
+    if (!matchId) throw new Error('Missing match ID');
+    const match = await getMatch(ex, matchId);
+    if (!match || ['complete', 'cancelled'].includes(match.status)) {
+      await scheduleVoiceCleanup(ex, matchId);
+      throw new Error('Match is no longer eligible for voice channel creation');
+    }
+    const existing = (await listAutoVoiceChannels(ex, matchId)).sort((a, b) => voiceTeamOrder(a.team_name) - voiceTeamOrder(b.team_name));
+    if (existing.some((row) => row.cleanup_after)) throw new Error('Previous voice channels are awaiting cleanup');
+    if (existing.length > 0 && existing.length !== channelNames.length) {
+      await scheduleVoiceCleanup(ex, matchId, true);
+      throw new Error('Incomplete voice channel creation is awaiting cleanup');
+    }
+    const settings = await getAnyDiscordSettings(ex);
 
     if (!settings?.guild_id) {
       throw new Error('Guild ID not configured');
@@ -87,29 +123,50 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
 
     const guild = await processor['client'].guilds.fetch(settings.guild_id);
 
-    const channelIds: string[] = [];
+    const channelIds: string[] = existing.map((row) => row.channel_id);
     const createdChannels: Array<{ id: string; delete: () => Promise<unknown> }> = [];
     try {
-      for (const name of channelNames) {
+      for (const name of existing.length ? [] : channelNames) {
         const channel = await guild.channels.create({
           name,
           type: 2,
           parent: categoryId,
+          reason: `MatchExec voice match ${matchId}`,
         });
+        logger.info(`Created auto voice channel ${channel.id} for match ${matchId}`);
         createdChannels.push(channel);
         channelIds.push(channel.id);
+        // Commit ownership before creating another channel or reporting the result.
+        await trackAutoVoiceChannels(ex, matchId, [{ channelId: channel.id,
+          teamName: voiceTeamName(channelIds.length - 1, channelNames.length) }]);
       }
     } catch (createError) {
       // Don't leave orphaned channels behind when a later creation fails
       for (const created of createdChannels) {
         try {
-          await created.delete();
+          await trackAutoVoiceChannels(ex, matchId, [{ channelId: created.id, teamName: 'all' }]);
+          await scheduleVoiceCleanup(ex, matchId, true);
+          const row = (await listAutoVoiceChannels(ex, matchId)).find((r) => r.channel_id === created.id)!;
+          await deleteTrackedVoiceChannel(processor['client'], ex, row);
         } catch (cleanupError) {
           logger.warning(`⚠️ Failed to clean up voice channel ${created.id} after partial failure:`, cleanupError instanceof Error ? cleanupError.message : 'Unknown');
         }
       }
       throw createError;
     }
+
+    await ex.transaction(async (tx) => {
+      const [latest] = await tx.select().from(matches).where(eq(matches.id, matchId)).for('update');
+      if (!latest || ['complete', 'cancelled'].includes(latest.status)) {
+        await scheduleVoiceCleanup(tx, matchId);
+        return;
+      }
+      const teams = (await getMatchTeams(tx, matchId)).filter((team) => !team.is_reserve);
+      for (let i = 0; i < teams.length; i++) {
+        const channelId = channelIds.length === 1 ? channelIds[0] : channelIds[i];
+        if (channelId) await setTeamVoiceChannel(tx, teams[i].id, channelId);
+      }
+    });
 
     logger.debug(`✅ Voice channel(s) created: ${channelIds.join(', ')}`);
 
@@ -131,21 +188,15 @@ async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotR
  */
 async function handleVoiceChannelDelete(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const { channelId, matchId } = (request.data ?? {}) as { channelId: string; matchId?: string };
-
-  logger.debug(`Deleting voice channel ${channelId} for match ${matchId}`);
-
-  try {
-    const channel = await processor['client'].channels.fetch(channelId);
-    if (channel) {
-      await channel.delete();
-      logger.debug(`✅ Voice channel deleted: ${channelId}`);
-    }
-
-    await processor['finish']('botRequest', request.id, { set: { result: { success: true } } });
-  } catch (error) {
-    logger.warning(`⚠️ Error deleting voice channel ${channelId}:`, error instanceof Error ? error.message : 'Unknown');
-    await processor['finish']('botRequest', request.id, { set: { result: { success: true, message: 'Channel may already be deleted' } } });
+  if (!channelId || !matchId) {
+    await processor['fail']('botRequest', request.id, 'Missing channel/match ID', { permanent: true });
+    return;
   }
+  // Old deployments removed tracking at enqueue time. Restore it before acknowledging the handoff.
+  await trackAutoVoiceChannels(processor['queueDb'], matchId, [{ channelId, teamName: 'all' }]);
+  const match = await getMatch(processor['queueDb'], matchId);
+  if (!match || ['complete', 'cancelled'].includes(match.status)) await scheduleVoiceCleanup(processor['queueDb'], matchId);
+  await processor['finish']('botRequest', request.id, { set: { result: { success: true, message: 'Handed off to durable voice cleanup' } } });
 }
 
 /**

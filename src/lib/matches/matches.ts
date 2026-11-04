@@ -6,6 +6,7 @@ import {
 } from '../../../lib/db/schema';
 import type { PositionScoringConfig } from '../../../lib/db/schema/types';
 import type { Announcement } from '../../../lib/db/schema/types';
+import { scheduleVoiceCleanup } from './voice';
 import { newMatchId } from './ids';
 import { listSeriesRefsForMatches } from '../series/refs';
 
@@ -311,8 +312,11 @@ export async function updateMatchDetails(ex: Executor, matchId: string, input: U
 
 /** Delete a match. Child rows (games, placements, participants, teams, stats, series events, ...) cascade via FKs. */
 export async function deleteMatch(ex: Executor, matchId: string): Promise<boolean> {
-  const rows = await ex.delete(matches).where(eq(matches.id, matchId)).returning({ id: matches.id });
-  return rows.length > 0;
+  return ex.transaction(async (tx) => {
+    await scheduleVoiceCleanup(tx, matchId);
+    const rows = await tx.delete(matches).where(eq(matches.id, matchId)).returning({ id: matches.id });
+    return rows.length > 0;
+  });
 }
 
 export async function getMatchEventImage(ex: Executor, matchId: string): Promise<{ id: string; event_image_url: string | null } | undefined> {
