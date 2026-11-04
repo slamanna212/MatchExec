@@ -29,7 +29,7 @@ import { restoreBackup, RestoreError, type RestoreFormat } from '@lib/restore';
 import { runAutoBackup } from '@/lib/backup-service';
 import { BackupSettingsError, getBackupSettings, updateBackupSettings } from '@/lib/backup-settings';
 import { HttpError, jsonError } from '../http';
-import { checkRateLimit, clientKey } from '../middleware/rate-limit';
+import { checkRateLimit, clientKey, refundRateLimit } from '../middleware/rate-limit';
 import { releaseInflight } from '../middleware/maintenance';
 
 /** Upload limit for a restore: 100 MB (MATCHEXEC_RESTORE_MAX_MB overrides, mainly for tests). */
@@ -186,21 +186,28 @@ export const restoreRoutes = new Hono()
     }
   })
   .post('/', async (c) => {
-    checkRateLimit(clientKey(c, 'restore'), 5, TEN_MINUTES);
+    const limiterKey = clientKey(c, 'restore');
+    checkRateLimit(limiterKey, 5, TEN_MINUTES);
+    // The limit exists to stop password guessing and repeated restores. A request refused before either (no file, wrong
+    // kind of file, password forgotten) is refunded, so a few typos do not lock the page for ten minutes.
+    const rejected = (message: string): Response => {
+      refundRateLimit(limiterKey);
+      return jsonError(c, message, 400);
+    };
 
     const declared = Number.parseInt(c.req.header('content-length') ?? '', 10);
-    if (Number.isFinite(declared) && declared > maxRestoreBytes() + 1024 * 1024) return jsonError(c, `File too large (max ${maxRestoreBytes() / 1024 / 1024} MB)`, 400);
+    if (Number.isFinite(declared) && declared > maxRestoreBytes() + 1024 * 1024) return rejected(`File too large (max ${maxRestoreBytes() / 1024 / 1024} MB)`);
 
     const form = await c.req.formData().catch(() => null);
     const upload = form?.get('file');
-    if (!upload || typeof upload === 'string') return jsonError(c, 'No file provided', 400);
-    if (upload.size > maxRestoreBytes()) return jsonError(c, `File too large (max ${maxRestoreBytes() / 1024 / 1024} MB)`, 400);
+    if (!upload || typeof upload === 'string') return rejected('No file provided');
+    if (upload.size > maxRestoreBytes()) return rejected(`File too large (max ${maxRestoreBytes() / 1024 / 1024} MB)`);
     const rawPassword = form?.get('password');
     const password = typeof rawPassword === 'string' ? rawPassword.trim() || undefined : undefined;
 
     let buffer: Buffer = Buffer.from(await upload.arrayBuffer());
     if (isEncryptedBackup(buffer)) {
-      if (!password) return jsonError(c, 'This backup is encrypted — please provide the password.', 400);
+      if (!password) return rejected('This backup is encrypted — please provide the password.');
       try {
         buffer = decryptBackup(buffer, password);
       } catch (error) {
@@ -211,7 +218,7 @@ export const restoreRoutes = new Hono()
 
     const format = detectBackupFormat(buffer.subarray(0, 16));
     if (format !== 'pgdump' && format !== 'sqlite') {
-      return jsonError(c, 'Invalid file — not a valid MatchExec backup (expected a PostgreSQL dump or a legacy SQLite database).', 400);
+      return rejected('Invalid file — not a valid MatchExec backup (expected a PostgreSQL dump or a legacy SQLite database).');
     }
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'matchexec-restore-'));

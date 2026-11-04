@@ -20,6 +20,15 @@ export function checkRateLimit(key: string, max: number, windowMs: number, now =
   }
 }
 
+/**
+ * Give back one hit recorded by `checkRateLimit` (never below zero, never into a new window). For requests that were
+ * turned away before doing anything a limiter exists to stop, so a typo does not use up the allowance.
+ */
+export function refundRateLimit(key: string, now = Date.now()): void {
+  const w = store.get(key);
+  if (w && now < w.resetAt && w.count > 0) w.count--;
+}
+
 /** Client identifier (first X-Forwarded-For hop) namespaced by `prefix`. */
 export function clientKey(c: Context, prefix: string): string {
   const forwarded = c.req.header('x-forwarded-for');
