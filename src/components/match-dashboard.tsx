@@ -26,7 +26,7 @@ import { showError, showSuccess } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
-import { cleanMapId } from '@/lib/utils/map-utils';
+import { cleanMapId, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
 import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 import { SeriesCardLinks, type SeriesRef } from './series/SeriesCardLinks';
 
@@ -360,60 +360,16 @@ export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
 
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
-        const maps = await response.json();
-        const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-        
+        const maps: { id: string; name: string; imageUrl?: string; modeName?: string; modeId?: string | null; location?: string }[] = await response.json();
+        let modes: {id: string, name: string}[] = [];
         if (supportsAllModes) {
-          // For flexible games, get all possible modes and create all combinations
           const modesResponse = await fetch(`/api/games/${gameId}/modes`);
-          let modes: {id: string, name: string}[] = [];
-          
-          if (modesResponse.ok) {
-            modes = await modesResponse.json();
-          }
-          
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            // Add the original map entry
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-            
-            // For flexible games, create entries for all possible mode combinations
-            // Extract base map name by removing the mode suffix
-            const baseMapName = map.id.replace(/-[^-]+$/, '');
-            
-            modes.forEach(mode => {
-              const modeSpecificId = `${baseMapName}-${mode.id}`;
-              if (modeSpecificId !== map.id) {
-                mapNamesObj[modeSpecificId] = map.name;
-                mapDetailsObj[modeSpecificId] = {
-                  name: map.name,
-                  imageUrl: map.imageUrl,
-                  modeName: mode.name,
-                  location: map.location
-                };
-              }
-            });
-          });
-        } else {
-          // For fixed mode games, use the API data as-is
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-          });
+          if (modesResponse.ok) modes = await modesResponse.json();
         }
-        
+        const mapDetailsObj = indexMapsWithModeVariants(maps, modes);
+        const mapNamesObj = Object.fromEntries(Object.entries(mapDetailsObj).map(([id, map]) => [id, map.name]));
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
+
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {

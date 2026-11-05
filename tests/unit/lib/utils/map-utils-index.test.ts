@@ -13,6 +13,27 @@ describe('indexMapsWithModeVariants', () => {
     expect(idx['battleisland-solo']).toMatchObject({ modeName: 'Solo', mode_id: 'solo' });
   });
 
+  it('resolves the affected CS2 match maps when the listed mode contains a hyphen', () => {
+    const csModes = [{ id: 'arms-race', name: 'Arms Race' }, { id: 'premier', name: 'Premier' }, { id: 'normal', name: 'Normal' }];
+    const maps = ['train', 'nuke', 'office', 'italy', 'shoots', 'pool-day'].map(id => ({
+      id: `${id}-arms-race`, name: id, modeId: 'arms-race', modeName: 'All Modes', imageUrl: `/assets/${id}.png`,
+    }));
+    const idx = indexMapsWithModeVariants(maps, csModes);
+    for (const id of ['train', 'nuke', 'office', 'shoots', 'pool-day']) {
+      expect(idx[`${id}-premier`]).toMatchObject({ name: id, imageUrl: `/assets/${id}.png`, modeName: 'Premier' });
+    }
+    expect(idx['italy-normal'].imageUrl).toBe('/assets/italy.png');
+    expect(idx['train-arms-premier']).toBeUndefined();
+  });
+
+  it('matches the longest known mode suffix when modeId is absent', () => {
+    const idx = indexMapsWithModeVariants(
+      [{ id: 'pool-day-arms-race', modeName: 'All Modes', imageUrl: '/pool.webp' }],
+      [{ id: 'race', name: 'Race' }, { id: 'arms-race', name: 'Arms Race' }, { id: 'normal', name: 'Normal' }],
+    );
+    expect(idx['pool-day-normal'].imageUrl).toBe('/pool.webp');
+  });
+
   it('never replaces a row that already exists under that id', () => {
     const real = { id: 'ascent-premier', name: 'Ascent (Premier)', modeName: 'Premier' };
     const idx = indexMapsWithModeVariants([{ id: 'ascent-normal', name: 'Ascent', modeName: 'All Modes' }, real], [{ id: 'premier', name: 'Premier' }, { id: 'normal', name: 'Normal' }]);

@@ -18,7 +18,7 @@ export function cleanMapId(mapId: string): string {
  * `battleisland-standard`, which is not in that list, so looking it up by id found nothing and the raw id was shown.
  * Here each such map also gets an entry per mode (never replacing a row that already exists under that id).
  */
-export function indexMapsWithModeVariants<T extends { id: string; modeName?: string }>(
+export function indexMapsWithModeVariants<T extends { id: string; modeName?: string; modeId?: string | null }>(
   maps: T[],
   modes: ReadonlyArray<{ id: string; name: string }>,
 ): Record<string, T & { modeName?: string; mode_id?: string }> {
@@ -26,7 +26,12 @@ export function indexMapsWithModeVariants<T extends { id: string; modeName?: str
   for (const map of maps) byId[map.id] = map;
   for (const map of maps) {
     if (map.modeName !== 'All Modes') continue; // only the name-deduplicated rows stand for several modes
-    const base = map.id.replace(/-[^-]+$/, '');
+    // Mode IDs can contain hyphens (e.g. arms-race); remove the whole suffix.
+    const sourceModeId = map.modeId ?? modes
+      .filter(mode => map.id.endsWith(`-${mode.id}`))
+      .sort((a, b) => b.id.length - a.id.length)[0]?.id;
+    if (!sourceModeId || !map.id.endsWith(`-${sourceModeId}`)) continue;
+    const base = map.id.slice(0, -(sourceModeId.length + 1));
     for (const mode of modes) {
       const key = `${base}-${mode.id}`;
       if (!byId[key]) byId[key] = { ...map, id: key, modeName: mode.name, mode_id: mode.id };

@@ -6,7 +6,7 @@ import { Loader, Container, Text, Center, Stack } from '@mantine/core';
 import type { Match, SignupConfig, ReminderData } from '@/shared/types';
 import { MatchPageLayout } from '@/components/match-page-layout';
 import { useMatchGames } from '@/components/match-details/useMatchGames';
-import { cleanMapId } from '@/lib/utils/map-utils';
+import { cleanMapId, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 
 const formatMapName = (mapId: string) => {
@@ -71,55 +71,16 @@ export default function HistoryMatchPage(): React.JSX.Element {
 
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
-        const maps = await response.json();
-        const mapNamesObj: {[key: string]: string} = {};
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-
+        const maps: { id: string; name: string; imageUrl?: string; modeName?: string; modeId?: string | null; location?: string }[] = await response.json();
+        let modes: {id: string, name: string}[] = [];
         if (supportsAllModes) {
           const modesResponse = await fetch(`/api/games/${gameId}/modes`);
-          let modes: {id: string, name: string}[] = [];
-
-          if (modesResponse.ok) {
-            modes = await modesResponse.json();
-          }
-
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-
-            const baseMapName = map.id.replace(/-[^-]+$/, '');
-
-            modes.forEach(mode => {
-              const modeSpecificId = `${baseMapName}-${mode.id}`;
-              if (modeSpecificId !== map.id) {
-                mapNamesObj[modeSpecificId] = map.name;
-                mapDetailsObj[modeSpecificId] = {
-                  name: map.name,
-                  imageUrl: map.imageUrl,
-                  modeName: mode.name,
-                  location: map.location
-                };
-              }
-            });
-          });
-        } else {
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapNamesObj[map.id] = map.name;
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-          });
+          if (modesResponse.ok) modes = await modesResponse.json();
         }
-
+        const mapDetailsObj = indexMapsWithModeVariants(maps, modes);
+        const mapNamesObj = Object.fromEntries(Object.entries(mapDetailsObj).map(([id, map]) => [id, map.name]));
         setMapNames(prev => ({ ...prev, ...mapNamesObj }));
+
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
     } catch (error) {

@@ -10,7 +10,7 @@ import { useMatchGames } from '@/components/match-details/useMatchGames';
 import { useMapCodes } from '@/components/match-details/useMapCodes';
 import { showError, notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
-import { cleanMapId } from '@/lib/utils/map-utils';
+import { cleanMapId, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
 
 const formatMapName = (mapId: string) => {
   // Convert map ID to proper display name
@@ -79,49 +79,13 @@ export default function MatchPage() {
 
       const response = await fetch(`/api/games/${gameId}/maps`);
       if (response.ok) {
-        const maps = await response.json();
-        const mapDetailsObj: {[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}} = {};
-
+        const maps: { id: string; name: string; imageUrl?: string; modeName?: string; modeId?: string | null; location?: string }[] = await response.json();
+        let modes: {id: string, name: string}[] = [];
         if (supportsAllModes) {
           const modesResponse = await fetch(`/api/games/${gameId}/modes`);
-          let modes: {id: string, name: string}[] = [];
-
-          if (modesResponse.ok) {
-            modes = await modesResponse.json();
-          }
-
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-
-            const baseMapName = map.id.replace(/-[^-]+$/, '');
-
-            modes.forEach(mode => {
-              const modeSpecificId = `${baseMapName}-${mode.id}`;
-              if (modeSpecificId !== map.id) {
-                mapDetailsObj[modeSpecificId] = {
-                  name: map.name,
-                  imageUrl: map.imageUrl,
-                  modeName: mode.name,
-                  location: map.location
-                };
-              }
-            });
-          });
-        } else {
-          maps.forEach((map: { id: string; name: string; imageUrl?: string; modeName?: string; location?: string }) => {
-            mapDetailsObj[map.id] = {
-              name: map.name,
-              imageUrl: map.imageUrl,
-              modeName: map.modeName,
-              location: map.location
-            };
-          });
+          if (modesResponse.ok) modes = await modesResponse.json();
         }
+        const mapDetailsObj = indexMapsWithModeVariants(maps, modes);
 
         setMapDetails(prev => ({ ...prev, ...mapDetailsObj }));
       }
