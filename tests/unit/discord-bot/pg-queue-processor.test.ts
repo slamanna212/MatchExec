@@ -8,13 +8,14 @@ import {
   discordAnnouncementQueue, discordBotRequests, discordSettings, discordMatchWinnerQueue, discordVoiceAnnouncementQueue,
   discordStatsReportQueue, discordHealthAlertQueue, discordScorecardPromptQueue, discordWinnerVoteQueue, discordDeletionQueue,
   discordReminderQueue, discordMapCodeQueue, discordScoreNotificationQueue, discordStatusUpdateQueue, discordMatchMessages, matches,
-  matchGames, autoVoiceChannels, matchTeams,
+  matchGames, autoVoiceChannels, matchTeams, discordSeriesUpdateQueue,
 } from '../../../lib/db/schema';
 import {
   enqueueAnnouncement, enqueueBotRequest, enqueueDeletion, enqueueHealthAlert, enqueueMapCode, enqueueMatchReminder,
   enqueueMatchWinner, enqueueScoreNotification, enqueueScorecardPrompt, enqueueStatsReport, enqueueStatusUpdate,
-  enqueueVoiceAnnouncement, enqueueWinnerVote,
+  enqueueSeriesUpdate, enqueueVoiceAnnouncement, enqueueWinnerVote,
 } from '../../../src/lib/discord-queues';
+import { insertSeries } from '../../utils/pg-series-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn(), critical: vi.fn() } }));
 vi.mock('discord.js', () => {
@@ -331,5 +332,50 @@ describe('processAllQueues', () => {
     release();
     await first;
     expect((await one(discordAnnouncementQueue, id)).status).toBe('completed');
+  });
+});
+
+describe('series updates', () => {
+  it('posts through the series handler, records the message id and completes', async () => {
+    const s = await insertSeries();
+    const id = (await enqueueSeriesUpdate(db, { seriesId: s.id, kind: 'standings', dedupeKey: 'week:1', payload: { week: 1 } }))!;
+    const { qp } = make();
+    const post = vi.fn().mockResolvedValue({ posted: 1, channels: 1, messageId: 'series-msg' });
+    qp.setSeriesUpdateHandler({ post } as never);
+    await qp.processSeriesUpdateQueue();
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, series_id: s.id, kind: 'standings', payload: { week: 1 } }));
+    expect(await one(discordSeriesUpdateQueue, id)).toMatchObject({ status: 'completed', external_message_id: 'series-msg' });
+  });
+
+  it('completes the job when no channel is configured (nothing posted)', async () => {
+    const s = await insertSeries();
+    const id = (await enqueueSeriesUpdate(db, { seriesId: s.id, kind: 'weekly_schedule', dedupeKey: 'week:1' }))!;
+    const { qp } = make();
+    qp.setSeriesUpdateHandler({ post: vi.fn().mockResolvedValue({ posted: 0, channels: 0 }) } as never);
+    await qp.processSeriesUpdateQueue();
+    expect(await one(discordSeriesUpdateQueue, id)).toMatchObject({ status: 'completed', external_message_id: null });
+  });
+
+  it('retries a failed post with backoff instead of completing it', async () => {
+    const s = await insertSeries();
+    const id = (await enqueueSeriesUpdate(db, { seriesId: s.id, kind: 'champion' }))!;
+    const { qp } = make();
+    qp.setSeriesUpdateHandler({ post: vi.fn().mockRejectedValue(new Error('discord down')) } as never);
+    await qp.processSeriesUpdateQueue();
+    const row = await one(discordSeriesUpdateQueue, id);
+    expect(row.status).not.toBe('completed');
+    expect(row.last_error).toContain('discord down');
+    expect(row.attempts).toBe(1);
+  });
+
+  it('does nothing without a handler or while the client is not ready', async () => {
+    const s = await insertSeries();
+    const id = (await enqueueSeriesUpdate(db, { seriesId: s.id, kind: 'champion' }))!;
+    const { qp } = make();
+    await qp.processSeriesUpdateQueue();
+    qp.setSeriesUpdateHandler({ post: vi.fn() } as never);
+    client.isReady.mockReturnValue(false);
+    await qp.processSeriesUpdateQueue();
+    expect((await one(discordSeriesUpdateQueue, id)).status).toBe('pending');
   });
 });

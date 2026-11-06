@@ -95,7 +95,7 @@ const HistorySeriesCard = memo(({ series, onViewDetails }: { series: SeriesSumma
           {series.champion ? (
             <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
               <IconTrophyFilled size={14} color="#fab005" style={{ flexShrink: 0 }} />
-              <Text size="sm" fw={500} truncate>{series.champion}</Text>
+              <Text size="sm" fw={500} truncate>{series.champion.name}</Text>
             </Group>
           ) : <Text size="sm">—</Text>}
         </Row>
@@ -169,7 +169,7 @@ export function SeriesHistoryDashboard(): JSX.Element {
     return series.filter(s =>
       s.name.toLowerCase().includes(q) ||
       (s.description ?? '').toLowerCase().includes(q) ||
-      (s.champion ?? '').toLowerCase().includes(q) ||
+      (s.champion?.name ?? '').toLowerCase().includes(q) ||
       (seriesHistoryIdentity(s)?.game_name ?? '').toLowerCase().includes(q)
     );
   }, [series, searchQuery]);

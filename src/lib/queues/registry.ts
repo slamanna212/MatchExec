@@ -1,5 +1,5 @@
 /**
- * Registry of every queue / job table a worker polls (plan 1.4). All 19 share the same worker columns:
+ * Registry of every queue / job table a worker polls (plan 1.4). All 20 share the same worker columns:
  * status, attempts, max_attempts, claimed_at, claimed_by, next_attempt_at, last_error, processed_at.
  */
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
@@ -7,7 +7,7 @@ import {
   discordAnnouncementQueue, discordBotRequests, discordDeletionQueue, discordHealthAlertQueue, discordMapCodeQueue,
   discordMatchEditQueue, discordMatchReminderQueue, discordMatchStartQueue, discordMatchWinnerQueue,
   discordPlayerReminderQueue, discordReminderQueue, discordScoreNotificationQueue, discordScorecardPromptQueue,
-  discordStatsReportQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue, discordWinnerVoteQueue,
+  discordSeriesUpdateQueue, discordStatsReportQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue, discordWinnerVoteQueue,
   statsImageQueue, statsProcessingQueue,
 } from '../../../lib/db/schema';
 
@@ -25,6 +25,7 @@ export const QUEUE_TABLES = {
   reminder: discordReminderQueue,
   scoreNotification: discordScoreNotificationQueue,
   scorecardPrompt: discordScorecardPromptQueue,
+  seriesUpdate: discordSeriesUpdateQueue,
   statsReport: discordStatsReportQueue,
   statusUpdate: discordStatusUpdateQueue,
   voiceAnnouncement: discordVoiceAnnouncementQueue,
@@ -68,7 +69,7 @@ export function queueConfig(queue: QueueName): QueueConfig {
 /** Queues that record the id of the Discord message they posted (`external_message_id`). */
 export const EXTERNAL_RESULT_QUEUES = [
   'announcement', 'healthAlert', 'matchReminder', 'matchStart', 'matchWinner', 'playerReminder', 'reminder',
-  'scoreNotification', 'scorecardPrompt', 'winnerVote',
+  'scoreNotification', 'scorecardPrompt', 'seriesUpdate', 'winnerVote',
 ] as const satisfies readonly QueueName[];
 export type ExternalResultQueue = (typeof EXTERNAL_RESULT_QUEUES)[number];
 

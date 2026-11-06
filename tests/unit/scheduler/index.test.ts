@@ -163,6 +163,19 @@ describe('MatchExecScheduler', () => {
       expect(cronNames.length).toBeGreaterThan(0);
     });
 
+    it('schedules the series updates job every 15 minutes (with and without a settings row)', async () => {
+      const cronModule = await import('node-cron');
+      const mockSchedule = cronModule.schedule as ReturnType<typeof vi.fn>;
+
+      await (scheduler as any).loadSchedulerSettings();
+      expect(mockSchedule.mock.calls.map((c: any[]) => c[0])).toContain('*/15 * * * *');
+
+      mockSchedule.mockClear();
+      await updateSchedulerCrons({ match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
+      await (scheduler as any).loadSchedulerSettings();
+      expect(mockSchedule.mock.calls.map((c: any[]) => c[0])).toContain('*/15 * * * *');
+    });
+
     it('reads cron settings from the database when available', async () => {
       await updateSchedulerCrons({ match_check_cron: '*/30 * * * * *', channel_refresh_cron: '0 0 1 * * *' });
 

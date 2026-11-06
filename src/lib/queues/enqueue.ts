@@ -11,9 +11,10 @@ import type { Executor } from '../../../lib/db';
 import {
   discordAnnouncementQueue, discordBotRequests, discordDeletionQueue, discordHealthAlertQueue, discordMapCodeQueue,
   discordMatchEditQueue, discordMatchStartQueue, discordMatchWinnerQueue, discordPlayerReminderQueue,
-  discordReminderQueue, discordScoreNotificationQueue, discordScorecardPromptQueue, discordStatsReportQueue,
+  discordReminderQueue, discordScoreNotificationQueue, discordScorecardPromptQueue, discordSeriesUpdateQueue, discordStatsReportQueue,
   discordStatusUpdateQueue, discordVoiceAnnouncementQueue, discordWinnerVoteQueue, statsImageQueue, statsProcessingQueue,
 } from '../../../lib/db/schema';
+import type { SeriesUpdateKind, SeriesUpdatePayload } from '../../../shared/series-types';
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
 
@@ -249,6 +250,30 @@ export async function enqueueHealthAlert(ex: Executor, input: { severity?: 'crit
   const id = newId('health_alert');
   await ex.insert(discordHealthAlertQueue).values({ id, severity: input.severity ?? 'critical', title: input.title, description: input.description ?? null });
   return id;
+}
+
+// ─── Series updates ──────────────────────────────────────────────────────────
+
+export interface EnqueueSeriesUpdateInput {
+  seriesId: string;
+  kind: SeriesUpdateKind;
+  /** e.g. `week:3`. With a key, a second post of the same (series, kind, key) is dropped; without one, posts never collide. */
+  dedupeKey?: string | null;
+  payload?: SeriesUpdatePayload;
+}
+
+/**
+ * Queue a series post (registration open, weekly schedule, standings, playoff seeded, champion) for the channels
+ * flagged `send_series_updates`. Returns the new row id, or null when the dedupe key already exists.
+ */
+export async function enqueueSeriesUpdate(ex: Executor, input: EnqueueSeriesUpdateInput): Promise<string | null> {
+  const id = newId('series_update');
+  const rows = await ex
+    .insert(discordSeriesUpdateQueue)
+    .values({ id, series_id: input.seriesId, kind: input.kind, dedupe_key: input.dedupeKey ?? null, payload: input.payload ?? {} })
+    .onConflictDoNothing()
+    .returning({ id: discordSeriesUpdateQueue.id });
+  return rows.length > 0 ? id : null;
 }
 
 // ─── Reminders ───────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import type { Client, Message } from 'discord.js';
 import type { ScorecardHandler } from './scorecard-handler';
 import type { WinnerVoteHandler } from './winner-vote-handler';
 import type { StatsReportHandler } from './stats-report-handler';
+import type { SeriesUpdateHandler } from './series-update-handler';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { eq, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { sendDM, buildCommanderAssignedEmbed } from './dm-builder';
@@ -330,6 +331,7 @@ export class QueueProcessor {
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
   private statsReportHandler: StatsReportHandler | null = null;
+  private seriesUpdateHandler: SeriesUpdateHandler | null = null;
   private readonly workerId = makeWorkerId('discord-bot');
   private ticking = false;
 
@@ -355,6 +357,10 @@ export class QueueProcessor {
 
   setStatsReportHandler(handler: StatsReportHandler) {
     this.statsReportHandler = handler;
+  }
+
+  setSeriesUpdateHandler(handler: SeriesUpdateHandler) {
+    this.seriesUpdateHandler = handler;
   }
 
   // ─── Queue worker contract helpers (claim / complete / fail / release) ─────────────────────────
@@ -1363,6 +1369,7 @@ export class QueueProcessor {
         this.processDiscordBotRequests(),
         this.processMatchEditQueue(),
         this.processHealthAlertQueue(),
+        this.processSeriesUpdateQueue(),
         this.processStatsReportQueue(),
         // Must run in order: map code → winner vote → scorecard
         this.processMapCodeQueue()
@@ -1422,6 +1429,33 @@ export class QueueProcessor {
       }
     } catch (error) {
       logger.error('❌ Error processing health alert queue:', error);
+    }
+  }
+
+  /** Series posts (registration open, weekly schedule, standings, playoffs seeded, champion). */
+  async processSeriesUpdateQueue() {
+    if (!this.client.isReady() || !this.seriesUpdateHandler) return;
+
+    try {
+      const pending = await this.claim('seriesUpdate', 5);
+
+      for (const item of pending) {
+        try {
+          if (alreadyPosted(item)) {
+            await this.finish('seriesUpdate', item.id);
+            continue;
+          }
+
+          const result = await this.seriesUpdateHandler.post(item);
+          await this.recordPosted('seriesUpdate', item.id, result.messageId);
+          await this.finish('seriesUpdate', item.id);
+        } catch (err) {
+          logger.error(`Error processing series update queue item ${item.id}:`, err);
+          await this.fail('seriesUpdate', item.id, err);
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error processing series update queue:', error);
     }
   }
 

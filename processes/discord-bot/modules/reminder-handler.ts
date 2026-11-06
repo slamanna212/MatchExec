@@ -554,6 +554,7 @@ export class ReminderHandler {
         send_match_start: channel.send_match_start,
         send_signup_updates: channel.send_signup_updates,
         send_health_alerts: channel.send_health_alerts,
+        send_series_updates: channel.send_series_updates,
         last_name_refresh: channel.last_name_refresh?.toISOString(),
         created_at: channel.created_at.toISOString(),
         updated_at: channel.updated_at.toISOString()

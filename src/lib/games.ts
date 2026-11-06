@@ -183,6 +183,7 @@ export interface GameModeListDto {
   description: string | null;
   team_size: number | null;
   max_players: number | null;
+  scoring_type: string;
 }
 
 /** `GET /api/games/:gameId/modes` rows (carries the game's max_players). */
@@ -194,6 +195,7 @@ export async function listModesDto(ex: Executor, gameId: string): Promise<GameMo
       description: gameModes.description,
       team_size: gameModes.team_size,
       max_players: games.max_players,
+      scoring_type: gameModes.scoring_type,
     })
     .from(gameModes)
     .innerJoin(games, eq(gameModes.game_id, games.id))

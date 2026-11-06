@@ -448,15 +448,15 @@ describe('Series API hardening', () => {
       // Series is complete, so add the event directly rather than via the (now locked) API.
       await linkEvent(seriesId, 'match', m, { event_order: 1 });
       const { data } = await appRequest('/api/series?status=complete');
-      expect(data.series.find((x: any) => x.id === seriesId).champion).toBe('Winner');
+      expect(data.series.find((x: any) => x.id === seriesId).champion).toEqual({ entrant_id: null, name: 'Winner', source: 'standings' });
     });
 
-    it('events GET joins name, status, game and date of the linked match', async () => {
+    it('events GET joins name, target status, game and date of the linked match', async () => {
       const m = await insertMatch('battle');
       await addEv({ event_type: 'match', match_id: m, points_multiplier: 1.5 });
       const { data } = await appRequest(`/api/series/${seriesId}/events`);
       expect(data.events).toHaveLength(1);
-      expect(data.events[0]).toMatchObject({ match_id: m, name: 'M', status: 'battle', game_id: gameId, points_multiplier: 1.5 });
+      expect(data.events[0]).toMatchObject({ match_id: m, name: 'M', status: 'live', target_status: 'battle', game_id: gameId, points_multiplier: 1.5 });
       expect(data.events[0].start_date).toBeTruthy();
     });
 

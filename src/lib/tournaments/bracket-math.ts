@@ -117,3 +117,43 @@ export function plannedMatchName(bracket: 'winners' | 'losers' | 'final', reset:
   if (bracket === 'final') return `${reset ? 'Grand Finals Reset' : 'Grand Finals'}: ${names}`;
   return names;
 }
+
+/** Standard single-elimination seed order for a power-of-two bracket: 1 vs n, then the halves interleaved (8: 1,8,4,5,2,7,3,6). */
+function standardSeedOrder(size: number): number[] {
+  let order = [1];
+  for (let s = 2; s <= size; s *= 2) order = order.flatMap((seed) => [seed, s + 1 - seed]);
+  return order;
+}
+
+/**
+ * Bracket position -> seed (1 = top seed) for `n` entrants, in the order `generateFirstRoundMatches` pairs them
+ * (positions 0/1, 2/3, ...; an odd team out sits the first round out).
+ *
+ * - A power of two gets the standard order: 1 vs n, 4 vs n-3 ..., so the top seeds only meet late.
+ * - Any other count pairs seed s with n + 1 - s (1 vs n, 2 vs n-1, ...), because the generator plays every team in
+ *   round 1 (it has no padded byes). With an odd count the TOP seed takes the bye, so it is the unpaired last position.
+ *   The generator re-pairs the winners in match order and gives an odd one out the bye, so the top pair is placed last
+ *   (for an even count the top seed's side then takes the round-2 bye; for an odd count the top seed plays the winner of
+ *   the weaker pair and the strongest remaining pair gets the bye).
+ */
+export function seedOrder(n: number): number[] {
+  if (!Number.isInteger(n) || n < 1) return [];
+  if (n === 1) return [1];
+  if (n === 2) return [1, 2];
+  if ((n & (n - 1)) === 0) return standardSeedOrder(n);
+
+  const hasBye = n % 2 === 1;
+  const first = hasBye ? 2 : 1; // the top seed sits out when the count is odd
+  const last = n;
+  const pairCount = Math.floor(n / 2);
+  const pairs = Array.from({ length: pairCount }, (_, i) => [first + i, last - i]);
+  let size = 1;
+  while (size < pairCount) size *= 2;
+  const arranged = standardSeedOrder(size).filter((p) => p <= pairCount).map((p) => pairs[p - 1]);
+  // the top pair goes last so its winner (the top seed's side) takes the bye when the winners are odd in round 2
+  const [top, ...rest] = arranged;
+  const ordered = [...rest, top];
+  const seeds = ordered.flat();
+  if (hasBye) seeds.push(1);
+  return seeds;
+}

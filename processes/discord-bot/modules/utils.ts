@@ -11,7 +11,7 @@ export function capTitle(s: string, max = 256): string {
 export { safePublicPath } from '../utils/image-source';
 
 export class Utils {
-  async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates'): Promise<DiscordChannel[]> {
+  async getChannelsForNotificationType(notificationType: 'announcements' | 'reminders' | 'match_start' | 'signup_updates' | 'series_updates'): Promise<DiscordChannel[]> {
     try {
       const channels = await listChannelsForNotification(pgDb, notificationType);
 
@@ -25,6 +25,7 @@ export class Utils {
         send_match_start: channel.send_match_start,
         send_signup_updates: channel.send_signup_updates,
         send_health_alerts: channel.send_health_alerts,
+        send_series_updates: channel.send_series_updates,
         last_name_refresh: channel.last_name_refresh?.toISOString(),
         created_at: channel.created_at.toISOString(),
         updated_at: channel.updated_at.toISOString()

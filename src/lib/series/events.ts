@@ -6,12 +6,20 @@
  * never observed half done, and a status change (the series starting) cannot slip between the status check and the
  * write. The unique indexes stay as the backstop and are mapped to 409s.
  */
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import { uniqueViolationConstraint } from '../../../lib/db/errors';
-import { matches, seriesEvents, tournaments } from '../../../lib/db/schema';
+import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
+import {
+  gameModes, matchTeams, matches, seriesEvents, seriesStages, tournamentTeams, tournaments,
+} from '../../../lib/db/schema';
+import type { SeriesEventRole } from '../../../shared/series-types';
+import { MATCH_ACTION_EVENTS, removeFeedEvents } from '../feed-helpers';
 import { logger } from '../logger';
-import { SeriesError, lockSeries, newSeriesEventId, toDateOrNull } from './series';
+import { deleteMatch } from '../matches/matches';
+import { enqueueDeletion } from '../queues/enqueue';
+import { deleteTournament, listTournamentMatchesIds, lockTournament } from '../tournaments/tournaments';
+import { SeriesError, allowedGameIds, lockSeries, newSeriesEventId, toDateOrNull, type SeriesRow } from './series';
 
 export type SeriesEventRow = typeof seriesEvents.$inferSelect;
 
@@ -23,6 +31,11 @@ export interface AddSeriesEventInput {
   /** ISO date string. */
   event_date?: string;
   points_multiplier?: number;
+  stage_id?: string | null;
+  role?: SeriesEventRole;
+  week?: number | null;
+  /** Default: true for `regular`, false for every other role. */
+  counts_for_standings?: boolean;
 }
 
 export interface UpdateSeriesEventInput {
@@ -30,7 +43,15 @@ export interface UpdateSeriesEventInput {
   event_order?: number;
   /** null clears the date. */
   event_date?: string | null;
+  /** null moves the event out of its stage. */
+  stage_id?: string | null;
+  role?: SeriesEventRole;
+  week?: number | null;
+  counts_for_standings?: boolean;
 }
+
+/** Edit fields that change standings or the event order: only allowed before the series starts. */
+export const STANDINGS_AFFECTING_FIELDS = ['points_multiplier', 'event_order', 'counts_for_standings', 'role'] as const;
 
 export type UpdateSeriesEventResult = { event: SeriesEventRow; swappedWith?: string };
 
@@ -73,6 +94,42 @@ export async function checkSeriesEventTarget(ex: Executor, seriesId: string, inp
   return null;
 }
 
+/** The stage must belong to the series. */
+async function assertStageInSeries(tx: Executor, seriesId: string, stageId: string | null | undefined): Promise<void> {
+  if (!stageId) return;
+  const [row] = await tx.select({ id: seriesStages.id }).from(seriesStages).where(and(eq(seriesStages.id, stageId), eq(seriesStages.series_id, seriesId)));
+  if (!row) throw new SeriesError('stage_id does not match a stage of this series', 400);
+}
+
+/**
+ * When the series has a scoring type, the attached match / tournament must be of an allowed game and (when it has a
+ * mode) of that scoring type. Legacy series (no scoring type) accept anything.
+ */
+export async function checkSeriesEventScoring(ex: Executor, series: Pick<SeriesRow, 'scoring_type' | 'game_id' | 'game_ids'>, input: AddSeriesEventInput): Promise<SeriesEventCheck> {
+  if (!series.scoring_type) return null;
+  let gameId: string | null = null;
+  let modeId: string | null = null;
+  if (input.event_type === 'match') {
+    const [m] = await ex.select({ game_id: matches.game_id, mode_id: matches.mode_id }).from(matches).where(eq(matches.id, input.match_id ?? ''));
+    gameId = m?.game_id ?? null;
+    modeId = m?.mode_id ?? null;
+  } else {
+    const [t] = await ex.select({ game_id: tournaments.game_id, mode_id: tournaments.game_mode_id }).from(tournaments).where(eq(tournaments.id, input.tournament_id ?? ''));
+    gameId = t?.game_id ?? null;
+    modeId = t?.mode_id ?? null;
+  }
+  if (!gameId) return null; // an unknown target is reported by the target check
+  const allowed = allowedGameIds(series);
+  if (allowed && !allowed.includes(gameId)) return { error: `Game ${gameId} is not one of this series' games`, status: 400 };
+  if (modeId) {
+    const [mode] = await ex.select({ scoring_type: gameModes.scoring_type }).from(gameModes).where(and(eq(gameModes.id, modeId), eq(gameModes.game_id, gameId)));
+    if (mode && mode.scoring_type !== series.scoring_type) {
+      return { error: `This series only takes ${series.scoring_type} events, but the ${input.event_type} is ${mode.scoring_type}`, status: 400 };
+    }
+  }
+  return null;
+}
+
 /** Locks the series and refuses (409) when it can no longer change its events. Returns the locked row. */
 async function lockEditableSeries(tx: Executor, seriesId: string) {
   const row = await lockSeries(tx, seriesId);
@@ -90,10 +147,14 @@ async function lockEditableSeries(tx: Executor, seriesId: string) {
  */
 export async function addSeriesEvent(ex: Executor, seriesId: string, input: AddSeriesEventInput): Promise<string> {
   return ex.transaction(async (tx) => {
-    await lockEditableSeries(tx, seriesId);
+    const series = await lockEditableSeries(tx, seriesId);
 
     const targetError = await checkSeriesEventTarget(tx, seriesId, input);
     if (targetError) throw new SeriesError(targetError.error, targetError.status);
+    const scoringError = await checkSeriesEventScoring(tx, series, input);
+    if (scoringError) throw new SeriesError(scoringError.error, scoringError.status);
+    await assertStageInSeries(tx, seriesId, input.stage_id);
+    const role = input.role ?? 'regular';
 
     let eventOrder = input.event_order;
     if (eventOrder === undefined) {
@@ -113,6 +174,11 @@ export async function addSeriesEvent(ex: Executor, seriesId: string, input: AddS
         event_order: eventOrder,
         event_date: toDateOrNull(input.event_date),
         points_multiplier: input.points_multiplier ?? 1.0,
+        stage_id: input.stage_id ?? null,
+        role,
+        week: input.week ?? null,
+        counts_for_standings: input.counts_for_standings ?? role === 'regular',
+        status: 'live',
       });
     } catch (err) {
       const constraint = uniqueViolationConstraint(err);
@@ -126,14 +192,70 @@ export async function addSeriesEvent(ex: Executor, seriesId: string, input: AddS
   });
 }
 
+/** A series-created target has teams pre-assigned to entrants; an attached one never does. */
+export async function isSeriesCreatedEvent(ex: Executor, event: Pick<SeriesEventRow, 'match_id' | 'tournament_id'>): Promise<boolean> {
+  if (event.match_id) {
+    const [row] = await ex.select({ id: matchTeams.id }).from(matchTeams)
+      .where(and(eq(matchTeams.match_id, event.match_id), isNotNull(matchTeams.series_entrant_id))).limit(1);
+    return !!row;
+  }
+  if (event.tournament_id) {
+    const [row] = await ex.select({ id: tournamentTeams.id }).from(tournamentTeams)
+      .where(and(eq(tournamentTeams.tournament_id, event.tournament_id), isNotNull(tournamentTeams.series_entrant_id))).limit(1);
+    return !!row;
+  }
+  return false;
+}
+
+const UNSTARTED_MATCH = ['created', 'gather', 'assign'];
+const UNSTARTED_TOURNAMENT = ['created', 'gather', 'assign'];
+
+/** Deletes a not-yet-started match the way the match DELETE route does (Discord cleanup queued in the same tx). */
+async function deleteUnstartedMatch(tx: Executor, matchId: string): Promise<boolean> {
+  const [m] = await tx.select({ status: matches.status, tournament_id: matches.tournament_id, event_image_url: matches.event_image_url })
+    .from(matches).where(eq(matches.id, matchId)).for('update');
+  if (!m || m.tournament_id || !UNSTARTED_MATCH.includes(m.status)) return false;
+  await enqueueDeletion(tx, matchId);
+  await removeFeedEvents(tx, matchId, MATCH_ACTION_EVENTS);
+  await deleteMatch(tx, matchId);
+  await deleteBlobsFor(tx, { type: 'match', id: matchId });
+  if (m.event_image_url) await deleteBlob(tx, m.event_image_url);
+  return true;
+}
+
+/** Deletes a not-yet-started tournament (and its matches) like the tournament DELETE route. */
+async function deleteUnstartedTournament(tx: Executor, tournamentId: string): Promise<boolean> {
+  const t = await lockTournament(tx, tournamentId);
+  if (!t || !UNSTARTED_TOURNAMENT.includes(t.status)) return false;
+  const matchIds = await listTournamentMatchesIds(tx, tournamentId);
+  for (const matchId of matchIds) {
+    await enqueueDeletion(tx, matchId);
+    await removeFeedEvents(tx, matchId, MATCH_ACTION_EVENTS);
+  }
+  await enqueueDeletion(tx, tournamentId);
+  await deleteTournament(tx, tournamentId);
+  for (const matchId of matchIds) await deleteBlobsFor(tx, { type: 'match', id: matchId });
+  if (t.event_image_url) await deleteBlob(tx, t.event_image_url);
+  return true;
+}
+
 /**
  * Removes a series event (404 when the series or event doesn't exist, 409 when the series is complete / cancelled).
+ * When the event was created by the series (its teams are linked to entrants) and its match / tournament has not
+ * started (`created` / `gather` / `assign`), the match / tournament is deleted with it. Attached events and started
+ * ones only lose the series link. Planned events (no target) are simply removed. Returns whether a target was deleted.
  */
-export async function removeSeriesEvent(ex: Executor, seriesId: string, eventId: string): Promise<void> {
-  await ex.transaction(async (tx) => {
+export async function removeSeriesEvent(ex: Executor, seriesId: string, eventId: string): Promise<{ deleted_target: boolean }> {
+  return ex.transaction(async (tx) => {
     await lockEditableSeries(tx, seriesId);
-    const rows = await tx.delete(seriesEvents).where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId))).returning({ id: seriesEvents.id });
-    if (rows.length === 0) throw new SeriesError('Event not found in this series', 404);
+    const [event] = await tx.select().from(seriesEvents).where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId)));
+    if (!event) throw new SeriesError('Event not found in this series', 404);
+    const seriesCreated = await isSeriesCreatedEvent(tx, event);
+    await tx.delete(seriesEvents).where(eq(seriesEvents.id, eventId));
+    let deletedTarget = false;
+    if (seriesCreated && event.tournament_id) deletedTarget = await deleteUnstartedTournament(tx, event.tournament_id);
+    else if (seriesCreated && event.match_id) deletedTarget = await deleteUnstartedMatch(tx, event.match_id);
+    return { deleted_target: deletedTarget };
   });
 }
 
@@ -148,14 +270,21 @@ export async function updateSeriesEvent(
   seriesId: string,
   eventId: string,
   updates: UpdateSeriesEventInput,
-  options: { requireSeriesStatus?: string } = {},
+  options: { requireSeriesStatus?: string | string[] } = {},
 ): Promise<UpdateSeriesEventResult> {
   return ex.transaction(async (tx) => {
     const locked = await lockSeries(tx, seriesId);
     if (!locked) throw new SeriesError('Series not found', 404);
-    if (options.requireSeriesStatus && locked.status !== options.requireSeriesStatus) {
-      throw new SeriesError(`Events can only be edited before the series starts (series is ${locked.status})`, 409);
+    const required = options.requireSeriesStatus === undefined ? null : [options.requireSeriesStatus].flat();
+    if (required && !required.includes(locked.status)) {
+      throw new SeriesError(
+        required.includes('active')
+          ? `Events cannot be edited in a ${locked.status} series`
+          : `Events can only be edited before the series starts (series is ${locked.status})`,
+        409,
+      );
     }
+    if (updates.stage_id !== undefined) await assertStageInSeries(tx, seriesId, updates.stage_id);
 
     const [event] = await tx.select().from(seriesEvents).where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId)));
     if (!event) throw new SeriesError('Event not found in this series', 404);
@@ -181,6 +310,12 @@ export async function updateSeriesEvent(
     if (updates.event_date !== undefined) {
       await tx.update(seriesEvents).set({ event_date: toDateOrNull(updates.event_date) }).where(eq(seriesEvents.id, eventId));
     }
+    const placement: Partial<typeof seriesEvents.$inferInsert> = {};
+    if (updates.stage_id !== undefined) placement.stage_id = updates.stage_id;
+    if (updates.role !== undefined) placement.role = updates.role;
+    if (updates.week !== undefined) placement.week = updates.week;
+    if (updates.counts_for_standings !== undefined) placement.counts_for_standings = updates.counts_for_standings;
+    if (Object.keys(placement).length > 0) await tx.update(seriesEvents).set(placement).where(eq(seriesEvents.id, eventId));
 
     const [updated] = await tx.select().from(seriesEvents).where(eq(seriesEvents.id, eventId));
     return { event: updated, swappedWith };

@@ -43,6 +43,7 @@ import {
   buildConfirmationMessage
 } from './interaction-helpers';
 import { sendDM, buildSignupWelcomeEmbed } from './dm-builder';
+import { SeriesRegistrationHandler } from './series-registration-handler';
 import { isUnscheduled } from '../../../shared/schedule';
 
 interface EventData {
@@ -168,6 +169,7 @@ async function showSignupModal(
 
 export class InteractionHandler {
   private pendingTeamSelections = new Map<string, { eventId: string; teamId: string }>();
+  private seriesRegistration = new SeriesRegistrationHandler();
 
   constructor(
     private client: Client,
@@ -416,6 +418,7 @@ export class InteractionHandler {
   }
 
   async handleButtonInteraction(interaction: ButtonInteraction) {
+    if (await this.seriesRegistration.handleButton(interaction)) return;
     if (!interaction.customId.startsWith('signup_')) return;
 
     const eventId = interaction.customId.replace('signup_', '');
@@ -447,6 +450,7 @@ export class InteractionHandler {
   }
 
   async handleModalSubmit(interaction: ModalSubmitInteraction) {
+    if (await this.seriesRegistration.handleModalSubmit(interaction)) return;
     if (!interaction.customId.startsWith('signup_form_')) return;
 
     logger.debug('Processing signup modal:', interaction.customId);
@@ -563,6 +567,7 @@ export class InteractionHandler {
   }
 
   async handleStringSelectMenu(interaction: StringSelectMenuInteraction) {
+    if (await this.seriesRegistration.handleStringSelectMenu(interaction)) return;
     if (!interaction.customId.startsWith('team_select_')) return;
 
     const eventId = interaction.customId.replace('team_select_', '');

@@ -10,7 +10,7 @@ import { getAnyDiscordSettings, getDiscordSettings } from '@/lib/settings';
 import { discordIdError } from '@/shared/discord-ids';
 import { jsonError } from '../http';
 
-const NOTIFICATION_FLAGS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts'] as const;
+const NOTIFICATION_FLAGS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts', 'send_series_updates'] as const;
 
 /** A channel that receives nothing is dead weight (and what the "add" form produced when no box was ticked). */
 function noNotificationTypes(body: Record<string, unknown>): string | null {
@@ -90,6 +90,7 @@ export const channels = new Hono()
         send_match_start: Boolean(body.send_match_start ?? false),
         send_signup_updates: Boolean(body.send_signup_updates ?? false),
         send_health_alerts: Boolean(body.send_health_alerts ?? false),
+        send_series_updates: Boolean(body.send_series_updates ?? false),
       });
       return c.json({ success: true, id, message: 'Channel created successfully' });
     } catch (error) {
@@ -151,6 +152,7 @@ export const channels = new Hono()
         send_match_start: Boolean(body.send_match_start ?? false),
         send_signup_updates: Boolean(body.send_signup_updates ?? false),
         send_health_alerts: Boolean(body.send_health_alerts ?? false),
+        send_series_updates: Boolean(body.send_series_updates ?? false),
       });
       return c.json({ success: true, message: 'Channel notification settings updated successfully' });
     } catch (error) {

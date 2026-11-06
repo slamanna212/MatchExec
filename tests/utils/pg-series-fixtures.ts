@@ -8,7 +8,11 @@ import { expect } from 'vitest';
 import { getPgTestDb } from './pg-test-db';
 import { appRequest } from './app-request';
 import { createGameMode } from './pg-fixtures';
-import { gameMaps, matchGames, matchParticipants, matchTeams, matches, series, seriesEvents } from '../../lib/db/schema';
+import {
+  gameMaps, matchGames, matchParticipants, matchTeams, matches, series, seriesEntrantMembers, seriesEntrants, seriesEvents, seriesStages,
+} from '../../lib/db/schema';
+import type { Db } from '../../lib/db';
+import type { SeriesEntrantType, SeriesMemberRole, SeriesScoringType } from '../../shared/series-types';
 
 export const uid = (prefix: string): string => `${prefix}${randomBytes(6).toString('hex')}`;
 let seq = 0;
@@ -26,6 +30,67 @@ export async function linkEvent(seriesId: string, kind: 'match' | 'tournament', 
     id: uid('se_'), series_id: seriesId, event_type: kind, match_id: kind === 'match' ? entityId : null, tournament_id: kind === 'tournament' ? entityId : null,
     event_order: ++linkOrder, ...overrides,
   }).returning();
+  return row;
+}
+
+export interface FixtureMember { user_id?: string; discord_user_id?: string | null; username?: string; role?: SeriesMemberRole; left?: boolean }
+export interface FixtureEntrant {
+  name: string;
+  /** A member can be given as just a username. Ids default to `u-<username>` (user id) and the same value as Discord id. */
+  members?: Array<string | FixtureMember>;
+  tag?: string; color?: string; division?: string; seed?: number; status?: 'pending' | 'active' | 'withdrawn';
+}
+
+/**
+ * A series with entrants and rosters, inserted directly (no validation). Returns the ids:
+ * `{ seriesId, entrants: [{ id, name, memberIds, userIds }] }` in the order given.
+ */
+export async function createSeriesWithEntrants(
+  db: Db,
+  opts: {
+    entrantType: SeriesEntrantType; scoringType?: SeriesScoringType | null; gameId?: string | null; gameIds?: string[];
+    status?: 'created' | 'registration' | 'active' | 'complete' | 'cancelled'; scoringConfig?: Record<string, unknown> | null;
+    rosterMin?: number | null; rosterMax?: number | null; entrants: FixtureEntrant[];
+  },
+) {
+  const [row] = await db.insert(series).values({
+    id: uid('s_'), name: 'Season', status: opts.status ?? 'active', entrant_type: opts.entrantType, scoring_type: opts.scoringType ?? null,
+    game_id: opts.gameId ?? null, game_ids: opts.gameIds ?? [], scoring_config: opts.scoringConfig ?? null,
+    roster_min: opts.rosterMin ?? null, roster_max: opts.rosterMax ?? null,
+  }).returning();
+  const out: Array<{ id: string; name: string; memberIds: string[]; userIds: string[] }> = [];
+  // Rosters order by joined_at; give members distinct, increasing join times so "listed first" is deterministic.
+  let joinedAt = Date.now() - 60_000;
+  for (const e of opts.entrants) {
+    const id = uid('se_');
+    await db.insert(seriesEntrants).values({
+      id, series_id: row.id, name: e.name, tag: e.tag ?? null, color: e.color ?? null, division: e.division ?? null, seed: e.seed ?? null, status: e.status ?? 'active',
+    });
+    const memberIds: string[] = [];
+    const userIds: string[] = [];
+    for (const [i, m] of (e.members ?? []).entries()) {
+      const spec: FixtureMember = typeof m === 'string' ? { username: m } : m;
+      const username = spec.username ?? spec.user_id ?? `p${i}`;
+      const userId = spec.user_id ?? `u-${username}`;
+      const memberId = uid('sm_');
+      await db.insert(seriesEntrantMembers).values({
+        id: memberId, entrant_id: id, series_id: row.id, user_id: userId,
+        discord_user_id: spec.discord_user_id === undefined ? userId : spec.discord_user_id, username, role: spec.role ?? 'player',
+        left_at: spec.left ? new Date() : null, joined_at: new Date(joinedAt++),
+      });
+      memberIds.push(memberId);
+      userIds.push(userId);
+    }
+    out.push({ id, name: e.name, memberIds, userIds });
+  }
+  return { seriesId: row.id, entrants: out };
+}
+
+let stageSeq = 0;
+/** Insert a stage directly. */
+export async function insertStage(seriesId: string, overrides: Partial<typeof seriesStages.$inferInsert> = {}) {
+  const n = ++stageSeq;
+  const [row] = await getPgTestDb().insert(seriesStages).values({ id: uid('sg_'), series_id: seriesId, name: `Stage ${n}`, stage_order: n, ...overrides }).returning();
   return row;
 }
 

@@ -23,7 +23,7 @@ describe('Drizzle migrations (PGlite or TEST_DATABASE_URL)', () => {
     const t = await rows<{ s: string; n: number }>(sql`SELECT table_schema AS s, count(*)::int AS n FROM information_schema.tables WHERE table_schema IN ('public','control') AND table_type = 'BASE TABLE' GROUP BY table_schema`);
     const by = Object.fromEntries(t.map((r) => [r.s, r.n]));
     expect(by.control).toBe(2);
-    expect(by.public).toBe(62); // 60 domain-ish tables + system_status + blobs + __drizzle_migrations (see pg-schema test for exact list)
+    expect(by.public).toBe(67); // 65 domain-ish tables + system_status + blobs + __drizzle_migrations (see pg-schema test for exact list)
   });
 
   it('is idempotent: re-running the migrator is a no-op', async () => {

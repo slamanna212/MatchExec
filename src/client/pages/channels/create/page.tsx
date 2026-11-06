@@ -25,9 +25,10 @@ interface CreateChannelForm {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates: boolean;
 }
 
-const NOTIFICATION_KEYS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts'] as const;
+const NOTIFICATION_KEYS = ['send_announcements', 'send_reminders', 'send_match_start', 'send_signup_updates', 'send_health_alerts', 'send_series_updates'] as const;
 
 export default function CreateChannelPage() {
   const navigate = useNavigate();
@@ -42,6 +43,7 @@ export default function CreateChannelPage() {
       send_match_start: false,
       send_signup_updates: false,
       send_health_alerts: false,
+      send_series_updates: false,
     },
     validate: {
       discord_channel_id: (value) => discordIdError(value, 'Channel ID', true),
@@ -177,6 +179,11 @@ export default function CreateChannelPage() {
                 description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
                 {...form.getInputProps('send_health_alerts', { type: 'checkbox' })}
               />
+              <Checkbox
+                label="Series Updates"
+                description="Send weekly schedules and standings for seasons and series"
+                {...form.getInputProps('send_series_updates', { type: 'checkbox' })}
+              />
             </Stack>
           </Stack>
         );
@@ -217,11 +224,15 @@ export default function CreateChannelPage() {
             {form.values.send_health_alerts && (
               <Text size="sm">✓ Health Alerts</Text>
             )}
+            {form.values.send_series_updates && (
+              <Text size="sm">✓ Series Updates</Text>
+            )}
             {!form.values.send_announcements &&
              !form.values.send_reminders &&
              !form.values.send_match_start &&
              !form.values.send_signup_updates &&
-             !form.values.send_health_alerts && (
+             !form.values.send_health_alerts &&
+             !form.values.send_series_updates && (
               <Text size="sm" c="dimmed">No notifications enabled</Text>
             )}
           </Stack>

@@ -3,6 +3,7 @@ import { pgTable, text, integer, boolean, timestamp, jsonb, index, unique, check
 import { sql } from 'drizzle-orm';
 import { games } from './games';
 import { tournamentTeams, tournaments } from './tournaments';
+import { seriesEntrants } from './series';
 import type { PositionScoringConfig, AnnouncementConfig } from './types';
 
 export const matchGamePlacements = pgTable('match_game_placements', {
@@ -86,8 +87,11 @@ export const matchTeams = pgTable('match_teams', {
   team_order: integer('team_order').notNull(),
   voice_channel_id: text('voice_channel_id'),
   is_reserve: boolean('is_reserve').notNull().default(false),
+  /** Set when the series pre-assigned this team to one of its entrants. */
+  series_entrant_id: text('series_entrant_id').references(() => seriesEntrants.id, { onDelete: 'set null' }),
 }, (t) => [
   index('idx_match_teams_match').on(t.match_id),
+  index('idx_match_teams_series_entrant').on(t.series_entrant_id),
   unique('match_teams_match_id_team_order_unique').on(t.match_id, t.team_order),
 ]);
 

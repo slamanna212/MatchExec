@@ -38,6 +38,7 @@ import { findMapByIdOrName, findMapByIdPattern, getGameDisplay, getMode } from '
 import { listChannelsForNotification } from '../../../src/lib/discord-channels';
 import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
 import { getMapNotes, getMatch, listMatchGameStatuses } from '../../../src/lib/matches';
+import { findSeriesForMatch } from '../../../src/lib/series';
 
 export class AnnouncementHandler {
   constructor(
@@ -158,9 +159,10 @@ export class AnnouncementHandler {
 
     try {
       // Check if this is a tournament match
-      let isTournamentMatch = false;
       const matchData = await getMatch(pgDb, eventData.id);
-      isTournamentMatch = !!matchData?.tournament_id;
+      const isTournamentMatch = !!matchData?.tournament_id;
+      // Series matches have their rosters preset from the entrants, so nobody signs up for them either.
+      const isSeriesMatch = !isTournamentMatch && (await findSeriesForMatch(pgDb, eventData.id)).length > 0;
 
       const { embed, attachment } = await this.createEventEmbedWithAttachment(
         eventData.name,
@@ -173,14 +175,15 @@ export class AnnouncementHandler {
         eventData.event_image_url,
         eventData.start_date,
         eventData.id,
-        isTournamentMatch
+        isTournamentMatch,
+        isSeriesMatch
       );
 
-      // Only add signup button for non-tournament matches
+      // Only add signup button for matches with open signups (not tournament or series matches)
       const mentionText = this.getMentionText();
       let messageOptions;
-      if (isTournamentMatch) {
-        // No signup button for tournament matches
+      if (isTournamentMatch || isSeriesMatch) {
+        // No signup button: participants are assigned from the bracket / series roster
         messageOptions = {
           content: mentionText,
           embeds: [embed],
@@ -273,13 +276,14 @@ export class AnnouncementHandler {
     eventImageUrl?: string,
     startDate?: string,
     _matchId?: string,
-    isTournamentMatch?: boolean
+    isTournamentMatch?: boolean,
+    isSeriesMatch?: boolean
   ): Promise<{ embed: EmbedBuilder; attachment?: AttachmentBuilder }> {
     const { gameName, gameColor } = await this.fetchGameDisplayData(gameId, type);
 
-    const footerText = isTournamentMatch
-      ? 'MatchExec • Participants assigned from tournament bracket'
-      : 'MatchExec • Sign up to participate!';
+    let footerText = 'MatchExec • Sign up to participate!';
+    if (isTournamentMatch) footerText = 'MatchExec • Participants assigned from tournament bracket';
+    else if (isSeriesMatch) footerText = 'MatchExec • Participants assigned from series rosters';
 
     const embed = new EmbedBuilder()
       .setTitle(capTitle(name))
@@ -604,6 +608,7 @@ export class AnnouncementHandler {
         send_match_start: channel.send_match_start,
         send_signup_updates: channel.send_signup_updates,
         send_health_alerts: channel.send_health_alerts,
+        send_series_updates: channel.send_series_updates,
         last_name_refresh: channel.last_name_refresh?.toISOString(),
         created_at: channel.created_at.toISOString(),
         updated_at: channel.updated_at.toISOString()

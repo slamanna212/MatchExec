@@ -3,6 +3,7 @@ import { mockDiscordClient, resetDiscordMocks, createMockChannel } from '../../m
 import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
 import { seedBasicTestData, createMatch, createDiscordChannel, createDiscordSettings, createTournament } from '../../utils/pg-fixtures';
 import { eq } from 'drizzle-orm';
+import { insertSeries, linkEvent } from '../../utils/pg-series-fixtures';
 import { discordChannels, matches } from '../../../lib/db/schema';
 
 // Mock the logger to prevent database access during import
@@ -186,6 +187,30 @@ describe('AnnouncementHandler', () => {
       expect(mockChannel.send).toHaveBeenCalledTimes(1);
       const sendCall = mockChannel.send.mock.calls[0][0];
       expect(sendCall.components).toHaveLength(0); // No signup button
+    });
+
+    it('should not include signup button for series matches', async () => {
+      const match = await createMatch(game.id, mode.id);
+      const seriesRow = await insertSeries();
+      await linkEvent(seriesRow.id, 'match', match.id);
+
+      const mockChannel = createMockChannel();
+      mockDiscordClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      await announcementHandler.postEventAnnouncement({
+        id: match.id,
+        name: 'Series Match',
+        description: 'A series match',
+        game_id: game.id,
+        type: 'competitive' as const,
+        maps: [],
+        max_participants: 10,
+        guild_id: 'guild-123'
+      });
+
+      expect(mockChannel.send).toHaveBeenCalledTimes(1);
+      const sendCall = mockChannel.send.mock.calls[0][0];
+      expect(sendCall.components).toHaveLength(0); // roster is preset from the series entrants
     });
 
     it('should handle missing channels gracefully', async () => {

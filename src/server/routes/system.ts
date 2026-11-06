@@ -5,7 +5,7 @@ import { db, getPool } from '@lib/db';
 import {
   discordAnnouncementQueue, discordDeletionQueue, discordHealthAlertQueue, discordMapCodeQueue, discordMatchEditQueue,
   discordMatchReminderQueue, discordMatchStartQueue, discordMatchWinnerQueue, discordPlayerReminderQueue,
-  discordReminderQueue, discordScoreNotificationQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue,
+  discordReminderQueue, discordScoreNotificationQueue, discordSeriesUpdateQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue,
   games, matches, matchParticipants, tournamentParticipants, tournaments,
 } from '@lib/db/schema';
 import { getSystemStatus } from '@lib/db/system-status';
@@ -99,7 +99,7 @@ function metric(name: string, help: string, type: string, value: number, labels?
 const PENDING_QUEUE_TABLES = [
   discordAnnouncementQueue, discordDeletionQueue, discordHealthAlertQueue, discordMapCodeQueue, discordMatchEditQueue,
   discordMatchReminderQueue, discordMatchStartQueue, discordMatchWinnerQueue, discordPlayerReminderQueue,
-  discordReminderQueue, discordScoreNotificationQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue,
+  discordReminderQueue, discordScoreNotificationQueue, discordSeriesUpdateQueue, discordStatusUpdateQueue, discordVoiceAnnouncementQueue,
 ] as const;
 
 async function countByStatus(table: typeof matches | typeof tournaments) {

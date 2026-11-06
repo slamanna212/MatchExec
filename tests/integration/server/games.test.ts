@@ -76,7 +76,8 @@ describe('GET /api/games/:gameId/modes', () => {
     expect(res.status).toBe(200);
     expect(res.data.map((m: any) => m.name)).toEqual(['Control', 'Push']);
     expect(res.data[0]).toMatchObject({ team_size: null, max_players: 12 });
-    expect(Object.keys(res.data[0]).sort()).toEqual(['description', 'id', 'max_players', 'name', 'team_size']);
+    expect(Object.keys(res.data[0]).sort()).toEqual(['description', 'id', 'max_players', 'name', 'scoring_type', 'team_size']);
+    expect(res.data[0].scoring_type).toBe('Normal');
   });
 });
 

@@ -4,13 +4,15 @@ import { StageRing } from '@/components/StageRing';
 import { SeriesAvatar } from './series-dashboard';
 import {
   SERIES_STATUS_COLOR, SERIES_FALLBACK_COLOR, seriesIdentity, seriesHistoryIdentity, seriesProgress,
-  formatShortDate, formatFullDateTime, formatPoints, parseScoringConfig,
+  formatShortDate, formatFullDateTime, formatPoints, parseScoringConfig, describeSeriesFormat,
 } from './series-shared';
 import type { SeriesSummary } from './series-shared';
 
 interface SeriesInfoPanelProps {
   series: SeriesSummary;
   onActivate: () => void;
+  /** created -> registration. Optional so older callers keep working (the button is then hidden). */
+  onOpenRegistration?: () => void;
   onAddEvent: () => void;
   onEdit: () => void;
   onComplete: () => void;
@@ -31,7 +33,7 @@ function EnabledBadge({ on }: { on: boolean }): JSX.Element {
 }
 
 export function SeriesInfoPanel({
-  series, onActivate, onAddEvent, onEdit, onComplete, onCancel,
+  series, onActivate, onOpenRegistration, onAddEvent, onEdit, onComplete, onCancel,
 }: SeriesInfoPanelProps): JSX.Element {
   const finished = series.status === 'complete' || series.status === 'cancelled';
   // Finished series have no next event, so identify them by their last event instead.
@@ -80,13 +82,24 @@ export function SeriesInfoPanel({
             </DetailRow>
             <DetailRow label="Events">{`${series.completed_event_count} of ${series.event_count} complete`}</DetailRow>
             <DetailRow label="Players">{String(series.participant_count)}</DetailRow>
+            {series.scoring_type && (
+              <DetailRow label="Format">{describeSeriesFormat(series.entrant_type ?? 'solo', series.scoring_type)}</DetailRow>
+            )}
             {(start || end) && <DetailRow label="Runs">{`${start ?? '?'} → ${end ?? '?'}`}</DetailRow>}
-            <DetailRow label="Match win / loss">
-              {`${formatPoints(config.match_win_points ?? 0)} / ${formatPoints(config.match_loss_points ?? 0)} pts`}
-            </DetailRow>
-            <DetailRow label="Placement">
-              {placements.length > 0 ? placements.map(formatPoints).join(' · ') : '—'}
-            </DetailRow>
+            {config.mode === 'head_to_head' ? (
+              <DetailRow label="Win / loss / tie">
+                {`${formatPoints(config.win_points ?? 0)} / ${formatPoints(config.loss_points ?? 0)} / ${formatPoints(config.tie_points ?? 0)} pts`}
+              </DetailRow>
+            ) : (
+              <>
+                <DetailRow label="Match win / loss">
+                  {`${formatPoints(config.match_win_points ?? 0)} / ${formatPoints(config.match_loss_points ?? 0)} pts`}
+                </DetailRow>
+                <DetailRow label="Placement">
+                  {placements.length > 0 ? placements.map(formatPoints).join(' · ') : '—'}
+                </DetailRow>
+              </>
+            )}
             <DetailRow label="Announcements"><EnabledBadge on={series.announcements} /></DetailRow>
             <DetailRow label="Player Notifications"><EnabledBadge on={series.player_notifications} /></DetailRow>
             {series.livestream_link && (
@@ -105,8 +118,11 @@ export function SeriesInfoPanel({
         {!finished && (
           <Card withBorder radius="md" padding="lg" shadow="sm">
             <Stack gap="xs">
-              {series.status === 'created' && (
-                <Button fullWidth variant="filled" color="violet" onClick={onActivate}>Activate Series</Button>
+              {series.status === 'created' && onOpenRegistration && (
+                <Button fullWidth variant="light" color="yellow" onClick={onOpenRegistration}>Open registration</Button>
+              )}
+              {(series.status === 'created' || series.status === 'registration') && (
+                <Button fullWidth variant="filled" color="violet" onClick={onActivate}>Start season</Button>
               )}
               {series.status === 'active' && (
                 <Button fullWidth variant="filled" color="violet" onClick={onAddEvent}>Add Event</Button>

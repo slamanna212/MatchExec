@@ -6,6 +6,7 @@ import { AvatarUpdateJob } from './jobs/update-avatars';
 import { AutoBackupJob } from './jobs/auto-backup';
 import { isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { UpdateCheckJob } from './jobs/check-for-update';
+import { SERIES_UPDATES_CRON, SeriesUpdatesJob } from './jobs/series-updates';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
 import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
@@ -50,6 +51,7 @@ class MatchExecScheduler {
   private leaderLock: LeaderLock | null = null;
   private workerControl: WorkerControl | null = null;
   private autoBackupJob: AutoBackupJob | null = null;
+  private seriesUpdatesJob: SeriesUpdatesJob | null = null;
 
   async start() {
     logger.debug('🕐 Starting MatchExec Scheduler...');
@@ -131,6 +133,8 @@ class MatchExecScheduler {
         this.updateCheckJob = new UpdateCheckJob();
         this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
+        this.startSeriesUpdatesJob();
+
         logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks with default settings`);
         return;
       }
@@ -150,10 +154,18 @@ class MatchExecScheduler {
       this.updateCheckJob = new UpdateCheckJob();
       this.startCronJob('Update Check', '0 0 9 * * *', this.updateCheckJob.checkForUpdate.bind(this.updateCheckJob));
 
+      this.startSeriesUpdatesJob();
+
       logger.debug(`✅ Loaded ${this.cronJobs.length} scheduled tasks`);
     } catch (error) {
       logger.error('❌ Failed to load scheduler settings:', error);
     }
+  }
+
+  /** Weekly schedule / standings posts for active series, every 15 minutes (not configurable). */
+  private startSeriesUpdatesJob() {
+    this.seriesUpdatesJob = new SeriesUpdatesJob();
+    this.startCronJob('Series Updates', SERIES_UPDATES_CRON, () => this.seriesUpdatesJob!.run().then(() => undefined));
   }
 
   private startCronJob(name: string, cronExpression: string, task: () => Promise<void>) {

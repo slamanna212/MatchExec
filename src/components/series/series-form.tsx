@@ -1,13 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { JSX, ReactNode } from 'react';
-import { Card, Stack, TextInput, Textarea, Group, Switch, Text } from '@mantine/core';
+import type { JSX } from 'react';
+import { Stack, TextInput, Textarea, Group, Switch, Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
-import { SectionLabel } from '@/components/SectionLabel';
 import { EventImageUpload } from '@/components/create-match/EventImageUpload';
 import { showError } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
-import type { SeriesScoringConfig } from '@/lib/series';
+import type {
+  SeriesDiscordConfig, SeriesEntrantType, SeriesMatchDefaults, SeriesScoringConfig, SeriesScoringType,
+} from '@/shared/series-types';
 import { ScoringConfigEditor } from './scoring-config-editor';
+import { defaultScoringConfig, isLegacyScoringConfig } from './scoring-config';
+import { SeriesFormCard } from './series-form-card';
+import { SeriesDiscordFields } from './series-setup-fields';
+import { rosterPayload } from './series-setup';
+import { parseScoringConfig } from './series-shared';
+import type { SeriesSummary } from './series-shared';
+
+export { SeriesFormCard };
 
 /** Form state shared by the create stepper and the edit page. Dates are 'YYYY-MM-DD' (Mantine 9 DateStringValue). */
 export interface SeriesFormData {
@@ -20,6 +29,29 @@ export interface SeriesFormData {
   announcements: boolean;
   player_notifications: boolean;
   scoring_config: SeriesScoringConfig;
+  // setup (series rework)
+  entrant_type: SeriesEntrantType;
+  roster_min: number | null;
+  roster_max: number | null;
+  /** null = legacy series without a scoring-type restriction. */
+  scoring_type: SeriesScoringType | null;
+  game_ids: string[];
+  game_id: string | null;
+  game_mode_id: string | null;
+  // match defaults
+  match_rounds: number | null;
+  match_rules: 'casual' | 'competitive' | null;
+  match_stats_enabled: boolean;
+  match_player_notifications: boolean;
+  match_maps: string[];
+  // Discord posts
+  discord_registration_posts: boolean;
+  discord_weekly_schedule: boolean;
+  discord_standings_posts: boolean;
+  discord_schedule_lead_hours: number;
+  // create flow: seed entrants from a previous season
+  previous_series_id: string | null;
+  copy_include_members: boolean;
 }
 
 export const EMPTY_SERIES_FORM: SeriesFormData = {
@@ -31,7 +63,25 @@ export const EMPTY_SERIES_FORM: SeriesFormData = {
   event_image_url: null,
   announcements: true,
   player_notifications: true,
-  scoring_config: {},
+  scoring_config: defaultScoringConfig('Normal'),
+  entrant_type: 'solo',
+  roster_min: null,
+  roster_max: null,
+  scoring_type: 'Normal',
+  game_ids: [],
+  game_id: null,
+  game_mode_id: null,
+  match_rounds: null,
+  match_rules: null,
+  match_stats_enabled: false,
+  match_player_notifications: true,
+  match_maps: [],
+  discord_registration_posts: true,
+  discord_weekly_schedule: true,
+  discord_standings_posts: true,
+  discord_schedule_lead_hours: 48,
+  previous_series_id: null,
+  copy_include_members: true,
 };
 
 export type UpdateSeriesForm = <K extends keyof SeriesFormData>(key: K, value: SeriesFormData[K]) => void;
@@ -52,8 +102,55 @@ export function isoToDateInput(value: string | null | undefined): string | null 
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Body for POST /api/series and PATCH /api/series/[id]. Empty optional fields are sent as null. */
-export function buildSeriesPayload(form: SeriesFormData): Record<string, unknown> {
+/** Setup keys the server validates as a whole and 409s on; an edit only sends the ones that changed. */
+const SETUP_KEYS = [
+  'entrant_type', 'roster_min', 'roster_max', 'scoring_type', 'game_id', 'game_ids', 'game_mode_id', 'previous_series_id',
+] as const;
+
+function setupPayload(form: SeriesFormData): Record<(typeof SETUP_KEYS)[number], unknown> {
+  return {
+    entrant_type: form.entrant_type,
+    ...rosterPayload(form.entrant_type, form.roster_min, form.roster_max),
+    scoring_type: form.scoring_type,
+    game_id: form.game_id,
+    game_ids: form.game_ids,
+    game_mode_id: form.game_mode_id,
+    previous_series_id: form.previous_series_id,
+  };
+}
+
+/** `match_defaults` from the form. */
+export function buildMatchDefaults(form: SeriesFormData): SeriesMatchDefaults {
+  const defaults: SeriesMatchDefaults = {};
+  if (form.match_rounds !== null) { defaults.rounds = form.match_rounds; defaults.rounds_per_match = form.match_rounds; }
+  if (form.match_rules) defaults.rules = form.match_rules;
+  defaults.stats_enabled = form.match_stats_enabled;
+  defaults.player_notifications = form.match_player_notifications;
+  if (form.match_maps.length > 0) defaults.maps = form.match_maps;
+  return defaults;
+}
+
+export function buildDiscordConfig(form: SeriesFormData): SeriesDiscordConfig {
+  return {
+    registration_posts: form.discord_registration_posts,
+    weekly_schedule: form.discord_weekly_schedule,
+    standings_posts: form.discord_standings_posts,
+    schedule_lead_hours: form.discord_schedule_lead_hours,
+  };
+}
+
+/**
+ * Body for POST /api/series and PATCH /api/series/[id]. Empty optional fields are sent as null. For an edit pass the
+ * form as it was loaded as `initial`: unchanged setup fields are then left out so a legacy series is never re-validated.
+ */
+export function buildSeriesPayload(form: SeriesFormData, initial?: SeriesFormData): Record<string, unknown> {
+  const setup: Record<string, unknown> = setupPayload(form);
+  if (initial) {
+    const before = setupPayload(initial);
+    for (const key of SETUP_KEYS) {
+      if (JSON.stringify(before[key]) === JSON.stringify(setup[key])) delete setup[key];
+    }
+  }
   return {
     name: form.name.trim(),
     description: form.description.trim() || null,
@@ -64,6 +161,44 @@ export function buildSeriesPayload(form: SeriesFormData): Record<string, unknown
     announcements: form.announcements,
     player_notifications: form.player_notifications,
     scoring_config: form.scoring_config,
+    match_defaults: buildMatchDefaults(form),
+    discord_config: buildDiscordConfig(form),
+    ...setup,
+  };
+}
+
+/** Edit form state from a loaded series. Legacy series (no scoring type / no standings mode) keep those fields empty. */
+export function formFromSeries(s: SeriesSummary): SeriesFormData {
+  const defaults = s.match_defaults ?? {};
+  const discord = s.discord_config ?? {};
+  return {
+    name: s.name,
+    description: s.description ?? '',
+    start_date: isoToDateInput(s.start_date),
+    end_date: isoToDateInput(s.end_date),
+    livestream_link: s.livestream_link ?? '',
+    event_image_url: s.event_image_url ?? null,
+    announcements: s.announcements,
+    player_notifications: s.player_notifications,
+    scoring_config: parseScoringConfig(s.scoring_config),
+    entrant_type: s.entrant_type ?? 'solo',
+    roster_min: s.roster_min ?? null,
+    roster_max: s.roster_max ?? null,
+    scoring_type: s.scoring_type ?? null,
+    game_ids: s.game_ids ?? [],
+    game_id: s.game_id ?? null,
+    game_mode_id: s.game_mode_id ?? null,
+    match_rounds: defaults.rounds ?? defaults.rounds_per_match ?? null,
+    match_rules: defaults.rules ?? null,
+    match_stats_enabled: defaults.stats_enabled ?? false,
+    match_player_notifications: defaults.player_notifications ?? true,
+    match_maps: defaults.maps ?? [],
+    discord_registration_posts: discord.registration_posts ?? true,
+    discord_weekly_schedule: discord.weekly_schedule ?? true,
+    discord_standings_posts: discord.standings_posts ?? true,
+    discord_schedule_lead_hours: discord.schedule_lead_hours ?? 48,
+    previous_series_id: s.previous_series_id ?? null,
+    copy_include_members: true,
   };
 }
 
@@ -87,7 +222,12 @@ export function useSeriesForm(): UseSeriesFormResult {
     if (typeof window === 'undefined') return EMPTY_SERIES_FORM;
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) return { ...EMPTY_SERIES_FORM, ...JSON.parse(saved) };
+      if (saved) {
+        const merged: SeriesFormData = { ...EMPTY_SERIES_FORM, ...JSON.parse(saved) };
+        // A form saved before standings modes existed: start from the default of its scoring type instead.
+        if (isLegacyScoringConfig(merged.scoring_config ?? {})) merged.scoring_config = defaultScoringConfig(merged.scoring_type);
+        return merged;
+      }
     } catch {
       /* fall through to defaults */
     }
@@ -188,17 +328,6 @@ export function useSeriesImageUpload(
   return { uploading, upload, remove };
 }
 
-export function SeriesFormCard({ title, children }: { title: string; children: ReactNode }): JSX.Element {
-  return (
-    <Card withBorder radius="md" padding="lg">
-      <Stack gap="md">
-        <SectionLabel>{title}</SectionLabel>
-        {children}
-      </Stack>
-    </Card>
-  );
-}
-
 export function SeriesDetailsFields({
   form,
   update,
@@ -271,20 +400,23 @@ export function SeriesDetailsFields({
 
 export function SeriesNotificationsFields({ form, update }: { form: SeriesFormData; update: UpdateSeriesForm }): JSX.Element {
   return (
-    <SeriesFormCard title="Notifications">
-      <Switch
-        label="Discord Announcements"
-        description="Post to Discord when the series is activated, completed, or cancelled"
-        checked={form.announcements}
-        onChange={(e) => update('announcements', e.currentTarget.checked)}
-      />
-      <Switch
-        label="Player Notifications"
-        description="Send DMs to participants for series events"
-        checked={form.player_notifications}
-        onChange={(e) => update('player_notifications', e.currentTarget.checked)}
-      />
-    </SeriesFormCard>
+    <Stack gap="md">
+      <SeriesFormCard title="Notifications">
+        <Switch
+          label="Discord Announcements"
+          description="Post to Discord when the series is activated, completed, or cancelled"
+          checked={form.announcements}
+          onChange={(e) => update('announcements', e.currentTarget.checked)}
+        />
+        <Switch
+          label="Player Notifications"
+          description="Send DMs to participants for series events"
+          checked={form.player_notifications}
+          onChange={(e) => update('player_notifications', e.currentTarget.checked)}
+        />
+      </SeriesFormCard>
+      <SeriesDiscordFields form={form} update={update} />
+    </Stack>
   );
 }
 
@@ -292,9 +424,9 @@ export function SeriesScoringFields({ form, update }: { form: SeriesFormData; up
   return (
     <SeriesFormCard title="Scoring">
       <Text size="xs" c="dimmed" mt={-8}>
-        Controls how match and tournament results convert into series standings points.
+        Controls how match and tournament results convert into series standings.
       </Text>
-      <ScoringConfigEditor value={form.scoring_config} onChange={(v) => update('scoring_config', v)} />
+      <ScoringConfigEditor value={form.scoring_config} onChange={(v) => update('scoring_config', v)} scoringType={form.scoring_type} />
     </SeriesFormCard>
   );
 }

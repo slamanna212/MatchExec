@@ -66,7 +66,7 @@ export const MAPPINGS: TableMapping[] = [
       id: SAME, guild_id: SAME, discord_channel_id: SAME, name: SAME, channel_name: SAME, type: SAME,
       channel_type: SAME, parent_id: SAME, send_announcements: SAME, send_reminders: SAME,
       send_match_start: SAME, send_signup_updates: SAME, last_name_refresh: SAME, created_at: SAME,
-      updated_at: SAME, send_health_alerts: SAME,
+      updated_at: SAME, send_health_alerts: SAME, send_series_updates: DEFAULT,
     },
   }),
   defineMapping(schema.discordDeletionQueue, 'discord_deletion_queue', {
@@ -302,7 +302,7 @@ export const MAPPINGS: TableMapping[] = [
   defineMapping(schema.matchTeams, 'match_teams', {
     columns: {
       id: SAME, match_id: SAME, team_name: SAME, team_color: SAME, team_order: SAME, voice_channel_id: SAME,
-      is_reserve: SAME,
+      is_reserve: SAME, series_entrant_id: DEFAULT,
     },
     // Known repair: a team created before migration 019 carried its Discord voice channel only in the retired
     // matches.blue/red_team_voice_channel columns; keep it so the bot can still clean the channel up.
@@ -373,13 +373,16 @@ export const MAPPINGS: TableMapping[] = [
       id: SAME, name: SAME, description: SAME, status: SAME, scoring_config: SAME, start_date: SAME,
       end_date: SAME, event_image_url: SAME, game_id: SAME, guild_id: SAME, channel_id: SAME,
       announcements: SAME, player_notifications: SAME, livestream_link: SAME, created_at: SAME,
-      updated_at: SAME,
+      updated_at: SAME, entrant_type: DEFAULT, roster_min: DEFAULT, roster_max: DEFAULT, scoring_type: DEFAULT,
+      game_ids: DEFAULT, game_mode_id: DEFAULT, match_defaults: DEFAULT, discord_config: DEFAULT,
+      previous_series_id: DEFAULT,
     },
   }),
   defineMapping(schema.seriesEvents, 'series_events', {
     columns: {
       id: SAME, series_id: SAME, event_type: SAME, match_id: SAME, tournament_id: SAME, event_order: SAME,
-      event_date: SAME, points_multiplier: SAME,
+      event_date: SAME, points_multiplier: SAME, stage_id: DEFAULT, role: DEFAULT, week: DEFAULT,
+      counts_for_standings: DEFAULT, batch_id: DEFAULT, status: DEFAULT, entrant_ids: DEFAULT, seeding_rule: DEFAULT,
     },
   }),
   defineMapping(schema.statsImageQueue, 'stats_image_queue', {
@@ -443,7 +446,7 @@ export const MAPPINGS: TableMapping[] = [
   }),
   defineMapping(schema.tournamentTeams, 'tournament_teams', {
     columns: {
-      id: SAME, tournament_id: SAME, team_name: SAME, created_at: SAME,
+      id: SAME, tournament_id: SAME, team_name: SAME, created_at: SAME, series_entrant_id: DEFAULT,
     },
   }),
   defineMapping(schema.tournaments, 'tournaments', {

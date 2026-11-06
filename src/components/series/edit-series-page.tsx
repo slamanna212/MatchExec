@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useNavigate } from 'react-router';
 import { Container, Stack, Button, Group, Loader, Center, Alert } from '@mantine/core';
@@ -7,11 +7,13 @@ import { PageHeader } from '@/components/PageHeader';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper, showError } from '@/lib/notifications';
 import {
-  EMPTY_SERIES_FORM, buildSeriesPayload, isoToDateInput,
+  EMPTY_SERIES_FORM, buildSeriesPayload, formFromSeries,
   SeriesDetailsFields, SeriesNotificationsFields, SeriesScoringFields,
 } from './series-form';
 import type { SeriesFormData, UpdateSeriesForm } from './series-form';
-import { parseScoringConfig } from './series-shared';
+import { SeriesSetupFields, useGameCatalog } from './series-setup-fields';
+import type { SetupLocks } from './series-setup-fields';
+import { validateRosterInputs } from './series-setup';
 import type { SeriesSummary } from './series-shared';
 
 export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element {
@@ -21,6 +23,10 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
   const [error, setError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState('');
   const [form, setForm] = useState<SeriesFormData>(EMPTY_SERIES_FORM);
+  const [locks, setLocks] = useState<SetupLocks>({});
+  // The form as loaded: the save only sends setup fields that changed.
+  const initialForm = useRef<SeriesFormData | null>(null);
+  const { catalog, loaded: catalogLoaded } = useGameCatalog();
 
   const update: UpdateSeriesForm = useCallback((key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -33,17 +39,19 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
         if (!res.ok) { setError(res.status === 404 ? 'Series not found' : 'Failed to load series'); return; }
         const { series: s }: { series: SeriesSummary } = await res.json();
         setSavedName(s.name);
-        setForm({
-          name: s.name,
-          description: s.description ?? '',
-          start_date: isoToDateInput(s.start_date),
-          end_date: isoToDateInput(s.end_date),
-          livestream_link: s.livestream_link ?? '',
-          event_image_url: s.event_image_url ?? null,
-          announcements: s.announcements,
-          player_notifications: s.player_notifications,
-          scoring_config: parseScoringConfig(s.scoring_config),
-        });
+        const loaded = formFromSeries(s);
+        initialForm.current = loaded;
+        setForm(loaded);
+
+        // The server refuses to change the entrant type once entrants exist and the scoring type once events exist.
+        let hasEntrants = false;
+        try {
+          const entrantsRes = await fetch(`/api/series/${seriesId}/entrants?include_left=true`);
+          if (entrantsRes.ok) hasEntrants = ((await entrantsRes.json()).entrants ?? []).length > 0;
+        } catch (err) {
+          logger.error('Error loading series entrants:', err);
+        }
+        setLocks({ entrantType: hasEntrants, scoringType: s.event_count > 0 });
       } catch (err) {
         logger.error('Error loading series:', err);
         setError('Failed to load series');
@@ -56,6 +64,8 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
 
   const handleSave = async () => {
     if (!form.name.trim()) { showError('Series name is required'); return; }
+    const rosterError = validateRosterInputs(form.entrant_type, form.roster_min, form.roster_max);
+    if (rosterError) { showError(rosterError); return; }
     setSaving(true);
     const nid = `series-save-${seriesId}`;
     notificationHelper.loading({ id: nid, message: 'Saving series...' });
@@ -63,7 +73,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
       const res = await fetch(`/api/series/${seriesId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildSeriesPayload(form)),
+        body: JSON.stringify(buildSeriesPayload(form, initialForm.current ?? undefined)),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -114,6 +124,7 @@ export function EditSeriesPage({ seriesId }: { seriesId: string }): JSX.Element 
 
         {/* Removing the image only clears the field: the saved series still uses the file until Save. */}
         <SeriesDetailsFields form={form} update={update} deleteImageOnRemove={false} />
+        <SeriesSetupFields form={form} update={update} catalog={catalog} catalogLoaded={catalogLoaded} locks={locks} />
         <SeriesNotificationsFields form={form} update={update} />
         <SeriesScoringFields form={form} update={update} />
 

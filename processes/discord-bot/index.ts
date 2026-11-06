@@ -19,6 +19,7 @@ import { HealthMonitor } from './modules/health-monitor';
 import { ScorecardHandler } from './modules/scorecard-handler';
 import { WinnerVoteHandler } from './modules/winner-vote-handler';
 import { StatsReportHandler } from './modules/stats-report-handler';
+import { SeriesUpdateHandler } from './modules/series-update-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
 import { db as pgDb, closeDb } from '../../lib/db';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
@@ -43,6 +44,7 @@ class MatchExecBot {
   private scorecardHandler: ScorecardHandler | null = null;
   private winnerVoteHandler: WinnerVoteHandler | null = null;
   private statsReportHandler: StatsReportHandler | null = null;
+  private seriesUpdateHandler: SeriesUpdateHandler | null = null;
   private voiceChannelEmptinessMonitor: VoiceChannelEmptinessMonitor | null = null;
   private voiceChannelMonitorInterval: ReturnType<typeof setInterval> | null = null;
   private leaderLock: LeaderLock | null = null;
@@ -264,6 +266,8 @@ class MatchExecBot {
       this.scorecardHandler.setWinnerVoteHandler(this.winnerVoteHandler);
       this.statsReportHandler = new StatsReportHandler(this.client);
       this.queueProcessor.setStatsReportHandler(this.statsReportHandler);
+      this.seriesUpdateHandler = new SeriesUpdateHandler(this.client, this.settings);
+      this.queueProcessor.setSeriesUpdateHandler(this.seriesUpdateHandler);
       this.healthMonitor = new HealthMonitor(this.announcementHandler);
       this.voiceChannelEmptinessMonitor = new VoiceChannelEmptinessMonitor(this.client);
 
@@ -299,6 +303,7 @@ class MatchExecBot {
       this.eventHandler?.updateSettings(newSettings);
       this.announcementHandler?.updateSettings(newSettings);
       this.reminderHandler?.updateSettings(newSettings);
+      this.seriesUpdateHandler?.updateSettings(newSettings);
       this.interactionHandler?.updateSettings(newSettings);
       this.queueProcessor?.updateSettings(newSettings);
       this.queueProcessor?.updateVoiceHandler(this.voiceHandler);

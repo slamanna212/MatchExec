@@ -130,8 +130,18 @@ describe('Utils', () => {
       expect(hasRemindersInRem).toBe(true);
     });
 
+    it('selects series_updates channels by their own flag and maps it into the DTO', async () => {
+      await createDiscordSettings({ guild_id: 'g1' });
+      await createDiscordChannel({ id: 'ch-s', guild_id: 'g1', discord_channel_id: 'dc-s', name: 'series', send_series_updates: true });
+      await createDiscordChannel({ id: 'ch-n', guild_id: 'g1', discord_channel_id: 'dc-n', name: 'other', send_series_updates: false });
+
+      const result = await utils.getChannelsForNotificationType('series_updates');
+      expect(result.map((c: any) => c.id)).toEqual(['ch-s']);
+      expect(result[0].send_series_updates).toBe(true);
+    });
+
     it('handles all valid notification types', async () => {
-      for (const type of ['announcements', 'reminders', 'match_start', 'signup_updates'] as const) {
+      for (const type of ['announcements', 'reminders', 'match_start', 'signup_updates', 'series_updates'] as const) {
         const result = await utils.getChannelsForNotificationType(type);
         expect(Array.isArray(result)).toBe(true);
       }

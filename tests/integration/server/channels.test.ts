@@ -44,7 +44,7 @@ describe('GET /api/channels', () => {
     expect(new Date(zebra.created_at).toISOString()).toBe(zebra.created_at);
     expect(Object.keys(zebra).sort()).toEqual([
       'channel_name', 'channel_type', 'created_at', 'discord_channel_id', 'id', 'last_name_refresh', 'send_announcements',
-      'send_health_alerts', 'send_match_start', 'send_reminders', 'send_signup_updates', 'updated_at',
+      'send_health_alerts', 'send_match_start', 'send_reminders', 'send_series_updates', 'send_signup_updates', 'updated_at',
     ]);
   });
 });
@@ -71,13 +71,14 @@ describe('POST /api/channels', () => {
 
   it('creates a text channel with the given flags (others default to false)', async () => {
     await configureGuild();
-    const res = await post({ discord_channel_id: '111111111111111111', channel_type: 'text', send_announcements: true, send_health_alerts: 1 });
+    const res = await post({ discord_channel_id: '111111111111111111', channel_type: 'text', send_announcements: true, send_health_alerts: 1, send_series_updates: 1 });
     expect(res.status).toBe(200);
     expect(res.data).toMatchObject({ success: true, message: 'Channel created successfully' });
     const [row] = await getPgTestDb().select().from(discordChannels).where(eq(discordChannels.id, res.data.id));
     expect(row).toMatchObject({
       guild_id: 'guild-123', discord_channel_id: '111111111111111111', name: 'Channel 111111111111111111', type: 0, channel_type: 'text',
       send_announcements: true, send_reminders: false, send_match_start: false, send_signup_updates: false, send_health_alerts: true,
+      send_series_updates: true,
     });
   });
 
@@ -151,13 +152,14 @@ describe('PUT /api/channels/:channelId', () => {
     await addChannel('ch-txt', { send_reminders: true, send_signup_updates: true });
     const before = (await getPgTestDb().select().from(discordChannels).where(eq(discordChannels.id, 'ch-txt')))[0];
 
-    const res = await put('ch-txt', { send_announcements: true, send_match_start: 1 });
+    const res = await put('ch-txt', { send_announcements: true, send_match_start: 1, send_series_updates: true });
     expect(res.status).toBe(200);
     expect(res.data).toEqual({ success: true, message: 'Channel notification settings updated successfully' });
 
     const [row] = await getPgTestDb().select().from(discordChannels).where(eq(discordChannels.id, 'ch-txt'));
     expect(row).toMatchObject({
       send_announcements: true, send_reminders: false, send_match_start: true, send_signup_updates: false, send_health_alerts: false,
+      send_series_updates: true,
     });
     expect(row.updated_at.getTime()).toBeGreaterThanOrEqual(before.updated_at.getTime());
   });

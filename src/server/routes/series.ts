@@ -1,38 +1,24 @@
 /** `/api/series/**` (series CRUD, status transitions, events, standings, membership lookups). Thin handlers over `src/lib/series`. */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { db } from '../../../lib/db';
-import { logger } from '@/lib/logger';
 import {
-  SeriesError, addSeriesEvent, createSeries, deleteSeries, getSeriesById, getSeriesStandings, getSeriesSummary, findSeriesForMatch,
-  findSeriesForTournament, listSeriesEventDetails, listSeriesSummaries, removeSeriesEvent, transitionSeriesStatus, updateSeries, updateSeriesEvent,
-  validateEventOrder, validatePointsMultiplier, validateSeriesBody, validateSeriesDates, validateSeriesGameId, validateSeriesStatusTransition,
+  STANDINGS_AFFECTING_FIELDS, addSeriesEvent, createSeriesChecked, deleteSeries, editSeries, getSeriesById, getSeriesEventDto,
+  getSeriesStandingsResponse, getSeriesSummary, findSeriesForMatch, findSeriesForTournament, listSeriesEventDtos, listSeriesSummaries,
+  removeSeriesEvent, transitionSeries, updateSeriesEvent, validateEventOrder, validatePlacementFields, validatePointsMultiplier,
+  validateSeriesBody, validateSeriesDates, SERIES_STATUSES,
   type AddSeriesEventInput, type CreateSeriesInput, type SeriesStatus, type UpdateSeriesEventInput, type UpdateSeriesInput,
 } from '@/lib/series';
 import { jsonError } from '../http';
+import { guard, readJsonObject } from './series-helpers';
+import { seriesBuilderRoutes } from './series-builder';
+import { seriesEntrantsRoutes } from './series-entrants';
+import { seriesPlayoffsRoutes } from './series-playoffs';
 
-const VALID_STATUSES = ['created', 'active', 'complete', 'cancelled'];
+const VALID_STATUSES: readonly string[] = SERIES_STATUSES;
 
-/** Run a handler; domain errors keep their status, everything else is logged and answered with `failure`. */
-async function guard(c: Context, label: string, failure: string, fn: () => Promise<Response>): Promise<Response> {
-  try {
-    return await fn();
-  } catch (error) {
-    if (error instanceof SeriesError) return jsonError(c, error.message, error.status);
-    logger.error(`${label}:`, error);
-    return jsonError(c, failure);
-  }
-}
-
-/** Parses a JSON object body; null for invalid JSON or non-object bodies. */
-async function readJsonObject(c: Context): Promise<Record<string, unknown> | null> {
-  try {
-    const body: unknown = await c.req.json();
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
-    return body as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+/** Series states in which an event's placement (stage / week / date) may still be moved around. */
+const PLACEMENT_EDITABLE = ['created', 'registration', 'active'];
+const STANDINGS_EDITABLE = ['created', 'registration'];
 
 export const seriesRoutes = new Hono()
   // ── list / membership lookups / create ────────────────────────────────────
@@ -60,11 +46,15 @@ export const seriesRoutes = new Hono()
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
     const validationError = validateSeriesBody(body, false);
     if (validationError) return jsonError(c, validationError, 400);
-    const gameError = await validateSeriesGameId(db, body.game_id);
-    if (gameError) return jsonError(c, gameError, 400);
-    const id = await createSeries(db, { ...body, name: (body.name as string).trim() } as unknown as CreateSeriesInput);
+    // game / scoring-type / roster consistency is checked by the domain (400)
+    const id = await createSeriesChecked(db, { ...body, name: (body.name as string).trim() } as unknown as CreateSeriesInput);
     return c.json({ id }, 201);
   }))
+
+  // ── entrants / stages / player search (before the /:seriesId routes), builder and playoff routers ──
+  .route('/', seriesEntrantsRoutes)
+  .route('/', seriesBuilderRoutes)
+  .route('/', seriesPlayoffsRoutes)
 
   // ── one series ────────────────────────────────────────────────────────────
   .get('/:seriesId', (c) => guard(c, 'Error fetching series', 'Failed to fetch series', async () => {
@@ -91,13 +81,11 @@ export const seriesRoutes = new Hono()
       body.end_date === undefined ? series.end_date : body.end_date,
     );
     if (dateError) return jsonError(c, dateError, 400);
-    const gameError = await validateSeriesGameId(db, body.game_id);
-    if (gameError) return jsonError(c, gameError, 400);
     // Status changes must go through POST /transition, which validates the move is legal (e.g. can't jump from
     // 'created' straight to 'complete', can't un-complete a finished series). Silently dropping it here rather than
     // erroring keeps this endpoint usable for updating other fields in the same request.
     const { status: _status, ...editableFields } = body;
-    await updateSeries(db, seriesId, {
+    await editSeries(db, seriesId, {
       ...editableFields,
       ...(typeof editableFields.name === 'string' ? { name: editableFields.name.trim() } : {}),
     } as unknown as UpdateSeriesInput);
@@ -112,8 +100,7 @@ export const seriesRoutes = new Hono()
 
   .post('/:seriesId/transition', (c) => guard(c, 'Error transitioning series', 'Failed to transition series', async () => {
     const seriesId = c.req.param('seriesId');
-    const series = await getSeriesById(db, seriesId);
-    if (!series) return jsonError(c, 'Series not found', 404);
+    if (!(await getSeriesById(db, seriesId))) return jsonError(c, 'Series not found', 404);
 
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
@@ -122,27 +109,24 @@ export const seriesRoutes = new Hono()
       return jsonError(c, `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`, 400);
     }
 
-    const transitionError = validateSeriesStatusTransition(series.status, newStatus);
-    if (transitionError) return jsonError(c, transitionError, 400);
-
-    // Atomic compare-and-set so two concurrent transitions can't both win.
-    const changed = await transitionSeriesStatus(db, seriesId, series.status, newStatus as SeriesStatus);
-    if (!changed) return jsonError(c, 'Series status changed concurrently, please refresh and retry', 409);
-    return c.json({ series: await getSeriesById(db, seriesId) });
+    // Validated and applied under the series row lock; follow-up work (Discord posts) commits with the change.
+    return c.json({ series: await transitionSeries(db, seriesId, newStatus as SeriesStatus) });
   }))
 
   .get('/:seriesId/standings', (c) => guard(c, 'Error fetching series standings', 'Failed to fetch series standings', async () => {
-    const seriesId = c.req.param('seriesId');
-    const series = await getSeriesById(db, seriesId);
-    if (!series) return jsonError(c, 'Series not found', 404);
-    return c.json({ series_id: seriesId, series_name: series.name, standings: await getSeriesStandings(db, seriesId) });
+    const view = c.req.query('view') ?? 'entrant';
+    if (view !== 'entrant' && view !== 'individual') return jsonError(c, 'view must be "entrant" or "individual"', 400);
+    // scope: 'season' (default) or a stage id of this series (404 otherwise, from the domain)
+    const standings = await getSeriesStandingsResponse(db, c.req.param('seriesId'), { scope: c.req.query('scope') || 'season', view });
+    if (!standings) return jsonError(c, 'Series not found', 404);
+    return c.json(standings);
   }))
 
   // ── events ────────────────────────────────────────────────────────────────
   .get('/:seriesId/events', (c) => guard(c, 'Error listing series events', 'Failed to list series events', async () => {
     const seriesId = c.req.param('seriesId');
     if (!(await getSeriesById(db, seriesId))) return jsonError(c, 'Series not found', 404);
-    return c.json({ events: await listSeriesEventDetails(db, seriesId) });
+    return c.json({ events: await listSeriesEventDtos(db, seriesId) });
   }))
 
   .post('/:seriesId/events', (c) => guard(c, 'Error adding series event', 'Failed to add series event', async () => {
@@ -176,6 +160,9 @@ export const seriesRoutes = new Hono()
       return jsonError(c, 'event_date must be a valid date', 400);
     }
 
+    const placementError = validatePlacementFields(body);
+    if (placementError) return jsonError(c, placementError, 400);
+
     const input: AddSeriesEventInput = {
       event_type,
       // a contradictory body (e.g. match event with tournament_id) is surfaced as 400 by the target check
@@ -184,24 +171,28 @@ export const seriesRoutes = new Hono()
       event_order: body.event_order as number | undefined,
       event_date: (body.event_date as string | null | undefined) ?? undefined,
       points_multiplier: body.points_multiplier as number | undefined,
+      stage_id: body.stage_id as string | null | undefined,
+      role: body.role as AddSeriesEventInput['role'],
+      week: body.week as number | null | undefined,
+      counts_for_standings: body.counts_for_standings as boolean | undefined,
     };
     const id = await addSeriesEvent(db, seriesId, input);
     return c.json({ id }, 201);
   }))
 
   /**
-   * Edit an event's points_multiplier, event_order (swaps with the event already holding that order) and/or event_date.
-   * Only allowed while the series is still 'created': once it starts, changing weights or order would silently rewrite
-   * standings people have already seen.
+   * Edit an event: stage_id / week / event_date (placement) while the series is created, in registration or active;
+   * points_multiplier, event_order (swaps with the event already holding that order), role and counts_for_standings
+   * only before the series starts, because changing weights, order or what counts would silently rewrite standings
+   * people have already seen.
    */
   .patch('/:seriesId/events/:eventId', (c) => guard(c, 'Error updating series event', 'Failed to update series event', async () => {
     const seriesId = c.req.param('seriesId');
     const eventId = c.req.param('eventId');
     const series = await getSeriesById(db, seriesId);
     if (!series) return jsonError(c, 'Series not found', 404);
-    if (series.status !== 'created') {
-      return jsonError(c, `Events can only be edited before the series starts (series is ${series.status})`, 409);
-    }
+    const lockedMessage = `Events can only be edited before the series starts (series is ${series.status})`;
+    if (!PLACEMENT_EDITABLE.includes(series.status)) return jsonError(c, lockedMessage, 409);
 
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
@@ -223,15 +214,27 @@ export const seriesRoutes = new Hono()
       }
       updates.event_date = body.event_date as string | null;
     }
+    const placementError = validatePlacementFields(body);
+    if (placementError) return jsonError(c, placementError, 400);
+    if (body.stage_id !== undefined) updates.stage_id = body.stage_id as string | null;
+    if (body.role !== undefined) updates.role = body.role as UpdateSeriesEventInput['role'];
+    if (body.week !== undefined) updates.week = body.week as number | null;
+    if (body.counts_for_standings !== undefined) updates.counts_for_standings = body.counts_for_standings as boolean;
     if (Object.keys(updates).length === 0) {
-      return jsonError(c, 'Nothing to update: send points_multiplier, event_order and/or event_date', 400);
+      return jsonError(c, 'Nothing to update: send points_multiplier, event_order, event_date, stage_id, role, week and/or counts_for_standings', 400);
     }
 
-    const result = await updateSeriesEvent(db, seriesId, eventId, updates, { requireSeriesStatus: 'created' });
-    return c.json({ event: result.event, swapped_with: result.swappedWith ?? null });
+    const affectsStandings = STANDINGS_AFFECTING_FIELDS.some((f) => updates[f] !== undefined);
+    if (affectsStandings && !STANDINGS_EDITABLE.includes(series.status)) return jsonError(c, lockedMessage, 409);
+
+    // re-checked under the series row lock, so a concurrent status change cannot let an edit through
+    const result = await updateSeriesEvent(db, seriesId, eventId, updates, {
+      requireSeriesStatus: affectsStandings ? STANDINGS_EDITABLE : PLACEMENT_EDITABLE,
+    });
+    return c.json({ event: await getSeriesEventDto(db, seriesId, eventId), swapped_with: result.swappedWith ?? null });
   }))
 
   .delete('/:seriesId/events/:eventId', (c) => guard(c, 'Error removing series event', 'Failed to remove series event', async () => {
-    await removeSeriesEvent(db, c.req.param('seriesId'), c.req.param('eventId'));
-    return c.json({ success: true });
+    const result = await removeSeriesEvent(db, c.req.param('seriesId'), c.req.param('eventId'));
+    return c.json({ success: true, deleted_target: result.deleted_target });
   }));

@@ -20,6 +20,7 @@ import type { SeriesSummary } from './series-shared';
 
 const NEXT_STATUS: Partial<Record<SeriesSummary['status'], { status: string; label: string; color: string; done: string }>> = {
   created: { status: 'active', label: 'Activate', color: 'green', done: 'Series activated!' },
+  registration: { status: 'active', label: 'Start season', color: 'green', done: 'Season started!' },
   active: { status: 'complete', label: 'Complete', color: 'blue', done: 'Series completed!' },
 };
 
@@ -225,7 +226,7 @@ export function SeriesDashboard(): JSX.Element {
 
   const fetchSeries = useCallback(async () => {
     try {
-      const res = await fetch('/api/series?status=created,active');
+      const res = await fetch('/api/series?status=created,registration,active');
       if (res.ok) setSeries((await res.json()).series ?? []);
       else showError('Failed to load series. Please refresh the page.');
     } catch (error) {
@@ -245,7 +246,7 @@ export function SeriesDashboard(): JSX.Element {
     if (!next) return;
     setTransitioning(prev => new Set(prev).add(s.id));
     const nid = `series-transition-${s.id}`;
-    notificationHelper.loading({ id: nid, message: next.status === 'active' ? 'Activating series...' : 'Completing series...' });
+    notificationHelper.loading({ id: nid, message: next.status === 'active' ? (s.status === 'registration' ? 'Starting season...' : 'Activating series...') : 'Completing series...' });
     try {
       const res = await fetch(`/api/series/${s.id}/transition`, {
         method: 'POST',

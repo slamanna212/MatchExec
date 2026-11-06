@@ -3,6 +3,7 @@ import { pgTable, text, integer, boolean, timestamp, jsonb, index, unique, check
 import { sql } from 'drizzle-orm';
 import { games } from './games';
 import { matches } from './matches';
+import { seriesEntrants } from './series';
 import type { PositionScoringConfig, AnnouncementConfig } from './types';
 
 export const tournamentMatches = pgTable('tournament_matches', {
@@ -71,8 +72,11 @@ export const tournamentTeams = pgTable('tournament_teams', {
   tournament_id: text('tournament_id').notNull().references(() => tournaments.id, { onDelete: 'cascade' }),
   team_name: text('team_name').notNull(),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  /** Set when the series pre-assigned this team to one of its entrants. */
+  series_entrant_id: text('series_entrant_id').references(() => seriesEntrants.id, { onDelete: 'set null' }),
 }, (t) => [
   index('idx_tournament_teams_tournament_id').on(t.tournament_id),
+  index('idx_tournament_teams_series_entrant').on(t.series_entrant_id),
 ]);
 
 export const tournaments = pgTable('tournaments', {

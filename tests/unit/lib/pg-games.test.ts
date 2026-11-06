@@ -134,7 +134,7 @@ describe('discord-channels module', () => {
     });
     const voiceId = await createChannel(db(), {
       guild_id: 'g1', discord_channel_id: 'd-voice', channel_type: 'voice', send_announcements: true, send_reminders: true,
-      send_match_start: true, send_signup_updates: true, send_health_alerts: true,
+      send_match_start: true, send_signup_updates: true, send_health_alerts: true, send_series_updates: true,
     });
     expect(await channelExistsByDiscordId(db(), 'd-text')).toBe(true);
     expect(await channelExistsByDiscordId(db(), 'nope')).toBe(false);
@@ -142,7 +142,7 @@ describe('discord-channels module', () => {
     const text = (await getChannel(db(), textId))!;
     expect(text).toMatchObject({ type: 0, channel_type: 'text', send_announcements: true, send_match_start: true, send_reminders: false });
     const voice = (await getChannel(db(), voiceId))!;
-    expect(voice).toMatchObject({ type: 2, channel_type: 'voice', send_announcements: false, send_health_alerts: false });
+    expect(voice).toMatchObject({ type: 2, channel_type: 'voice', send_announcements: false, send_health_alerts: false, send_series_updates: false });
     expect(toChannelDto(text).created_at).toBe(text.created_at.toISOString());
   });
 
@@ -152,10 +152,12 @@ describe('discord-channels module', () => {
     const b = await createChannel(db(), { guild_id: 'g1', discord_channel_id: 'b', channel_type: 'text', send_announcements: false, send_reminders: false, send_match_start: false, send_signup_updates: false, send_health_alerts: false });
     expect((await listChannelsForNotification(db(), 'announcements')).map((c) => c.id)).toEqual([a]);
     expect(await listChannelsForNotification(db(), 'health_alerts')).toEqual([]);
+    expect(await listChannelsForNotification(db(), 'series_updates')).toEqual([]);
 
-    await updateChannelFlags(db(), b, { send_announcements: true, send_reminders: true, send_match_start: false, send_signup_updates: false, send_health_alerts: true });
+    await updateChannelFlags(db(), b, { send_announcements: true, send_reminders: true, send_match_start: false, send_signup_updates: false, send_health_alerts: true, send_series_updates: true });
     expect((await listChannelsForNotification(db(), 'announcements')).map((c) => c.id).sort()).toEqual([a, b].sort());
     expect((await listChannelsForNotification(db(), 'health_alerts')).map((c) => c.id)).toEqual([b]);
+    expect((await listChannelsForNotification(db(), 'series_updates')).map((c) => c.id)).toEqual([b]);
     await expect(listChannelsForNotification(db(), 'bogus' as never)).rejects.toThrow('Invalid notification type');
 
     await setChannelName(db(), a, 'general');

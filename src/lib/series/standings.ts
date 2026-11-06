@@ -1,318 +1,330 @@
 /**
- * Series standings, computed on demand: each event's outcome is converted to points via `series.scoring_config`,
- * multiplied by the event's `points_multiplier`, and summed per player (Discord id when known, else user id).
- * Only completed matches and tournaments contribute (and count towards `events_played`).
+ * Series standings, computed on demand from the series' events (see docs/series-plan.md section 5).
+ *
+ * Every event's result is resolved to an entrant (a team / a player on the roster) and scored per `scoring_config.mode`:
+ * legacy (no mode: points per `match_win_points` etc.), `points` (finishing positions, event spreads, drop_worst) or
+ * `head_to_head` (W-L-T records, map differential, optional league points). A series without entrants treats every
+ * player as an implicit entrant and reproduces the original per-player numbers. Only completed matches / tournaments of
+ * live events that count for the requested scope contribute. The heavy lifting lives in standings-data.ts (batched
+ * loading), standings-points.ts / standings-h2h.ts (scoring) and standings-rank.ts (tiebreakers and ranks).
  */
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import {
-  gameModes, matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, tournamentMatches, tournamentTeamMembers, tournaments,
-} from '../../../lib/db/schema';
-import { determineMatchWinner } from '../matches/scoreboard';
+import type {
+  SeriesChampionDto, SeriesScoringConfig, SeriesStandingEventPoints, SeriesStandingRow, SeriesStandingsMode, SeriesStandingsResponse,
+  SeriesTiebreaker,
+} from '../../../shared/series-types';
+import { listEntrants, type SeriesEntrantRow } from './entrants';
 import { listSeriesEvents, type SeriesEventRow } from './events';
-import { getSeriesById } from './series';
-import { parseScoringConfig, type SeriesScoringConfig } from './validation';
+import { SeriesError, getSeriesById, type SeriesRow } from './series';
+import { listStages, type SeriesStageRow } from './stages';
+import { parseScoringConfig } from './validation';
+import { loadStandingsData } from './standings-data';
+import { eventH2hMatches, scoreH2hEvent, type H2hMatch } from './standings-h2h';
+import { scoreMatch, scoreTournament, type Contribution, type StandingsContext } from './standings-points';
+import { orderByTiebreakers, type MiniTable, type RankItem } from './standings-rank';
 
-export interface SeriesStandingEventPoints {
-  series_event_id: string;
-  /** Points for this event after the multiplier; null when the player didn't take part. */
-  points: number | null;
+export { competitionRanks, resolveBracketPlacings, tieAwareRanks } from './standings-rank';
+export type { SeriesStandingEventPoints, SeriesStandingRow, SeriesStandingsResponse, SeriesChampionDto } from '../../../shared/series-types';
+
+export interface StandingsOptions {
+  /** 'season' (default) or a stage id. */
+  scope?: string;
+  /** 'entrant' (default) or 'individual' (per player). */
+  view?: 'entrant' | 'individual';
 }
 
-export interface SeriesStandingRow {
-  rank: number;
-  username: string;
-  user_id: string;
-  total_points: number;
-  events_played: number;
-  /** One entry per series event, in event_order. */
-  events: SeriesStandingEventPoints[];
+const DEFAULT_H2H_TIEBREAKERS: SeriesTiebreaker[] = ['match_wins', 'map_diff', 'head_to_head', 'maps_won'];
+const DEFAULT_POINTS_TIEBREAKERS: SeriesTiebreaker[] = ['points', 'event_wins', 'best_finishes'];
+
+/** Stage config over series config, key by key (a stage only overrides the keys it sets). */
+function mergeConfig(base: SeriesScoringConfig, override: SeriesScoringConfig | null | undefined): SeriesScoringConfig {
+  if (!override) return base;
+  const merged: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(parseScoringConfig(override))) if (v !== undefined) merged[k] = v;
+  return merged as SeriesScoringConfig;
 }
 
-type AddPoints = (playerKey: string, username: string, points: number, eventId: string) => void;
-
-/** Stable player identity across matches: Discord id when known, else user id. */
-function playerKey(p: { discord_user_id?: string | null; user_id: string }): string {
-  return p.discord_user_id ?? p.user_id;
+function defaultTiebreakers(cfg: SeriesScoringConfig): SeriesTiebreaker[] {
+  if (cfg.tiebreakers && cfg.tiebreakers.length > 0) return cfg.tiebreakers;
+  if (cfg.mode === 'head_to_head') {
+    const league = (cfg.win_points ?? 0) !== 0 || (cfg.loss_points ?? 0) !== 0 || (cfg.tie_points ?? 0) !== 0;
+    return league ? ['points', ...DEFAULT_H2H_TIEBREAKERS] : DEFAULT_H2H_TIEBREAKERS;
+  }
+  // legacy configs (no mode) rank on points alone, exactly as before
+  return cfg.mode === 'points' ? DEFAULT_POINTS_TIEBREAKERS : ['points'];
 }
 
-/** Standard competition ranking over a descending-sorted list of totals: tied entries share the rank (index) of the first tied entry. */
-export function tieAwareRanks(totals: number[]): number[] {
-  const ranks: number[] = [];
-  totals.forEach((t, i) => {
-    ranks.push(i > 0 && t === totals[i - 1] ? ranks[i - 1] : i);
+interface StandingsInput {
+  series: SeriesRow;
+  stages: SeriesStageRow[];
+  entrants: SeriesEntrantRow[];
+  ctx: StandingsContext;
+  events: SeriesEventRow[];
+}
+
+async function buildContext(ex: Executor, series: SeriesRow, events: SeriesEventRow[]): Promise<Pick<StandingsInput, 'entrants' | 'ctx'>> {
+  const withMembers = await listEntrants(ex, series.id, { includeLeft: true });
+  const index = new Map<string, string>();
+  // old -> current so a current roster overwrites an old one (same rule as loadPlayerEntrantIndex)
+  const members = withMembers.flatMap((e) => e.members).sort((a, b) => Number(b.left_at !== null) - Number(a.left_at !== null) || a.joined_at.getTime() - b.joined_at.getTime());
+  for (const m of members) {
+    index.set(m.user_id, m.entrant_id);
+    if (m.discord_user_id) index.set(m.discord_user_id, m.entrant_id);
+  }
+  const data = await loadStandingsData(ex, events);
+  return {
+    entrants: withMembers,
+    ctx: { hasEntrants: withMembers.length > 0, index, entrantNames: new Map(withMembers.map((e) => [e.id, e.name])), data },
+  };
+}
+
+/** Events of the scope in (stage_order, event_order) order. */
+function eventsInScope(all: SeriesEventRow[], stages: SeriesStageRow[], scope: string): SeriesEventRow[] {
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  const inScope = all.filter((e) => {
+    if (e.status !== 'live' || !e.counts_for_standings) return false;
+    if (scope === 'season') return !e.stage_id || stageById.get(e.stage_id)?.counts_toward_season !== false;
+    return e.stage_id === scope;
   });
-  return ranks;
+  const stageOrder = (e: SeriesEventRow) => (e.stage_id ? (stageById.get(e.stage_id)?.stage_order ?? 0) : 0);
+  return inScope.sort((a, b) => stageOrder(a) - stageOrder(b) || a.event_order - b.event_order || a.id.localeCompare(b.id));
 }
 
-/**
- * Score a 'match' series event. Only completed matches contribute.
- *
- * - Position matches (by default) use their own points_awarded spread from match_game_placements. This is the only mode
- *   the position_event_use_event_spread toggle applies to.
- * - Tournament matches resolve the winner via tournament_teams membership (matches.winner_team is a tournament_teams.id).
- * - Normal standalone matches compare match_teams ids; reserves and unassigned players earn nothing.
- * - Normal/FFA/Position-without-spread award match_win_points to the winner and match_loss_points to the other
- *   participants. Ties award no wins.
- */
-async function scoreMatchEvent(ex: Executor, event: SeriesEventRow, config: SeriesScoringConfig, addPoints: AddPoints): Promise<void> {
-  if (!event.match_id) return;
-  const matchId = event.match_id;
+interface Agg {
+  key: string;
+  entrantId: string | null;
+  name: string;
+  /** Contribution per event id (merged when a competitor shows up twice in one event). */
+  perEvent: Map<string, Contribution>;
+}
 
-  const [match] = await ex
-    .select({
-      status: matches.status,
-      scoring_type: gameModes.scoring_type,
-      tournament_id: matches.tournament_id,
-      winner_team: matches.winner_team,
-      tm_team1: tournamentMatches.team1_id,
-      tm_team2: tournamentMatches.team2_id,
-      blue_team_id: matches.blue_team_id,
-      red_team_id: matches.red_team_id,
-    })
-    .from(matches)
-    .leftJoin(gameModes, and(eq(gameModes.id, matches.mode_id), eq(gameModes.game_id, matches.game_id)))
-    .leftJoin(tournamentMatches, eq(tournamentMatches.match_id, matches.id))
-    .where(eq(matches.id, matchId));
-  if (match?.status !== 'complete') return;
-  const scoringType = match.scoring_type ?? 'Normal';
-  const team1 = match.tm_team1 ?? match.blue_team_id;
-  const team2 = match.tm_team2 ?? match.red_team_id;
+const emptyRecord = () => ({ w: 0, l: 0, t: 0, mw: 0, ml: 0, mt: 0 });
 
-  const participants = await ex
-    .select({
-      id: matchParticipants.id, user_id: matchParticipants.user_id, discord_user_id: matchParticipants.discord_user_id,
-      username: matchParticipants.username, team_id: matchParticipants.team_id, is_reserve: matchTeams.is_reserve,
-    })
-    .from(matchParticipants)
-    .leftJoin(matchTeams, eq(matchTeams.id, matchParticipants.team_id))
-    .where(eq(matchParticipants.match_id, matchId))
-    .orderBy(asc(matchParticipants.joined_at), asc(matchParticipants.id));
-  if (participants.length === 0) return;
-
-  const mult = event.points_multiplier;
-  const winPts = config.match_win_points ?? 0;
-  const lossPts = config.match_loss_points ?? 0;
-
-  const participantTotals = async (expr: SQL<number>) => {
-    const rows = await ex
-      .select({ entity_id: matchGamePlacements.entity_id, total_pts: expr })
-      .from(matchGamePlacements)
-      .innerJoin(matchGames, eq(matchGames.id, matchGamePlacements.match_game_id))
-      .where(and(eq(matchGames.match_id, matchId), eq(matchGames.status, 'completed'), eq(matchGamePlacements.entity_type, 'participant')))
-      .groupBy(matchGamePlacements.entity_id);
-    return rows.map((r) => ({ entity_id: r.entity_id, total_pts: r.total_pts ?? 0 }));
-  };
-
-  if (scoringType === 'Position' && config.position_event_use_event_spread !== false) {
-    const rows = await participantTotals(sql<number>`sum(${matchGamePlacements.points_awarded})`.mapWith(Number));
-    const byParticipant = new Map(rows.map((r) => [r.entity_id, r.total_pts]));
-    for (const p of participants) {
-      addPoints(playerKey(p), p.username, (byParticipant.get(p.id) ?? 0) * mult, event.id);
-    }
-    return;
-  }
-
-  if (scoringType === 'FFA' || scoringType === 'Position') {
-    const rows = await participantTotals(
-      sql<number>`sum(coalesce(${matchGamePlacements.points_awarded}, case when ${matchGamePlacements.is_winner} then 1 else 0 end))`.mapWith(Number),
-    );
-    const best = rows.reduce((max, r) => Math.max(max, r.total_pts), -Infinity);
-    const leaders = rows.filter((r) => r.total_pts === best);
-    // A tie for first means nobody is credited with the win.
-    const winnerId = leaders.length === 1 && best > 0 ? leaders[0].entity_id : null;
-    for (const p of participants) {
-      addPoints(playerKey(p), p.username, (p.id === winnerId ? winPts : lossPts) * mult, event.id);
-    }
-    return;
-  }
-
-  if (match.tournament_id) {
-    // Tournament match: winner_team is a tournament_teams.id, so credit by tournament team membership instead of match_teams.
-    const winnerTeam = match.winner_team ?? await determineMatchWinner(ex, matchId);
-    const teamIds = [team1, team2].filter((t): t is string => !!t);
-    const members = teamIds.length === 0 ? [] : await ex
-      .select({ team_id: tournamentTeamMembers.team_id, user_id: tournamentTeamMembers.user_id, discord_user_id: tournamentTeamMembers.discord_user_id })
-      .from(tournamentTeamMembers).where(inArray(tournamentTeamMembers.team_id, teamIds)).orderBy(asc(tournamentTeamMembers.id));
-    for (const p of participants) {
-      const member = members.find((m) => m.user_id === p.user_id || (m.discord_user_id && m.discord_user_id === p.discord_user_id));
-      if (!member) continue; // not on either team
-      const isWinner = winnerTeam !== null && member.team_id === winnerTeam;
-      addPoints(playerKey(p), p.username, (isWinner ? winPts : lossPts) * mult, event.id);
-    }
-    return;
-  }
-
-  const winnerEntityId = await determineMatchWinner(ex, matchId);
-  for (const p of participants) {
-    if (p.is_reserve === true) continue;
-    if (!p.team_id) continue; // unassigned
-    const isWinner = winnerEntityId !== null && p.team_id === winnerEntityId;
-    addPoints(playerKey(p), p.username, (isWinner ? winPts : lossPts) * mult, event.id);
+function mergeInto(have: Contribution, c: Contribution): void {
+  have.points = Math.max(have.points, c.points);
+  if (c.position !== null) have.position = have.position === null ? c.position : Math.min(have.position, c.position);
+  have.isWin = have.isWin || c.isWin;
+  if (c.record) {
+    const r = have.record ?? emptyRecord();
+    for (const k of Object.keys(r) as Array<keyof typeof r>) r[k] += c.record[k];
+    have.record = r;
   }
 }
 
-interface BracketMatch {
-  round: number;
-  bracket_type: string;
-  status: string;
-  winner_team: string | null;
-  team1_id: string | null;
-  team2_id: string | null;
+/** The individual view credits each player of a contribution with that contribution. */
+function fanOut(c: Contribution): Contribution[] {
+  return c.players.map((p) => ({ ...c, key: p.key, name: p.username, players: [p], record: c.record ? { ...c.record } : undefined }));
 }
 
-function loserOf(m: BracketMatch): string | null {
-  if (!m.winner_team) return null;
-  if (m.team1_id === m.winner_team) return m.team2_id;
-  if (m.team2_id === m.winner_team) return m.team1_id;
-  return null;
-}
+async function computeResponse(ex: Executor, series: SeriesRow, options: StandingsOptions): Promise<SeriesStandingsResponse> {
+  const scope = options.scope && options.scope !== 'season' ? options.scope : 'season';
+  const view = options.view ?? 'entrant';
+  const stages = await listStages(ex, series.id);
+  const stage = scope === 'season' ? null : stages.find((s) => s.id === scope);
+  if (scope !== 'season' && !stage) throw new SeriesError('Stage not found', 404);
 
-/**
- * Resolve bracket-tournament placings as an ordered list of team-id groups (index 0 = champion, 1 = runner-up,
- * 2 = third place, ...). Groups with several teams are tied for that placing.
- *
- * Single elimination: champion = winner of the highest winners-bracket round; runner-up = its loser; semifinal losers
- * share 3rd. Double elimination: champion = winner of the 'final' bracket match (latest round if there's a reset);
- * runner-up = its loser; 3rd = loser of the last losers-bracket match.
- */
-export function resolveBracketPlacings(bracket: BracketMatch[], format: string): string[][] {
-  const done = bracket.filter((m) => m.status === 'complete' && m.winner_team);
-  const maxBy = (list: BracketMatch[]) => list.reduce<BracketMatch | null>((best, m) => (!best || m.round > best.round ? m : best), null);
+  const baseCfg = parseScoringConfig(series.scoring_config);
+  const tableCfg = mergeConfig(baseCfg, stage?.scoring_config);
+  const mode: SeriesStandingsMode = tableCfg.mode ?? 'points';
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  const events = eventsInScope(await listSeriesEvents(ex, series.id), stages, scope);
+  const { entrants, ctx } = await buildContext(ex, series, events);
+  const individual = view === 'individual';
 
-  let finalMatch: BracketMatch | null;
-  if (format === 'double-elimination') {
-    finalMatch = maxBy(done.filter((m) => m.bracket_type === 'final'));
-  } else {
-    finalMatch = maxBy(done.filter((m) => m.bracket_type === 'winners' || m.bracket_type === 'final'));
-  }
-  if (!finalMatch?.winner_team) return [];
-
-  const placings: string[][] = [[finalMatch.winner_team]];
-  const runnerUp = loserOf(finalMatch);
-  if (runnerUp) placings.push([runnerUp]);
-
-  if (format === 'double-elimination') {
-    const lastLosers = maxBy(done.filter((m) => m.bracket_type === 'losers'));
-    const third = lastLosers ? loserOf(lastLosers) : null;
-    if (third && third !== runnerUp) placings.push([third]);
-  } else {
-    const semis = done.filter((m) => m.bracket_type === 'winners' && m.round === finalMatch.round - 1);
-    const losers = semis.map(loserOf).filter((t): t is string => !!t);
-    if (losers.length > 0) placings.push(Array.from(new Set(losers)));
-  }
-  return placings;
-}
-
-/**
- * Score a 'tournament' series event via tournament_position_points. Only completed tournaments contribute.
- *
- * cumulative-points: players are ranked by total points (grouped on discord_user_id/user_id); ties share the higher
- * placing's points. Bracket formats: see resolveBracketPlacings - champion, runner-up and third place receive
- * tournament_position_points[0..2].
- */
-async function scoreTournamentEvent(ex: Executor, event: SeriesEventRow, config: SeriesScoringConfig, addPoints: AddPoints): Promise<void> {
-  if (!event.tournament_id) return;
-  const tournamentId = event.tournament_id;
-  const positionPoints = config.tournament_position_points ?? [];
-  const mult = event.points_multiplier;
-
-  const [tournament] = await ex.select({ format: tournaments.format, status: tournaments.status }).from(tournaments).where(eq(tournaments.id, tournamentId));
-  if (tournament?.status !== 'complete') return;
-
-  if (tournament.format === 'cumulative-points') {
-    const key = sql<string>`coalesce(${matchParticipants.discord_user_id}, ${matchParticipants.user_id})`;
-    const username = sql<string>`max(${matchParticipants.username})`;
-    const totalPoints = sql<number>`coalesce(sum(${matchGamePlacements.points_awarded}), 0)`.mapWith(Number);
-    const rows = await ex
-      .select({ player_key: key, username, total_points: totalPoints })
-      .from(matchParticipants)
-      .innerJoin(matches, and(eq(matchParticipants.match_id, matches.id), eq(matches.tournament_id, tournamentId)))
-      .leftJoin(matchGames, and(eq(matchGames.match_id, matches.id), eq(matchGames.status, 'completed')))
-      .leftJoin(matchGamePlacements, and(
-        eq(matchGamePlacements.match_game_id, matchGames.id),
-        eq(matchGamePlacements.entity_id, matchParticipants.id),
-        eq(matchGamePlacements.entity_type, 'participant'),
-      ))
-      .groupBy(key)
-      .orderBy(desc(totalPoints), asc(username));
-    const ranks = tieAwareRanks(rows.map((r) => r.total_points));
-    rows.forEach((r, idx) => {
-      addPoints(r.player_key, r.username, (positionPoints[ranks[idx]] ?? 0) * mult, event.id);
-    });
-    return;
-  }
-
-  const bracketRows = await ex
-    .select({
-      match_round: matches.tournament_round, tm_round: tournamentMatches.round,
-      match_bracket: matches.tournament_bracket_type, tm_bracket: tournamentMatches.bracket_type,
-      status: matches.status, winner_team: matches.winner_team,
-      tm_team1: tournamentMatches.team1_id, tm_team2: tournamentMatches.team2_id,
-      blue_team_id: matches.blue_team_id, red_team_id: matches.red_team_id,
-    })
-    .from(matches)
-    .leftJoin(tournamentMatches, eq(tournamentMatches.match_id, matches.id))
-    .where(eq(matches.tournament_id, tournamentId));
-  const bracket: BracketMatch[] = bracketRows.map((r) => ({
-    round: r.match_round ?? r.tm_round ?? 1,
-    bracket_type: r.match_bracket ?? r.tm_bracket ?? 'winners',
-    status: r.status,
-    winner_team: r.winner_team,
-    team1_id: r.tm_team1 ?? r.blue_team_id,
-    team2_id: r.tm_team2 ?? r.red_team_id,
-  }));
-  const placings = resolveBracketPlacings(bracket, tournament.format);
-  if (placings.length === 0) return;
-
-  const allTeams = [...new Set(placings.flat())];
-  const members = await ex
-    .select({
-      team_id: tournamentTeamMembers.team_id, user_id: tournamentTeamMembers.user_id,
-      discord_user_id: tournamentTeamMembers.discord_user_id, username: tournamentTeamMembers.username,
-    })
-    .from(tournamentTeamMembers).where(inArray(tournamentTeamMembers.team_id, allTeams)).orderBy(asc(tournamentTeamMembers.id));
-
-  for (let i = 0; i < placings.length; i++) {
-    const pts = (positionPoints[i] ?? 0) * mult;
-    for (const teamId of placings[i]) {
-      for (const mem of members.filter((m) => m.team_id === teamId)) addPoints(playerKey(mem), mem.username, pts, event.id);
-    }
-  }
-}
-
-export async function getSeriesStandings(ex: Executor, seriesId: string): Promise<SeriesStandingRow[]> {
-  const row = await getSeriesById(ex, seriesId);
-  const config = parseScoringConfig(row?.scoring_config);
-  const events = await listSeriesEvents(ex, seriesId);
-
-  const totals = new Map<string, { username: string; total_points: number; per_event: Map<string, number> }>();
-  const addPoints: AddPoints = (key, username, points, eventId) => {
-    const entry = totals.get(key) ?? { username, total_points: 0, per_event: new Map<string, number>() };
-    entry.username = username; // events are scored in order, so the latest name wins
-    entry.total_points += points;
-    entry.per_event.set(eventId, (entry.per_event.get(eventId) ?? 0) + points);
-    totals.set(key, entry);
-  };
-
+  // ── score every event ──
+  const aggs = new Map<string, Agg>();
+  const h2hRecords: H2hMatch[] = [];
   for (const event of events) {
-    if (event.event_type === 'match') {
-      await scoreMatchEvent(ex, event, config, addPoints);
-    } else if (event.event_type === 'tournament') {
-      await scoreTournamentEvent(ex, event, config, addPoints);
+    const cfg = mergeConfig(baseCfg, event.stage_id ? stageById.get(event.stage_id)?.scoring_config : null);
+    let contribs: Contribution[];
+    if (tableCfg.mode === 'head_to_head') {
+      const records = eventH2hMatches(ctx, event);
+      h2hRecords.push(...records);
+      contribs = scoreH2hEvent(ctx, records, cfg, event.points_multiplier, individual);
+    } else {
+      contribs = event.match_id ? scoreMatch(ctx, event.match_id, cfg, event.points_multiplier)
+        : (event.tournament_id ? scoreTournament(ctx, event.tournament_id, cfg, event.points_multiplier) : []);
+      const field = contribs.filter((c) => c.position !== null).length;
+      for (const c of contribs) c.field = field;
+      if (individual) contribs = contribs.flatMap(fanOut);
+    }
+    for (const c of contribs) {
+      const agg = aggs.get(c.key) ?? { key: c.key, entrantId: c.entrantId, name: c.name, perEvent: new Map() };
+      agg.name = c.name; // events are scored in order, so the latest name wins
+      if (c.entrantId) agg.entrantId = c.entrantId;
+      const have = agg.perEvent.get(event.id);
+      if (have) mergeInto(have, c);
+      else agg.perEvent.set(event.id, { ...c, record: c.record ? { ...c.record } : undefined });
+      aggs.set(c.key, agg);
     }
   }
 
-  const sorted = Array.from(totals.entries())
-    .map(([user_id, data]) => ({
-      user_id,
-      username: data.username,
-      total_points: data.total_points,
-      events_played: data.per_event.size,
-      events: events.map((ev) => ({ series_event_id: ev.id, points: data.per_event.get(ev.id) ?? null })),
-    }))
-    .sort((a, b) => b.total_points - a.total_points || a.username.localeCompare(b.username));
-  // Players tied on points share a rank (same convention as tournament standings).
-  const ranks = tieAwareRanks(sorted.map((e) => e.total_points));
-  return sorted.map((entry, idx) => ({ rank: ranks[idx] + 1, ...entry }));
+  const entrantById = new Map<string, SeriesEntrantRow>(entrants.map((e) => [e.id, e]));
+  // entrant view of a series with entrants lists every active entrant, even before its first result
+  if (ctx.hasEntrants && !individual) {
+    for (const e of entrants) {
+      if (e.status === 'active' && !aggs.has(e.id)) aggs.set(e.id, { key: e.id, entrantId: e.id, name: e.name, perEvent: new Map() });
+    }
+  }
+
+  // ── rows ──
+  const dropWorst = tableCfg.drop_worst ?? 0;
+  const items: Array<RankItem & { row: SeriesStandingRow }> = [];
+  for (const agg of aggs.values()) {
+    const played = events.filter((e) => agg.perEvent.has(e.id));
+    const dropped = new Set<string>();
+    if (dropWorst > 0 && played.length > dropWorst) {
+      const worst = played
+        .map((e, i) => ({ id: e.id, i, points: agg.perEvent.get(e.id)!.points }))
+        .sort((a, b) => a.points - b.points || b.i - a.i)
+        .slice(0, dropWorst);
+      for (const w of worst) dropped.add(w.id);
+    }
+
+    let total = 0;
+    const rec = emptyRecord();
+    let eventWins = 0;
+    let podiums = 0;
+    const positionCounts: number[] = [];
+    const eventPoints: SeriesStandingEventPoints[] = events.map((e) => {
+      const c = agg.perEvent.get(e.id);
+      if (!c) return { series_event_id: e.id, points: null };
+      if (dropped.has(e.id)) return { series_event_id: e.id, points: c.points, dropped: true };
+      total += c.points;
+      return { series_event_id: e.id, points: c.points };
+    });
+    for (const c of agg.perEvent.values()) {
+      if (c.record) for (const k of Object.keys(rec) as Array<keyof typeof rec>) rec[k] += c.record[k];
+      if (c.isWin) eventWins++;
+      if (c.position !== null) {
+        if (c.position <= 3 && (c.field ?? 0) >= 3) podiums++;
+        positionCounts[c.position - 1] = (positionCounts[c.position - 1] ?? 0) + 1;
+      }
+    }
+
+    const entrant = agg.entrantId ? entrantById.get(agg.entrantId) : undefined;
+    const entrantRow = !individual && ctx.hasEntrants ? entrant : undefined;
+    const name = entrantRow?.name ?? agg.name;
+    const row: SeriesStandingRow = {
+      rank: 0,
+      entrant_id: individual || !ctx.hasEntrants ? null : agg.key,
+      key: agg.key,
+      name,
+      ...(entrant ? { tag: entrant.tag, color: entrant.color, division: entrant.division } : {}),
+      ...(individual ? { entrant_name: entrant?.name ?? null } : {}),
+      total_points: total,
+      events_played: agg.perEvent.size,
+      ...(tableCfg.mode === 'head_to_head' ? {
+        match_wins: rec.w, match_losses: rec.l, match_ties: rec.t, map_wins: rec.mw, map_losses: rec.ml, map_ties: rec.mt, map_diff: rec.mw - rec.ml,
+      } : {
+        event_wins: eventWins, podiums,
+      }),
+      events: eventPoints,
+      username: name,
+      user_id: agg.key,
+    };
+    items.push({
+      row, key: agg.key, name, total_points: total, match_wins: rec.w, match_losses: rec.l, match_ties: rec.t,
+      map_wins: rec.mw, map_losses: rec.ml, map_ties: rec.mt, event_wins: eventWins, positionCounts,
+    });
+  }
+
+  // ── order and rank ──
+  const mini: MiniTable | null = tableCfg.mode === 'head_to_head' && !individual ? miniTable(h2hRecords) : null;
+  const groups = orderByTiebreakers(items, defaultTiebreakers(tableCfg), mini);
+  const rows: SeriesStandingRow[] = [];
+  for (const group of groups) {
+    const rank = rows.length + 1;
+    for (const item of [...group].sort((a, b) => a.name.localeCompare(b.name))) rows.push({ ...item.row, rank });
+  }
+
+  const divisions = [...new Set(rows.map((r) => r.division).filter((d): d is string => !!d))].sort((a, b) => a.localeCompare(b));
+  return {
+    series_id: series.id,
+    series_name: series.name,
+    mode,
+    scope: stage ? { type: 'stage', stage_id: stage.id } : { type: 'season' },
+    view,
+    events: events.map((e) => ({
+      id: e.id,
+      name: (e.match_id ? ctx.data.matches.get(e.match_id)?.name : ctx.data.tournaments.get(e.tournament_id ?? '')?.name) ?? null,
+      event_order: e.event_order,
+      stage_id: e.stage_id,
+    })),
+    divisions,
+    standings: rows,
+    rows,
+  };
+}
+
+/** The record between the given entrants only (head_to_head tiebreaker), over every counted 2-entrant match. */
+function miniTable(records: H2hMatch[]): MiniTable {
+  return (keys) => {
+    const out = new Map<string, { wins: number; games: number }>();
+    const bump = (key: string, win: boolean) => {
+      const have = out.get(key) ?? { wins: 0, games: 0 };
+      have.games++;
+      if (win) have.wins++;
+      out.set(key, have);
+    };
+    for (const m of records) {
+      if (!keys.has(m.a.entrantId) || !keys.has(m.b.entrantId)) continue;
+      bump(m.a.entrantId, m.winner === 'a');
+      bump(m.b.entrantId, m.winner === 'b');
+    }
+    return out;
+  };
+}
+
+/** The standings of a series (`null` when it does not exist). Throws a 404 `SeriesError` for an unknown stage. */
+export async function getSeriesStandingsResponse(ex: Executor, seriesId: string, options: StandingsOptions = {}): Promise<SeriesStandingsResponse | null> {
+  const series = await getSeriesById(ex, seriesId);
+  return series ? computeResponse(ex, series, options) : null;
+}
+
+/** The rows of the season standings (`[]` for an unknown series). */
+export async function getSeriesStandings(ex: Executor, seriesId: string, options: StandingsOptions = {}): Promise<SeriesStandingRow[]> {
+  return (await getSeriesStandingsResponse(ex, seriesId, options))?.rows ?? [];
+}
+
+// ─── champion ────────────────────────────────────────────────────────────────
+
+function uniq<T>(xs: T[]): T[] {
+  return [...new Set(xs)];
+}
+
+/** Champion(s) of a completed season playoff tournament, or null. */
+async function playoffChampion(ex: Executor, series: SeriesRow, event: SeriesEventRow): Promise<SeriesChampionDto | null> {
+  if (!event.tournament_id) return null;
+  const { ctx } = await buildContext(ex, series, [event]);
+  const winners = scoreTournament(ctx, event.tournament_id, { tournament_position_points: [1] }, 1).filter((c) => c.position === 1);
+  if (winners.length === 0) return null;
+  const names = uniq(winners.map((w) => (ctx.hasEntrants ? w.name : (w.label ?? w.name))));
+  const entrantIds = uniq(winners.map((w) => w.entrantId));
+  return { entrant_id: entrantIds.length === 1 ? entrantIds[0] : null, name: names.join(', '), source: 'season_playoff' };
+}
+
+/**
+ * Champion of a series: the winner of its completed `season_playoff` tournament, else the leader(s) of the season table
+ * once the series is `complete`; null otherwise.
+ */
+export async function getSeriesChampion(ex: Executor, seriesId: string): Promise<SeriesChampionDto | null> {
+  const series = await getSeriesById(ex, seriesId);
+  if (!series) return null;
+  const events = await listSeriesEvents(ex, seriesId);
+  const playoffs = events.filter((e) => e.role === 'season_playoff' && e.status === 'live' && e.tournament_id).sort((a, b) => b.event_order - a.event_order);
+  for (const event of playoffs) {
+    const champion = await playoffChampion(ex, series, event);
+    if (champion) return champion;
+  }
+  if (series.status !== 'complete') return null;
+
+  const rows = (await computeResponse(ex, series, {})).rows;
+  const leaders = rows.filter((r) => r.rank === 1 && (r.total_points > 0 || (r.match_wins ?? 0) > 0));
+  if (leaders.length === 0) return null;
+  return {
+    entrant_id: leaders.length === 1 ? leaders[0].entrant_id : null,
+    name: leaders.map((l) => l.name).join(', '),
+    source: 'standings',
+  };
 }

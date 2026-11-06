@@ -15,6 +15,7 @@ interface ChannelEditData {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates: boolean;
 }
 
 export default function ChannelsPage() {
@@ -30,7 +31,8 @@ export default function ChannelsPage() {
     send_reminders: false,
     send_match_start: false,
     send_signup_updates: false,
-    send_health_alerts: false
+    send_health_alerts: false,
+    send_series_updates: false
   });
 
   useEffect(() => {
@@ -84,7 +86,8 @@ export default function ChannelsPage() {
       send_reminders: channel.send_reminders || false,
       send_match_start: channel.send_match_start || false,
       send_signup_updates: channel.send_signup_updates || false,
-      send_health_alerts: channel.send_health_alerts || false
+      send_health_alerts: channel.send_health_alerts || false,
+      send_series_updates: channel.send_series_updates || false
     });
     openEditModal();
   };
@@ -151,7 +154,8 @@ export default function ChannelsPage() {
     reminders: textChannels.some(ch => ch.send_reminders),
     live_updates: textChannels.some(ch => ch.send_match_start),
     signup_updates: textChannels.some(ch => ch.send_signup_updates),
-    health_alerts: textChannels.some(ch => ch.send_health_alerts)
+    health_alerts: textChannels.some(ch => ch.send_health_alerts),
+    series_updates: textChannels.some(ch => ch.send_series_updates)
   };
 
   if (loading) {
@@ -161,7 +165,7 @@ export default function ChannelsPage() {
           <Card shadow="sm" padding="lg" radius="md" withBorder style={{ maxWidth: '900px', margin: '0 auto' }}>
             <Skeleton height={14} width={160} mb="xs" mx="auto" />
             <Group gap="lg" justify="center" wrap="wrap" mt="md">
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: 6 }).map((_, i) => (
                 <Stack key={i} gap="xs" align="center">
                   <Skeleton height={14} width={80} />
                   <Skeleton height={16} width={16} circle />
@@ -267,6 +271,14 @@ export default function ChannelsPage() {
                 fill="currentColor"
               />
             </Stack>
+            <Stack gap="xs" align="center">
+              <Text size="sm" fw={500}>Series Updates</Text>
+              <IconCircle
+                size="1rem"
+                style={{ color: notificationStatus.series_updates ? '#51cf66' : '#ff6b6b' }}
+                fill="currentColor"
+              />
+            </Stack>
           </Group>
         </Card>
 
@@ -325,7 +337,8 @@ export default function ChannelsPage() {
                         {channel.send_match_start && <Badge size="xs" color="orange">Live Updates</Badge>}
                         {channel.send_signup_updates && <Badge size="xs" color="purple">Signup Updates</Badge>}
                         {channel.send_health_alerts && <Badge size="xs" color="red">Health Alerts</Badge>}
-                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && !channel.send_health_alerts && (
+                        {channel.send_series_updates && <Badge size="xs" color="teal">Series Updates</Badge>}
+                        {!channel.send_announcements && !channel.send_reminders && !channel.send_match_start && !channel.send_signup_updates && !channel.send_health_alerts && !channel.send_series_updates && (
                           <Badge size="xs" color="gray" variant="light">No notifications</Badge>
                         )}
                       </Group>
@@ -401,6 +414,13 @@ export default function ChannelsPage() {
                 description="Send critical system health alerts (scheduler heartbeat, database errors, process crashes)"
                 checked={editData.send_health_alerts}
                 onChange={(e) => setEditData(prev => ({ ...prev, send_health_alerts: e.target.checked }))}
+              />
+
+              <Checkbox
+                label="Series Updates"
+                description="Send weekly schedules and standings for seasons and series"
+                checked={editData.send_series_updates}
+                onChange={(e) => setEditData(prev => ({ ...prev, send_series_updates: e.target.checked }))}
               />
             </Stack>
 

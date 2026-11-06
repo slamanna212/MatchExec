@@ -6,9 +6,9 @@
  * (`lockTournament`), so generating a round and recording its bye teams is atomic.
  */
 import { v4 as uuidv4 } from 'uuid';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { matches, tournamentMatches, tournamentRoundByes, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
+import { matchParticipants, matchTeams, matches, tournamentMatches, tournamentRoundByes, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
 import type { Announcement } from '../../../lib/db/schema/types';
 import { getModeById, listMapsForModes, listModesByTeamSize, listNonWorkshopModes } from '../games';
 import {
@@ -321,6 +321,15 @@ async function setupTournamentMatchTeams(ex: Executor, matchId: string, team1Id:
   ]);
   await addRosterToMatch(ex, matchId, team1Id, blueId);
   await addRosterToMatch(ex, matchId, team2Id, redId);
+  // A series pre-assigned the tournament teams to entrants: carry that onto the match teams (every round, not just the first).
+  await tagMatchTeamEntrant(ex, blueId, team1Id);
+  await tagMatchTeamEntrant(ex, redId, team2Id);
+}
+
+/** Copy `tournament_teams.series_entrant_id` onto a match_teams row (a no-op for teams that are not series entrants). */
+async function tagMatchTeamEntrant(ex: Executor, matchTeamId: string, tournamentTeamId: string): Promise<void> {
+  const [team] = await ex.select({ entrant: tournamentTeams.series_entrant_id }).from(tournamentTeams).where(eq(tournamentTeams.id, tournamentTeamId));
+  if (team?.entrant) await ex.update(matchTeams).set({ series_entrant_id: team.entrant }).where(eq(matchTeams.id, matchTeamId));
 }
 
 /** Cumulative-points: every team member joins the single match, and each participant gets a match_teams row. */
@@ -329,6 +338,16 @@ export async function addAllTeamsToMatch(ex: Executor, tournamentId: string, mat
     .where(eq(tournamentTeams.tournament_id, tournamentId)).orderBy(asc(tournamentTeams.created_at), asc(tournamentTeams.id));
   for (const team of teams) await addRosterToMatch(ex, matchId, team.id);
   await createMatchTeams(ex, matchId); // FFA/Position: one match_teams row per participant (idempotent)
+
+  // Series entrants: tag each participant's own match_teams row with the entrant of the tournament team they sit on.
+  for (const team of await ex.select({ id: tournamentTeams.id, entrant: tournamentTeams.series_entrant_id }).from(tournamentTeams)
+    .where(eq(tournamentTeams.tournament_id, tournamentId))) {
+    if (!team.entrant) continue;
+    const memberIds = ex.select({ user_id: tournamentTeamMembers.user_id }).from(tournamentTeamMembers).where(eq(tournamentTeamMembers.team_id, team.id));
+    const rowIds = ex.select({ id: matchParticipants.team_id }).from(matchParticipants)
+      .where(and(eq(matchParticipants.match_id, matchId), inArray(matchParticipants.user_id, memberIds)));
+    await ex.update(matchTeams).set({ series_entrant_id: team.entrant }).where(inArray(matchTeams.id, rowIds));
+  }
 }
 
 export interface SaveGeneratedOptions {

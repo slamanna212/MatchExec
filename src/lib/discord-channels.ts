@@ -9,7 +9,7 @@ import { discordChannels } from '../../lib/db/schema';
 
 export type DiscordChannelRow = typeof discordChannels.$inferSelect;
 
-export type NotificationType = 'announcements' | 'reminders' | 'match_start' | 'signup_updates' | 'health_alerts';
+export type NotificationType = 'announcements' | 'reminders' | 'match_start' | 'signup_updates' | 'health_alerts' | 'series_updates';
 
 const NOTIFICATION_COLUMNS = {
   announcements: discordChannels.send_announcements,
@@ -17,6 +17,7 @@ const NOTIFICATION_COLUMNS = {
   match_start: discordChannels.send_match_start,
   signup_updates: discordChannels.send_signup_updates,
   health_alerts: discordChannels.send_health_alerts,
+  series_updates: discordChannels.send_series_updates,
 } as const;
 
 export interface DiscordChannelDto {
@@ -29,6 +30,7 @@ export interface DiscordChannelDto {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates: boolean;
   last_name_refresh: string | null;
   created_at: string;
   updated_at: string;
@@ -45,6 +47,7 @@ export function toChannelDto(row: DiscordChannelRow): DiscordChannelDto {
     send_match_start: row.send_match_start,
     send_signup_updates: row.send_signup_updates,
     send_health_alerts: row.send_health_alerts,
+    send_series_updates: row.send_series_updates,
     last_name_refresh: row.last_name_refresh ? row.last_name_refresh.toISOString() : null,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
@@ -82,6 +85,7 @@ export interface NewChannelInput {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates?: boolean;
 }
 
 /** Inserts a channel; notification flags only apply to text channels. Returns the new row id. */
@@ -100,6 +104,7 @@ export async function createChannel(ex: Executor, input: NewChannelInput): Promi
     send_match_start: isText && input.send_match_start,
     send_signup_updates: isText && input.send_signup_updates,
     send_health_alerts: isText && input.send_health_alerts,
+    send_series_updates: isText && Boolean(input.send_series_updates),
   });
   return id;
 }
@@ -110,6 +115,8 @@ export interface ChannelFlags {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  /** Omitted = leave the stored value untouched. */
+  send_series_updates?: boolean;
 }
 
 export async function updateChannelFlags(ex: Executor, id: string, flags: ChannelFlags): Promise<void> {

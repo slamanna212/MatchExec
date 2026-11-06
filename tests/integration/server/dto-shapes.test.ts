@@ -137,10 +137,16 @@ describe('tournament, series, feed, games, system DTOs', () => {
     expectTypes(events.events[0], { num: ['event_order', 'points_multiplier'], iso: ['start_date'] });
 
     const standings = (await appRequest(`/api/series/${seriesId}/standings`)).data;
-    expect(keys(standings)).toEqual(['series_id', 'series_name', 'standings']);
+    // SeriesStandingsResponse (shared/series-types.ts); `standings` stays as a back-compat alias of `rows`.
+    expect(keys(standings)).toEqual(['divisions', 'events', 'mode', 'rows', 'scope', 'series_id', 'series_name', 'standings', 'view']);
+    expect(standings.scope).toEqual({ type: 'season' });
+    expect(standings.view).toBe('entrant');
+    expect(standings.standings).toEqual(standings.rows);
     expect(standings.standings.length).toBeGreaterThan(0);
-    expect(keys(standings.standings[0])).toEqual(['events', 'events_played', 'rank', 'total_points', 'user_id', 'username']);
-    expect(keys(standings.standings[0].events[0])).toEqual(['points', 'series_event_id']);
+    expect(keys(standings.standings[0])).toEqual(expect.arrayContaining([
+      'entrant_id', 'events', 'events_played', 'key', 'name', 'rank', 'total_points', 'user_id', 'username',
+    ]));
+    expect(keys(standings.standings[0].events[0])).toEqual(expect.arrayContaining(['points', 'series_event_id']));
   });
 
   it('feed, games, settings, health and db-status', async () => {

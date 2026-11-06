@@ -4,10 +4,14 @@
  */
 import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { games, matchParticipants, matches, series, seriesEvents, tournamentParticipants, tournaments } from '../../../lib/db/schema';
+import {
+  games, matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, series, seriesEntrants, seriesEvents,
+  tournamentParticipants, tournaments,
+} from '../../../lib/db/schema';
+import type { SeriesChampionDto, SeriesEventDto, SeriesEventStatus } from '../../../shared/series-types';
 import type { SeriesEventRow } from './events';
 import type { SeriesRow } from './series';
-import { getSeriesStandings } from './standings';
+import { getSeriesChampion } from './standings';
 
 export interface SeriesGameInfo {
   game_id: string | null;
@@ -17,11 +21,13 @@ export interface SeriesGameInfo {
   game_cover: string | null;
 }
 
-export interface SeriesEventDetail extends SeriesEventRow, SeriesGameInfo {
-  /** Name of the linked match/tournament; null when the target was deleted. */
+export interface SeriesEventDetail extends Omit<SeriesEventRow, 'status'>, SeriesGameInfo {
+  /** `live` (has a match / tournament) or `planned` (playoff placeholder). */
+  status: SeriesEventStatus;
+  /** Name of the linked match/tournament (the placeholder's template name when planned); null when the target was deleted. */
   name: string | null;
-  /** Status of the linked match/tournament. */
-  status: string | null;
+  /** Status of the linked match/tournament; null for a planned event. */
+  target_status: string | null;
   event_image_url: string | null;
   /** event_date when set, else the match/tournament start date. */
   start_date: Date | null;
@@ -44,8 +50,8 @@ export interface SeriesSummary extends SeriesRow {
   last_event_game: SeriesGameInfo | null;
   /** The series' own game (series.game_id), used as an identity fallback. */
   series_game: SeriesGameInfo | null;
-  /** Rank-1 username(s) for complete series; null otherwise or when no standings. */
-  champion: string | null;
+  /** Season playoff winner, else the rank-1 entrant(s) of a complete series; null otherwise or when nobody qualifies. */
+  champion: SeriesChampionDto | null;
 }
 
 const FINISHED_EVENT_STATUSES = new Set(['complete', 'cancelled']);
@@ -60,7 +66,8 @@ function selectEventDetails(ex: Executor) {
   return ex
     .select({
       ...getTableColumns(seriesEvents),
-      mName: matches.name, tName: tournaments.name,
+      mName: matches.name, tName: tournaments.name, plannedName: sql<string | null>`${seriesEvents.seeding_rule}->'template'->>'name'`,
+      plannedStart: sql<string | null>`${seriesEvents.seeding_rule}->'template'->>'start_time'`,
       mStatus: matches.status, tStatus: tournaments.status,
       mImage: matches.event_image_url, tImage: tournaments.event_image_url,
       mStart: matches.start_date, tStart: tournaments.start_date,
@@ -69,20 +76,23 @@ function selectEventDetails(ex: Executor) {
     .from(seriesEvents)
     .leftJoin(matches, and(eq(seriesEvents.event_type, 'match'), eq(matches.id, seriesEvents.match_id)))
     .leftJoin(tournaments, and(eq(seriesEvents.event_type, 'tournament'), eq(tournaments.id, seriesEvents.tournament_id)))
-    .leftJoin(games, eq(games.id, sql`coalesce(${matches.game_id}, ${tournaments.game_id})`))
+    .leftJoin(series, eq(series.id, seriesEvents.series_id))
+    // a planned playoff has no target yet: fall back to its template's game, then the series' game
+    .leftJoin(games, eq(games.id, sql`coalesce(${matches.game_id}, ${tournaments.game_id}, ${seriesEvents.seeding_rule}->'template'->>'game_id', ${series.game_id})`))
     .$dynamic();
 }
 
 type EventDetailRow = Awaited<ReturnType<typeof selectEventDetails>>[number];
 
 function toEventDetail(r: EventDetailRow): SeriesEventDetail {
-  const { mName, tName, mStatus, tStatus, mImage, tImage, mStart, tStart, ...rest } = r;
+  const { mName, tName, plannedName, plannedStart, mStatus, tStatus, mImage, tImage, mStart, tStart, ...rest } = r;
+  const planned = r.status === 'planned';
   return {
     ...rest,
-    name: mName ?? tName,
-    status: mStatus ?? tStatus,
+    name: planned ? plannedName : (mName ?? tName),
+    target_status: mStatus ?? tStatus,
     event_image_url: mImage ?? tImage,
-    start_date: r.event_date ?? mStart ?? tStart,
+    start_date: r.event_date ?? mStart ?? tStart ?? (plannedStart ? new Date(plannedStart) : null),
   };
 }
 
@@ -90,6 +100,74 @@ function toEventDetail(r: EventDetailRow): SeriesEventDetail {
 export async function listSeriesEventDetails(ex: Executor, seriesId: string): Promise<SeriesEventDetail[]> {
   const rows = await selectEventDetails(ex).where(eq(seriesEvents.series_id, seriesId)).orderBy(asc(seriesEvents.event_order), asc(seriesEvents.id));
   return rows.map(toEventDetail);
+}
+
+/** The two entrants of every 2-entrant series-created match, with their map wins and the winner. */
+async function loadMatchEntrants(ex: Executor, matchIds: string[]): Promise<Map<string, NonNullable<SeriesEventDto['entrants']>>> {
+  const out = new Map<string, NonNullable<SeriesEventDto['entrants']>>();
+  if (matchIds.length === 0) return out;
+  const completedGames = ex.select({ id: matchGames.id }).from(matchGames).where(and(inArray(matchGames.match_id, matchIds), eq(matchGames.status, 'completed')));
+  const wins = sql<number>`count(${matchGamePlacements.id}) filter (where ${matchGamePlacements.is_winner})`.mapWith(Number);
+  const rows = await ex
+    .select({
+      match_id: matchTeams.match_id, team_id: matchTeams.id, team_order: matchTeams.team_order, entrant_id: seriesEntrants.id,
+      name: seriesEntrants.name, color: seriesEntrants.color, winner_team: matches.winner_team, match_status: matches.status, wins,
+    })
+    .from(matchTeams)
+    .innerJoin(seriesEntrants, eq(seriesEntrants.id, matchTeams.series_entrant_id))
+    .innerJoin(matches, eq(matches.id, matchTeams.match_id))
+    .leftJoin(matchGamePlacements, and(
+      eq(matchGamePlacements.entity_id, matchTeams.id), eq(matchGamePlacements.entity_type, 'team'),
+      inArray(matchGamePlacements.match_game_id, completedGames),
+    ))
+    .where(and(inArray(matchTeams.match_id, matchIds), eq(matchTeams.is_reserve, false)))
+    .groupBy(matchTeams.id, seriesEntrants.id, matches.id)
+    .orderBy(asc(matchTeams.match_id), asc(matchTeams.team_order));
+  const byMatch = new Map<string, typeof rows>();
+  for (const r of rows) byMatch.set(r.match_id, [...(byMatch.get(r.match_id) ?? []), r]);
+  for (const [matchId, teams] of byMatch) {
+    if (teams.length !== 2) continue;
+    const played = teams.some((t) => t.match_status === 'complete' || t.match_status === 'battle');
+    out.set(matchId, teams.map((t) => ({
+      entrant_id: t.entrant_id, name: t.name, color: t.color,
+      ...(played ? { score: t.wins } : {}),
+      ...(t.match_status === 'complete' ? { is_winner: t.winner_team === t.team_id } : {}),
+    })));
+  }
+  return out;
+}
+
+const iso = (d: Date | null): string | null => (d ? d.toISOString() : null);
+
+/** Wire shape of an event (`SeriesEventDto`, plus the image / cover fields the UI cards already use). */
+export type SeriesEventWire = SeriesEventDto & { event_image_url: string | null; game_cover: string | null };
+
+export function toSeriesEventDto(e: SeriesEventDetail, entrants?: SeriesEventDto['entrants']): SeriesEventWire {
+  return {
+    id: e.id, series_id: e.series_id, stage_id: e.stage_id, event_type: e.event_type, match_id: e.match_id, tournament_id: e.tournament_id,
+    event_order: e.event_order, event_date: iso(e.event_date), points_multiplier: e.points_multiplier, role: e.role, week: e.week,
+    counts_for_standings: e.counts_for_standings, batch_id: e.batch_id, status: e.status, entrant_ids: e.entrant_ids,
+    seeding_rule: e.seeding_rule, name: e.name, target_status: e.target_status, start_date: iso(e.start_date), game_id: e.game_id,
+    game_name: e.game_name, game_icon: e.game_icon, game_color: e.game_color,
+    event_image_url: e.event_image_url, game_cover: e.game_cover,
+    ...(entrants ? { entrants } : {}),
+  };
+}
+
+/** Events of one series as `SeriesEventDto`s (the `GET /api/series/:id/events` read model). */
+export async function listSeriesEventDtos(ex: Executor, seriesId: string): Promise<SeriesEventWire[]> {
+  const details = await listSeriesEventDetails(ex, seriesId);
+  const entrants = await loadMatchEntrants(ex, details.map((d) => d.match_id).filter((m): m is string => !!m));
+  return details.map((d) => toSeriesEventDto(d, d.match_id ? entrants.get(d.match_id) : undefined));
+}
+
+/** One event as a `SeriesEventDto`, or null when it is not part of the series. */
+export async function getSeriesEventDto(ex: Executor, seriesId: string, eventId: string): Promise<SeriesEventWire | null> {
+  const [row] = await selectEventDetails(ex).where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId)));
+  if (!row) return null;
+  const detail = toEventDetail(row);
+  const entrants = detail.match_id ? (await loadMatchEntrants(ex, [detail.match_id])).get(detail.match_id) : undefined;
+  return toSeriesEventDto(detail, entrants);
 }
 
 function pickGame(e: SeriesGameInfo): SeriesGameInfo {
@@ -105,7 +183,7 @@ export interface ListSeriesSummaryOptions {
 
 /**
  * Lists series with everything the dashboard/history cards need. Uses a fixed number of queries regardless of series
- * count, except the champion lookup, which runs standings for each *complete* series in the page.
+ * count, except the champion lookup, which runs standings for each *complete* series (or finished season playoff) in the page.
  */
 export async function listSeriesSummaries(ex: Executor, options: ListSeriesSummaryOptions = {}): Promise<SeriesSummary[]> {
   const statuses = (options.statuses ?? []) as SeriesRow['status'][];
@@ -141,20 +219,17 @@ export async function listSeriesSummaries(ex: Executor, options: ListSeriesSumma
   for (const r of rows) {
     const { sg_name: sgName, sg_icon: sgIcon, sg_color: sgColor, sg_cover: sgCover, ...row } = r;
     const evs = eventsBySeries.get(r.id) ?? [];
-    const next = evs.find((e) => !isEventFinished(e.status)) ?? null;
+    const next = evs.find((e) => e.status === 'live' && !isEventFinished(e.target_status)) ?? null;
     const last = evs.length > 0 ? evs[evs.length - 1] : null;
 
-    let champion: string | null = null;
-    if (r.status === 'complete' && evs.length > 0) {
-      const standings = await getSeriesStandings(ex, r.id);
-      const leaders = standings.filter((s) => s.rank === 1 && s.total_points > 0).map((s) => s.username);
-      champion = leaders.length > 0 ? leaders.join(', ') : null;
-    }
+    // Only series that can have a champion pay for the standings run: complete ones, or ones whose season playoff is over.
+    const playoffDone = evs.some((e) => e.role === 'season_playoff' && e.status === 'live' && e.target_status === 'complete');
+    const champion = (r.status === 'complete' && evs.length > 0) || playoffDone ? await getSeriesChampion(ex, r.id) : null;
 
     summaries.push({
       ...row,
       event_count: evs.length,
-      completed_event_count: evs.filter((e) => e.status === 'complete').length,
+      completed_event_count: evs.filter((e) => e.target_status === 'complete').length,
       participant_count: participantCounts.get(r.id) ?? 0,
       next_event: next ? {
         id: next.id,

@@ -2,7 +2,9 @@
 import { pgTable, text, integer, timestamp, jsonb, index, uniqueIndex, unique, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { matchGames, matches } from './matches';
+import { series } from './series';
 import { scorecardSubmissions } from './stats';
+import type { SeriesUpdateKind, SeriesUpdatePayload } from '../../../shared/series-types';
 
 export const discordAnnouncementQueue = pgTable('discord_announcement_queue', {
   id: text('id').primaryKey(),
@@ -84,6 +86,30 @@ export const discordHealthAlertQueue = pgTable('discord_health_alert_queue', {
 }, (t) => [
   index('idx_discord_health_alert_queue_status').on(t.status),
   check('discord_health_alert_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+]);
+
+export const discordSeriesUpdateQueue = pgTable('discord_series_update_queue', {
+  id: text('id').primaryKey(),
+  series_id: text('series_id').notNull().references(() => series.id, { onDelete: 'cascade' }),
+  /** SeriesUpdateKind (shared/series-types.ts). */
+  kind: text('kind').$type<SeriesUpdateKind>().notNull(),
+  /** Dedupes repeated posts, e.g. 'week:3'. NULL never collides (NULLs are distinct in the unique index). */
+  dedupe_key: text('dedupe_key'),
+  payload: jsonb('payload').$type<SeriesUpdatePayload>().notNull().default({}),
+  status: text('status', { enum: ['pending', 'processing', 'completed', 'failed'] }).notNull().default("pending"),
+  created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  processed_at: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
+  last_error: text('last_error'),
+  attempts: integer('attempts').notNull().default(0),
+  max_attempts: integer('max_attempts').notNull().default(5),
+  claimed_at: timestamp('claimed_at', { withTimezone: true, mode: 'date' }),
+  claimed_by: text('claimed_by'),
+  next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
+  external_message_id: text('external_message_id'),
+}, (t) => [
+  unique('discord_series_update_queue_dedupe_unique').on(t.series_id, t.kind, t.dedupe_key),
+  index('idx_discord_series_update_queue_status').on(t.status),
+  check('discord_series_update_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
 export const discordMapCodeQueue = pgTable('discord_map_code_queue', {

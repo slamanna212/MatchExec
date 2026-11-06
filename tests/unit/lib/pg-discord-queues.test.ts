@@ -29,8 +29,8 @@ async function row(id: string) {
 }
 
 describe('registry', () => {
-  it('covers all 19 queue / job tables and each has the worker columns', () => {
-    expect(QUEUE_NAMES).toHaveLength(19);
+  it('covers all 20 queue / job tables and each has the worker columns', () => {
+    expect(QUEUE_NAMES).toHaveLength(20);
     for (const name of QUEUE_NAMES) {
       const t = QUEUE_TABLES[name] as unknown as Record<string, unknown>;
       for (const col of ['id', 'status', 'attempts', 'max_attempts', 'claimed_at', 'claimed_by', 'next_attempt_at', 'last_error', 'processed_at', 'created_at']) {

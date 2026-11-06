@@ -216,9 +216,9 @@ PostgreSQL 18 through Drizzle ORM (`drizzle-orm` with `pg`; PGlite in tests). Sc
 
 - **Matches**: `matches`, `match_participants`, `match_games`, `match_teams` (N-team rows per match), `match_game_placements` (unified results)
 - **Tournaments**: `tournaments`, `tournament_participants`, `tournament_teams`, `tournament_team_members`, `tournament_matches`, `tournament_round_byes`
-- **Series**: `series`, `series_events`
+- **Series**: `series`, `series_events`, `series_entrants`, `series_entrant_members`, `series_stages`, `series_event_batches`
 - **Games**: `games`, `game_modes` (with `scoring_type` and `setup_components`), `game_maps`, `game_stat_definitions`
-- **Discord**: 19 queue/job tables (`discord_*_queue`, `discord_bot_requests`, `stats_*_queue`), `discord_channels`, `discord_match_messages`, `discord_settings`
+- **Discord**: 20 queue/job tables (`discord_*_queue`, `discord_bot_requests`, `stats_*_queue`), `discord_channels`, `discord_match_messages`, `discord_settings`
 - **Stats**: `scorecard_submissions`, `scorecard_player_stats`, `stats_settings`
 - **Settings**: `app_settings`, `announcer_settings`, `ui_settings`, `scheduler_settings`, `voices`
 - **System**: `system_status`, `blobs`, `data_versions`, `activity_feed`
@@ -298,10 +298,14 @@ Setup phase components live in `src/components/setup/`: `setup-phase.tsx` (dispa
 
 ### Series System
 - Top-level entity for multi-event championships and seasons (`src/lib/series/`)
-- Series owns an event schedule: each `series_event` links to a `match` or `tournament` with a `points_multiplier`
-- Standings computed on demand (`getSeriesStandings`) from placements, per event, with a breakdown
-- API: `src/server/routes/series.ts` (CRUD + events + standings)
-- UI: `/series`, `/series/create`, `/series/[seriesId]`, `/series/[seriesId]/edit`, `/series/history`
+- A series is a season: locked to one `scoring_type` and a set of allowed games (`game_ids`), with **entrants** (solo players or teams, rosters in `series_entrant_members`, soft leave via `left_at`), optional **stages**, and statuses `created -> registration -> active -> complete` (or `cancelled`). Design and work breakdown: `docs/series-plan.md`; wire types: `shared/series-types.ts`
+- Series owns an event schedule: each `series_event` links to a `match` or `tournament` (or is a `planned` playoff placeholder) with a `points_multiplier`, `role`, `week`, `stage_id` and `counts_for_standings`; series-created matches/tournaments link their teams to entrants through `series_entrant_id`
+- The series **creates** its events: single matches/tournaments with preset entrant rosters (`builder.ts`, status `assign`, no signups), generators (`generators/`: round robin with optional divisions, race calendar; preview -> commit as a `series_event_batches` row -> regenerate/remove unplayed), withdraw (`withdraw.ts`). Attaching existing events still works
+- Standings computed on demand (`standings*.ts`, `getSeriesStandingsResponse`) per entrant, season or stage scope, entrant or individual view: legacy configs (no `mode`, per player), `head_to_head` (W-L-T, map diff, tiebreakers) or `points` (position spreads, multipliers, drop worst). A series without entrants scores each player as an implicit entrant. `getSeriesChampion`: season playoff winner, else rank 1 of a complete series
+- Playoffs (`playoffs.ts`): planned events with a `seeding_rule` are seeded from standings (`seedOrder` in `src/lib/tournaments/bracket-math.ts`); completing a stage activates the next one
+- Discord (`discord_series_update_queue`, `processes/discord-bot/modules/series-update-handler.ts`, `series-registration-handler.ts`, scheduler job `series-updates.ts`): registration posts go to announcement channels, playoff/champion posts to Live Updates (`send_match_start`), weekly schedule and standings to the `send_series_updates` ("Series Updates") channels
+- API: `src/server/routes/series.ts` (CRUD + events + standings) plus `series-entrants.ts` (entrants, rosters, copy, stages, player search), `series-builder.ts` (event creation, generators, batches, withdraw), `series-playoffs.ts` (seed preview/seed, complete stage)
+- UI: `/series`, `/series/create`, `/series/[seriesId]` (tabs: Overview, Schedule, Standings, Entrants), `/series/[seriesId]/edit`, `/series/history`
 
 ### Backups and Restore
 - `lib/backup.ts`: `pg_dump --format=custom --compress=zstd --schema=public` to `*.partial`, renamed on success. Automatic backups run from the scheduler (`processes/scheduler/jobs/auto-backup.ts`; default daily 04:00 container TZ, keep 14 daily + 4 weekly; on by default for embedded Postgres, off for external `DATABASE_URL`). Settings live in `app_settings`.

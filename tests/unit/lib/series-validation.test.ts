@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveBracketPlacings, tieAwareRanks } from '@/lib/series/standings';
 import {
+  validateDiscordConfig, validateEntrantBody, validateMatchDefaults, validateMemberBody, validatePlacementFields, validateRosterBounds,
+  validateStageBody,
   parseScoringConfig, validateEventOrder, validatePointsMultiplier, validateScoringConfig, validateSeriesBody, validateSeriesDates,
   validateSeriesStatusTransition,
 } from '@/lib/series/validation';
@@ -124,5 +126,106 @@ describe('resolveBracketPlacings', () => {
   it('yields no placings until the final is decided', () => {
     expect(resolveBracketPlacings([m(1, 'winners', 'a', 'b', null, 'battle')], 'single-elimination')).toEqual([]);
     expect(resolveBracketPlacings([], 'double-elimination')).toEqual([]);
+  });
+});
+
+describe('status transitions with registration', () => {
+  it('created -> registration -> active -> complete, with created -> active still legal', () => {
+    expect(validateSeriesStatusTransition('created', 'registration')).toBeNull();
+    expect(validateSeriesStatusTransition('registration', 'active')).toBeNull();
+    expect(validateSeriesStatusTransition('created', 'active')).toBeNull();
+  });
+  it('cancel is reachable from registration; nothing goes back or skips', () => {
+    expect(validateSeriesStatusTransition('registration', 'cancelled')).toBeNull();
+    expect(validateSeriesStatusTransition('registration', 'created')).not.toBeNull();
+    expect(validateSeriesStatusTransition('registration', 'complete')).not.toBeNull();
+    expect(validateSeriesStatusTransition('active', 'registration')).not.toBeNull();
+    expect(validateSeriesStatusTransition('cancelled', 'registration')).not.toBeNull();
+  });
+});
+
+describe('validateScoringConfig (rework keys)', () => {
+  it('accepts head_to_head and points configs', () => {
+    expect(validateScoringConfig({ mode: 'head_to_head', win_points: 3, loss_points: 0, tie_points: 1, tiebreakers: ['match_wins', 'map_diff', 'head_to_head', 'maps_won'] })).toBeNull();
+    expect(validateScoringConfig({ mode: 'points', position_points: [25, 18, 15], drop_worst: 2, tiebreakers: ['points', 'event_wins', 'best_finishes'] })).toBeNull();
+  });
+  it('rejects bad values', () => {
+    for (const bad of [
+      { mode: 'league' }, { win_points: 'x' }, { loss_points: NaN }, { tie_points: null }, { tiebreakers: ['luck'] }, { tiebreakers: 'points' },
+      { position_points: [1, 'a'] }, { position_points: 3 }, { drop_worst: -1 }, { drop_worst: 1.5 }, { drop_worst: '1' },
+    ]) {
+      expect(validateScoringConfig(bad), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+});
+
+describe('validateSeriesBody (rework fields)', () => {
+  const ok = { name: 'S' };
+  it('accepts the new fields', () => {
+    expect(validateSeriesBody({ ...ok, entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Normal', game_ids: ['a', 'b'], game_mode_id: 'm', match_defaults: { rounds: 3 }, discord_config: { weekly_schedule: true }, previous_series_id: null }, false)).toBeNull();
+    expect(validateSeriesBody({ scoring_type: null, match_defaults: null, discord_config: null }, true)).toBeNull();
+  });
+  it('rejects bad enums, bounds and blobs', () => {
+    for (const bad of [
+      { entrant_type: 'duo' }, { scoring_type: 'Elo' }, { roster_min: 0 }, { roster_max: 100 }, { roster_min: 4, roster_max: 2 },
+      { entrant_type: 'solo', roster_max: 3 }, { game_ids: 'a' }, { game_ids: [''] }, { game_ids: [1] }, { game_mode_id: 5 },
+      { match_defaults: [] }, { discord_config: 'x' },
+    ]) {
+      expect(validateSeriesBody({ ...ok, ...bad }, false), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+});
+
+describe('validateMatchDefaults / validateDiscordConfig / validateRosterBounds', () => {
+  it('match defaults', () => {
+    expect(validateMatchDefaults({ maps: ['a'], rounds: 3, rounds_per_match: 5, rules: 'casual', stats_enabled: true, announcements: [{ type: 'x', time: 5 }], livestream_link: null })).toBeNull();
+    for (const bad of [{ maps: [1] }, { rounds: 0 }, { rounds: 100 }, { rules: 'x' }, { stats_enabled: 'y' }, { announcements: [{ type: 'x' }] }, { livestream_link: 3 }, 'x']) {
+      expect(validateMatchDefaults(bad), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+  it('discord config', () => {
+    expect(validateDiscordConfig({ weekly_schedule: false, standings_posts: true, registration_posts: true, schedule_lead_hours: 48 })).toBeNull();
+    for (const bad of [{ weekly_schedule: 1 }, { schedule_lead_hours: -1 }, { schedule_lead_hours: 'x' }, { schedule_lead_hours: 9999 }, null]) {
+      expect(validateDiscordConfig(bad), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+  it('roster bounds', () => {
+    expect(validateRosterBounds('team', 5, 7)).toBeNull();
+    expect(validateRosterBounds('team', null, null)).toBeNull();
+    expect(validateRosterBounds('solo', 1, 1)).toBeNull();
+    expect(validateRosterBounds('solo', undefined, undefined)).toBeNull();
+    expect(validateRosterBounds('solo', 2, 2)).not.toBeNull();
+    expect(validateRosterBounds('team', 8, 7)).not.toBeNull();
+    expect(validateRosterBounds('team', 1.5, 7)).not.toBeNull();
+  });
+});
+
+describe('entrant / member / stage / placement bodies', () => {
+  it('entrant', () => {
+    expect(validateEntrantBody({ name: 'A', tag: 'AB', color: '#fff', seed: 1, division: 'East', status: 'pending', members: [{ user_id: 'u', username: 'n', role: 'captain' }] }, false)).toBeNull();
+    expect(validateEntrantBody({ seed: 2 }, true)).toBeNull();
+    for (const bad of [{}, { name: '' }, { name: 'x'.repeat(101) }, { name: 'A', tag: 'x'.repeat(13) }, { name: 'A', seed: 0 }, { name: 'A', status: 'gone' }, { name: 'A', members: 'x' }, { name: 'A', members: [{ user_id: 'u' }] }, { name: 'A', color: 5 }]) {
+      expect(validateEntrantBody(bad, false), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+  it('member', () => {
+    expect(validateMemberBody({ user_id: 'u', username: 'n', discord_user_id: null }, false)).toBeNull();
+    expect(validateMemberBody({ role: 'sub' }, true)).toBeNull();
+    for (const bad of [{ username: 'n' }, { user_id: ' ', username: 'n' }, { user_id: 'u', username: 'n', role: 'coach' }, { user_id: 'u', username: 'n', discord_user_id: 5 }]) {
+      expect(validateMemberBody(bad, false), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+  it('stage', () => {
+    expect(validateStageBody({ name: 'S1', stage_order: 2, counts_toward_season: false, status: 'active', scoring_config: { drop_worst: 1 } }, false)).toBeNull();
+    for (const bad of [{}, { name: ' ' }, { name: 'S', stage_order: 0 }, { name: 'S', counts_toward_season: 'y' }, { name: 'S', status: 'done' }, { name: 'S', scoring_config: { mode: 'x' } }]) {
+      expect(validateStageBody(bad, false), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+  it('placement fields', () => {
+    expect(validatePlacementFields({ stage_id: null, role: 'exhibition', week: 3, counts_for_standings: false })).toBeNull();
+    expect(validatePlacementFields({})).toBeNull();
+    for (const bad of [{ stage_id: 3 }, { role: 'final' }, { week: 0 }, { week: 1.5 }, { week: 'x' }, { counts_for_standings: 'yes' }]) {
+      expect(validatePlacementFields(bad), JSON.stringify(bad)).not.toBeNull();
+    }
   });
 });

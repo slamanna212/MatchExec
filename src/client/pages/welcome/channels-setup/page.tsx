@@ -22,6 +22,7 @@ interface DiscordChannel {
   send_match_start?: boolean;
   send_signup_updates?: boolean;
   send_health_alerts?: boolean;
+  send_series_updates?: boolean;
 }
 
 interface CreateChannelForm {
@@ -31,6 +32,7 @@ interface CreateChannelForm {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates: boolean;
 }
 
 interface ChannelEditData {
@@ -39,6 +41,7 @@ interface ChannelEditData {
   send_match_start: boolean;
   send_signup_updates: boolean;
   send_health_alerts: boolean;
+  send_series_updates: boolean;
 }
 
 function fireConfetti() {
@@ -94,13 +97,13 @@ export default function ChannelsSetupPage() {
   const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
   const [editData, setEditData] = useState<ChannelEditData>({
     send_announcements: false, send_reminders: false,
-    send_match_start: false, send_signup_updates: false, send_health_alerts: false,
+    send_match_start: false, send_signup_updates: false, send_health_alerts: false, send_series_updates: false,
   });
 
   const createForm = useForm<CreateChannelForm>({
     initialValues: {
       discord_channel_id: '', send_announcements: false, send_reminders: false,
-      send_match_start: false, send_signup_updates: false, send_health_alerts: false,
+      send_match_start: false, send_signup_updates: false, send_health_alerts: false, send_series_updates: false,
     },
     validate: {
       discord_channel_id: (v) => discordIdError(v, 'Channel ID', true),
@@ -176,7 +179,8 @@ export default function ChannelsSetupPage() {
     const validation = createForm.validate();
     if (validation.hasErrors) return;
     if (!createForm.values.send_announcements && !createForm.values.send_reminders && !createForm.values.send_match_start
-      && !createForm.values.send_signup_updates && !createForm.values.send_health_alerts) {
+      && !createForm.values.send_signup_updates && !createForm.values.send_health_alerts
+      && !createForm.values.send_series_updates) {
       showError('Pick at least one notification type for this channel');
       return;
     }
@@ -212,6 +216,7 @@ export default function ChannelsSetupPage() {
       send_match_start: channel.send_match_start || false,
       send_signup_updates: channel.send_signup_updates || false,
       send_health_alerts: channel.send_health_alerts || false,
+      send_series_updates: channel.send_series_updates || false,
     });
     setEditModalOpened(true);
   };
@@ -265,6 +270,7 @@ export default function ChannelsSetupPage() {
     textChannels.some((ch) => ch.send_match_start),
     textChannels.some((ch) => ch.send_signup_updates),
     textChannels.some((ch) => ch.send_health_alerts),
+    textChannels.some((ch) => ch.send_series_updates),
   ].filter(Boolean).length;
 
   const statTileStyle: React.CSSProperties = {
@@ -299,6 +305,7 @@ export default function ChannelsSetupPage() {
     send_match_start: 'Live Updates',
     send_signup_updates: 'Signups',
     send_health_alerts: 'Health',
+    send_series_updates: 'Series',
   };
 
   return (
@@ -396,6 +403,7 @@ export default function ChannelsSetupPage() {
                   <Checkbox label="Live Updates" {...createForm.getInputProps('send_match_start', { type: 'checkbox' })} />
                   <Checkbox label="Signup Updates" {...createForm.getInputProps('send_signup_updates', { type: 'checkbox' })} />
                   <Checkbox label="Health Alerts" {...createForm.getInputProps('send_health_alerts', { type: 'checkbox' })} />
+                  <Checkbox label="Series Updates" {...createForm.getInputProps('send_series_updates', { type: 'checkbox' })} />
                 </Stack>
               </div>
               <Group justify="space-between">
@@ -599,6 +607,7 @@ export default function ChannelsSetupPage() {
             <Checkbox label="Live Updates" description="Live match scores and updates" checked={editData.send_match_start} onChange={(e) => setEditData((d) => ({ ...d, send_match_start: e.target.checked }))} />
             <Checkbox label="Signup Updates" description="Player sign-up and leave events" checked={editData.send_signup_updates} onChange={(e) => setEditData((d) => ({ ...d, send_signup_updates: e.target.checked }))} />
             <Checkbox label="Health Alerts" description="System health and error alerts" checked={editData.send_health_alerts} onChange={(e) => setEditData((d) => ({ ...d, send_health_alerts: e.target.checked }))} />
+            <Checkbox label="Series Updates" description="Weekly schedules and standings for seasons" checked={editData.send_series_updates} onChange={(e) => setEditData((d) => ({ ...d, send_series_updates: e.target.checked }))} />
           </Stack>
           <Group justify="flex-end" mt="sm">
             <Button variant="subtle" onClick={() => { setEditModalOpened(false); setSelectedChannel(null); }}>Cancel</Button>

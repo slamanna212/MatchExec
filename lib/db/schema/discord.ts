@@ -52,6 +52,7 @@ export const discordChannels = pgTable('discord_channels', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
   send_health_alerts: boolean('send_health_alerts').notNull().default(false),
+  send_series_updates: boolean('send_series_updates').notNull().default(false),
 }, (t) => [
   index('idx_discord_channels_guild_id').on(t.guild_id),
 ]);

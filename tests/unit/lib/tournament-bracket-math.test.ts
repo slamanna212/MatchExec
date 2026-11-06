@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateTotalMatches, calculateTournamentRounds, filterTournamentMaps, matchTitle, pairTeams, plannedMatchName, selectMapForRound,
-  selectMapsForMatch, shuffleArray,
+  seedOrder, selectMapsForMatch, shuffleArray,
 } from '@/lib/tournaments/bracket-math';
 
 describe('calculateTournamentRounds', () => {
@@ -117,5 +117,46 @@ describe('naming', () => {
     expect(plannedMatchName('losers', undefined, 'A vs B')).toBe('A vs B');
     expect(plannedMatchName('final', false, 'A vs B')).toBe('Grand Finals: A vs B');
     expect(plannedMatchName('final', true, 'A vs B')).toBe('Grand Finals Reset: A vs B');
+  });
+});
+
+describe('seedOrder', () => {
+  it('uses the standard order for powers of two (1 vs n, top seeds meet late)', () => {
+    expect(seedOrder(2)).toEqual([1, 2]);
+    expect(seedOrder(4)).toEqual([1, 4, 2, 3]);
+    expect(seedOrder(8)).toEqual([1, 8, 4, 5, 2, 7, 3, 6]);
+    expect(seedOrder(16).slice(0, 4)).toEqual([1, 16, 8, 9]);
+  });
+
+  it('pairs 1 vs n, 2 vs n-1 ... in the adjacent positions the generator pairs, whatever the count', () => {
+    for (const n of [4, 6, 8, 10, 12, 16]) {
+      const order = seedOrder(n);
+      for (let i = 0; i < n; i += 2) expect(order[i] + order[i + 1]).toBe(n + 1);
+    }
+  });
+
+  it('gives the top seed the first-round bye for an odd count: it is the unpaired last position', () => {
+    expect(seedOrder(3)).toEqual([2, 3, 1]);
+    expect(seedOrder(5)).toEqual([3, 4, 2, 5, 1]);
+    for (const n of [3, 5, 7, 9, 11]) {
+      const order = seedOrder(n);
+      expect(order[n - 1]).toBe(1);
+      for (let i = 0; i + 1 < n - 1; i += 2) expect(order[i] + order[i + 1]).toBe(n + 2); // the rest pair 2 vs n, 3 vs n-1 ...
+    }
+  });
+
+  it('places the top pair last for an even non-power of two so the top seed takes the round-2 bye', () => {
+    expect(seedOrder(6)).toEqual([2, 5, 3, 4, 1, 6]);
+    expect(seedOrder(6).slice(-2)).toEqual([1, 6]);
+  });
+
+  it('is a permutation of 1..n for every count', () => {
+    for (let n = 1; n <= 40; n++) expect([...seedOrder(n)].sort((a, b) => a - b)).toEqual(Array.from({ length: n }, (_, i) => i + 1));
+  });
+
+  it('is empty for an invalid count', () => {
+    expect(seedOrder(0)).toEqual([]);
+    expect(seedOrder(-3)).toEqual([]);
+    expect(seedOrder(1)).toEqual([1]);
   });
 });

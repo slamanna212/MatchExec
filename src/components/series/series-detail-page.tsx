@@ -1,19 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs,
+  Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs, Card, SegmentedControl,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
+import classes from '@/components/gradient-segmented-control.module.css';
 import { SeriesInfoPanel } from './SeriesInfoPanel';
-import { SeriesContentPanel } from './SeriesContentPanel';
-import { AddSeriesEventModal, EditSeriesEventModal } from './series-event-modals';
-import type { SeriesSummary, SeriesEventDetail, SeriesStanding } from './series-shared';
+import { SeriesEntrantsPanel } from './series-entrants-panel';
+import { SeriesOverviewPanel } from './series-overview-panel';
+import { SeriesSchedulePanel } from './series-schedule-panel';
+import { useSeriesStages } from './series-schedule-api';
+import { SeriesStandingsPanel } from './series-standings-panel';
+import { isEventFinished } from './series-shared';
+import type { SeriesSummary, SeriesEventView } from './series-shared';
+
+export type SeriesTab = 'overview' | 'schedule' | 'standings' | 'entrants';
+const TABS: SeriesTab[] = ['overview', 'schedule', 'standings', 'entrants'];
+
+/** The `?tab=` value of the URL, falling back to the overview. */
+export function parseSeriesTab(value: string | null): SeriesTab {
+  return TABS.includes(value as SeriesTab) ? (value as SeriesTab) : 'overview';
+}
+
+function StandingsTab({ series, refreshToken }: { series: SeriesSummary; refreshToken: number }): JSX.Element {
+  const { stages } = useSeriesStages(series.id);
+  return <SeriesStandingsPanel series={series} stages={stages} refreshToken={refreshToken} />;
+}
 
 const TRANSITION_MESSAGES: Record<string, { loading: string; success: string }> = {
+  registration: { loading: 'Opening registration...', success: 'Registration is open!' },
   active: { loading: 'Activating series...', success: 'Series activated!' },
   complete: { loading: 'Completing series...', success: 'Series completed!' },
   cancelled: { loading: 'Cancelling series...', success: 'Series cancelled' },
@@ -49,21 +68,29 @@ function DetailSkeleton(): JSX.Element {
 
 export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseSeriesTab(searchParams.get('tab'));
   const [series, setSeries] = useState<SeriesSummary | null>(null);
-  const [events, setEvents] = useState<SeriesEventDetail[]>([]);
-  const [standings, setStandings] = useState<SeriesStanding[]>([]);
+  const [events, setEvents] = useState<SeriesEventView[]>([]);
+  const [dataVersion, setDataVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [addEventOpen, setAddEventOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<SeriesEventDetail | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(30);
+
+  const changeTab = useCallback((next: string) => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === 'overview') params.delete('tab');
+      else params.set('tab', next);
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [seriesRes, eventsRes, standingsRes] = await Promise.all([
+      const [seriesRes, eventsRes] = await Promise.all([
         fetch(`/api/series/${seriesId}`),
         fetch(`/api/series/${seriesId}/events`),
-        fetch(`/api/series/${seriesId}/standings`),
       ]);
       if (!seriesRes.ok) {
         setError(seriesRes.status === 404 ? 'Series not found' : 'Failed to load series');
@@ -72,7 +99,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
       setError(null);
       setSeries((await seriesRes.json()).series);
       if (eventsRes.ok) setEvents((await eventsRes.json()).events ?? []);
-      if (standingsRes.ok) setStandings((await standingsRes.json()).standings ?? []);
+      setDataVersion((v) => v + 1);
     } catch (err) {
       logger.error('Error loading series:', err);
       setError('Failed to load series data');
@@ -127,7 +154,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   }, [seriesId, fetchData]);
 
   const confirmComplete = () => {
-    const unfinished = events.filter(e => e.status !== 'complete' && e.status !== 'cancelled').length;
+    const unfinished = events.filter(e => e.status === 'live' && !isEventFinished(e.target_status)).length;
     modals.openConfirmModal({
       title: 'Complete Series',
       children: (
@@ -157,37 +184,6 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
       labels: { confirm: 'Cancel Series', cancel: 'Back' },
       confirmProps: { color: 'red' },
       onConfirm: () => { void transition('cancelled'); },
-    });
-  };
-
-  const confirmRemoveEvent = (ev: SeriesEventDetail) => {
-    modals.openConfirmModal({
-      title: 'Remove Event',
-      children: (
-        <Text size="sm">
-          Remove &quot;{ev.name ?? `Event #${ev.event_order}`}&quot; from this series? Its points will no longer count.
-          The {ev.event_type} itself is not deleted.
-        </Text>
-      ),
-      labels: { confirm: 'Remove Event', cancel: 'Back' },
-      confirmProps: { color: 'red' },
-      onConfirm: async () => {
-        const nid = `series-remove-event-${ev.id}`;
-        notificationHelper.loading({ id: nid, message: 'Removing event...' });
-        try {
-          const res = await fetch(`/api/series/${seriesId}/events/${ev.id}`, { method: 'DELETE' });
-          if (res.ok) {
-            notificationHelper.update(nid, { type: 'success', message: 'Event removed' });
-            await fetchData();
-          } else {
-            const data = await res.json().catch(() => ({}));
-            notificationHelper.update(nid, { type: 'error', message: data.error ?? 'Failed to remove event' });
-          }
-        } catch (err) {
-          logger.error('Error removing series event:', err);
-          notificationHelper.update(nid, { type: 'error', message: 'An error occurred while removing the event' });
-        }
-      },
     });
   };
 
@@ -230,37 +226,46 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           <SeriesInfoPanel
             series={series}
             onActivate={() => { void transition('active'); }}
-            onAddEvent={() => setAddEventOpen(true)}
+            onOpenRegistration={() => { void transition('registration'); }}
+            onAddEvent={() => changeTab('schedule')}
             onEdit={() => navigate(`/series/${seriesId}/edit`)}
             onComplete={confirmComplete}
             onCancel={confirmCancel}
           />
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 8 }} pr={{ base: 'md', md: 0 }}>
-          <SeriesContentPanel
-            series={series}
-            events={events}
-            standings={standings}
-            onAddEvent={() => setAddEventOpen(true)}
-            onEditEvent={setEditingEvent}
-            onRemoveEvent={confirmRemoveEvent}
-          />
+          <Stack gap="md">
+            <Group justify="center">
+              <SegmentedControl
+                radius="xl"
+                size="sm"
+                classNames={classes}
+                value={tab}
+                style={{ maxWidth: '100%', overflowX: 'auto' }}
+                onChange={changeTab}
+                data={[
+                  { label: 'Overview', value: 'overview' },
+                  { label: `Schedule (${events.length})`, value: 'schedule' },
+                  { label: 'Standings', value: 'standings' },
+                  { label: 'Entrants', value: 'entrants' },
+                ]}
+              />
+            </Group>
+            {tab === 'overview' && (
+              <SeriesOverviewPanel series={series} events={events} onOpenSchedule={() => changeTab('schedule')} />
+            )}
+            {tab === 'schedule' && (
+              <SeriesSchedulePanel series={series} events={events} onChanged={() => { void fetchData(); }} />
+            )}
+            {tab === 'standings' && <StandingsTab series={series} refreshToken={dataVersion} />}
+            {tab === 'entrants' && (
+              <Card withBorder radius="md" padding="lg">
+                <SeriesEntrantsPanel series={series} onChanged={() => { void fetchData(); }} />
+              </Card>
+            )}
+          </Stack>
         </Grid.Col>
       </Grid>
-
-      <AddSeriesEventModal
-        opened={addEventOpen}
-        onClose={() => setAddEventOpen(false)}
-        seriesId={seriesId}
-        events={events}
-        onAdded={() => { void fetchData(); }}
-      />
-      <EditSeriesEventModal
-        seriesId={seriesId}
-        event={editingEvent}
-        onClose={() => setEditingEvent(null)}
-        onSaved={() => { void fetchData(); }}
-      />
     </div>
   );
 }
