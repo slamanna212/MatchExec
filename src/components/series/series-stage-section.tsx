@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import type { JSX } from 'react';
 import { Stack, Group, Text, Badge, Card, Button, ActionIcon, Menu, Tooltip } from '@mantine/core';
 import {
@@ -8,18 +9,14 @@ import { EmptyState } from '@/components/EmptyState';
 import { SectionLabel } from '@/components/SectionLabel';
 import type { SeriesStageDto, SeriesStageStatus } from '@/shared/series-types';
 import { SeriesEventRow } from './series-event-row';
-import { STRUCTURE_LOCKED_HINT, eventMovePatch } from './series-schedule-helpers';
+import { STRUCTURE_LOCKED_HINT, byEventOrder } from './series-schedule-helpers';
 import type { ScheduleSection, SeriesEditLevel } from './series-schedule-helpers';
 import type { SeriesEventView } from './series-shared';
 
 const STAGE_STATUS_COLOR: Record<SeriesStageStatus, string> = { upcoming: 'gray', active: 'green', complete: 'blue' };
 
-/** Everything the schedule rows and stage headers need to act on the series (supplied by `SeriesSchedulePanel`). */
-export interface ScheduleActions {
-  level: SeriesEditLevel;
-  stages: SeriesStageDto[];
-  seedableIds: ReadonlySet<string>;
-  nextEventId: string | null;
+/** Callbacks the schedule rows and stage headers use (supplied by `SeriesSchedulePanel`, kept referentially stable). */
+export interface ScheduleHandlers {
   editEvent: (event: SeriesEventView) => void;
   removeEvent: (event: SeriesEventView) => void;
   moveEvent: (event: SeriesEventView, patch: { event_order: number }) => void;
@@ -35,12 +32,36 @@ export interface ScheduleActions {
   deleteStage: (stage: SeriesStageDto) => void;
 }
 
-function EventActions({ event, siblings, actions }: { event: SeriesEventView; siblings: SeriesEventView[]; actions: ScheduleActions }): JSX.Element | null {
+export const SCHEDULE_HANDLER_KEYS = [
+  'editEvent', 'removeEvent', 'moveEvent', 'moveToStage', 'regenerateBatch', 'removeBatch', 'seed',
+  'renameStage', 'moveStage', 'completeStage', 'editStageScoring', 'toggleStageCounts', 'deleteStage',
+] as const satisfies ReadonlyArray<keyof ScheduleHandlers>;
+
+/** Everything the schedule rows and stage headers need to act on the series. */
+export interface ScheduleActions extends ScheduleHandlers {
+  level: SeriesEditLevel;
+  stages: SeriesStageDto[];
+  seedableIds: ReadonlySet<string>;
+  nextEventId: string | null;
+}
+
+/** The event_order a row would swap with when moved up / down (null at the ends). */
+interface MoveTargets { up: number | null; down: number | null }
+
+/** Neighbour orders for every event of a section, computed with one sort instead of one per row. */
+function moveTargetsFor(events: readonly SeriesEventView[]): Map<string, MoveTargets> {
+  const sorted = [...events].sort(byEventOrder);
+  const map = new Map<string, MoveTargets>();
+  sorted.forEach((e, i) => map.set(e.id, { up: sorted[i - 1]?.event_order ?? null, down: sorted[i + 1]?.event_order ?? null }));
+  return map;
+}
+
+function EventActions({ event, targets, actions }: { event: SeriesEventView; targets: MoveTargets; actions: ScheduleActions }): JSX.Element | null {
   const { level } = actions;
   if (level === 'none') return null;
   const structure = level === 'full';
-  const up = eventMovePatch(siblings, event.id, -1);
-  const down = eventMovePatch(siblings, event.id, 1);
+  const up = targets.up === null ? null : { event_order: targets.up };
+  const down = targets.down === null ? null : { event_order: targets.down };
   const otherStages = actions.stages.filter((s) => s.id !== event.stage_id);
   const planned = event.status === 'planned';
   const ready = actions.seedableIds.has(event.id);
@@ -163,6 +184,28 @@ function StageHeader({ stage, count, index, total, actions }: {
   );
 }
 
+const NO_TARGETS: MoveTargets = { up: null, down: null };
+
+interface ScheduleEventItemProps {
+  event: SeriesEventView;
+  targets: MoveTargets;
+  isNext: boolean;
+  ready: boolean;
+  actions: ScheduleActions;
+}
+
+/** Memoized row: re-renders only when its own event, flags or the (stable) actions change. */
+const ScheduleEventItem = memo(function ScheduleEventItem({ event, targets, isNext, ready, actions }: ScheduleEventItemProps): JSX.Element {
+  return (
+    <SeriesEventRow
+      event={event}
+      isNext={isNext}
+      ready={ready}
+      actions={<EventActions event={event} targets={targets} actions={actions} />}
+    />
+  );
+});
+
 interface SeriesStageSectionProps {
   section: ScheduleSection;
   index: number;
@@ -173,6 +216,7 @@ interface SeriesStageSectionProps {
 /** One stage (or the "Unstaged" group) of the schedule: header, then events, grouped by week when weeks are set. */
 export function SeriesStageSection({ section, index, total, actions }: SeriesStageSectionProps): JSX.Element {
   const { stage } = section;
+  const targets = useMemo(() => moveTargetsFor(section.events), [section.events]);
   return (
     <Stack gap="xs" data-testid={`stage-section-${section.key}`}>
       {stage ? (
@@ -199,12 +243,13 @@ export function SeriesStageSection({ section, index, total, actions }: SeriesSta
               <SectionLabel>{group.week === null ? 'No week' : `Week ${group.week}`}</SectionLabel>
             )}
             {group.events.map((ev) => (
-              <SeriesEventRow
+              <ScheduleEventItem
                 key={ev.id}
                 event={ev}
+                targets={targets.get(ev.id) ?? NO_TARGETS}
                 isNext={actions.nextEventId === ev.id}
                 ready={actions.seedableIds.has(ev.id)}
-                actions={<EventActions event={ev} siblings={section.events} actions={actions} />}
+                actions={actions}
               />
             ))}
           </Stack>

@@ -1,0 +1,29 @@
+/*
+ * Skips layout and paint for rows that are off screen (long schedules). content-visibility: auto implies paint
+ * containment, which clips overflow, so the wrapper carries padding (offset by a negative margin, so the layout
+ * is unchanged) to leave room for the hover lift and shadow. It ignores the pointer so the padding never
+ * covers the neighbouring rows.
+ */
+.wrapper {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 112px;
+  padding: 20px;
+  margin: -20px;
+  pointer-events: none;
+}
+
+.row {
+  pointer-events: auto;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px var(--row-glow, transparent);
+  }
+}

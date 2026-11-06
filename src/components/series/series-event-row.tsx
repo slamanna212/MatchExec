@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react';
+import type { CSSProperties, JSX, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Stack, Group, Text, Badge, Card, Avatar, Box, ColorSwatch } from '@mantine/core';
 import { IconCalendar, IconTrophy } from '@tabler/icons-react';
@@ -8,6 +8,7 @@ import {
 } from './series-shared';
 import type { SeriesEventView } from './series-shared';
 import { versusLine } from './series-schedule-helpers';
+import classes from './series-event-row.module.css';
 
 const TARGET_STATUS_COLOR: Record<string, string> = {
   created: 'gray', gather: 'blue', assign: 'orange', battle: 'green', complete: 'teal', cancelled: 'red',
@@ -56,27 +57,19 @@ export function SeriesEventRow({ event, isNext, ready, actions }: SeriesEventRow
   const label = event.name ?? (missing ? 'Deleted event' : `Event #${event.event_order}`);
 
   return (
+    <div className={classes.wrapper}>
     <Card
       withBorder
       radius="md"
       p="sm"
+      className={href ? `${classes.row} ${classes.clickable}` : classes.row}
       data-testid="series-event-row"
       data-event-id={event.id}
       style={{
-        cursor: href ? 'pointer' : 'default',
-        transition: 'all 0.25s ease',
+        '--row-glow': `${color}55`,
         borderColor: ready ? 'var(--mantine-color-violet-6)' : isNext ? color : undefined,
         opacity: done ? 0.85 : 1,
-      }}
-      onMouseOver={(e) => {
-        if (!href) return;
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = `0 8px 24px ${color}33`;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '';
-      }}
+      } as CSSProperties}
       onClick={() => { if (href) navigate(href); }}
     >
       <Group gap="sm" wrap="nowrap" align="center">
@@ -133,5 +126,6 @@ export function SeriesEventRow({ event, isNext, ready, actions }: SeriesEventRow
         )}
       </Group>
     </Card>
+    </div>
   );
 }

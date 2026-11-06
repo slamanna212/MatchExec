@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Stack, Group, Text, Card, Button, Alert, Loader, Center } from '@mantine/core';
 import { modals } from '@mantine/modals';
@@ -11,8 +11,8 @@ import { EditSeriesEventModal } from './series-event-modals';
 import { SeedPlayoffsModal } from './series-seed-modal';
 import { buildSchedule, editLevel, isSeedable, stageMovePatch, unplayedInBatch } from './series-schedule-helpers';
 import { runWithToast, scheduleApi, useSeriesStages } from './series-schedule-api';
-import { SeriesStageSection } from './series-stage-section';
-import type { ScheduleActions } from './series-stage-section';
+import { SCHEDULE_HANDLER_KEYS, SeriesStageSection } from './series-stage-section';
+import type { ScheduleActions, ScheduleHandlers } from './series-stage-section';
 import { StageFormModal, StageScoringModal } from './series-stage-modals';
 import type { SeriesEventView, SeriesSummary } from './series-shared';
 
@@ -62,11 +62,7 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
     return result;
   };
 
-  const actions: ScheduleActions = {
-    level,
-    stages,
-    seedableIds,
-    nextEventId: series.next_event?.id ?? null,
+  const handlerImpl: ScheduleHandlers = {
     editEvent: setEditing,
     removeEvent: (ev) => confirm(
       'Remove Event',
@@ -147,6 +143,19 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
       () => { void act(`series-delete-stage-${stage.id}`, 'Deleting stage...', 'Stage deleted', () => scheduleApi.deleteStage(series.id, stage.id)); },
     ),
   };
+
+  // The handlers close over fresh state every render. Rows get stable wrappers that delegate to the latest
+  // implementation, so memoized rows are not re-rendered by unrelated panel state (modals, toasts).
+  const handlerRef = useRef(handlerImpl);
+  useLayoutEffect(() => { handlerRef.current = handlerImpl; });
+  const handlers = useMemo(() => Object.fromEntries(
+    SCHEDULE_HANDLER_KEYS.map((key) => [key, (...args: unknown[]) => (handlerRef.current[key] as (...a: unknown[]) => void)(...args)]),
+  ) as unknown as ScheduleHandlers, []);
+  const nextEventId = series.next_event?.id ?? null;
+  const actions = useMemo<ScheduleActions>(
+    () => ({ ...handlers, level, stages, seedableIds, nextEventId }),
+    [handlers, level, stages, seedableIds, nextEventId],
+  );
 
   const submitStage = async (values: { name: string; counts_toward_season: boolean }) => {
     const target = stageForm.stage;
