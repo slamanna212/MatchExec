@@ -82,7 +82,7 @@ export async function getMatchDetail(ex: Executor, matchId: string): Promise<Mat
 /** Match row + whether its tournament allows editing (null for standalone matches), for the PUT permission check. */
 export async function getMatchEditContext(ex: Executor, matchId: string) {
   const [row] = await ex
-    .select({ id: matches.id, status: matches.status, tournament_id: matches.tournament_id, tournament_allow_match_editing: tournaments.allow_match_editing })
+    .select({ id: matches.id, game_id: matches.game_id, status: matches.status, tournament_id: matches.tournament_id, tournament_allow_match_editing: tournaments.allow_match_editing })
     .from(matches).leftJoin(tournaments, eq(matches.tournament_id, tournaments.id))
     .where(eq(matches.id, matchId)).limit(1);
   return row;
@@ -290,6 +290,8 @@ export interface UpdateMatchInput {
   rounds?: number | null;
   livestreamLink?: string | null;
   maps?: unknown[] | null;
+  /** The mode the (validated) maps belong to; left unchanged when omitted. */
+  modeId?: string | null;
   statsEnabled: boolean;
   playerNotifications: boolean;
 }
@@ -304,6 +306,7 @@ export async function updateMatchDetails(ex: Executor, matchId: string, input: U
     rounds: input.rounds || null,
     livestream_link: input.livestreamLink || null,
     maps: input.maps && input.maps.length > 0 ? input.maps : null,
+    ...(input.modeId ? { mode_id: input.modeId } : {}),
     stats_enabled: input.statsEnabled,
     player_notifications: input.playerNotifications,
   }).where(eq(matches.id, matchId)).returning({ id: matches.id });

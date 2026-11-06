@@ -7,8 +7,7 @@ import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createMatch, createTournament } from '../../utils/pg-fixtures';
 import {
   discordBotRequests, discordDeletionQueue, discordMatchEditQueue, discordMatchMessages, discordSettings, matchGames,
-  matchParticipants, matchTeams, matches, scorecardSubmissions, seriesEvents, series, tournamentMatches, tournamentTeams,
-} from '../../../lib/db/schema';
+  matchParticipants, matchTeams, matches, scorecardSubmissions, seriesEvents, series, tournamentMatches, tournamentTeams, gameMaps } from '../../../lib/db/schema';
 import { getTournamentRescoreBlocker } from '@/lib/matches';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -88,11 +87,12 @@ describe('GET/PUT/DELETE /api/matches/:id', () => {
   });
 
   it('edits a match, validates input and queues an embed edit only when an announcement exists', async () => {
+    await pg().insert(gameMaps).values([{ id: 'edit-map-a', game_id: gameId, mode_id: modeId, name: 'Map A' }, { id: 'edit-map-b', game_id: gameId, mode_id: modeId, name: 'Map B' }]);
     const m = await createMatch(gameId, modeId, { id: 'edit-me', status: 'gather' });
-    const body = { name: '  Renamed  ', description: 'd', startDate: '2026-06-01T10:00:00.000Z', rules: 'competitive', rounds: 3, maps: ['x', 'y'], statsEnabled: true, playerNotifications: false };
+    const body = { name: '  Renamed  ', description: 'd', startDate: '2026-06-01T10:00:00.000Z', rules: 'competitive', rounds: 3, maps: ['edit-map-a', 'edit-map-b'], statsEnabled: true, playerNotifications: false };
     const res = await appRequest(`/api/matches/${m.id}`, { method: 'PUT', json: body });
     expect(res.status).toBe(200);
-    expect(res.data).toMatchObject({ name: 'Renamed', description: 'd', rules: 'competitive', maps: ['x', 'y'], stats_enabled: true, player_notifications: false });
+    expect(res.data).toMatchObject({ name: 'Renamed', description: 'd', rules: 'competitive', maps: ['edit-map-a', 'edit-map-b'], stats_enabled: true, player_notifications: false });
     expect(res.data.start_date).toBe('2026-06-01T10:00:00.000Z');
     expect(await pg().select().from(discordMatchEditQueue)).toHaveLength(0);
 

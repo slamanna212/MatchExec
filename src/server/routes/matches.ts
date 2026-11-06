@@ -17,8 +17,9 @@ import {
   getMatchGameInMatch, getMatchGames, getMatchGamesWithResults, getMatchResult, getMatchScoringType, getMatchTeams, getMatchWithGame,
   initializeMatchGames, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
   matchExists, saveMapNote, saveSetup, setMapCodes, submitGameResult, transitionMatch, updateMatchDetails, validateMatchRequest,
-  getOverallMatchScore, resolveWinnerEntity, isKnownStatus, type MatchRequestBody,
+  getOverallMatchScore, resolveWinnerEntity, isKnownStatus, resolveModeFromMaps, type MatchRequestBody,
 } from '@/lib/matches';
+import { getModeScoringType } from '@/lib/games';
 import { getSuggestedPositions } from '@/lib/stats';
 import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
 import { jsonError } from '../http';
@@ -126,10 +127,24 @@ export const matches = new Hono()
       const start = startDate ? new Date(startDate) : null;
       if (start && Number.isNaN(start.getTime())) return jsonError(c, 'startDate must be a valid date', 400);
 
+      // Maps are checked like they are at creation: they must exist for the game and share one scoring type, and that
+      // type must be the match's own (its teams / setup were built for it).
+      let modeId: string | null = null;
+      if (Array.isArray(maps) && maps.length > 0) {
+        const resolved = await resolveModeFromMaps(db, existing.game_id, maps);
+        if (resolved.error) return jsonError(c, resolved.error, 400);
+        modeId = resolved.modeId;
+        if (modeId) {
+          const current = await getMatchScoringType(db, matchId);
+          const next = (await getModeScoringType(db, existing.game_id, modeId)) ?? 'Normal';
+          if (next !== current) return jsonError(c, `Maps must use the same scoring type as the match (${current}), not ${next}`, 400);
+        }
+      }
+
       const updated = await db.transaction(async (tx) => {
         const ok = await updateMatchDetails(tx, matchId, {
           name: name.trim(), description, startDate: start, rules, rounds, livestreamLink,
-          maps: Array.isArray(maps) ? maps : null, statsEnabled: !!statsEnabled, playerNotifications: playerNotifications !== false,
+          maps: Array.isArray(maps) ? maps : null, modeId, statsEnabled: !!statsEnabled, playerNotifications: playerNotifications !== false,
         });
         if (!ok) return false;
         // Queue the Discord embed update in the same transaction when an announcement message exists.

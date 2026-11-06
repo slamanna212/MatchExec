@@ -111,6 +111,41 @@ describe('POST /api/settings/restore: request validation', () => {
   });
 });
 
+describe('POST /api/settings/restore: rate limit (5 per 10 minutes per client)', () => {
+  const post = (body: FormData) => appRequest('/api/settings/restore', { method: 'POST', body });
+  const garbage = () => restoreForm(new Blob([Buffer.from('this is not a backup')]), 'notes.txt');
+
+  it('does not count requests turned away before they could do anything: no file, wrong kind of file, forgotten password', async () => {
+    const encrypted = () => restoreForm(new Blob([Buffer.concat([Buffer.from('MEXECBAK'), Buffer.alloc(100)])]), 'backup.dump.enc');
+    for (let i = 0; i < 4; i++) {
+      expect((await post(restoreForm(null))).status).toBe(400);
+      expect((await post(garbage())).status).toBe(400);
+      expect((await post(encrypted())).status).toBe(400);
+    }
+    // 12 rejected requests later the client is not locked out: still a plain 400, not a 429.
+    expect((await post(garbage())).status).toBe(400);
+  });
+
+  it('still counts wrong passwords, so a backup password cannot be guessed freely', async () => {
+    const enc = encryptBackup(Buffer.from('PGDMP-something'), 'right-password');
+    const guess = () => post(restoreForm(new Blob([new Uint8Array(enc)]), 'backup.dump.enc', 'wrong-password'));
+    for (let i = 0; i < 5; i++) expect((await guess()).status).toBe(400);
+    expect((await guess()).status).toBe(429);
+    // Locked out, even for a request that would otherwise just be rejected as invalid.
+    expect((await post(garbage())).status).toBe(429);
+  });
+
+  it('refunds only what it counted: rejected requests between wrong guesses do not extend the allowance', async () => {
+    const enc = encryptBackup(Buffer.from('PGDMP-something'), 'right-password');
+    const guess = () => post(restoreForm(new Blob([new Uint8Array(enc)]), 'backup.dump.enc', 'wrong-password'));
+    for (let i = 0; i < 5; i++) {
+      await post(garbage()); // refunded
+      expect((await guess()).status).toBe(400); // counted
+    }
+    expect((await guess()).status).toBe(429);
+  });
+});
+
 describe('POST /api/settings/backup', () => {
   it('streams the dump with the .dump filename when no password is given', async () => {
     installFakePgDump('ok');

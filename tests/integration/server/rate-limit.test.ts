@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { onError } from '../../../src/server/http';
-import { checkRateLimit, clientKey, rateLimit, resetRateLimits } from '../../../src/server/middleware/rate-limit';
+import { checkRateLimit, clientKey, rateLimit, refundRateLimit, resetRateLimits } from '../../../src/server/middleware/rate-limit';
 
 beforeEach(() => resetRateLimits());
 
@@ -12,6 +12,20 @@ describe('rate limiting', () => {
     checkRateLimit('k', 2, 1000, 1);
     expect(() => checkRateLimit('k', 2, 1000, 2)).toThrow(/Too many requests/);
     expect(() => checkRateLimit('k', 2, 1000, 1001)).not.toThrow();
+  });
+
+  it('refundRateLimit gives one hit back, never below zero and never into a new window', () => {
+    checkRateLimit('r', 2, 1000, 0);
+    checkRateLimit('r', 2, 1000, 1);
+    refundRateLimit('r', 2); // 2 hits -> 1
+    expect(() => checkRateLimit('r', 2, 1000, 3)).not.toThrow(); // the refunded slot is usable again
+    expect(() => checkRateLimit('r', 2, 1000, 4)).toThrow(/Too many requests/);
+
+    refundRateLimit('unknown-key'); // no window: nothing to do
+    checkRateLimit('w', 1, 1000, 0);
+    refundRateLimit('w', 5000); // window already over: do not touch the next one
+    checkRateLimit('w', 1, 1000, 5001); // opens a fresh window (count 1)
+    expect(() => checkRateLimit('w', 1, 1000, 5002)).toThrow(/Too many requests/);
   });
 
   it('middleware returns a 429 JSON error keyed by client IP', async () => {

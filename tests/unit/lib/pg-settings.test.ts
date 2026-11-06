@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { DEFAULT_CHANNEL_REFRESH_CRON } from '../../../shared/scheduler';
 import { describe, it, expect } from 'vitest';
 import { setupPgTestFile } from '../../utils/pg-test-db';
 import {
@@ -77,7 +78,7 @@ describe('ui and scheduler settings', () => {
     expect(await getSchedulerSettings()).toBeUndefined();
     const created = await updateSchedulerCrons({ match_check_cron: '0 */2 * * * *' });
     expect(created.match_check_cron).toBe('0 */2 * * * *');
-    expect(created.channel_refresh_cron).toBe('0 */6 * * *'); // schema default
+    expect(created.channel_refresh_cron).toBe(DEFAULT_CHANNEL_REFRESH_CRON); // the shared default, not the table's own (every 6 hours)
     const updated = await updateSchedulerCrons({ channel_refresh_cron: '0 0 1 * * *' });
     expect(updated).toMatchObject({ match_check_cron: '0 */2 * * * *', channel_refresh_cron: '0 0 1 * * *' });
   });

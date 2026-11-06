@@ -190,11 +190,65 @@ describe('PUT /api/matches/:id', () => {
   });
 
   it('persists the maps array', async () => {
+    const { gameMaps } = await import('../../../lib/db/schema');
+    await pg().insert(gameMaps).values([{ id: 'map1', game_id: gameId, mode_id: modeId, name: 'Map 1' }, { id: 'map2', game_id: gameId, mode_id: modeId, name: 'Map 2' }]);
     const m = await createMatch(gameId, modeId, { id: 'maps' });
     const res = await put(m.id, { name: 'Maps Match', maps: ['map1', 'map2'], startDate: new Date().toISOString() });
     expect(res.status).toBe(200);
     expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].maps).toEqual(['map1', 'map2']);
     expect((await appRequest(`/api/matches/${m.id}`)).data.maps).toEqual(['map1', 'map2']);
+  });
+
+  describe('map validation (the same rules as creating a match)', () => {
+    it('refuses a map that does not exist for the game, and changes nothing', async () => {
+      const m = await createMatch(gameId, modeId, { id: 'bad-map', name: 'Before' });
+      const res = await put(m.id, { name: 'After', maps: ['totally-fake-map'], startDate: new Date().toISOString() });
+      expect(res.status).toBe(400);
+      expect(res.data.error).toMatch(/Unknown map "totally-fake-map"/);
+      const [row] = await pg().select().from(matches).where(eq(matches.id, m.id));
+      expect(row.name).toBe('Before');
+      expect(row.maps).toBeNull();
+    });
+
+    it('refuses maps from different scoring types', async () => {
+      const { gameMaps } = await import('../../../lib/db/schema');
+      const ffa = await createGameMode(gameId, { scoring_type: 'FFA', team_size: null });
+      await pg().insert(gameMaps).values([{ id: 'normal-map', game_id: gameId, mode_id: modeId, name: 'N' }, { id: 'ffa-map', game_id: gameId, mode_id: ffa.id, name: 'F' }]);
+      const m = await createMatch(gameId, modeId, { id: 'mixed' });
+      const res = await put(m.id, { name: 'Mixed', maps: ['normal-map', 'ffa-map'], startDate: new Date().toISOString() });
+      expect(res.status).toBe(400);
+      expect(res.data.error).toMatch(/same scoring type/);
+    });
+
+    it('refuses to switch a match to maps of another scoring type (its teams and setup were built for the old one)', async () => {
+      const { gameMaps } = await import('../../../lib/db/schema');
+      const ffa = await createGameMode(gameId, { scoring_type: 'FFA', team_size: null });
+      await pg().insert(gameMaps).values({ id: 'ffa-only', game_id: gameId, mode_id: ffa.id, name: 'F' });
+      const m = await createMatch(gameId, modeId, { id: 'switch' });
+      const res = await put(m.id, { name: 'Switch', maps: ['ffa-only'], startDate: new Date().toISOString() });
+      expect(res.status).toBe(400);
+      expect(res.data.error).toMatch(/same scoring type as the match \(Normal\), not FFA/);
+      expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].mode_id).toBe(modeId);
+    });
+
+    it('keeps mode_id in step when the maps move to another mode of the same scoring type', async () => {
+      const { gameMaps } = await import('../../../lib/db/schema');
+      const other = await createGameMode(gameId, { scoring_type: 'Normal' });
+      await pg().insert(gameMaps).values({ id: 'other-mode-map', game_id: gameId, mode_id: other.id, name: 'O' });
+      const m = await createMatch(gameId, modeId, { id: 'move' });
+      expect((await put(m.id, { name: 'Move', maps: ['other-mode-map'], startDate: new Date().toISOString() })).status).toBe(200);
+      expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].mode_id).toBe(other.id);
+    });
+
+    it('accepts map ids carrying the UI timestamp/random suffix', async () => {
+      const { gameMaps } = await import('../../../lib/db/schema');
+      await pg().insert(gameMaps).values({ id: 'suffixed', game_id: gameId, mode_id: modeId, name: 'S' });
+      const m = await createMatch(gameId, modeId, { id: 'suffix' });
+      const id = 'suffixed-1793410040191-umuprdq78';
+      const res = await put(m.id, { name: 'Suffix', maps: [id], startDate: new Date().toISOString() });
+      expect(res.status).toBe(200);
+      expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].maps).toEqual([id]);
+    });
   });
 });
 

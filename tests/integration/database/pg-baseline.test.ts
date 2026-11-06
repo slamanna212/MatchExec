@@ -32,7 +32,7 @@ describe('Postgres baseline (PGlite)', () => {
 
   it('creates every table declared in the Drizzle schema', async () => {
     const declared = (Object.values(schema) as unknown[]).filter((v): v is PgTable => v instanceof PgTable);
-    expect(declared.length).toBe(62);
+    expect(declared.length).toBe(63);
     const res = await client.query<{ table_schema: string; table_name: string }>(
       `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('public','control')`,
     );
