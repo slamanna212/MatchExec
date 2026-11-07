@@ -9,6 +9,8 @@ import {
   IconSettings,
   IconDatabaseExport,
   IconChartBar,
+  IconDeviceGamepad2,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
@@ -37,10 +39,17 @@ const settingsCategories = [
   },
   {
     title: 'Discord',
-    description: 'Configure Discord bot connection and permissions',
+    description: 'Bot connection, server, player DMs and notification channels',
     href: '/settings/discord',
     icon: IconBrandDiscord,
     color: '#5865f2',
+  },
+  {
+    title: 'Games',
+    description: 'Map pools for each game',
+    href: '/settings/games',
+    icon: IconDeviceGamepad2,
+    color: '#0ea5e9',
   },
   {
     title: 'Scheduler',
@@ -62,6 +71,13 @@ const settingsCategories = [
     href: '/settings/backup-restore',
     icon: IconDatabaseExport,
     color: '#16a085',
+  },
+  {
+    title: 'Info',
+    description: 'Documentation, support, credits and copyright',
+    href: '/settings/info',
+    icon: IconInfoCircle,
+    color: '#95a5a6',
   },
 ];
 

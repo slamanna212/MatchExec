@@ -99,6 +99,17 @@ function formatRelativeTime(timestamp: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ─── FeedItem (enter animation wrapper) ───────────────────────────────────────
+
+function FeedItem({ isNew, children }: { isNew: boolean; children: React.ReactNode }) {
+  // Always render the wrapper so the card is not remounted when the animation class is removed.
+  return (
+    <div className={isNew ? 'feed-item-enter' : undefined}>
+      <div className={isNew ? 'feed-item-enter-inner' : undefined}>{children}</div>
+    </div>
+  );
+}
+
 // ─── FeedEventCard ────────────────────────────────────────────────────────────
 
 function FeedEventCard({ event }: { event: FeedEvent }) {
@@ -324,6 +335,8 @@ export function FeedDashboard(): JSX.Element {
   const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
   const etagRef = useRef<string | null>(null);
   const seenHealthAlertIds = useRef<Set<string>>(new Set());
+  const knownIdsRef = useRef<Set<string> | null>(null);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
   const fetchEvents = useCallback(async (silent = false, limit = displayLimit, range = dateRange) => {
     try {
@@ -347,6 +360,15 @@ export function FeedDashboard(): JSX.Element {
 
       if (res.ok) {
         const data: FeedResponse = await res.json();
+        const known = knownIdsRef.current;
+        if (silent && known) {
+          const fresh = data.events.filter(e => !known.has(e.id)).map(e => e.id);
+          if (fresh.length > 0) {
+            setNewIds(new Set(fresh));
+            setTimeout(() => setNewIds(new Set()), 1500);
+          }
+        }
+        knownIdsRef.current = new Set(data.events.map(e => e.id));
         setEvents(data.events);
         setTotal(data.total);
 
@@ -412,6 +434,28 @@ export function FeedDashboard(): JSX.Element {
       <style>{`
         .feed-assign-players-btn {
           animation: feedScorePulse 2.4s ease-in-out infinite;
+        }
+        .feed-item-enter {
+          display: grid;
+          animation: feedItemExpand 0.4s ease-out;
+        }
+        .feed-item-enter-inner {
+          min-height: 0;
+          overflow: hidden;
+          animation: feedItemIn 0.5s ease-out;
+          border-radius: var(--mantine-radius-md);
+        }
+        @keyframes feedItemExpand {
+          from { grid-template-rows: 0fr; }
+          to   { grid-template-rows: 1fr; }
+        }
+        @keyframes feedItemIn {
+          0%   { opacity: 0; transform: translateY(-12px); box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6); }
+          60%  { box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.6); }
+          100% { opacity: 1; transform: none; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .feed-item-enter, .feed-item-enter-inner { animation: none; }
         }
         @keyframes feedScorePulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.5); }
@@ -549,7 +593,7 @@ export function FeedDashboard(): JSX.Element {
                     Requires Attention
                   </Text>
                 </Group>
-                {critical.map(e => <FeedEventCard key={e.id} event={e} />)}
+                {critical.map(e => <FeedItem key={e.id} isNew={newIds.has(e.id)}><FeedEventCard event={e} /></FeedItem>)}
                 {regular.length > 0 && <Divider my={4} />}
               </>
             )}
@@ -569,7 +613,7 @@ export function FeedDashboard(): JSX.Element {
                     Scorecard Player Assignment
                   </Text>
                 </Group>
-                {playerMatchingRequired.map(e => <FeedEventCard key={e.id} event={e} />)}
+                {playerMatchingRequired.map(e => <FeedItem key={e.id} isNew={newIds.has(e.id)}><FeedEventCard event={e} /></FeedItem>)}
                 {(regular.length > 0 || updateEvents.length > 0) && <Divider my={4} />}
               </>
             )}
@@ -583,13 +627,13 @@ export function FeedDashboard(): JSX.Element {
                     Update Available
                   </Text>
                 </Group>
-                {updateEvents.map(e => <UpdateAvailableCard key={e.id} event={e} platform={detectedPlatform} />)}
+                {updateEvents.map(e => <FeedItem key={e.id} isNew={newIds.has(e.id)}><UpdateAvailableCard event={e} platform={detectedPlatform} /></FeedItem>)}
                 {regular.length > 0 && <Divider my={4} />}
               </>
             )}
 
             {/* Main list */}
-            {regular.map(e => <FeedEventCard key={e.id} event={e} />)}
+            {regular.map(e => <FeedItem key={e.id} isNew={newIds.has(e.id)}><FeedEventCard event={e} /></FeedItem>)}
 
             {/* Empty state */}
             {filtered.length === 0 && (

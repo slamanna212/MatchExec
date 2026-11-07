@@ -1,16 +1,16 @@
 import { lazy } from 'react';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import RootLayout from './root-layout';
 
 // Every page is code-split with React.lazy (Recharts and the bracket views are the heavy ones); RootLayout wraps the outlet in <Suspense>.
 
 const PageHome = lazy(() => import('./pages/home'));
-const PageChannels = lazy(() => import('./pages/channels/page'));
-const PageChannelsCreate = lazy(() => import('./pages/channels/create/page'));
+const PageSettingsChannelsCreate = lazy(() => import('./pages/settings/channels/create/page'));
 const PageDev = lazy(() => import('./pages/dev/page'));
 const PageFeed = lazy(() => import('./pages/feed/page'));
-const PageGames = lazy(() => import('./pages/games/page'));
-const PageInfo = lazy(() => import('./pages/info/page'));
+const PageSettingsGames = lazy(() => import('./pages/settings/games/page'));
+const PageSettingsGameDetail = lazy(() => import('./pages/settings/games/gameid/page'));
+const PageSettingsInfo = lazy(() => import('./pages/settings/info/page'));
 const PageLogin = lazy(() => import('./pages/login/page'));
 const PageMatches = lazy(() => import('./pages/matches/page'));
 const PageMatchesCreate = lazy(() => import('./pages/matches/create/page'));
@@ -52,12 +52,13 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <PageHome /> },
-      { path: 'channels', element: <PageChannels /> },
-      { path: 'channels/create', element: <PageChannelsCreate /> },
+      // Channels, Games and Info moved under Settings; keep the old URLs working.
+      { path: 'channels', element: <Navigate to="/settings/discord" replace /> },
+      { path: 'channels/create', element: <Navigate to="/settings/channels/create" replace /> },
+      { path: 'games', element: <Navigate to="/settings/games" replace /> },
+      { path: 'info', element: <Navigate to="/settings/info" replace /> },
       { path: 'dev', element: <PageDev /> },
       { path: 'feed', element: <PageFeed /> },
-      { path: 'games', element: <PageGames /> },
-      { path: 'info', element: <PageInfo /> },
       { path: 'login', element: <PageLogin /> },
       { path: 'matches', element: <PageMatches /> },
       { path: 'matches/create', element: <PageMatchesCreate /> },
@@ -78,7 +79,11 @@ export const router = createBrowserRouter([
       { path: 'settings/announcer', element: <PageSettingsAnnouncer /> },
       { path: 'settings/application', element: <PageSettingsApplication /> },
       { path: 'settings/backup-restore', element: <PageSettingsBackupRestore /> },
+      { path: 'settings/channels/create', element: <PageSettingsChannelsCreate /> },
       { path: 'settings/discord', element: <PageSettingsDiscord /> },
+      { path: 'settings/games', element: <PageSettingsGames /> },
+      { path: 'settings/games/:gameId', element: <PageSettingsGameDetail /> },
+      { path: 'settings/info', element: <PageSettingsInfo /> },
       { path: 'settings/scheduler', element: <PageSettingsScheduler /> },
       { path: 'settings/stats', element: <PageSettingsStats /> },
       { path: 'settings/ui', element: <PageSettingsUi /> },

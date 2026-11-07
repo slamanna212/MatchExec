@@ -194,9 +194,6 @@ const STATIC_NAV_ITEMS: NavItemData[] = [
     iconName: 'series',
     links: [{ label: 'History', href: '/series/history', iconName: 'history' }],
   },
-  { label: 'Games',    href: '/games',    iconName: 'gamepad' },
-  { label: 'Channels', href: '/channels', iconName: 'hash' },
-  { label: 'Info',     href: '/info',     iconName: 'info' },
   {
     label: 'Settings',
     href: '/settings',
@@ -206,9 +203,11 @@ const STATIC_NAV_ITEMS: NavItemData[] = [
       { label: 'Stats',         href: '/settings/stats',         iconName: 'chart' },
       { label: 'Announcer',     href: '/settings/announcer',     iconName: 'volume' },
       { label: 'Discord',       href: '/settings/discord',       iconName: 'discord' },
+      { label: 'Games',         href: '/settings/games',         iconName: 'gamepad' },
       { label: 'Scheduler',     href: '/settings/scheduler',     iconName: 'clock' },
       { label: 'UI',            href: '/settings/ui',            iconName: 'paint' },
       { label: 'Backup & Restore', href: '/settings/backup-restore', iconName: 'database' },
+      { label: 'Info',          href: '/settings/info',          iconName: 'info' },
     ],
   },
 ];

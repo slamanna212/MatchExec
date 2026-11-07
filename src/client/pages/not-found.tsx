@@ -14,7 +14,7 @@ export default function NotFound() {
         <Button component={Link} to="/" variant="filled">
           Go Home
         </Button>
-        <Button component={Link} to="/games" variant="outline">
+        <Button component={Link} to="/settings/games" variant="outline">
           Browse Games
         </Button>
       </Group>

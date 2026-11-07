@@ -108,7 +108,7 @@ export default function CreateChannelPage() {
 
       if (response.ok) {
         showSuccess('Channel created successfully!');
-        navigate('/channels');
+        navigate('/settings/discord');
       } else {
         const errorData = await response.json();
         showError(errorData.error || 'Failed to create channel');
@@ -248,14 +248,14 @@ export default function CreateChannelPage() {
           icon={IconHash}
           title="Add Channel"
           subtitle="Configure a Discord channel for notifications"
-          breadcrumbs={[{ title: 'Channels', href: '/channels' }]}
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }, { title: 'Discord', href: '/settings/discord' }]}
           action={
             <Button
               variant="outline"
               leftSection={<IconArrowLeft size="1rem" />}
-              onClick={() => navigate('/channels')}
+              onClick={() => navigate('/settings/discord')}
             >
-              Back to Channels
+              Back to Discord
             </Button>
           }
         />

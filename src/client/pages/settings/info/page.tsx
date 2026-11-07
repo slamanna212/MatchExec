@@ -1,178 +1,110 @@
-import { Card, Text, Stack, Button, Group, Anchor } from '@mantine/core';
+import { Card, Text, Stack, Button, Group, Anchor, SimpleGrid } from '@mantine/core';
+import type { ReactNode } from 'react';
 import { IconBrandGithub, IconInfoCircle, IconBook, IconBug, IconBulb, IconHeart, IconBrandDiscord, IconButterfly, IconScale } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageLayout } from '@/components/PageLayout';
 
+const COPYRIGHTS = [
+  'Assetto Corsa Competizione © Kunos Simulazioni S.r.l.',
+  'Counter-Strike 2 © Valve Corporation',
+  'Fortnite © Epic Games, Inc.',
+  'League of Legends © Riot Games, Inc.',
+  'Mario Kart 8 Deluxe © Nintendo Co., Ltd.',
+  'Marvel Rivals © NetEase Games. Marvel characters © Marvel Entertainment, LLC.',
+  'Overwatch © Blizzard Entertainment, Inc.',
+  'Rainbow Six Siege © Ubisoft Entertainment SA',
+  'Rocket League © Psyonix LLC',
+  'VALORANT © Riot Games, Inc.',
+];
+
+function InfoCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return (
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Stack gap="sm" h="100%">
+        <Group gap="xs" wrap="nowrap">
+          <span style={{ display: 'flex', color: 'var(--mantine-color-violet-4)' }}>{icon}</span>
+          <Text size="md" fw={600}>{title}</Text>
+        </Group>
+        {children}
+      </Stack>
+    </Card>
+  );
+}
+
+function ExternalButton({ href, icon, children }: { href: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <Button leftSection={icon} component="a" href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </Button>
+  );
+}
+
 export default function InfoPage() {
   return (
-    <PageLayout>
+    <PageLayout narrow>
       <Stack gap="md">
         <PageHeader
           icon={IconInfoCircle}
           title="Information"
           subtitle="Documentation, support, and project information"
+          breadcrumbs={[{ title: 'Settings', href: '/settings' }]}
         />
 
-        <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconInfoCircle size="1.2rem" />
-              <Text size="lg" fw={600}>Documentation</Text>
+        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+          <InfoCard icon={<IconBook size="1.2rem" />} title="Documentation">
+            <Text size="sm" style={{ flex: 1 }}>Our documentation is full of info about MatchExec</Text>
+            <Group>
+              <ExternalButton href="https://docs.matchexec.com/docs/getting-started/getting-started/" icon={<IconBook size="1rem" />}>
+                Documentation
+              </ExternalButton>
             </Group>
+          </InfoCard>
 
-            <Stack gap="md">
-              <Text>
-                Our documentation is full of info about MatchExec
-              </Text>
-
-              <Group justify="flex-start">
-                <Button
-                  leftSection={<IconBook size="1rem" />}
-                  component="a"
-                  href="https://docs.matchexec.com/docs/getting-started/getting-started/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Documentation
-                </Button>
-              </Group>
-            </Stack>
-          </Card>
-        </Stack>
-
-        <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconBrandGithub size="1.2rem" />
-              <Text size="lg" fw={600}>Support</Text>
+          <InfoCard icon={<IconBrandGithub size="1.2rem" />} title="Support">
+            <Text size="sm" style={{ flex: 1 }}>Need help or found an issue? Submit a report on our GitHub repository.</Text>
+            <Group gap="xs">
+              <ExternalButton href="https://github.com/slamanna212/MatchExec/issues/new?template=bug_report.yml" icon={<IconBug size="1rem" />}>
+                Submit Bug Report
+              </ExternalButton>
+              <ExternalButton href="https://github.com/slamanna212/MatchExec/issues/new?template=enhancement.yml" icon={<IconBulb size="1rem" />}>
+                Submit Feature Request
+              </ExternalButton>
             </Group>
+          </InfoCard>
 
-            <Stack gap="md">
-              <Text>
-                Need help or found an issue? Submit a report on our GitHub repository.
-              </Text>
-              
-              <Group justify="flex-start">
-                <Button
-                  leftSection={<IconBug size="1rem" />}
-                  component="a"
-                  href="https://github.com/slamanna212/MatchExec/issues/new?template=bug_report.yml"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Submit Bug Report
-                </Button>
-                <Button
-                  leftSection={<IconBulb size="1rem" />}
-                  component="a"
-                  href="https://github.com/slamanna212/MatchExec/issues/new?template=enhancement.yml"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Submit Feature Request
-                </Button>
-              </Group>
-            </Stack>
-          </Card>
-        </Stack>
-
-        <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconBrandDiscord size="1.2rem" />
-              <Text size="lg" fw={600}>Connect With MatchExec</Text>
+          <InfoCard icon={<IconBrandDiscord size="1.2rem" />} title="Connect With MatchExec">
+            <Text size="sm" style={{ flex: 1 }}>Stay up to date with the latest info.</Text>
+            <Group gap="xs">
+              <ExternalButton href="https://discord.gg/nPKp95Cc6k" icon={<IconBrandDiscord size="1rem" />}>Discord</ExternalButton>
+              <ExternalButton href="https://bsky.app/profile/matchexec.com" icon={<IconButterfly size="1rem" />}>Bluesky</ExternalButton>
             </Group>
+          </InfoCard>
+        </SimpleGrid>
 
-            <Stack gap="md">
-              <Text>
-                Stay up to date with the latest info.
-              </Text>
-              
-              <Group justify="flex-start">
-                <Button
-                  leftSection={<IconBrandDiscord size="1rem" />}
-                  component="a"
-                  href="https://discord.gg/nPKp95Cc6k"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Discord
-                </Button>
-                <Button
-                  leftSection={<IconButterfly size="1rem" />}
-                  component="a"
-                  href="https://bsky.app/profile/matchexec.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Bluesky
-                </Button>
-              </Group>
-            </Stack>
-          </Card>
-        </Stack>
+        <InfoCard icon={<IconHeart size="1.2rem" />} title="Credits">
+          <Text size="sm">
+            Thank you{' '}
+            <Anchor href="https://www.fiverr.com/fajar998" target="_blank" rel="noopener noreferrer" size="sm">
+              Abdulklah Keyani
+            </Anchor>
+            {' '}for the MatchExec logo.
+          </Text>
+          <Text size="sm">
+            Thank you to a special group of friends that inspired this project and helped test it thoroughly. A true group of heroes!
+          </Text>
+        </InfoCard>
 
-        <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconHeart size="1.2rem" />
-              <Text size="lg" fw={600}>Credits</Text>
-            </Group>
-
-            <Stack gap="md">
-              <ul className="list-disc ml-4">
-                <li>
-                  <Text component="span">
-                    Thank you{' '}
-                    <Anchor
-                      href="https://www.fiverr.com/fajar998"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Abdulklah Keyani
-                    </Anchor>
-                    {' '}for the MatchExec logo.
-                  </Text>
-                </li>
-                <li>
-                  <Text component="span">
-                    Thank you to a special group of friends that inspired this project and helped test it thoroughly. A true group of heroes!
-                  </Text>
-                </li>
-              </ul>
-            </Stack>
-          </Card>
-        </Stack>
-
-        <Stack gap="lg">
-          <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Group mb="md">
-              <IconScale size="1.2rem" />
-              <Text size="lg" fw={600}>Copyright</Text>
-            </Group>
-
-            <Stack gap="md">
-              <Text>
-                MatchExec is and always will be free and open source.
-              </Text>
-              <ul className="list-disc ml-4">
-                <li><Text component="span">Assetto Corsa Competizione &copy; Kunos Simulazioni S.r.l.</Text></li>
-                <li><Text component="span">Counter-Strike 2 &copy; Valve Corporation</Text></li>
-                <li><Text component="span">Fortnite &copy; Epic Games, Inc.</Text></li>
-                <li><Text component="span">League of Legends &copy; Riot Games, Inc.</Text></li>
-                <li><Text component="span">Mario Kart 8 Deluxe &copy; Nintendo Co., Ltd.</Text></li>
-                <li><Text component="span">Marvel Rivals &copy; NetEase Games. Marvel characters &copy; Marvel Entertainment, LLC.</Text></li>
-                <li><Text component="span">Overwatch &copy; Blizzard Entertainment, Inc.</Text></li>
-                <li><Text component="span">Rainbow Six Siege &copy; Ubisoft Entertainment SA</Text></li>
-                <li><Text component="span">Rocket League &copy; Psyonix LLC</Text></li>
-                <li><Text component="span">VALORANT &copy; Riot Games, Inc.</Text></li>
-              </ul>
-              <Text size="sm" c="dimmed">
-                MatchExec is an independent tool and is not affiliated with, endorsed by, or sponsored by any of the above companies. All game names, logos, and trademarks are the property of their respective owners.
-              </Text>
-            </Stack>
-          </Card>
-        </Stack>
+        <InfoCard icon={<IconScale size="1.2rem" />} title="Copyright">
+          <Text size="sm">MatchExec is and always will be free and open source.</Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs" verticalSpacing={6}>
+            {COPYRIGHTS.map((line) => (
+              <Text key={line} size="sm" c="dimmed">{line}</Text>
+            ))}
+          </SimpleGrid>
+          <Text size="sm" c="dimmed">
+            MatchExec is an independent tool and is not affiliated with, endorsed by, or sponsored by any of the above companies. All game names, logos, and trademarks are the property of their respective owners.
+          </Text>
+        </InfoCard>
       </Stack>
     </PageLayout>
   );
