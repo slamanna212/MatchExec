@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import {
   Modal, Stack, Group, Text, TextInput, NumberInput, ColorInput, Autocomplete, Select, Switch, Button, Divider, Alert,
-  Radio, Avatar, Anchor,
+  Radio, Avatar, Anchor, FileButton, Input,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconUpload, IconTrash } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
 import type { SeriesEntrantDto, SeriesEntrantType, SeriesMemberRole } from '@/shared/series-types';
@@ -170,6 +170,7 @@ export function EntrantFormModal({
   const [tag, setTag] = useState('');
   const [color, setColor] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [division, setDivision] = useState('');
   const [seed, setSeed] = useState<number | string>('');
   const [player, setPlayer] = useState<PickedPlayer | null>(null);
@@ -193,12 +194,31 @@ export function EntrantFormModal({
   const divisions = useMemo(() => distinctDivisions(entrants), [entrants]);
   const seedValue = typeof seed === 'number' ? seed : null;
   const tagTooLong = tag.trim().length > 12;
-  const canSave = name.trim().length > 0 && !tagTooLong && (entrant !== null || !solo || player !== null);
+  const canSave = !uploadingLogo && name.trim().length > 0 && !tagTooLong && (entrant !== null || !solo || player !== null);
 
   const pickPlayer = (p: PickedPlayer | null) => {
     // Solo entrants are named after their player until the name is edited by hand.
     if (solo && !entrant && (name.trim() === '' || name === player?.username)) setName(p?.username ?? '');
     setPlayer(p);
+  };
+
+  const uploadLogo = async (file: File | null) => {
+    if (!file) return;
+    setUploadingLogo(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append('image', file);
+      const res = await fetch('/api/upload/event-image', { method: 'POST', body });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.imageUrl) throw new Error(result.error || 'Failed to upload logo');
+      setLogoUrl(result.imageUrl);
+    } catch (err) {
+      logger.error('Error uploading entrant logo:', err);
+      setError(errorMessage(err, 'Failed to upload logo'));
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleSave = async () => {
@@ -277,12 +297,23 @@ export function EntrantFormModal({
             swatches={['#e03131', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#c2255c', '#0c8599', '#495057']}
           />
         </Group>
-        <TextInput
-          label="Logo URL"
-          placeholder="https://..."
-          value={logoUrl}
-          onChange={(e) => setLogoUrl(e.currentTarget.value)}
-        />
+        <Input.Wrapper label="Logo" description="PNG, JPEG, WebP or GIF up to 5MB">
+          <Group mt={6}>
+            <Avatar src={logoUrl || null} size="lg" radius="md" />
+            <FileButton onChange={uploadLogo} accept="image/png,image/jpeg,image/webp,image/gif">
+              {(props) => (
+                <Button {...props} variant="light" size="xs" leftSection={<IconUpload size={14} />} loading={uploadingLogo}>
+                  {logoUrl ? 'Replace' : 'Upload logo'}
+                </Button>
+              )}
+            </FileButton>
+            {logoUrl && (
+              <Button variant="subtle" color="red" size="xs" leftSection={<IconTrash size={14} />} onClick={() => setLogoUrl('')} disabled={uploadingLogo}>
+                Remove
+              </Button>
+            )}
+          </Group>
+        </Input.Wrapper>
         <Group grow align="flex-start">
           <Autocomplete
             label="Division"
