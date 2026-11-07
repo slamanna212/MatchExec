@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Container, Stack, Button, Stepper, Group, Text, TextInput, Divider } from '@mantine/core';
+import { Container, Stack, Button, Stepper, Group, Text, Divider } from '@mantine/core';
 import {
   IconTimeline, IconArrowLeft, IconInfoCircle, IconBell, IconCalculator,
-  IconListDetails, IconListCheck, IconSearch, IconSettings,
+  IconListCheck, IconSettings,
 } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { logger } from '@/lib/logger/client';
@@ -16,22 +16,16 @@ import {
 import { SeriesSetupFields, SeriesCopyEntrantsFields, useGameCatalog } from './series-setup-fields';
 import { validateRosterInputs } from './series-setup';
 import type { GameCatalog } from './series-setup';
-import type { PickedEvent, SeriesFormData } from './series-form';
-import {
-  useEventCandidates, filterCandidates, EventPickerList, EventPickerRow, EventTypeBadge, candidateKey,
-} from './event-picker';
-import { formatMultiplier, formatShortDate, formatPoints, describeSeriesFormat } from './series-shared';
+import type { SeriesFormData } from './series-form';
+import { formatShortDate, formatPoints, describeSeriesFormat } from './series-shared';
 
 const STEPS = [
   { label: 'Details', icon: IconInfoCircle },
   { label: 'Setup', icon: IconSettings },
   { label: 'Notifications', icon: IconBell },
   { label: 'Scoring', icon: IconCalculator },
-  { label: 'Events', icon: IconListDetails },
   { label: 'Review', icon: IconListCheck },
 ] as const;
-
-const DEFAULT_MULTIPLIER: Record<'match' | 'tournament', number> = { match: 1, tournament: 1.5 };
 
 export function CreateSeriesPage(): JSX.Element {
   const navigate = useNavigate();
@@ -39,7 +33,7 @@ export function CreateSeriesPage(): JSX.Element {
   const rawStep = Number.parseInt(searchParams.get('step') ?? '1', 10);
   const step = Number.isInteger(rawStep) && rawStep >= 1 && rawStep <= STEPS.length ? rawStep : 1;
 
-  const { form, update, clear, pickedEvents, setPickedEvents } = useSeriesForm();
+  const { form, update, clear } = useSeriesForm();
   const { catalog, loaded: catalogLoaded } = useGameCatalog();
   const [submitting, setSubmitting] = useState<'create' | 'activate' | null>(null);
   // Set once the series exists: clearing the form then must not bounce the user back to step 1 (see below).
@@ -122,37 +116,7 @@ export function CreateSeriesPage(): JSX.Element {
         }
       }
 
-      // Add picked events one by one, in the order they were picked. The series already
-      // exists at this point, so a failure is reported and the user lands on the series page.
-      const failed: string[] = [];
-      for (const ev of Object.values(pickedEvents)) {
-        try {
-          const evRes = await fetch(`/api/series/${id}/events`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event_type: ev.type,
-              ...(ev.type === 'match' ? { match_id: ev.id } : { tournament_id: ev.id }),
-              points_multiplier: ev.multiplier,
-            }),
-          });
-          if (!evRes.ok) {
-            const err = await evRes.json().catch(() => ({}));
-            failed.push(`${ev.name}${err.error ? ` (${err.error})` : ''}`);
-          }
-        } catch (err) {
-          logger.error('Error adding series event:', err);
-          failed.push(ev.name);
-        }
-      }
-
-      if (failed.length > 0) {
-        notificationHelper.update(nid, {
-          type: 'warning',
-          title: 'Series created with problems',
-          message: `Couldn't add: ${failed.join(', ')}.${activate ? ' The series was not activated.' : ''}`,
-        });
-      } else if (activate) {
+      if (activate) {
         const tRes = await fetch(`/api/series/${id}/transition`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -214,8 +178,7 @@ export function CreateSeriesPage(): JSX.Element {
         )}
         {step === 3 && <SeriesNotificationsFields form={form} update={update} />}
         {step === 4 && <SeriesScoringFields form={form} update={update} />}
-        {step === 5 && <EventsStep picked={pickedEvents} setPicked={setPickedEvents} />}
-        {step === 6 && <ReviewStep form={form} picked={pickedEvents} catalog={catalog} />}
+        {step === 5 && <ReviewStep form={form} catalog={catalog} />}
 
         <Group justify="space-between">
           <Button variant="outline" onClick={handleBack} disabled={submitting !== null}>
@@ -250,66 +213,6 @@ export function CreateSeriesPage(): JSX.Element {
   );
 }
 
-function EventsStep({
-  picked,
-  setPicked,
-}: {
-  picked: Record<string, PickedEvent>;
-  setPicked: (updater: (prev: Record<string, PickedEvent>) => Record<string, PickedEvent>) => void;
-}): JSX.Element {
-  const { candidates, loading } = useEventCandidates();
-  const [search, setSearch] = useState('');
-  const filtered = useMemo(() => filterCandidates(candidates, search), [candidates, search]);
-
-  return (
-    <SeriesFormCard title="Events (optional)">
-      <Text size="sm" c="dimmed" mt={-8}>
-        Add existing matches and tournaments now, or later from the series page.
-      </Text>
-      <TextInput
-        placeholder="Search matches and tournaments..."
-        leftSection={<IconSearch size={14} />}
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-      />
-      <EventPickerList
-        candidates={filtered}
-        loading={loading}
-        maxHeight={420}
-        emptyText={search ? 'No events match your search' : 'No matches or tournaments available'}
-        renderRow={(c) => {
-          const key = candidateKey(c);
-          const isPicked = key in picked;
-          return (
-            <EventPickerRow
-              key={key}
-              candidate={c}
-              selected={isPicked}
-              onClick={() => setPicked(prev => {
-                const next = { ...prev };
-                if (isPicked) delete next[key];
-                else next[key] = { type: c.type, id: c.id, name: c.name, multiplier: DEFAULT_MULTIPLIER[c.type] };
-                return next;
-              })}
-              extra={
-                <Group gap={6} wrap="nowrap" visibleFrom="xs">
-                  <EventTypeBadge type={c.type} />
-                  <Text size="xs" ff="monospace" fw={700} c="violet">{formatMultiplier(DEFAULT_MULTIPLIER[c.type])}</Text>
-                </Group>
-              }
-            />
-          );
-        }}
-      />
-      {Object.keys(picked).length > 0 && (
-        <Text size="xs" c="dimmed">
-          {Object.keys(picked).length} selected · added in the order picked · multipliers can be changed until the series starts
-        </Text>
-      )}
-    </SeriesFormCard>
-  );
-}
-
 function ReviewRow({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
     <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
@@ -319,12 +222,11 @@ function ReviewRow({ label, children }: { label: string; children: ReactNode }):
   );
 }
 
-function ReviewStep({ form, picked, catalog }: { form: SeriesFormData; picked: Record<string, PickedEvent>; catalog: GameCatalog }): JSX.Element {
+function ReviewStep({ form, catalog }: { form: SeriesFormData; catalog: GameCatalog }): JSX.Element {
   const start = form.start_date ? formatShortDate(`${form.start_date}T00:00:00`) : null;
   const end = form.end_date ? formatShortDate(`${form.end_date}T00:00:00`) : null;
   const sc = form.scoring_config;
   const placements = sc.tournament_position_points ?? [];
-  const events = Object.values(picked);
   const gameName = (id: string) => catalog.games.find((g) => g.id === id)?.name ?? id;
   const allowedGames = form.game_ids.length > 0 ? form.game_ids : form.game_id ? [form.game_id] : [];
   const rosterText = form.entrant_type === 'team' && (form.roster_min !== null || form.roster_max !== null)
@@ -377,12 +279,6 @@ function ReviewStep({ form, picked, catalog }: { form: SeriesFormData; picked: R
             </ReviewRow>
           </>
         )}
-        <Divider />
-        <ReviewRow label="Events">
-          {events.length === 0
-            ? 'None yet'
-            : events.map((e, i) => `#${i + 1} ${e.name} ${formatMultiplier(e.multiplier)}`).join(', ')}
-        </ReviewRow>
       </Stack>
     </SeriesFormCard>
   );

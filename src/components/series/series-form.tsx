@@ -213,8 +213,6 @@ export interface UseSeriesFormResult {
   setForm: React.Dispatch<React.SetStateAction<SeriesFormData>>;
   update: UpdateSeriesForm;
   clear: () => void;
-  pickedEvents: Record<string, PickedEvent>;
-  setPickedEvents: React.Dispatch<React.SetStateAction<Record<string, PickedEvent>>>;
 }
 
 export function useSeriesForm(): UseSeriesFormResult {
@@ -234,23 +232,9 @@ export function useSeriesForm(): UseSeriesFormResult {
     return EMPTY_SERIES_FORM;
   });
 
-  const [pickedEvents, setPickedEvents] = useState<Record<string, PickedEvent>>(() => {
-    if (typeof window === 'undefined') return {};
-    try {
-      const saved = sessionStorage.getItem(`${STORAGE_KEY}:events`);
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch { /* storage unavailable */ }
   }, [form]);
-
-  useEffect(() => {
-    try { sessionStorage.setItem(`${STORAGE_KEY}:events`, JSON.stringify(pickedEvents)); } catch { /* storage unavailable */ }
-  }, [pickedEvents]);
 
   const update: UpdateSeriesForm = useCallback((key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -258,22 +242,13 @@ export function useSeriesForm(): UseSeriesFormResult {
 
   const clear = useCallback(() => {
     setForm(EMPTY_SERIES_FORM);
-    setPickedEvents({});
     try {
       sessionStorage.removeItem(STORAGE_KEY);
-      sessionStorage.removeItem(`${STORAGE_KEY}:events`);
+      sessionStorage.removeItem(`${STORAGE_KEY}:events`); // stale key from the removed Events step
     } catch { /* storage unavailable */ }
   }, []);
 
-  return { form, setForm, update, clear, pickedEvents, setPickedEvents };
-}
-
-/** An event picked on the create stepper's Events step, keyed by `${type}:${id}`. */
-export interface PickedEvent {
-  type: 'match' | 'tournament';
-  id: string;
-  name: string;
-  multiplier: number;
+  return { form, setForm, update, clear };
 }
 
 /** Upload/remove handlers for the series cover, reusing the event-image endpoint. */

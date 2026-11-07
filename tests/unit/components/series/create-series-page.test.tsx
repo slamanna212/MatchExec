@@ -69,7 +69,7 @@ describe('CreateSeriesPage', () => {
       roots.push(root);
       root.render(
         <MantineProvider>
-          <MemoryRouter initialEntries={['/series/create?step=6']}>
+          <MemoryRouter initialEntries={['/series/create?step=5']}>
             <Where />
             <Routes>
               <Route path="/series/create" element={<CreateSeriesPage />} />
@@ -114,7 +114,7 @@ describe('CreateSeriesPage', () => {
       roots.push(root);
       root.render(
         <MantineProvider>
-          <MemoryRouter initialEntries={['/series/create?step=6']}>
+          <MemoryRouter initialEntries={['/series/create?step=5']}>
             <Routes>
               <Route path="/series/create" element={<CreateSeriesPage />} />
               <Route path="/series/:seriesId" element={<div>series page</div>} />
