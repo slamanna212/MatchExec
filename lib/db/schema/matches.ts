@@ -84,6 +84,8 @@ export const matchTeams = pgTable('match_teams', {
   match_id: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
   team_name: text('team_name').notNull(),
   team_color: text('team_color'),
+  /** Uploaded logo (`/uploads/...`). Series-linked teams fall back to their entrant's logo at read time. */
+  logo_url: text('logo_url'),
   team_order: integer('team_order').notNull(),
   voice_channel_id: text('voice_channel_id'),
   is_reserve: boolean('is_reserve').notNull().default(false),

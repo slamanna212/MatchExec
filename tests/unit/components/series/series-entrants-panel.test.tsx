@@ -98,12 +98,12 @@ describe('SeriesEntrantsPanel (team series)', () => {
     expect(text).toContain('Boston');
     expect(text).toContain('BOS');
     expect(text).toContain('#1');
-    expect(text).toContain('Captain');
+    expect(container.querySelector('[aria-label="Captain"]')).not.toBeNull();
     expect(text).toContain('Sub');
-    expect(text).toContain('pending');
+    expect(text).toContain('Pending');
     // Seoul has one of the required three players
     expect(text).toContain('Needs 2 more');
-    expect(text).toContain('Roster · 3 / 6 players');
+    expect(text).toContain('Seed #1 · 3 / 6 players');
     expect(text).toContain('Add team');
   });
 

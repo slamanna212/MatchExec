@@ -13,7 +13,7 @@ import {
   TournamentError, assignTeamMembers, createTeam, createTournament, deleteTeam, deleteTournament, generateTournamentMatches, getBracketStandings,
   getCumulativeStandings, getLeaderboardBreakdown, getTournament, getTournamentDetail, getTournamentEventImage, getTournamentWithGame,
   getProgressHint, hasActiveMatches, listBracketMatches, listParticipants, listTeamsWithMembers, listTournamentMatchesIds, listTournaments, lockTournament,
-  progressTournament, transitionTournament, updateTournamentDetails, type BracketAssignment, type CreateTournamentInput, type TeamAssignmentInput,
+  progressTournament, setTeamLogo, transitionTournament, updateTournamentDetails, type BracketAssignment, type CreateTournamentInput, type TeamAssignmentInput,
   type UpdateTournamentInput,
 } from '@/lib/tournaments';
 import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
@@ -328,6 +328,16 @@ export const tournaments = new Hono()
     const { teams } = await c.req.json();
     if (!teams || !Array.isArray(teams)) return jsonError(c, 'Invalid team assignments data', 400);
     await assignTeamMembers(db, id, teams as TeamAssignmentInput[]);
+    return c.json({ success: true });
+  }))
+  .put('/:tournamentId/teams/:teamId/logo', (c) => guard(c, 'Error updating team logo', 'Failed to update team logo', async () => {
+    const { tournamentId, teamId } = c.req.param();
+    if (!validId(tournamentId) || !validId(teamId)) return jsonError(c, 'Invalid ID', 400);
+    const { logo_url } = await c.req.json();
+    if (logo_url !== null && (typeof logo_url !== 'string' || !logo_url.startsWith('/uploads/') || logo_url.length > 500)) {
+      return jsonError(c, 'logo_url must be an uploaded image path or null', 400);
+    }
+    if (!(await setTeamLogo(db, tournamentId, teamId, logo_url))) return jsonError(c, 'Team not found', 404);
     return c.json({ success: true });
   }))
   .delete('/:tournamentId/teams', (c) => guard(c, 'Error deleting team', 'Failed to delete team', async () => {

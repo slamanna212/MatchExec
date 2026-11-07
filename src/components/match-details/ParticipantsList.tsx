@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { Stack, Card, Group, Avatar, Text, Badge, Skeleton, Grid, ActionIcon } from '@mantine/core';
 import { IconMapRoute, IconBrandDiscord } from '@tabler/icons-react';
+import { TeamMark } from '@/components/shared/team-logo';
 import { layoutParticipants, type TeamGroup } from './participant-groups';
 
 interface MatchParticipant {
@@ -15,6 +16,7 @@ interface MatchParticipant {
   team_id?: string | null;
   team_name?: string | null;
   team_color?: string | null;
+  team_logo_url?: string | null;
   team_order?: number | null;
   receives_map_codes?: boolean;
 }
@@ -140,14 +142,18 @@ export function ParticipantsList({
   const renderTeamSection = (
     title: string,
     teamPlayers: MatchParticipant[],
-    teamColor: string
+    teamColor: string,
+    logoUrl?: string | null
   ) => {
     return (
       <div>
         <Group justify="space-between" mb="sm">
-          <Text size="md" fw={600} c={teamColor}>
-            {title}
-          </Text>
+          <Group gap="sm" wrap="nowrap">
+            {logoUrl && <TeamMark logoUrl={logoUrl} color={`var(--mantine-color-${teamColor}-6)`} size={28} />}
+            <Text size="md" fw={600} c={teamColor}>
+              {title}
+            </Text>
+          </Group>
           <Badge size="md" color={teamColor} variant="light">
             {teamPlayers.length}
           </Badge>
@@ -265,7 +271,7 @@ export function ParticipantsList({
         <Grid gap="md">
           {layout.teams.map((team: TeamGroup<MatchParticipant>) => (
             <Grid.Col key={team.key} span={{ base: 12, md: 6 }}>
-              {renderTeamSection(team.title, team.players, team.color)}
+              {renderTeamSection(team.title, team.players, team.color, team.logoUrl)}
             </Grid.Col>
           ))}
         </Grid>
@@ -284,10 +290,10 @@ export function ParticipantsList({
       {!allUnassigned && (
         <Grid gap="md">
           <Grid.Col span={{ base: 12, md: 6 }}>
-            {renderTeamSection(blue.title, blue.players, 'blue')}
+            {renderTeamSection(blue.title, blue.players, 'blue', blue.logoUrl)}
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 6 }}>
-            {renderTeamSection(red.title, red.players, 'red')}
+            {renderTeamSection(red.title, red.players, 'red', red.logoUrl)}
           </Grid.Col>
         </Grid>
       )}

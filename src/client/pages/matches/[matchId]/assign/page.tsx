@@ -21,6 +21,8 @@ import {
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle, IconMapRoute, IconGripVertical } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
+import { TeamLogoControl } from '@/components/shared/team-logo';
+import { showError } from '@/lib/notifications';
 import { SetupPhase, type SetupData } from '@/components/setup/setup-phase';
 
 interface SignupField {
@@ -55,6 +57,7 @@ interface MatchTeam {
   id: string;
   team_name: string;
   team_color?: string;
+  logo_url?: string | null;
   team_order: number;
   is_reserve: boolean;
 }
@@ -374,6 +377,16 @@ export default function AssignPage() {
     );
   };
 
+  const handleTeamLogoChange = async (teamId: string, logoUrl: string | null) => {
+    const res = await fetch(`/api/matches/${matchId}/teams/${teamId}/logo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logo_url: logoUrl }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to save logo');
+    setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, logo_url: logoUrl } : t)));
+  };
+
   const renderTeamSection = (teamId: string | undefined, title: string, color: string) => {
     const teamParticipants = getTeamParticipants(teamId);
 
@@ -393,6 +406,16 @@ export default function AssignPage() {
             {teamParticipants.length}
           </Badge>
         </Group>
+
+        {teamId && (
+          <Group mb="md">
+            <TeamLogoControl
+              logoUrl={teams.find((t) => t.id === teamId)?.logo_url}
+              onChange={(url) => handleTeamLogoChange(teamId, url)}
+              onError={showError}
+            />
+          </Group>
+        )}
 
         <Stack gap="sm">
           {teamParticipants.length === 0 ? (

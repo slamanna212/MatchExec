@@ -12,7 +12,7 @@ import { processMatchAnnouncements } from '@/lib/reminder-helpers';
 import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/utils/validation';
 import { logFeedEvent, removeFeedEvents, MATCH_ACTION_EVENTS } from '@/lib/feed-helpers';
 import {
-  AssignTeamsError, GameAlreadyScoredError, MatchTransitionError, ResultError, SetupStatusError, assignTeams, createMatchFromRequest,
+  AssignTeamsError, GameAlreadyScoredError, TeamAssignmentError, setMatchTeamLogo, MatchTransitionError, ResultError, SetupStatusError, assignTeams, createMatchFromRequest,
   createMatchTeams, deleteMatch, getGameResult, getMapCodes, getMapNotes, getMatch, getMatchDetail, getMatchEditContext,
   getMatchGameInMatch, getMatchGames, getMatchGamesWithResults, getMatchResult, getMatchScoringType, getMatchTeams, getMatchWithGame,
   initializeMatchGames, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
@@ -264,6 +264,26 @@ export const matches = new Hono()
     } catch (error) {
       logger.error('Error fetching match teams:', error);
       return jsonError(c, 'Failed to fetch match teams');
+    }
+  })
+  .put('/:matchId/teams/:teamId/logo', async (c) => {
+    try {
+      const { matchId, teamId } = c.req.param();
+      if (!validId(matchId) || !validId(teamId)) return jsonError(c, 'Invalid ID', 400);
+      const { logo_url } = await body(c);
+      if (logo_url !== null && (typeof logo_url !== 'string' || !logo_url.startsWith('/uploads/') || logo_url.length > 500)) {
+        return jsonError(c, 'logo_url must be an uploaded image path or null', 400);
+      }
+      try {
+        await setMatchTeamLogo(db, matchId, teamId, logo_url);
+      } catch (error) {
+        if (error instanceof TeamAssignmentError) return jsonError(c, error.message, 404);
+        throw error;
+      }
+      return c.json({ success: true });
+    } catch (error) {
+      logger.error('Error updating match team logo:', error);
+      return jsonError(c, 'Failed to update team logo');
     }
   })
   .get('/:matchId/setup', async (c) => {

@@ -14,6 +14,7 @@ export interface GroupableParticipant {
   team_assignment?: 'reserve' | 'blue' | 'red' | null;
   team_id?: string | null;
   team_name?: string | null;
+  team_logo_url?: string | null;
   team_order?: number | null;
 }
 
@@ -22,6 +23,8 @@ export interface TeamGroup<P extends GroupableParticipant> {
   title: string;
   /** Mantine colour name. */
   color: string;
+  /** Team logo, when it has one. */
+  logoUrl?: string | null;
   players: P[];
 }
 
@@ -40,6 +43,10 @@ function isReserve(p: GroupableParticipant): boolean {
 function sideTitle(players: GroupableParticipant[], fallback: string, defaultName: string): string {
   const name = players.find((p) => p.team_name)?.team_name;
   return !name || name === defaultName ? fallback : name;
+}
+
+function teamLogo(players: GroupableParticipant[]): string | null {
+  return players.find((p) => p.team_logo_url)?.team_logo_url ?? null;
 }
 
 export function layoutParticipants<P extends GroupableParticipant>(participants: P[], scoringType = 'Normal'): ParticipantLayout<P> {
@@ -67,8 +74,8 @@ export function layoutParticipants<P extends GroupableParticipant>(participants:
     const red = byOrder.get(1) ?? [];
     return {
       kind: 'sides',
-      blue: { key: 'blue', title: sideTitle(blue, 'Blue Team', 'Blue'), color: 'blue', players: blue },
-      red: { key: 'red', title: sideTitle(red, 'Red Team', 'Red'), color: 'red', players: red },
+      blue: { key: 'blue', title: sideTitle(blue, 'Blue Team', 'Blue'), color: 'blue', logoUrl: teamLogo(blue), players: blue },
+      red: { key: 'red', title: sideTitle(red, 'Red Team', 'Red'), color: 'red', logoUrl: teamLogo(red), players: red },
       unassigned,
     };
   }
@@ -81,6 +88,7 @@ export function layoutParticipants<P extends GroupableParticipant>(participants:
         key: `team-${order}`,
         title: players.find((p) => p.team_name)?.team_name ?? `Team ${order + 1}`,
         color: TEAM_COLORS[order % TEAM_COLORS.length],
+        logoUrl: teamLogo(players),
         players,
       };
     }),

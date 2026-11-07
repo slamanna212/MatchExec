@@ -301,7 +301,7 @@ export const MAPPINGS: TableMapping[] = [
   }),
   defineMapping(schema.matchTeams, 'match_teams', {
     columns: {
-      id: SAME, match_id: SAME, team_name: SAME, team_color: SAME, team_order: SAME, voice_channel_id: SAME,
+      id: SAME, match_id: SAME, team_name: SAME, team_color: SAME, logo_url: DEFAULT, team_order: SAME, voice_channel_id: SAME,
       is_reserve: SAME, series_entrant_id: DEFAULT,
     },
     // Known repair: a team created before migration 019 carried its Discord voice channel only in the retired
@@ -446,7 +446,7 @@ export const MAPPINGS: TableMapping[] = [
   }),
   defineMapping(schema.tournamentTeams, 'tournament_teams', {
     columns: {
-      id: SAME, tournament_id: SAME, team_name: SAME, created_at: SAME, series_entrant_id: DEFAULT,
+      id: SAME, tournament_id: SAME, team_name: SAME, logo_url: DEFAULT, created_at: SAME, series_entrant_id: DEFAULT,
     },
   }),
   defineMapping(schema.tournaments, 'tournaments', {

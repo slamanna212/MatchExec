@@ -1,7 +1,7 @@
 /** `tournament_teams`, `tournament_team_members` and `tournament_participants` (signups). */
 import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
+import { seriesEntrants, tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
 import { genId } from '../matches/ids';
 import { lockTournament, touchTournament, TournamentError } from './tournaments';
 
@@ -49,10 +49,12 @@ export async function listTeamsWithMembers(ex: Executor, tournamentId: string, o
   const rows = await ex
     .select({
       team: tournamentTeams,
+      entrant_logo: seriesEntrants.logo_url,
       member: ttm,
       avatar_url: avatar,
     })
     .from(tournamentTeams).leftJoin(ttm, eq(ttm.team_id, tournamentTeams.id))
+    .leftJoin(seriesEntrants, eq(seriesEntrants.id, tournamentTeams.series_entrant_id))
     .where(eq(tournamentTeams.tournament_id, tournamentId))
     .orderBy(asc(tournamentTeams.team_name), asc(tournamentTeams.id), asc(ttm.joined_at), asc(ttm.id));
 
@@ -60,7 +62,8 @@ export async function listTeamsWithMembers(ex: Executor, tournamentId: string, o
   for (const row of rows) {
     let team = teams.get(row.team.id);
     if (!team) {
-      team = { ...row.team, members: [] };
+      // Own upload wins; series-linked teams otherwise show their entrant's logo.
+      team = { ...row.team, logo_url: row.team.logo_url ?? row.entrant_logo ?? null, members: [] };
       teams.set(row.team.id, team);
     }
     if (row.member) {
@@ -160,6 +163,13 @@ export async function deleteTeam(ex: Executor, tournamentId: string, teamId: str
     await tx.delete(tournamentTeams).where(eq(tournamentTeams.id, teamId));
     await touchTournament(tx, tournamentId);
   });
+}
+
+/** Set or clear (null) a team's own logo. Returns false when the team isn't in the tournament. */
+export async function setTeamLogo(ex: Executor, tournamentId: string, teamId: string, logoUrl: string | null): Promise<boolean> {
+  const rows = await ex.update(tournamentTeams).set({ logo_url: logoUrl })
+    .where(and(eq(tournamentTeams.id, teamId), eq(tournamentTeams.tournament_id, tournamentId))).returning({ id: tournamentTeams.id });
+  return rows.length > 0;
 }
 
 export async function countTeams(ex: Executor, tournamentId: string): Promise<number> {

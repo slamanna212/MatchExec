@@ -1,7 +1,7 @@
 /** match_teams: team creation per scoring_type at the gather -> assign transition, team lookups and assignment. */
 import { and, asc, count, eq, isNull, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { matches, matchParticipants, matchTeams, gameModes } from '../../../lib/db/schema';
+import { matches, matchParticipants, matchTeams, gameModes, seriesEntrants } from '../../../lib/db/schema';
 import { genId } from './ids';
 
 export const MAX_VOICE_CHANNELS_PER_MATCH = 8;
@@ -227,9 +227,20 @@ export async function assignParticipantToTeam(ex: Executor, matchId: string, par
 }
 
 /** All match_teams for a match (active teams first by team_order, Reserve last). */
+/** Teams of a match; `logo_url` is the team's own upload, else its series entrant's logo. */
 export async function getMatchTeams(ex: Executor, matchId: string): Promise<MatchTeamRow[]> {
-  return ex.select().from(matchTeams).where(eq(matchTeams.match_id, matchId))
+  const rows = await ex.select({ team: matchTeams, entrant_logo: seriesEntrants.logo_url }).from(matchTeams)
+    .leftJoin(seriesEntrants, eq(seriesEntrants.id, matchTeams.series_entrant_id))
+    .where(eq(matchTeams.match_id, matchId))
     .orderBy(asc(matchTeams.is_reserve), asc(matchTeams.team_order));
+  return rows.map((r) => ({ ...r.team, logo_url: r.team.logo_url ?? r.entrant_logo ?? null }));
+}
+
+/** Set or clear (null) a match team's own logo. Throws TeamAssignmentError when the team isn't in the match. */
+export async function setMatchTeamLogo(ex: Executor, matchId: string, teamId: string, logoUrl: string | null): Promise<void> {
+  const updated = await ex.update(matchTeams).set({ logo_url: logoUrl })
+    .where(and(eq(matchTeams.id, teamId), eq(matchTeams.match_id, matchId))).returning({ id: matchTeams.id });
+  if (updated.length === 0) throw new TeamAssignmentError(`Team '${teamId}' does not belong to match ${matchId}`);
 }
 
 /** Update voice_channel_id on a match_teams row; scoped to `matchId` when given (TeamAssignmentError if it doesn't belong). */

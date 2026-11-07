@@ -25,6 +25,7 @@ import { IconUsers, IconAlertCircle, IconPlus, IconX, IconSearch, IconStar, Icon
 import { PageHeader } from '@/components/PageHeader';
 import type { TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { showError, showSuccess } from '@/lib/notifications';
+import { TeamLogoControl } from '@/components/shared/team-logo';
 
 interface SignupField {
   id: string;
@@ -145,6 +146,16 @@ export default function AssignTournamentPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleTeamLogoChange = async (teamId: string, logoUrl: string | null) => {
+    const res = await fetch(`/api/tournaments/${tournamentId}/teams/${teamId}/logo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logo_url: logoUrl })
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to save logo');
+    await fetchData();
+  };
 
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
@@ -533,6 +544,15 @@ export default function AssignTournamentPage() {
                   </Group>
                 )}
               </Group>
+              {selectedTeamId && (
+                <Group px="md" pb="sm">
+                  <TeamLogoControl
+                    logoUrl={teams.find((t) => t.id === selectedTeamId)?.logo_url}
+                    onChange={(url) => handleTeamLogoChange(selectedTeamId, url)}
+                    onError={showError}
+                  />
+                </Group>
+              )}
               <Divider />
               <div style={{ flex: 1, overflow: 'auto', padding: 'var(--mantine-spacing-md)' }}>
                 {selectedTeamId ? (

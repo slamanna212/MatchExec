@@ -15,6 +15,7 @@ import {
   ActionIcon
 } from '@mantine/core';
 import { IconTrophy, IconStar, IconUsers, IconSwords, IconBrandDiscord } from '@tabler/icons-react';
+import { TeamMark } from '@/components/shared/team-logo';
 import type { TournamentWithGameDetails, TournamentTeam, TournamentTeamMember } from '@/shared/types';
 import { TournamentBracket } from '../tournament-bracket';
 import { StageRing } from '../StageRing';
@@ -194,13 +195,7 @@ export function TournamentContentPanel({
                     style={{ height: '100%', minHeight: '200px', display: 'flex', flexDirection: 'column' }}
                   >
                     <Group mb="sm" gap="sm" wrap="nowrap">
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                          backgroundColor: `var(--mantine-color-${color}-6)`,
-                        }}
-                      />
+                      <TeamMark logoUrl={team.logo_url} color={`var(--mantine-color-${color}-6)`} />
                       <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
                       <Badge size="sm" variant="light" color="gray" style={{ flexShrink: 0 }}>
                         {memberCount} {memberCount === 1 ? 'member' : 'members'}

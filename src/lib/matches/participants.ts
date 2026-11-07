@@ -183,6 +183,8 @@ export type ParticipantDto = Omit<ParticipantRow, 'match_id' | 'last_avatar_chec
   /** The participant's own team (name / colour / order), null when unassigned. Lets clients group without a second fetch. */
   team_name: string | null;
   team_color: string | null;
+  /** Team logo: its own upload, else its series entrant's. */
+  team_logo_url: string | null;
   team_order: number | null;
 };
 
@@ -200,15 +202,18 @@ export async function listParticipantDtos(ex: Executor, matchId: string): Promis
       signup_data: matchParticipants.signup_data, team_id: matchParticipants.team_id, receives_map_codes: matchParticipants.receives_map_codes,
       team_order: matchTeams.team_order, is_reserve: matchTeams.is_reserve,
       team_name: matchTeams.team_name, team_color: matchTeams.team_color,
+      team_logo_url: sql<string | null>`coalesce(${matchTeams.logo_url}, ${seriesEntrants.logo_url})`,
     })
     .from(matchParticipants).leftJoin(matchTeams, eq(matchTeams.id, matchParticipants.team_id))
+    .leftJoin(seriesEntrants, eq(seriesEntrants.id, matchTeams.series_entrant_id))
     .where(eq(matchParticipants.match_id, matchId))
     .orderBy(asc(matchParticipants.joined_at), asc(matchParticipants.id));
-  return rows.map(({ team_order, is_reserve, team_name, team_color, ...p }) => ({
+  return rows.map(({ team_order, is_reserve, team_name, team_color, team_logo_url, ...p }) => ({
     ...p,
     team_assignment: is_reserve ? 'reserve' : team_order === 0 ? 'blue' : team_order === 1 ? 'red' : null,
     team_name: team_name ?? null,
     team_color: team_color ?? null,
+    team_logo_url: team_logo_url ?? null,
     team_order: team_order ?? null,
   }));
 }

@@ -71,6 +71,8 @@ export const tournamentTeams = pgTable('tournament_teams', {
   id: text('id').primaryKey(),
   tournament_id: text('tournament_id').notNull().references(() => tournaments.id, { onDelete: 'cascade' }),
   team_name: text('team_name').notNull(),
+  /** Uploaded logo (`/uploads/...`). Series-linked teams fall back to their entrant's logo at read time. */
+  logo_url: text('logo_url'),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   /** Set when the series pre-assigned this team to one of its entrants. */
   series_entrant_id: text('series_entrant_id').references(() => seriesEntrants.id, { onDelete: 'set null' }),

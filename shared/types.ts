@@ -86,6 +86,8 @@ export interface TournamentTeam {
   id: string;
   tournament_id: string;
   team_name: string;
+  /** Own upload, else the series entrant's logo. */
+  logo_url?: string | null;
   created_at: string;
 }
 
