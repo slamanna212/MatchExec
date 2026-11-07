@@ -75,6 +75,28 @@ describe('POST /:id/events/match|tournament|planned', () => {
     expect(p.data.event).toMatchObject({ status: 'planned', name: 'Finals', match_id: null, tournament_id: null, role: 'season_playoff', event_order: 2 });
   });
 
+  it('creates a tournament (and seeds playoffs) without a series default mode: falls back to the first mode of the scoring type', async () => {
+    const s = await teamSeries();
+    await pg().update(series).set({ game_mode_id: null }).where(eq(series.id, s.seriesId));
+    const t = await api(s.seriesId, '/events/tournament', 'POST', { format: 'single-elimination', tournament: { name: 'Cup', start_time: START } });
+    expect(t.status, JSON.stringify(t.data)).toBe(201);
+    const [row] = await pg().select().from(tournaments).where(eq(tournaments.id, t.data.tournament_id));
+    expect(row.game_mode_id).toBe(s.modeId);
+  });
+
+  it('refuses a counted match with more than two entrants in a head_to_head series, but allows it as an exhibition', async () => {
+    const s = await teamSeries();
+    await pg().update(series).set({ scoring_config: { mode: 'head_to_head', win_points: 3 } }).where(eq(series.id, s.seriesId));
+    const three = s.entrants.slice(0, 3).map((e) => e.id);
+    const m = (json: Record<string, unknown>) => api(s.seriesId, '/events/match', 'POST', { match: { start_date: START, maps: s.mapIds.slice(0, 2) }, ...json });
+    const refused = await m({ entrant_ids: three });
+    expect(refused.status).toBe(400);
+    expect(refused.data.error).toMatch(/only count matches between two entrants/);
+    expect((await m({ entrant_ids: three, role: 'exhibition' })).status).toBe(201);
+    expect((await m({ entrant_ids: three, counts_for_standings: false })).status).toBe(201);
+    expect((await m({ entrant_ids: three.slice(0, 2) })).status).toBe(201);
+  });
+
   it('answers 400 for malformed bodies, 404 for an unknown series and 409 for a finished one', async () => {
     const s = await teamSeries();
     const m = (json: unknown) => api(s.seriesId, '/events/match', 'POST', json);

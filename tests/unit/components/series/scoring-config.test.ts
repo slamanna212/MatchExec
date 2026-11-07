@@ -61,6 +61,12 @@ describe('tiebreakers', () => {
     expect(effectiveTiebreakers({ mode: 'points', tiebreakers: ['best_finishes'] }, 'points')).toEqual(['best_finishes']);
   });
 
+  it('ranks on league points first by default when win/tie/loss points are set (matches the server)', () => {
+    expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 3, tie_points: 1 }, 'head_to_head'))
+      .toEqual(['points', ...DEFAULT_TIEBREAKERS.head_to_head]);
+    expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 3, tiebreakers: ['match_wins'] }, 'head_to_head')).toEqual(['match_wins']);
+  });
+
   it('every default is allowed', () => {
     for (const mode of ['head_to_head', 'points'] as const) {
       expect(DEFAULT_TIEBREAKERS[mode].every((t) => ALLOWED_TIEBREAKERS[mode].includes(t))).toBe(true);

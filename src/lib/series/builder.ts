@@ -21,7 +21,7 @@ import type {
 } from '../../../shared/series-types';
 import { enqueueAnnouncement } from '../discord-queues';
 import { logFeedEvent } from '../feed-helpers';
-import { getGame, getMode, getModeScoringType, type GameModeRow } from '../games';
+import { getGame, getMode, getModeScoringType, listModes, type GameModeRow } from '../games';
 import { logger } from '../logger';
 import {
   VoiceChannelService, addParticipantsBulk, casMatchStatus, createMatchFromRequest, createMatchTeams, createNamedMatchTeams, resolveModeFromMaps,
@@ -34,6 +34,7 @@ import { generateTournamentMatchesInTx } from '../tournaments/generate';
 import { createTournament, casTournamentStatus, TournamentError, type TournamentRow } from '../tournaments/tournaments';
 import { toDateOrNull, allowedGameIds, lockSeries, newSeriesEventId, SeriesError, type SeriesRow } from './series';
 import { getStage } from './stages';
+import { parseScoringConfig } from './validation';
 import {
   assertRosters, loadSeriesEntrants, orderBySeed, rosterAsParticipants, selectEntrants, type ResolvedEntrant,
 } from './rosters';
@@ -82,6 +83,21 @@ async function resolveGameId(tx: Executor, series: SeriesRow, requested: string 
   return gameId;
 }
 
+/**
+ * The mode a series tournament is created with: the template's, else the series' default (only valid for the series'
+ * own game), else the first mode (by name, like the UI's mode list) that matches the series' scoring type. Returns
+ * null when the game has no usable mode.
+ */
+export async function resolveTournamentModeId(
+  ex: Executor, series: SeriesRow, gameId: string, requested: string | null | undefined,
+): Promise<string | null> {
+  if (requested) return requested;
+  if (series.game_mode_id && (!series.game_id || series.game_id === gameId)) return series.game_mode_id;
+  const modes = await listModes(ex, gameId);
+  const fit = modes.find((m) => !series.scoring_type || m.scoring_type === series.scoring_type);
+  return fit?.id ?? null;
+}
+
 function assertScoringType(series: SeriesRow, actual: string, what: string): void {
   if (series.scoring_type && series.scoring_type !== actual) {
     throw new SeriesError(`This series only takes ${series.scoring_type} events, but the ${what} is ${actual}`, 400);
@@ -90,6 +106,24 @@ function assertScoringType(series: SeriesRow, actual: string, what: string): voi
 
 async function assertStage(tx: Executor, seriesId: string, stageId: string | null | undefined): Promise<void> {
   if (stageId && !(await getStage(tx, seriesId, stageId))) throw new SeriesError('stage_id does not match a stage of this series', 400);
+}
+
+/**
+ * head_to_head standings only count matches between exactly two entrants. Refuse a counted match with more sides in a
+ * head_to_head table (stage override first) instead of letting it silently count for nothing.
+ */
+async function assertCountableInH2h(
+  tx: Executor, series: SeriesRow, stageId: string | null | undefined, entrantCount: number, counts: boolean,
+): Promise<void> {
+  if (!counts || entrantCount <= 2) return;
+  const stage = stageId ? await getStage(tx, series.id, stageId) : null;
+  const mode = stage?.scoring_config?.mode ?? parseScoringConfig(series.scoring_config).mode;
+  if (mode === 'head_to_head') {
+    throw new SeriesError(
+      `Head-to-head standings only count matches between two entrants, but this match has ${entrantCount}. ` +
+      'Set it to not count for standings (an exhibition), or use a points-based standings mode.', 400,
+    );
+  }
 }
 
 async function nextEventOrder(tx: Executor, seriesId: string): Promise<number> {
@@ -213,6 +247,7 @@ export async function createSeriesMatchEventTx(
 
   const entrantTeams = usesEntrantTeams(scoring, mode);
   if (entrants.length < 2) throw new SeriesError('A match needs at least 2 entrants', 400);
+  if (scoring === 'Normal') await assertCountableInH2h(tx, series, input.stage_id, entrants.length, countsForStandings(input, input.role ?? 'regular'));
   if (scoring === 'Normal' && entrants.length > 16) throw new SeriesError(`A Normal match takes 2 to 16 entrants (got ${entrants.length})`, 400);
   assertRosters(series, entrants, entrantTeams && series.entrant_type !== 'solo' ? 0 : 1);
 
@@ -333,8 +368,8 @@ export async function createSeriesTournamentEventTx(
 
   const gameId = await resolveGameId(tx, series, tpl.game_id);
   await assertStage(tx, seriesId, input.stage_id);
-  const gameModeId = tpl.game_mode_id || series.game_mode_id;
-  if (!gameModeId) throw new SeriesError('game_mode_id is required (the series has no default mode)', 400);
+  const gameModeId = await resolveTournamentModeId(tx, series, gameId, tpl.game_mode_id);
+  if (!gameModeId) throw new SeriesError(`game_mode_id is required (the series has no default mode and ${gameId} has no mode for ${series.scoring_type ?? 'this'} scoring)`, 400);
   const ow2Option = gameId === 'overwatch2' && gameModeId.startsWith('ow2-');
   const scoring = ow2Option ? 'Normal' : await getModeScoringType(tx, gameId, gameModeId);
   if (!scoring) throw new SeriesError('Invalid game mode ID or game mode does not belong to the selected game', 400);

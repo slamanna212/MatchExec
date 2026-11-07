@@ -5,9 +5,9 @@ import { eq } from 'drizzle-orm';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createMatch, createTournament } from '../../utils/pg-fixtures';
-import { addEventApi, insertSeries, linkEvent, transitionSeriesApi, uid } from '../../utils/pg-series-fixtures';
+import { addEventApi, insertSeries, insertStage, linkEvent, transitionSeriesApi, uid } from '../../utils/pg-series-fixtures';
 import {
-  matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, series, seriesEvents, tournaments,
+  matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, series, seriesEvents, seriesStages, tournaments,
   tournamentTeamMembers, tournamentTeams,
 } from '../../../lib/db/schema';
 
@@ -123,6 +123,36 @@ describe('POST /api/series/:seriesId/transition', () => {
   it('rejects transitioning out of a completed series', async () => {
     await insertSeries({ id: 's_t3', status: 'complete' });
     expect((await transitionSeriesApi('s_t3', 'active')).status).toBe(400);
+  });
+
+  it('accepts newStatus (like the match and tournament routes) as well as status', async () => {
+    await insertSeries({ id: 's_t_new', status: 'created' });
+    const res = await appRequest('/api/series/s_t_new/transition', { method: 'POST', json: { newStatus: 'active' } });
+    expect(res.status).toBe(200);
+    expect(res.data.series.status).toBe('active');
+  });
+
+  it('starts the first stage when the series goes active, and finishes the running stage on complete', async () => {
+    await insertSeries({ id: 's_t_stages', status: 'created' });
+    const one = await insertStage('s_t_stages', { stage_order: 1 });
+    const two = await insertStage('s_t_stages', { stage_order: 2 });
+    const stageStatuses = async () => {
+      const rows = await getPgTestDb().select().from(seriesStages).where(eq(seriesStages.series_id, 's_t_stages'));
+      return Object.fromEntries(rows.map((r) => [r.id, r.status]));
+    };
+    expect((await transitionSeriesApi('s_t_stages', 'active')).status).toBe(200);
+    expect(await stageStatuses()).toEqual({ [one.id]: 'active', [two.id]: 'upcoming' });
+    expect((await transitionSeriesApi('s_t_stages', 'complete')).status).toBe(200);
+    expect(await stageStatuses()).toEqual({ [one.id]: 'complete', [two.id]: 'upcoming' });
+  });
+
+  it('leaves a stage that is already running alone when the series goes active', async () => {
+    await insertSeries({ id: 's_t_stages2', status: 'created' });
+    const one = await insertStage('s_t_stages2', { stage_order: 1, status: 'complete' });
+    const two = await insertStage('s_t_stages2', { stage_order: 2, status: 'active' });
+    expect((await transitionSeriesApi('s_t_stages2', 'active')).status).toBe(200);
+    const rows = await getPgTestDb().select().from(seriesStages).where(eq(seriesStages.series_id, 's_t_stages2'));
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.status]))).toEqual({ [one.id]: 'complete', [two.id]: 'active' });
   });
 
   it('rejects an invalid status value', async () => {

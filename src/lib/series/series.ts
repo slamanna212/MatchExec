@@ -1,7 +1,7 @@
 /** `series`: CRUD, status compare-and-set and the series row lock that serialises event changes. */
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { gameModes, series, seriesEntrants, seriesEvents } from '../../../lib/db/schema';
+import { gameModes, series, seriesEntrants, seriesEvents, seriesStages } from '../../../lib/db/schema';
 import type {
   SeriesDiscordConfig, SeriesEntrantType, SeriesMatchDefaults, SeriesScoringConfig, SeriesScoringType,
 } from '../../../shared/series-types';
@@ -320,11 +320,31 @@ export async function editSeries(ex: Executor, seriesId: string, updates: Update
  * Runs inside the transition transaction, after the status changed (never for a no-op). Follow-up work that must commit
  * with the status change belongs here:
  *  - `registration`: enqueue `registration_open` (Discord work package),
- *  - `complete`: enqueue `champion` (`onSeriesCompleted`, playoffs.ts).
+ *  - `active`: start the first stage (when none is running yet),
+ *  - `complete`: finish the stage that is still running, then enqueue `champion` (`onSeriesCompleted`, playoffs.ts).
  */
 export async function afterSeriesTransition(_tx: Executor, _series: SeriesRow, _from: SeriesStatus, _to: SeriesStatus): Promise<void> {
   await enqueueRegistrationOpen(_tx, _series, _to);
+  await syncStagesWithSeriesStatus(_tx, _series.id, _to);
   if (_to === 'complete') await onSeriesCompleted(_tx, _series.id);
+}
+
+/**
+ * Stages follow the season: the first stage starts with the series (later ones start when the previous stage is
+ * completed, see `completeStage`), and a finished series leaves no stage running. Written directly (not through
+ * `updateStage`) because the series row is already locked and, for `complete`, no longer editable.
+ */
+async function syncStagesWithSeriesStatus(tx: Executor, seriesId: string, to: SeriesStatus): Promise<void> {
+  if (to === 'active') {
+    const stages = await tx.select({ id: seriesStages.id, status: seriesStages.status }).from(seriesStages)
+      .where(eq(seriesStages.series_id, seriesId)).orderBy(asc(seriesStages.stage_order));
+    if (stages.length === 0 || stages.some((s) => s.status === 'active')) return;
+    const first = stages.find((s) => s.status === 'upcoming');
+    if (first) await tx.update(seriesStages).set({ status: 'active' }).where(eq(seriesStages.id, first.id));
+  } else if (to === 'complete') {
+    await tx.update(seriesStages).set({ status: 'complete' })
+      .where(and(eq(seriesStages.series_id, seriesId), eq(seriesStages.status, 'active')));
+  }
 }
 
 /** `registration_open` post (announcement channels): only when the series announces and registration posts are not switched off. */

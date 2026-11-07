@@ -429,9 +429,12 @@ describe('createSeriesTournamentEvent', () => {
     await rejects(createSeriesTournamentEvent(pg(), s.seriesId, { format: 'single-elimination', entrant_ids: [s.entrants[0].id], tournament: tpl() }), 400, /at least 2/);
     await rejects(createSeriesTournamentEvent(pg(), s.seriesId, { format: 'single-elimination', seed_order: [s.entrants[0].id, s.entrants[1].id], tournament: tpl() }), 400, /seed_order/);
     await rejects(createSeriesTournamentEvent(pg(), s.seriesId, { format: 'single-elimination', seed_order: [s.entrants[0].id, s.entrants[0].id, s.entrants[1].id], tournament: tpl() }), 400, /seed_order/);
-    await pg().update(series).set({ game_mode_id: null }).where(eq(series.id, s.seriesId));
-    await rejects(createSeriesTournamentEvent(pg(), s.seriesId, { format: 'single-elimination', tournament: tpl() }), 400, /game_mode_id is required/);
     expect((await pg().select().from(tournaments)).length).toBe(before);
+    // no template mode and no series default: the first mode of the series' scoring type is used
+    await pg().update(series).set({ game_mode_id: null }).where(eq(series.id, s.seriesId));
+    const fallback = await createSeriesTournamentEvent(pg(), s.seriesId, { format: 'single-elimination', tournament: tpl() });
+    const [created] = await pg().select().from(tournaments).where(eq(tournaments.id, fallback.tournament_id));
+    expect(created.game_mode_id).toBeTruthy();
 
     const racers = await createSeriesWithEntrants(pg(), {
       entrantType: 'solo', scoringType: 'Position', gameId: racingGame.id, entrants: [{ name: 'Ada', members: ['ada'] }, { name: 'Bo', members: ['bo'] }],

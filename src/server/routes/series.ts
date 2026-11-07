@@ -104,7 +104,8 @@ export const seriesRoutes = new Hono()
 
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
-    const newStatus = body.status;
+    // `newStatus` matches the match / tournament transition routes; `status` is the original name and still works.
+    const newStatus = body.newStatus ?? body.status;
     if (typeof newStatus !== 'string' || !VALID_STATUSES.includes(newStatus)) {
       return jsonError(c, `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`, 400);
     }

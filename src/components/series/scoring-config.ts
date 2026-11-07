@@ -76,9 +76,12 @@ export function switchScoringMode(config: SeriesScoringConfig, mode: SeriesStand
   return next;
 }
 
-/** Tiebreakers currently in effect (the stored list, else the mode's default). */
+/** Tiebreakers currently in effect (the stored list, else the mode's default). Mirrors the server: a head_to_head table with league points ranks on points first unless a list is stored. */
 export function effectiveTiebreakers(config: SeriesScoringConfig, mode: SeriesStandingsMode): SeriesTiebreaker[] {
-  return config.tiebreakers && config.tiebreakers.length > 0 ? config.tiebreakers : DEFAULT_TIEBREAKERS[mode];
+  if (config.tiebreakers && config.tiebreakers.length > 0) return config.tiebreakers;
+  const league = mode === 'head_to_head'
+    && ((config.win_points ?? 0) !== 0 || (config.loss_points ?? 0) !== 0 || (config.tie_points ?? 0) !== 0);
+  return league ? ['points', ...DEFAULT_TIEBREAKERS[mode]] : DEFAULT_TIEBREAKERS[mode];
 }
 
 /** Moves `list[index]` by `delta` positions (clamped); returns a new array. */
