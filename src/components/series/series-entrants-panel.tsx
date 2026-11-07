@@ -372,7 +372,7 @@ function TeamEntrantCard({
       style={{ minHeight: 200, display: 'flex', flexDirection: 'column', opacity: withdrawn ? 0.65 : 1 }}
     >
       <Group mb="sm" gap="sm" wrap="nowrap">
-        <TeamMark logoUrl={entrant.logo_url} color={color} />
+        <TeamMark logoUrl={entrant.logo_url} color={color} size={50} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">
             <Text fw={500} lineClamp={2} style={{ minWidth: 0 }}>{entrant.name}</Text>

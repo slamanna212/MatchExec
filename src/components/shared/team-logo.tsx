@@ -28,8 +28,7 @@ export function TeamMark({ logoUrl, color, size = 24 }: TeamMarkProps): JSX.Elem
       height={size}
       onError={() => setFailed(true)}
       style={{
-        width: size, height: size, borderRadius: Math.round(size / 4), flexShrink: 0, objectFit: 'cover',
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)',
+        width: size, height: size, borderRadius: Math.round(size / 4), flexShrink: 0, objectFit: 'contain',
       }}
     />
   );

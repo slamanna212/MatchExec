@@ -195,7 +195,7 @@ export function TournamentContentPanel({
                     style={{ height: '100%', minHeight: '200px', display: 'flex', flexDirection: 'column' }}
                   >
                     <Group mb="sm" gap="sm" wrap="nowrap">
-                      <TeamMark logoUrl={team.logo_url} color={`var(--mantine-color-${color}-6)`} />
+                      <TeamMark logoUrl={team.logo_url} color={`var(--mantine-color-${color}-6)`} size={50} />
                       <Text fw={500} lineClamp={2} style={{ flex: 1 }}>{team.team_name}</Text>
                       <Badge size="sm" variant="light" color="gray" style={{ flexShrink: 0 }}>
                         {memberCount} {memberCount === 1 ? 'member' : 'members'}
