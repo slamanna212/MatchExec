@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router';
 import { Button, Group, Modal, Text, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconRocket, IconSettings, IconExternalLink, IconStack2, IconBrandDiscord } from '@tabler/icons-react';
+import { IconRocket, IconSettings, IconRestore, IconExternalLink, IconStack2, IconBrandDiscord } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 import { logger } from '@/lib/logger/client';
+import { RestoreFileModal } from '@/components/settings/restore-file-modal';
 import styles from './welcome.module.css';
 
 const RESOURCES = [
@@ -31,11 +32,13 @@ export default function WelcomePage() {
   const navigate = useNavigate();
   const [proModalOpen, { open: openProModal, close: closeProModal }] = useDisclosure(false);
 
+  const [restoreModalOpen, { open: openRestoreModal, close: closeRestoreModal }] = useDisclosure(false);
+
   const handleGetStarted = () => {
     void navigate('/welcome/discord-setup');
   };
 
-  const handleProModeConfirm = async () => {
+  const completeWelcomeFlow = async () => {
     try {
       const response = await fetch('/api/welcome-flow', {
         method: 'PUT',
@@ -49,6 +52,8 @@ export default function WelcomePage() {
       logger.error('Error completing welcome flow:', error);
     }
   };
+
+  const handleProModeConfirm = completeWelcomeFlow;
 
   return (
     <>
@@ -149,6 +154,18 @@ export default function WelcomePage() {
           >
             Pro Mode
           </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            leftSection={<IconRestore size={20} />}
+            onClick={openRestoreModal}
+            style={{
+              borderColor: 'rgba(124,58,237,0.5)',
+              color: 'var(--mantine-color-violet-4, #c084fc)',
+            }}
+          >
+            Restore Backup
+          </Button>
         </motion.div>
 
         {/* Resource tiles */}
@@ -208,6 +225,14 @@ export default function WelcomePage() {
           ))}
         </motion.div>
       </motion.div>
+
+      {/* Restore Backup Modal */}
+      <RestoreFileModal
+        opened={restoreModalOpen}
+        onClose={closeRestoreModal}
+        onRestored={() => { void completeWelcomeFlow(); }}
+        warning="Restores everything from the backup, including matches, tournaments and settings, and skips the setup guide. MatchExec is unavailable for a moment."
+      />
 
       {/* Pro Mode Modal */}
       <Modal

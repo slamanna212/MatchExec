@@ -7,7 +7,6 @@ import {
   PasswordInput,
   Alert,
   Modal,
-  FileInput,
   Divider,
   Switch,
   SegmentedControl,
@@ -23,12 +22,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   IconAlertTriangle, IconDownload, IconUpload, IconShieldOff, IconDatabaseImport, IconTrash, IconHistory,
-  IconPlayerPlay, IconFile,
+  IconPlayerPlay,
 } from '@tabler/icons-react';
 import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { RestoreFileModal } from '@/components/settings/restore-file-modal';
 import {
   PRESET_OPTIONS,
   formatBackupDate,
@@ -178,8 +178,6 @@ export default function BackupRestorePage() {
   const [modal, setModal] = useState<Modals>(null);
   const [busy, setBusy] = useState(false);
   const [exportPassword, setExportPassword] = useState('');
-  const [restoreFile, setRestoreFile] = useState<File | null>(null);
-  const [restorePassword, setRestorePassword] = useState('');
 
   const loadAll = useCallback(async () => {
     try {
@@ -207,8 +205,6 @@ export default function BackupRestorePage() {
     if (busy) return;
     setModal(null);
     setExportPassword('');
-    setRestoreFile(null);
-    setRestorePassword('');
   };
 
   const saveConfig = async (override?: { enabled: boolean }) => {
@@ -344,54 +340,6 @@ export default function BackupRestorePage() {
     }
   };
 
-  const handleFileRestore = async () => {
-    if (!restoreFile) return;
-
-    setBusy(true);
-    const notifId = 'restore-progress';
-    notificationHelper.loading({ id: notifId, title: 'Restoring backup…', message: 'Replacing database, please wait.' });
-
-    try {
-      const formData = new FormData();
-      formData.append('file', restoreFile);
-      if (restorePassword) formData.append('password', restorePassword);
-
-      const response = await fetch('/api/settings/restore', { method: 'POST', body: formData });
-      const data = await response.json().catch(() => ({})) as { error?: string };
-
-      if (!response.ok) {
-        notificationHelper.update(notifId, {
-          type: 'error',
-          title: 'Restore Failed',
-          message: data.error || 'An unexpected error occurred.',
-          autoClose: 8000,
-        });
-        return;
-      }
-
-      notificationHelper.update(notifId, {
-        type: 'success',
-        title: 'Restore Complete',
-        message: 'Database restored. The previous data was saved as a "Pre-restore" backup.',
-        autoClose: 6000,
-      });
-      setModal(null);
-      setRestoreFile(null);
-      setRestorePassword('');
-      void loadAll();
-    } catch (error) {
-      logger.error('Restore error:', error);
-      notificationHelper.update(notifId, {
-        type: 'error',
-        title: 'Restore Failed',
-        message: 'Could not connect to the server.',
-        autoClose: 6000,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const now = useMemo(() => new Date(), [config, backups]); // eslint-disable-line react-hooks/exhaustive-deps
   const status = buildStatus(config, now);
   const noTools = config ? !config.pgToolsAvailable : false;
@@ -405,9 +353,6 @@ export default function BackupRestorePage() {
   const visibleFilters = FILTERS.filter((f) => f.value === 'all' || counts[f.value] > 0);
   const filtered = backups.filter((b) => filter === 'all' || b.kind === filter);
   const rows = showAll ? filtered : filtered.slice(0, LIST_LIMIT);
-
-  const isEncryptedFile = restoreFile?.name.endsWith('.enc') ?? false;
-  const fileInvalid = !restoreFile || (isEncryptedFile && !restorePassword);
 
   const rowModalBackup = modal?.type === 'restore' || modal?.type === 'delete' ? modal.backup : null;
 
@@ -697,39 +642,11 @@ export default function BackupRestorePage() {
       </Modal>
 
       {/* Restore from file */}
-      <Modal opened={modal?.type === 'file'} onClose={closeModal} title="Restore from file" centered size="sm">
-        <Stack gap="md">
-          <FileInput
-            label="Backup file"
-            description=".dump or .dump.enc from MatchExec. Older SQLite .db backups work too."
-            placeholder="Choose a backup file"
-            accept=".dump,.db,.enc"
-            value={restoreFile}
-            onChange={setRestoreFile}
-            leftSection={<IconFile size="1rem" />}
-            clearable
-          />
-          {restoreFile && (
-            <PasswordInput
-              label="Password"
-              description={isEncryptedFile ? 'Required: this file is encrypted' : 'Only needed if this backup was encrypted'}
-              placeholder={isEncryptedFile ? 'This file is encrypted' : 'Leave blank if not encrypted'}
-              value={restorePassword}
-              onChange={(e) => setRestorePassword(e.currentTarget.value)}
-              required={isEncryptedFile}
-            />
-          )}
-          <Alert icon={<IconAlertTriangle size="1rem" />} color="red" variant="light">
-            Replaces all matches, tournaments, participants and settings. Your current data is saved as a Pre-restore backup first, and MatchExec is unavailable for a moment.
-          </Alert>
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={closeModal} disabled={busy}>Cancel</Button>
-            <Button color="red" onClick={handleFileRestore} disabled={fileInvalid} loading={busy}>
-              Replace data and restore
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <RestoreFileModal
+        opened={modal?.type === 'file'}
+        onClose={() => setModal(null)}
+        onRestored={() => { setModal(null); void loadAll(); }}
+      />
 
       {/* Restore a stored backup */}
       <Modal opened={modal?.type === 'restore'} onClose={closeModal} title="Restore this backup?" centered size="sm">
