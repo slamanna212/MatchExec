@@ -52,4 +52,21 @@ describe('DiscordBotService', () => {
     await expect(service().waitForRequestCompletion(slow, 600)).rejects.toThrow(/timeout/i);
     expect((await db.select().from(discordBotRequests).where(eq(discordBotRequests.id, slow)))[0]).toMatchObject({ status: 'failed' });
   });
+
+  it('searchGuildMembers enqueues member_search and returns the bot result', async () => {
+    const pending = service().searchGuildMembers('ze', 5, 3000);
+    await vi.waitFor(async () => {
+      const rows = await db.select().from(discordBotRequests).where(eq(discordBotRequests.type, 'member_search'));
+      expect(rows[0]).toMatchObject({ status: 'pending', data: { query: 'ze', limit: 5 } });
+      await db.update(discordBotRequests).set({ status: 'completed', result: { success: true, members: [{ id: '1', username: 'Zed', avatar_url: null }] } })
+        .where(eq(discordBotRequests.id, rows[0]!.id));
+    });
+    expect(await pending).toEqual([{ id: '1', username: 'Zed', avatar_url: null }]);
+  });
+
+  it('searchGuildMembers returns [] when the request fails or times out', async () => {
+    expect(await service().searchGuildMembers('x', 5, 300)).toEqual([]);
+    const rows = await db.select().from(discordBotRequests).where(eq(discordBotRequests.type, 'member_search'));
+    expect(rows.at(-1)).toMatchObject({ status: 'failed' });
+  });
 });

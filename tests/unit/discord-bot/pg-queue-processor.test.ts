@@ -225,6 +225,16 @@ describe('other queues', () => {
 });
 
 describe('bot requests', () => {
+  it('member_search returns non-bot guild members from the configured guild', async () => {
+    const id = await enqueueBotRequest(db, 'member_search', { query: 'ze', limit: 5 });
+    const member = (id: string, name: string, bot = false) => ({ id, user: { bot }, displayName: name, displayAvatarURL: () => `http://a/${id}.png` });
+    const search = vi.fn().mockResolvedValue(new Map([['1', member('1', 'Zed')], ['2', member('2', 'ZeBot', true)]]));
+    client.guilds.fetch.mockResolvedValue({ members: { search } });
+    await make().qp.processDiscordBotRequests();
+    expect(search).toHaveBeenCalledWith({ query: 'ze', limit: 5 });
+    expect(await one(discordBotRequests, id)).toMatchObject({ status: 'completed', result: { success: true, members: [{ id: '1', username: 'Zed', avatar_url: 'http://a/1.png' }] } });
+  });
+
   it('voice channel create stores a jsonb result the web side can read', async () => {
     const id = await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A', 'B'] });
     const guild = { channels: { create: vi.fn().mockResolvedValueOnce({ id: 'c1', delete: vi.fn() }).mockResolvedValueOnce({ id: 'c2', delete: vi.fn() }) } };

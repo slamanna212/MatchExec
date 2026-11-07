@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { createGame, createGameMode, createMatch, createTournament } from '../../utils/pg-fixtures';
+import { createSeriesWithEntrants } from '../../utils/pg-series-fixtures';
 import {
   autoVoiceChannels, discordBotRequests, discordChannels, discordMapCodeQueue, discordScoreNotificationQueue, discordSettings,
   discordStatusUpdateQueue, discordVoiceAnnouncementQueue, discordWinnerVoteMessages, gameMaps, games, matchGames, matchParticipants,
-  matchTeams, matchVoiceAlternation, matches, scorecardSubmissions, statsSettings,
+  matchTeams, matchVoiceAlternation, matches, scorecardSubmissions, seriesEntrantMembers, statsSettings,
 } from '../../../lib/db/schema';
 import { db } from '../../../lib/db';
 import {
@@ -334,6 +335,15 @@ describe('scheduler queries and avatars', () => {
     expect((await pg().select().from(matchParticipants).where(eq(matchParticipants.id, 'a')))[0].failed_avatar_checks).toBe(1);
     await recordAvatarRefreshed(db, 'da', 'https://cdn/x.png');
     expect((await pg().select().from(matchParticipants).where(eq(matchParticipants.id, 'a')))[0]).toMatchObject({ avatar_url: 'https://cdn/x.png', failed_avatar_checks: 0 });
+  });
+
+  it('refreshes avatars of current series roster members too', async () => {
+    const f = await createSeriesWithEntrants(pg(), { entrantType: 'team', entrants: [{ name: 'T', members: ['cur', { username: 'gone', left: true }] }] });
+    expect(await listAvatarRefreshUsers(db)).toEqual(['u-cur']);
+    await recordAvatarRefreshed(db, 'u-cur', 'https://cdn/cur.png');
+    await recordAvatarRefreshed(db, 'u-cur', null); // a failed lookup never wipes the stored picture
+    const rows = await pg().select().from(seriesEntrantMembers).where(eq(seriesEntrantMembers.series_id, f.seriesId));
+    expect(rows.find((r) => r.user_id === 'u-cur')?.avatar_url).toBe('https://cdn/cur.png');
   });
 
   it('queues status updates for every match of a tournament', async () => {

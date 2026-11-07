@@ -12,6 +12,8 @@ import {
   type UpdateEntrantInput, type UpdateStageInput,
 } from '@/lib/series';
 import type { CopySeriesEntrantsInput, CreateSeriesEntrantInput, SeriesMemberRole, SeriesStageStatus } from '../../../shared/series-types';
+import { DiscordBotService } from '../../../lib/discord-bot-service';
+import { logger } from '@/lib/logger';
 import { jsonError } from '../http';
 import { guard, readJsonObject } from './series-helpers';
 
@@ -28,7 +30,21 @@ export const seriesEntrantsRoutes = new Hono()
     const limitParam = c.req.query('limit');
     const limit = limitParam ? Number.parseInt(limitParam, 10) : 20;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) return jsonError(c, 'limit must be an integer between 1 and 100', 400);
-    return c.json({ players: await searchPlayers(db, q, limit) });
+    const known = await searchPlayers(db, q, limit);
+    // Server members come from the bot; any failure just leaves the locally known players.
+    let members: Awaited<ReturnType<DiscordBotService['searchGuildMembers']>> = [];
+    if (q.trim() !== '' && c.req.query('guild') !== 'false') {
+      try { members = await new DiscordBotService(db).searchGuildMembers(q.trim(), Math.min(limit, 25)); }
+      catch (error) { logger.warning('Guild member search failed:', error); }
+    }
+    const seen = new Set(known.map((p) => p.discord_user_id ?? p.user_id));
+    const guildPlayers = members
+      .filter((m) => !seen.has(m.id))
+      .map((m) => ({ user_id: m.id, discord_user_id: m.id, username: m.username, avatar_url: m.avatar_url }));
+    const players = [...known, ...guildPlayers]
+      .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }))
+      .slice(0, limit);
+    return c.json({ players });
   }))
 
   // ── entrants ──────────────────────────────────────────────────────────────

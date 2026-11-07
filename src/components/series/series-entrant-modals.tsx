@@ -226,7 +226,7 @@ export function EntrantFormModal({
           division: blankToNull(division),
           seed: seedValue,
           members: player
-            ? [{ user_id: player.user_id, discord_user_id: player.discord_user_id, username: player.username, role: solo ? 'player' : 'captain' }]
+            ? [{ user_id: player.user_id, discord_user_id: player.discord_user_id, username: player.username, avatar_url: player.avatar_url ?? null, role: solo ? 'player' : 'captain' }]
             : undefined,
         });
       }
@@ -348,7 +348,7 @@ export function AddMemberModal({ opened, onClose, seriesId, entrantType, entrant
     notificationHelper.loading({ id: nid, message: 'Adding player...' });
     try {
       await entrantsApi.addMember(seriesId, entrant.id, {
-        user_id: player.user_id, discord_user_id: player.discord_user_id, username: player.username, role,
+        user_id: player.user_id, discord_user_id: player.discord_user_id, username: player.username, avatar_url: player.avatar_url ?? null, role,
       });
       notificationHelper.update(nid, { type: 'success', message: `${player.username} added to ${entrant.name}` });
       onClose();

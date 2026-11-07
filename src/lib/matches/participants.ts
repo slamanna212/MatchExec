@@ -1,7 +1,7 @@
 /** match_participants: signups, listing, commander flags and the racing setup phase (grid order / qualifying times). */
-import { and, asc, count, eq, gte, inArray, isNotNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { games, matchParticipants, matchTeams, matches } from '../../../lib/db/schema';
+import { games, matchParticipants, matchTeams, matches, seriesEntrantMembers, seriesEntrants } from '../../../lib/db/schema';
 import { genId } from './ids';
 import { lockMatch } from './teams';
 
@@ -257,7 +257,15 @@ export async function listAvatarRefreshUsers(ex: Executor): Promise<string[]> {
     .where(and(isNotNull(matchParticipants.discord_user_id), lt(matchParticipants.failed_avatar_checks, AVATAR_FAILURE_LIMIT), notInArray(matches.status, ['complete', 'cancelled'])))
     .groupBy(matchParticipants.discord_user_id)
     .orderBy(sql`min(${matchParticipants.joined_at})`, asc(matchParticipants.discord_user_id));
-  return rows.map((r) => r.discord_user_id as string);
+  const ids = rows.map((r) => r.discord_user_id as string);
+  // Players on a current series roster are refreshed too, after the match participants
+  const roster = await ex.selectDistinct({ discord_user_id: seriesEntrantMembers.discord_user_id }).from(seriesEntrantMembers)
+    .innerJoin(seriesEntrants, eq(seriesEntrants.id, seriesEntrantMembers.entrant_id))
+    .where(and(isNotNull(seriesEntrantMembers.discord_user_id), isNull(seriesEntrantMembers.left_at), notInArray(seriesEntrants.status, ['withdrawn'])))
+    .orderBy(asc(seriesEntrantMembers.discord_user_id));
+  const seen = new Set(ids);
+  for (const r of roster) if (r.discord_user_id && !seen.has(r.discord_user_id)) ids.push(r.discord_user_id);
+  return ids;
 }
 
 /** Distinct users in active matches skipped for having too many failed avatar checks. */
@@ -271,6 +279,7 @@ export async function countAvatarUsersSkipped(ex: Executor): Promise<number> {
 /** Store a fresh avatar for every participant record of this Discord user; success resets the failure count. */
 export async function recordAvatarRefreshed(ex: Executor, discordUserId: string, avatarUrl: string | null): Promise<void> {
   await ex.update(matchParticipants).set({ avatar_url: avatarUrl, last_avatar_check: new Date(), failed_avatar_checks: 0 }).where(eq(matchParticipants.discord_user_id, discordUserId));
+  if (avatarUrl) await ex.update(seriesEntrantMembers).set({ avatar_url: avatarUrl }).where(eq(seriesEntrantMembers.discord_user_id, discordUserId));
 }
 
 /** A failed fetch: remember the attempt but keep the old avatar. */

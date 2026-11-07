@@ -82,7 +82,7 @@ export const entrantsApi = {
 
   addMember: async (
     seriesId: string, entrantId: string,
-    member: { user_id: string; discord_user_id?: string | null; username: string; role?: SeriesMemberRole },
+    member: { user_id: string; discord_user_id?: string | null; username: string; avatar_url?: string | null; role?: SeriesMemberRole },
   ): Promise<SeriesEntrantMemberDto> =>
     (await request<{ member: SeriesEntrantMemberDto }>(`${base(seriesId)}/entrants/${encodeURIComponent(entrantId)}/members`, jsonInit('POST', member), 'Failed to add player')).member,
 

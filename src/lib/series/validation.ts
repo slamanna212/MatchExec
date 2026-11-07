@@ -272,6 +272,7 @@ export function validateMemberBody(body: Record<string, unknown>, partial: boole
     if (typeof body.username !== 'string' || body.username.trim() === '') return 'username must be a non-empty string';
   }
   if (!isNullableString(body.discord_user_id)) return 'discord_user_id must be a string';
+  if (!isNullableString(body.avatar_url)) return 'avatar_url must be a string';
   if (body.role !== undefined && !(MEMBER_ROLES as readonly unknown[]).includes(body.role)) {
     return `role must be one of: ${MEMBER_ROLES.join(', ')}`;
   }

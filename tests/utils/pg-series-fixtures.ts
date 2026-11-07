@@ -33,7 +33,7 @@ export async function linkEvent(seriesId: string, kind: 'match' | 'tournament', 
   return row;
 }
 
-export interface FixtureMember { user_id?: string; discord_user_id?: string | null; username?: string; role?: SeriesMemberRole; left?: boolean }
+export interface FixtureMember { user_id?: string; discord_user_id?: string | null; username?: string; avatar_url?: string | null; role?: SeriesMemberRole; left?: boolean }
 export interface FixtureEntrant {
   name: string;
   /** A member can be given as just a username. Ids default to `u-<username>` (user id) and the same value as Discord id. */
@@ -75,7 +75,7 @@ export async function createSeriesWithEntrants(
       const memberId = uid('sm_');
       await db.insert(seriesEntrantMembers).values({
         id: memberId, entrant_id: id, series_id: row.id, user_id: userId,
-        discord_user_id: spec.discord_user_id === undefined ? userId : spec.discord_user_id, username, role: spec.role ?? 'player',
+        discord_user_id: spec.discord_user_id === undefined ? userId : spec.discord_user_id, username, avatar_url: spec.avatar_url ?? null, role: spec.role ?? 'player',
         left_at: spec.left ? new Date() : null, joined_at: new Date(joinedAt++),
       });
       memberIds.push(memberId);

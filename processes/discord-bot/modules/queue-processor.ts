@@ -237,6 +237,28 @@ async function handleVoiceTest(processor: QueueProcessor, request: BotRequest): 
 }
 
 /**
+ * Searches the configured guild's members by username / nickname (needs the Server Members intent).
+ * The result is read by the web API: `{ success, members: [{ id, username, avatar_url }] }`.
+ */
+async function handleMemberSearch(processor: QueueProcessor, request: BotRequest): Promise<void> {
+  const { query, limit } = (request.data ?? {}) as { query?: string; limit?: number };
+  const q = (query ?? '').trim();
+  const settings = await getAnyDiscordSettings(processor['queueDb']);
+  if (!settings?.guild_id) {
+    await processor['fail']('botRequest', request.id, 'Guild ID not configured', {
+      permanent: true, set: { result: { success: false, message: 'Guild ID not configured' } },
+    });
+    return;
+  }
+  const guild = await processor['client'].guilds.fetch(settings.guild_id);
+  const found = q === '' ? [] : [...(await guild.members.search({ query: q, limit: Math.min(Math.max(limit ?? 10, 1), 25) })).values()];
+  const members = found
+    .filter((m) => !m.user.bot)
+    .map((m) => ({ id: m.id, username: m.displayName, avatar_url: m.displayAvatarURL({ size: 64 }) }));
+  await processor['finish']('botRequest', request.id, { set: { result: { success: true, members } } });
+}
+
+/**
  * Registry of request type handlers
  */
 async function handleCommanderDM(processor: QueueProcessor, request: BotRequest): Promise<void> {
@@ -258,6 +280,7 @@ const REQUEST_HANDLERS: Record<string, RequestHandler> = {
   'voice_channel_delete': handleVoiceChannelDelete,
   'voice_test': handleVoiceTest,
   'commander_dm': handleCommanderDM,
+  'member_search': handleMemberSearch,
 };
 
 interface TournamentMessageData {

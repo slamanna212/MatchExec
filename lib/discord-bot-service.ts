@@ -70,4 +70,29 @@ export class DiscordBotService {
 
     throw new Error('Request timeout - voice test took longer than 45 seconds to complete');
   }
+
+  /**
+   * Searches the guild's members through the bot (`member_search`). Resolves to `[]` when the bot is slow, offline or
+   * has no guild configured, so callers can fall back to locally known players.
+   */
+  async searchGuildMembers(query: string, limit = 10, timeoutMs = 6000): Promise<GuildMemberHit[]> {
+    const requestId = await enqueueBotRequest(this.ex, 'member_search', { query, limit });
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const request = await getBotRequest(this.ex, requestId);
+      if (request?.status === 'completed') {
+        return ((request.result as { members?: GuildMemberHit[] } | null)?.members) ?? [];
+      }
+      if (request?.status === 'failed') return [];
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    await failBotRequest(this.ex, requestId, { success: false, message: 'Member search timed out' });
+    return [];
+  }
+}
+
+export interface GuildMemberHit {
+  id: string;
+  username: string;
+  avatar_url: string | null;
 }

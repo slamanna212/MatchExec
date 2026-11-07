@@ -273,7 +273,7 @@ export interface CreateSeriesEntrantInput {
   division?: string | null;
   seed?: number | null;
   status?: SeriesEntrantStatus;
-  members?: Array<{ user_id: string; discord_user_id?: string | null; username: string; role?: SeriesMemberRole }>;
+  members?: Array<{ user_id: string; discord_user_id?: string | null; username: string; avatar_url?: string | null; role?: SeriesMemberRole }>;
 }
 
 export interface CopySeriesEntrantsInput {

@@ -1,0 +1,1 @@
+ALTER TABLE "series_entrant_members" ADD COLUMN "avatar_url" text;

@@ -326,10 +326,10 @@ export async function matchIdsWithLivePlayerReminder(ex: Executor, matchIds: rea
 
 // ─── Bot requests (request/response RPC to the Discord bot) ──────────────────
 
-export type BotRequestType = 'voice_channel_create' | 'voice_channel_delete' | 'voice_test' | 'commander_dm';
+export type BotRequestType = 'voice_channel_create' | 'voice_channel_delete' | 'voice_test' | 'commander_dm' | 'member_search';
 
 export async function enqueueBotRequest(ex: Executor, type: BotRequestType, data: Record<string, unknown>): Promise<string> {
-  const id = newId(type === 'voice_channel_create' ? 'voice_create' : type === 'voice_channel_delete' ? 'voice_delete' : type === 'commander_dm' ? 'cmdr_dm' : 'voice_test');
+  const id = newId(type === 'voice_channel_create' ? 'voice_create' : type === 'voice_channel_delete' ? 'voice_delete' : type === 'commander_dm' ? 'cmdr_dm' : type === 'member_search' ? 'member_search' : 'voice_test');
   await ex.insert(discordBotRequests).values({ id, type, data });
   return id;
 }

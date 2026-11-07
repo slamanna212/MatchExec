@@ -1,11 +1,12 @@
 // @vitest-environment node
 /** `/api/series/:id/entrants|stages`, `/api/series/players/search` and the reworked series / event routes (Hono + Postgres). */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createMatch, createMatchParticipant } from '../../utils/pg-fixtures';
 import { addEventApi, createSeriesWithEntrants, insertSeries, insertStage, linkEvent, transitionSeriesApi, uid } from '../../utils/pg-series-fixtures';
+import { DiscordBotService } from '../../../lib/discord-bot-service';
 import { matchTeams, matches, seriesEntrants, seriesEvents } from '../../../lib/db/schema';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -196,6 +197,30 @@ describe('POST /entrants/copy', () => {
 });
 
 describe('GET /players/search (not captured by /:seriesId)', () => {
+  const guildSearch = vi.spyOn(DiscordBotService.prototype, 'searchGuildMembers');
+  beforeEach(() => { guildSearch.mockReset().mockResolvedValue([]); });
+
+  it('adds server members from the bot, de-duplicated against known players', async () => {
+    await createSeriesWithEntrants(pg(), { entrantType: 'solo', entrants: [{ name: 'S', members: [{ username: 'Zed', user_id: 'zu', discord_user_id: 'zd' }] }] });
+    guildSearch.mockResolvedValue([
+      { id: 'zd', username: 'Zed (server)', avatar_url: null },
+      { id: 'g1', username: 'Zoe', avatar_url: 'http://a/z.png' },
+    ]);
+    const res = await api('/players/search?q=z');
+    expect(res.data.players.map((p: any) => p.username)).toEqual(['Zed', 'Zoe']);
+    expect(res.data.players[1]).toEqual({ user_id: 'g1', discord_user_id: 'g1', username: 'Zoe', avatar_url: 'http://a/z.png' });
+    expect(guildSearch).toHaveBeenCalledWith('z', 20);
+  });
+
+  it('falls back to known players when the bot search fails, and skips it with guild=false', async () => {
+    await createSeriesWithEntrants(pg(), { entrantType: 'solo', entrants: [{ name: 'S', members: [{ username: 'Zed', user_id: 'zu', discord_user_id: 'zd' }] }] });
+    guildSearch.mockRejectedValue(new Error('bot down'));
+    expect((await api('/players/search?q=z')).data.players.map((p: any) => p.username)).toEqual(['Zed']);
+    guildSearch.mockClear();
+    await api('/players/search?q=z&guild=false');
+    expect(guildSearch).not.toHaveBeenCalled();
+  });
+
   it('returns distinct players and validates limit', async () => {
     const game = await createGame();
     const mode = await createGameMode(game.id);
@@ -209,6 +234,30 @@ describe('GET /players/search (not captured by /:seriesId)', () => {
     expect((await api('/players/search')).data.players).toEqual([]);
     expect((await api('/players/search?q=z&limit=0')).status).toBe(400);
     expect((await api('/players/search?q=z&limit=1')).data.players).toHaveLength(1);
+  });
+});
+
+describe('member avatars', () => {
+  it('stores the avatar sent when adding a player and returns it with the roster', async () => {
+    const f = await createSeriesWithEntrants(pg(), { entrantType: 'team', entrants: [{ name: 'T', members: ['cap'] }] });
+    const t = f.entrants[0];
+    const added = await api(`/${f.seriesId}/entrants/${t.id}/members`, 'POST', { user_id: 'new', discord_user_id: 'new', username: 'newbie', avatar_url: 'http://a/new.png' });
+    expect(added.status).toBe(201);
+    expect(added.data.member.avatar_url).toBe('http://a/new.png');
+    const listed = (await api(`/${f.seriesId}/entrants`)).data.entrants[0].members.find((m: any) => m.user_id === 'new');
+    expect(listed.avatar_url).toBe('http://a/new.png');
+    expect((await api(`/${f.seriesId}/entrants/${t.id}/members`, 'POST', { user_id: 'bad', username: 'x', avatar_url: 5 })).status).toBe(400);
+  });
+
+  it('falls back to a participant avatar for roster rows saved without one', async () => {
+    const game = await createGame();
+    const mode = await createGameMode(game.id);
+    const m = await createMatch(game.id, mode.id);
+    await createMatchParticipant(m.id, 'u-old', 'Old', { avatar_url: 'http://a/old.png' });
+    const f = await createSeriesWithEntrants(pg(), { entrantType: 'team', entrants: [{ name: 'T', members: ['old', 'nobody'] }] });
+    const members = (await api(`/${f.seriesId}/entrants`)).data.entrants[0].members;
+    expect(members.find((x: any) => x.user_id === 'u-old').avatar_url).toBe('http://a/old.png');
+    expect(members.find((x: any) => x.user_id === 'u-nobody').avatar_url).toBeNull();
   });
 });
 

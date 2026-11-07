@@ -70,6 +70,8 @@ export const seriesEntrantMembers = pgTable('series_entrant_members', {
   user_id: text('user_id').notNull(),
   discord_user_id: text('discord_user_id'),
   username: text('username').notNull(),
+  /** Discord avatar URL captured when the player was added; kept fresh by the scheduler's avatar job. */
+  avatar_url: text('avatar_url'),
   role: text('role', { enum: ['captain', 'player', 'sub'] }).notNull().default("player"),
   joined_at: timestamp('joined_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   left_at: timestamp('left_at', { withTimezone: true, mode: 'date' }),

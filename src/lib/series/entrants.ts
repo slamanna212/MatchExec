@@ -4,7 +4,7 @@
  * event mutations do. Leaving a roster is soft (`left_at`), because history counts: a player's old results still belong
  * to the entrant they raced for.
  */
-import { and, asc, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import { uniqueViolationConstraint } from '../../../lib/db/errors';
 import {
@@ -40,7 +40,18 @@ async function loadMembers(ex: Executor, entrantIds: string[], includeLeft: bool
   const rows = await ex.select().from(seriesEntrantMembers)
     .where(and(inArray(seriesEntrantMembers.entrant_id, entrantIds), includeLeft ? undefined : isNull(seriesEntrantMembers.left_at)))
     .orderBy(roleRank, asc(seriesEntrantMembers.joined_at), asc(seriesEntrantMembers.id));
+  // Rows saved before avatars were stored fall back to an avatar the participant tables already know.
+  const missing = [...new Set(rows.filter((r) => !r.avatar_url && r.discord_user_id).map((r) => r.discord_user_id as string))];
+  const known = new Map<string, string>();
+  if (missing.length > 0) {
+    const found = await ex.select({ id: matchParticipants.discord_user_id, avatar: matchParticipants.avatar_url, at: matchParticipants.joined_at })
+      .from(matchParticipants)
+      .where(and(inArray(matchParticipants.discord_user_id, missing), isNotNull(matchParticipants.avatar_url)))
+      .orderBy(asc(matchParticipants.joined_at));
+    for (const f of found) if (f.id && f.avatar) known.set(f.id, f.avatar);
+  }
   for (const r of rows) {
+    if (!r.avatar_url && r.discord_user_id) r.avatar_url = known.get(r.discord_user_id) ?? null;
     const list = out.get(r.entrant_id) ?? [];
     list.push(r);
     out.set(r.entrant_id, list);
@@ -207,7 +218,7 @@ async function insertMember(tx: Executor, series: SeriesRow, entrantId: string, 
   try {
     const [row] = await tx.insert(seriesEntrantMembers).values({
       id: newEntrantMemberId(), entrant_id: entrantId, series_id: series.id, user_id: member.user_id.trim(),
-      discord_user_id: clean(member.discord_user_id), username: member.username.trim(), role, joined_at: nextJoinedAt(),
+      discord_user_id: clean(member.discord_user_id), username: member.username.trim(), avatar_url: clean(member.avatar_url), role, joined_at: nextJoinedAt(),
     }).returning();
     return row;
   } catch (err) { return mapUnique(err); }
@@ -435,7 +446,7 @@ export async function copyEntrants(ex: Executor, targetSeriesId: string, input: 
         try {
           // a savepoint, so a member refused by the roster rules does not abort the whole copy
           await tx.transaction((sp) => insertMember(sp, target, id, {
-            user_id: m.user_id, discord_user_id: m.discord_user_id, username: m.username, role: target.entrant_type === 'solo' ? 'player' : m.role,
+            user_id: m.user_id, discord_user_id: m.discord_user_id, username: m.username, avatar_url: m.avatar_url, role: target.entrant_type === 'solo' ? 'player' : m.role,
           }));
         } catch (err) {
           if (!(err instanceof SeriesError)) throw err;
@@ -481,7 +492,7 @@ export async function searchPlayers(ex: Executor, query: string, limit = 20): Pr
     .from(matchParticipants).where(ilike(matchParticipants.username, pattern)).orderBy(desc(matchParticipants.joined_at)).limit(cap));
   add(await ex.select({ user_id: tournamentParticipants.user_id, discord_user_id: tournamentParticipants.discord_user_id, username: tournamentParticipants.username, avatar_url: sql<string | null>`null`, at: tournamentParticipants.joined_at })
     .from(tournamentParticipants).where(ilike(tournamentParticipants.username, pattern)).orderBy(desc(tournamentParticipants.joined_at)).limit(cap));
-  add(await ex.select({ user_id: seriesEntrantMembers.user_id, discord_user_id: seriesEntrantMembers.discord_user_id, username: seriesEntrantMembers.username, avatar_url: sql<string | null>`null`, at: seriesEntrantMembers.joined_at })
+  add(await ex.select({ user_id: seriesEntrantMembers.user_id, discord_user_id: seriesEntrantMembers.discord_user_id, username: seriesEntrantMembers.username, avatar_url: seriesEntrantMembers.avatar_url, at: seriesEntrantMembers.joined_at })
     .from(seriesEntrantMembers).where(ilike(seriesEntrantMembers.username, pattern)).orderBy(desc(seriesEntrantMembers.joined_at)).limit(cap));
 
   return [...found.values()]
