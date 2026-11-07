@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs, Card, SegmentedControl,
+  Stack, Group, Text, Grid, Skeleton, Alert, Anchor, Breadcrumbs, SegmentedControl,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { IconAlertCircle } from '@tabler/icons-react';
@@ -259,9 +259,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
             )}
             {tab === 'standings' && <StandingsTab series={series} refreshToken={dataVersion} />}
             {tab === 'entrants' && (
-              <Card withBorder radius="md" padding="lg">
-                <SeriesEntrantsPanel series={series} onChanged={() => { void fetchData(); }} />
-              </Card>
+              <SeriesEntrantsPanel series={series} onChanged={() => { void fetchData(); }} />
             )}
           </Stack>
         </Grid.Col>
