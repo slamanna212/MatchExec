@@ -420,21 +420,19 @@ const ENTRANTS = ['a', 'b', 'c'].map((id, i) => ({
 }));
 
 describe('add event menu', () => {
-  it('disables the builder entries without entrants but keeps attach available', async () => {
+  it('disables the builder entries without entrants', async () => {
     stubApi('active');
     await renderPage('/series/s1?tab=schedule');
     await act(async () => { buttonByText('Add event')!.click(); });
-    expect(menuItem('Match').getAttribute('data-disabled')).not.toBeNull();
-    expect(menuItem('Attach existing...').getAttribute('data-disabled')).toBeNull();
+    expect(menuItem('Single match').getAttribute('data-disabled')).not.toBeNull();
     expect(document.body.textContent).toContain('Add and approve entrants to create events');
   });
 
   it.each([
-    ['Match', 'Create match'],
+    ['Single match', 'Create match'],
     ['Tournament', 'Create tournament'],
     ['Round robin', 'Double round robin'],
     ['Playoff placeholder', 'Add playoffs'],
-    ['Attach existing...', 'Attach existing event'],
   ])('opens the %s dialog', async (item, marker) => {
     stubApi('active', { entrants: ENTRANTS });
     await renderPage('/series/s1?tab=schedule');
