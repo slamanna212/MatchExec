@@ -9,7 +9,7 @@ await esbuild.build({
   entryPoints: [join(__dirname, 'processes/scheduler/index.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node26',
+  target: 'node24',
   format: 'cjs',
   outfile: join(__dirname, 'dist/scheduler.js'),
   external: [

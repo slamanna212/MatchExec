@@ -16,6 +16,10 @@ updates:
       - dependency-name: "typescript"
         update-types:
           - "version-update:semver-major"
+      # The project targets Node 24 (Docker image, esbuild target, CI); the move to 26 is deliberate.
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       # Group all patch updates together
       patch-updates:
@@ -152,6 +156,10 @@ updates:
     ignore:
       # A Postgres major bump needs the dump/restore procedure (plan 7.3), not a PR.
       - dependency-name: "postgres"
+        update-types:
+          - "version-update:semver-major"
+      # The project targets Node 24; moving the base image to 26 is a deliberate edit.
+      - dependency-name: "node"
         update-types:
           - "version-update:semver-major"
     assignees:

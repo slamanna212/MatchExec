@@ -11,7 +11,7 @@ await esbuild.build({
   entryPoints: [join(__dirname, 'scripts/import-sqlite.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node26',
+  target: 'node24',
   format: 'cjs',
   outfile: join(__dirname, 'dist/import-sqlite.js'),
   external: [

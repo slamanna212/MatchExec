@@ -83,7 +83,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.11",
-    "@types/node": "26.6.5",
+    "@types/node": "24.19.2",
     "@types/node-cron": "3.0.11",
     "@types/pg": "^8.23.1",
     "@types/react": "19.3.0",

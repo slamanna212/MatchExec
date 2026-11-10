@@ -29,7 +29,7 @@ Comma list from `web,bot,scheduler,stats,migrate`, default `all`. In the Docker 
 ## Development
 
 ### Prerequisites
-- Node.js 24+ (the Docker image uses Node 26)
+- Node.js 24 (the Docker image, esbuild targets and CI all use Node 24; the move to 26 is planned for later)
 - pnpm (pinned via `packageManager`; enable with `corepack enable`)
 - Docker (for the dev Postgres container)
 - PM2 (installed as a dependency)
@@ -497,7 +497,7 @@ tests/
 - **Database**: PostgreSQL 18, Drizzle ORM, `pg`; PGlite for tests
 - **Process Management**: PM2 (dev), s6-overlay v3 (Docker)
 - **Voice**: @discordjs/voice, ffmpeg-static
-- **Tooling**: Node 26 (Docker image; 24+ for development), pnpm, tsx, esbuild, Vitest, ESLint
+- **Tooling**: Node 24 (Docker image, CI and development), pnpm, tsx, esbuild, Vitest, ESLint
 
 ## Scripts
 

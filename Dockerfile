@@ -1,5 +1,5 @@
 # Builder stage - uses TARGETPLATFORM by default for correct musl binaries
-FROM node:26-alpine AS dependencies
+FROM node:24-alpine AS dependencies
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN apk add --no-cache python3 py3-setuptools make g++ git
 
 # Enable pnpm via Corepack (version pinned by "packageManager" in package.json)
 COPY package.json ./
-# Node 25+ no longer bundles Corepack, so install it first
+# Install the current Corepack (the one bundled with Node 24 can lag behind pnpm releases; Node 25+ drops it entirely)
 RUN npm install -g corepack && corepack enable && corepack install
 
 # Keep the fetched store in a layer: CI exports layers, not cache-mount contents.
@@ -45,7 +45,7 @@ RUN pnpm run build
 RUN node -e 'const fs = require("node:fs"); for (const name of fs.readdirSync("public")) { fs.rmSync("public/" + name, { recursive: true, force: true }); if (name !== "uploads") fs.symlinkSync("/app/dist/client/" + name, "public/" + name); } fs.mkdirSync("public/uploads", { recursive: true });' && \
     chmod -R a-w /app/dist/client /app/data
 
-FROM node:26-alpine AS s6-download
+FROM node:24-alpine AS s6-download
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG TARGETARCH
 RUN apk add --no-cache curl xz && mkdir /overlay && \
@@ -54,7 +54,7 @@ RUN apk add --no-cache curl xz && mkdir /overlay && \
     curl -fL "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${arch}.tar.xz" -o /tmp/arch.tar.xz && \
     tar -C /overlay -Jxpf /tmp/noarch.tar.xz && tar -C /overlay -Jxpf /tmp/arch.tar.xz
 
-FROM node:26-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 # Include embedded PostgreSQL and client tools for migrations, backups and restores.

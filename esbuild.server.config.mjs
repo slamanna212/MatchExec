@@ -10,7 +10,7 @@ await esbuild.build({
   entryPoints: [join(__dirname, 'src/server/index.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node26',
+  target: 'node24',
   format: 'cjs',
   outfile: join(__dirname, 'dist/server.js'),
   external: [
