@@ -13,7 +13,6 @@ import {
   generateSingleEliminationMatches, getBracketWinner, getCurrentRoundInfo, isRoundComplete, saveGeneratedMatches, TournamentError, tournamentMatchCapacity,
   type BracketAssignment, type GeneratedMatch, type TournamentMatchInfo,
 } from '@/lib/tournaments';
-import { AfterCommit as Effects } from '@/lib/matches/effects';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
 const setupVoice = vi.fn().mockResolvedValue(true);
@@ -39,11 +38,9 @@ const assignmentsFor = (teams: string[]): BracketAssignment[] => teams.map((team
 const infosFor = (tournamentId: string, round: number, generated: GeneratedMatch[], bracket: 'winners' | 'losers' | 'final' = 'winners'): TournamentMatchInfo[] =>
   generated.map((m, i) => ({ id: m.id, tournament_id: tournamentId, round, bracket_type: bracket, team1_id: m.team1_id, team2_id: m.team2_id, match_order: i + 1 }));
 
-/** Generate + save one round in a transaction (voice setup deferred like the API does). */
+/** Generate + save one round in a transaction. */
 async function saveRound(tournamentId: string, generated: GeneratedMatch[], round: number, opts: { addAllTeams?: boolean } = {}) {
-  const after = new Effects();
-  await db.transaction((tx) => saveGeneratedMatches(tx, generated, infosFor(tournamentId, round, generated), opts, after));
-  await after.run();
+  await db.transaction((tx) => saveGeneratedMatches(tx, generated, infosFor(tournamentId, round, generated), opts));
 }
 
 describe('generateSingleEliminationMatches', () => {
@@ -199,7 +196,7 @@ describe('saveGeneratedMatches', () => {
     expect(parts).toHaveLength(4);
     expect(parts.filter((p) => p.team_id === mts[0].id)).toHaveLength(2);
     expect(await pg().select().from(matchGames).where(eq(matchGames.match_id, match.id))).toHaveLength(2);
-    expect(setupVoice).toHaveBeenCalledWith(match.id);
+    expect(setupVoice).not.toHaveBeenCalled(); // voice channels are created right before the match starts, not at generation
   });
 
   it('adds the roster of whichever side is known when a match is only half filled', async () => {
@@ -207,19 +204,9 @@ describe('saveGeneratedMatches', () => {
     const [a] = await insertTeams(t.id, 1, 2);
     const g = (await generateSingleEliminationMatches(db, t.id, assignmentsFor(await insertTeams(t.id, 2))))[0];
     const half: GeneratedMatch = { ...g, id: 'half-match', team1_id: a, team2_id: undefined };
-    const after = new Effects();
-    await db.transaction((tx) => saveGeneratedMatches(tx, [half], [{ id: 'half-match', tournament_id: t.id, round: 1, bracket_type: 'winners', team1_id: a, match_order: 1 }], {}, after));
+    await db.transaction((tx) => saveGeneratedMatches(tx, [half], [{ id: 'half-match', tournament_id: t.id, round: 1, bracket_type: 'winners', team1_id: a, match_order: 1 }], {}));
     expect(await pg().select().from(matchParticipants).where(eq(matchParticipants.match_id, 'half-match'))).toHaveLength(2);
     expect(await pg().select().from(matchTeams).where(eq(matchTeams.match_id, 'half-match'))).toHaveLength(0);
-  });
-
-  it('a voice channel failure never fails the save', async () => {
-    setupVoice.mockRejectedValueOnce(new Error('bot offline'));
-    const t = await newTournament();
-    const teams = await insertTeams(t.id, 2);
-    const generated = await generateSingleEliminationMatches(db, t.id, assignmentsFor(teams));
-    await expect(saveRound(t.id, generated, 1)).resolves.toBeUndefined();
-    expect(await pg().select().from(matches).where(eq(matches.tournament_id, t.id))).toHaveLength(1);
   });
 
   it('rolls everything back when the transaction fails (no half-saved bracket)', async () => {
@@ -227,7 +214,7 @@ describe('saveGeneratedMatches', () => {
     const teams = await insertTeams(t.id, 4);
     const generated = await generateSingleEliminationMatches(db, t.id, assignmentsFor(teams));
     const bad = [...generated, { ...generated[0] }]; // duplicate match id -> primary key violation on the last insert
-    await expect(db.transaction((tx) => saveGeneratedMatches(tx, bad, infosFor(t.id, 1, bad), {}, new Effects()))).rejects.toThrow();
+    await expect(db.transaction((tx) => saveGeneratedMatches(tx, bad, infosFor(t.id, 1, bad), {}))).rejects.toThrow();
     expect(await pg().select().from(matches)).toHaveLength(0);
     expect(await pg().select().from(tournamentMatches)).toHaveLength(0);
   });
@@ -378,9 +365,7 @@ describe('generateCumulativeMatches', () => {
     const t = await createTournament(g.gameId, { game_mode_id: g.modeId, format: 'cumulative-points', rounds_per_match: 1 });
     await insertTeams(t.id, 3, 1);
     const { matches: generated, tournamentMatches: infos } = await generateCumulativeMatches(db, t.id);
-    const after = new Effects();
-    await db.transaction((tx) => saveGeneratedMatches(tx, generated, infos, { addAllTeams: true }, after));
-    await after.run();
+    await db.transaction((tx) => saveGeneratedMatches(tx, generated, infos, { addAllTeams: true }));
     const parts = await pg().select().from(matchParticipants).where(eq(matchParticipants.match_id, generated[0].id));
     expect(parts).toHaveLength(3);
     expect(await pg().select().from(matchTeams).where(and(eq(matchTeams.match_id, generated[0].id), eq(matchTeams.is_reserve, false)))).toHaveLength(3);

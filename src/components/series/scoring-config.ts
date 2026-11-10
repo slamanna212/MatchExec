@@ -76,11 +76,18 @@ export function switchScoringMode(config: SeriesScoringConfig, mode: SeriesStand
   return next;
 }
 
-/** Tiebreakers currently in effect (the stored list, else the mode's default). Mirrors the server: a head_to_head table with league points ranks on points first unless a list is stored. */
+/** True when a head_to_head table awards league points (any of win / loss / tie points is non-zero): then standings always rank on them. */
+export function hasLeaguePoints(config: SeriesScoringConfig, mode: SeriesStandingsMode): boolean {
+  return mode === 'head_to_head' && ((config.win_points ?? 0) !== 0 || (config.loss_points ?? 0) !== 0 || (config.tie_points ?? 0) !== 0);
+}
+
+/**
+ * Tiebreakers currently in effect (the stored list, else the mode's default). Mirrors the server: with league points the
+ * table ranks on points first, so a stored list that does not place 'points' gets it in front.
+ */
 export function effectiveTiebreakers(config: SeriesScoringConfig, mode: SeriesStandingsMode): SeriesTiebreaker[] {
-  if (config.tiebreakers && config.tiebreakers.length > 0) return config.tiebreakers;
-  const league = mode === 'head_to_head'
-    && ((config.win_points ?? 0) !== 0 || (config.loss_points ?? 0) !== 0 || (config.tie_points ?? 0) !== 0);
+  const league = hasLeaguePoints(config, mode);
+  if (config.tiebreakers && config.tiebreakers.length > 0) return league && !config.tiebreakers.includes('points') ? ['points', ...config.tiebreakers] : config.tiebreakers;
   return league ? ['points', ...DEFAULT_TIEBREAKERS[mode]] : DEFAULT_TIEBREAKERS[mode];
 }
 

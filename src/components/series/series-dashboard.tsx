@@ -160,6 +160,12 @@ const SeriesCard = memo(({ series, onViewDetails, onAdvance, isTransitioning }: 
             <Text size="xs" c="dimmed">Events</Text>
             <Text size="sm" fw={500}>{series.completed_event_count}/{series.event_count}</Text>
           </Stack>
+          {series.entrant_type === 'team' && series.entrant_count > 0 && (
+            <Stack gap={2} align="center">
+              <Text size="xs" c="dimmed">Teams</Text>
+              <Text size="sm" fw={500}>{series.entrant_count}</Text>
+            </Stack>
+          )}
           <Stack gap={2} align="center">
             <Text size="xs" c="dimmed">Players</Text>
             <Text size="sm" fw={500}>{series.participant_count}</Text>

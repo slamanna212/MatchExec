@@ -158,7 +158,7 @@ async function progressSingleElimination(tx: Executor, tournament: TournamentRow
     team2_id: match.team2_id,
     match_order: index + 1,
   }));
-  await saveGeneratedMatches(tx, nextRoundMatches, infos, {}, after);
+  await saveGeneratedMatches(tx, nextRoundMatches, infos, {});
 
   return {
     message: `Generated ${nextRoundMatches.length} matches for Round ${maxWinnersRound + 1}`,
@@ -216,7 +216,7 @@ async function progressDoubleElimination(tx: Executor, tournament: TournamentRow
     orderInRound.set(key, order);
     return { id: match.id, tournament_id: tournamentId, round: planned.round, bracket_type: planned.bracket, team1_id: planned.team1, team2_id: planned.team2, match_order: order };
   });
-  await saveGeneratedMatches(tx, generated, infos, {}, after);
+  await saveGeneratedMatches(tx, generated, infos, {});
 
   const groups = new Map<string, number>();
   for (const p of plan.matches) {

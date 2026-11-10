@@ -7,7 +7,7 @@ import { IconPlus, IconArrowUp, IconArrowDown, IconX, IconChevronDown, IconInfoC
 import type { SeriesScoringConfig, SeriesScoringType, SeriesStandingsMode } from '@/shared/series-types';
 import { ordinal } from './series-shared';
 import {
-  ALLOWED_TIEBREAKERS, POSITION_PRESETS, TIEBREAKER_LABELS, effectiveTiebreakers, isLegacyScoringConfig, moveItem,
+  ALLOWED_TIEBREAKERS, POSITION_PRESETS, TIEBREAKER_LABELS, effectiveTiebreakers, hasLeaguePoints, isLegacyScoringConfig, moveItem,
   suggestNextPlace, switchScoringMode,
 } from './scoring-config';
 
@@ -105,6 +105,7 @@ function TiebreakerEditor({
   mode, value, onChange,
 }: { mode: SeriesStandingsMode; value: SeriesScoringConfig; onChange: (v: SeriesScoringConfig) => void }): JSX.Element {
   const list = effectiveTiebreakers(value, mode);
+  const leagueActive = hasLeaguePoints(value, mode); // league points always count, so they cannot be removed from the order
   const remaining = ALLOWED_TIEBREAKERS[mode].filter((t) => !list.includes(t));
   const set = (next: typeof list) => onChange({ ...value, tiebreakers: next });
 
@@ -112,7 +113,7 @@ function TiebreakerEditor({
     <div>
       <Text size="sm" fw={500}>Tiebreakers</Text>
       <Text size="xs" c="dimmed" mb="xs">
-        Applied in this order when entrants are level{value.tiebreakers ? '.' : ' (default order, change it to customise).'}
+        {leagueActive ? 'Entrants are ranked by league points first; the rest of the order breaks ties.' : `Applied in this order when entrants are level${value.tiebreakers ? '.' : ' (default order, change it to customise).'}`}
       </Text>
       <Stack gap={6}>
         {list.map((t, i) => (
@@ -133,7 +134,7 @@ function TiebreakerEditor({
             </ActionIcon>
             <ActionIcon
               variant="subtle" size="sm" color="red" aria-label={`Remove ${TIEBREAKER_LABELS[t]}`}
-              disabled={list.length <= 1} onClick={() => set(list.filter((x) => x !== t))}
+              disabled={list.length <= 1 || (leagueActive && t === 'points')} onClick={() => set(list.filter((x) => x !== t))}
             >
               <IconX size={14} />
             </ActionIcon>

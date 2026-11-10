@@ -91,9 +91,9 @@ export const scheduleApi = {
   seedPreview: (seriesId: string, eventId: string) =>
     request<SeedPreviewResponse>(`${base(seriesId)}/events/${enc(eventId)}/seed-preview`, undefined, 'Failed to load the qualifiers'),
 
-  seedEvent: (seriesId: string, eventId: string, entrantIds?: string[]) =>
+  seedEvent: (seriesId: string, eventId: string, entrantIds?: string[], force?: boolean) =>
     request<{ event: SeriesEventView; tournament_id: string }>(
-      `${base(seriesId)}/events/${enc(eventId)}/seed`, jsonInit('POST', entrantIds ? { entrant_ids: entrantIds } : {}), 'Failed to seed the playoffs',
+      `${base(seriesId)}/events/${enc(eventId)}/seed`, jsonInit('POST', { ...(entrantIds ? { entrant_ids: entrantIds } : {}), ...(force ? { force: true } : {}) }), 'Failed to seed the playoffs',
     ),
 
   standings: (seriesId: string, scope: string, view: 'entrant' | 'individual') =>

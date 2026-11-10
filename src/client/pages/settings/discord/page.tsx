@@ -20,6 +20,7 @@ interface DiscordSettings {
   mention_everyone?: boolean;
   voice_channel_category_id?: string;
   voice_channel_cleanup_delay_minutes?: number;
+  voice_channel_lead_minutes?: number;
   signup_dm_enabled?: boolean;
   commander_dm_enabled?: boolean;
 }
@@ -184,6 +185,7 @@ export default function DiscordSettingsPage() {
       mention_everyone: false,
       voice_channel_category_id: '',
       voice_channel_cleanup_delay_minutes: 10,
+      voice_channel_lead_minutes: 15,
       signup_dm_enabled: true,
       commander_dm_enabled: true,
     },
@@ -213,6 +215,7 @@ export default function DiscordSettingsPage() {
             mention_everyone: data.discord.mention_everyone || false,
             voice_channel_category_id: data.discord.voice_channel_category_id || '',
             voice_channel_cleanup_delay_minutes: data.discord.voice_channel_cleanup_delay_minutes ?? 10,
+            voice_channel_lead_minutes: data.discord.voice_channel_lead_minutes ?? 15,
             signup_dm_enabled: data.discord.signup_dm_enabled !== undefined ? data.discord.signup_dm_enabled : true,
             commander_dm_enabled: data.discord.commander_dm_enabled !== undefined ? data.discord.commander_dm_enabled : true,
           });
@@ -265,6 +268,7 @@ export default function DiscordSettingsPage() {
             mention_everyone: refreshedData.mention_everyone || false,
             voice_channel_category_id: refreshedData.voice_channel_category_id || '',
             voice_channel_cleanup_delay_minutes: refreshedData.voice_channel_cleanup_delay_minutes ?? 10,
+            voice_channel_lead_minutes: refreshedData.voice_channel_lead_minutes ?? 15,
             signup_dm_enabled: refreshedData.signup_dm_enabled !== undefined ? refreshedData.signup_dm_enabled : true,
             commander_dm_enabled: refreshedData.commander_dm_enabled !== undefined ? refreshedData.commander_dm_enabled : true,
           });
@@ -522,6 +526,12 @@ export default function DiscordSettingsPage() {
                   />
 
                   <NumberInput
+                    label="Create voice channels before match start (minutes)"
+                    description="Voice channels are created this many minutes before a match's start time. A match started by hand gets its channels when it starts."
+                    min={0} max={1440} allowDecimal={false}
+                    {...form.getInputProps('voice_channel_lead_minutes')}
+                  />
+                  <NumberInput
                     label="Voice channel cleanup delay (minutes)"
                     description="After a match finishes, is cancelled, or is deleted, wait this long and then remove channels once everyone has left."
                     min={0} max={10080} allowDecimal={false}
@@ -530,7 +540,7 @@ export default function DiscordSettingsPage() {
                   <TextInput
                     label="Voice Channel Category ID"
                     placeholder="Category ID for auto-created voice channels"
-                    description="Voice channels will be automatically created in this category when matches start"
+                    description="Voice channels will be automatically created in this category shortly before matches start"
                     {...form.getInputProps('voice_channel_category_id')}
                     disabled={loading}
                     error={form.values.voice_channel_category_id && !/^\d{17,19}$/.test(form.values.voice_channel_category_id) ? 'Invalid Discord category ID format' : null}

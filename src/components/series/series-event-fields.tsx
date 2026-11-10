@@ -99,7 +99,7 @@ interface MatchTemplateFieldsProps {
   hideMaps?: boolean;
 }
 
-/** Game (from the allowed set), maps, rounds and rules of a match or tournament the series creates. */
+/** Game (from the allowed set), maps (matches) or maps per match (tournaments), and rules of a match or tournament the series creates. */
 export function MatchTemplateFields({ series, catalog, value, onChange, hideMaps }: MatchTemplateFieldsProps): JSX.Element {
   const gameIds = useMemo(() => allowedGameIds(series, catalog), [series, catalog]);
   const nameOf = (id: string) => catalog.games.find((g) => g.id === id)?.name ?? id;
@@ -118,15 +118,17 @@ export function MatchTemplateFields({ series, catalog, value, onChange, hideMaps
           allowDeselect={false}
           searchable
         />
-        <NumberInput
-          label="Rounds"
-          placeholder="Series default"
-          value={value.rounds ?? ''}
-          onChange={(v) => set({ rounds: typeof v === 'number' ? v : null })}
-          min={1}
-          max={99}
-          allowDecimal={false}
-        />
+        {hideMaps && (
+          <NumberInput
+            label="Maps per match"
+            placeholder="Series default"
+            value={value.rounds ?? ''}
+            onChange={(v) => set({ rounds: typeof v === 'number' ? v : null })}
+            min={1}
+            max={99}
+            allowDecimal={false}
+          />
+        )}
         <Select
           label="Rules"
           placeholder="Series default"
@@ -139,7 +141,7 @@ export function MatchTemplateFields({ series, catalog, value, onChange, hideMaps
       {!hideMaps && (
         <MultiSelect
           label="Maps"
-          description={modeId ? 'Played in this order' : 'Pick a game with a matching mode to choose maps'}
+          description={modeId ? 'One game per map, played in this order' : 'Pick a game with a matching mode to choose maps'}
           placeholder={value.maps.length === 0 ? 'Series default maps' : undefined}
           data={maps.map((m) => ({ value: m.id, label: m.name }))}
           value={value.maps}

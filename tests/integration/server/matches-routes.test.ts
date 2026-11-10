@@ -571,10 +571,10 @@ describe('POST /api/matches/:id/assign-teams', () => {
 });
 
 describe('GET /api/matches/:id/teams', () => {
-  it('lazily creates teams for a match in battle', async () => {
+  it('does not create teams for a match in battle (a GET never writes)', async () => {
     const m = await createMatch(gameId, modeId, { status: 'battle' });
     const res = await appRequest(`/api/matches/${m.id}/teams`);
-    expect(res.data.teams.filter((t: any) => !t.is_reserve)).toHaveLength(2);
+    expect(res.data.teams).toEqual([]);
   });
 });
 

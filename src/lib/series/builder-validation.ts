@@ -57,7 +57,7 @@ function validateMatchTemplate(m: unknown, label: string, requireStart: boolean)
   if (requireStart && !isDateString(m.start_date)) return `${label}.start_date is required and must be a valid date`;
   if (!requireStart && m.start_date !== undefined) return `${label}.start_date is computed by the generator`;
   if (m.maps !== undefined && (!Array.isArray(m.maps) || !m.maps.every((x) => typeof x === 'string'))) return `${label}.maps must be an array of map ids`;
-  if (m.rounds !== undefined && (typeof m.rounds !== 'number' || !Number.isInteger(m.rounds) || m.rounds < 1 || m.rounds > 9)) return `${label}.rounds must be an integer from 1 to 9`;
+  if (m.rounds !== undefined) return `${label}.rounds is not accepted: a match plays one game per map, so choose the maps instead`;
   if (m.rules !== undefined && !RULESETS.includes(m.rules as string)) return `${label}.rules must be casual or competitive`;
   return firstError(
     stringField(m, 'name', 255, label), stringField(m, 'description', 1000, label), stringField(m, 'game_id', 100, label),

@@ -264,7 +264,8 @@ export function SeriesMatchDefaultsFields({ form, update }: { form: SeriesFormDa
       </Text>
       <Group grow align="flex-start">
         <NumberInput
-          label="Rounds per match"
+          label="Maps per tournament match"
+          description="Matches play one game per selected map"
           placeholder="Game default"
           value={form.match_rounds ?? ''}
           onChange={(v) => update('match_rounds', typeof v === 'number' ? v : null)}

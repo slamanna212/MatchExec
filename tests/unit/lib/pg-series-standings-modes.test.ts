@@ -73,6 +73,14 @@ describe('head_to_head mode', () => {
     expect(rows.map((r) => r.rank)).toEqual([1, 1]);
   });
 
+  it('does not rank a drawn pairing below entrants that have not played (draw = half a head-to-head win)', async () => {
+    const { seriesId, play } = await league(['Alpha', 'Bravo', 'Charlie'], h2h({ tiebreakers: ['match_wins', 'head_to_head', 'maps_won'] }));
+    await play('Alpha', 'Bravo', ['a', 'b']); // tied match, 1-1 maps
+    const rows = await getSeriesStandings(pg(), seriesId);
+    expect(rows[2].name).toBe('Charlie');
+    expect(rows.map((r) => r.name).slice(0, 2).sort()).toEqual(['Alpha', 'Bravo']);
+  });
+
   it('awards league points with the event multiplier and sorts by them when configured', async () => {
     const { seriesId, play } = await league(['Alpha', 'Bravo', 'Charlie'], h2h({ win_points: 3, loss_points: 0, tie_points: 1 }));
     await play('Bravo', 'Alpha', ['a'], { points_multiplier: 2 }); // Bravo 6
@@ -81,6 +89,24 @@ describe('head_to_head mode', () => {
     const rows = await getSeriesStandings(pg(), seriesId);
     expect(rows.map((r) => [r.name, r.total_points])).toEqual([['Bravo', 6], ['Charlie', 4], ['Alpha', 1]]);
     expect(byName(rows, 'Bravo').events.map((e) => e.points)).toEqual([6, null, 0]);
+  });
+
+  it('ranks on league points first even when a custom tiebreaker list does not include points', async () => {
+    // Alpha has the only win but fewer points than Bravo and Charlie, who tied each other four times.
+    const { seriesId, play } = await league(['Alpha', 'Bravo', 'Charlie'], h2h({ win_points: 3, tie_points: 1, tiebreakers: ['match_wins', 'map_diff'] }));
+    await play('Alpha', 'Charlie', ['a']);              // Alpha 3 points, 1 win
+    for (let i = 0; i < 4; i++) await play('Bravo', 'Charlie', ['draw']); // 4 tied matches: 4 points each, no wins
+    const rows = await getSeriesStandings(pg(), seriesId);
+    expect(rows.map((r) => [r.name, r.total_points, r.match_wins])).toEqual([['Bravo', 4, 0], ['Charlie', 4, 0], ['Alpha', 3, 1]]);
+  });
+
+  it('an explicit position for points in a custom list is respected (wins can outrank points)', async () => {
+    const { seriesId, play } = await league(['Alpha', 'Bravo'], h2h({ win_points: 3, loss_points: 0, tie_points: 3, tiebreakers: ['match_wins', 'points'] }));
+    await play('Alpha', 'Bravo', ['a']);                // Alpha 1 win, 3 pts
+    await play('Bravo', 'Alpha', ['draw']);             // tie worth 3 points to each: Alpha 6, Bravo 3
+    await play('Alpha', 'Bravo', ['draw']);             // Alpha 9, Bravo 6
+    const rows = await getSeriesStandings(pg(), seriesId);
+    expect(rows.map((r) => [r.name, r.match_wins, r.total_points])).toEqual([['Alpha', 1, 9], ['Bravo', 0, 6]]);
   });
 
   it('breaks a two-way tie on head-to-head before alphabetical order', async () => {

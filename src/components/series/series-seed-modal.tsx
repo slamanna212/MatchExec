@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
-import { Modal, Stack, Group, Button, Text, Badge, Alert, Loader, Center, Divider } from '@mantine/core';
+import { Modal, Stack, Group, Button, Text, Badge, Alert, Loader, Center, Divider, Checkbox } from '@mantine/core';
 import { IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import type { SeedPreviewResponse } from '@/shared/series-types';
@@ -22,6 +22,7 @@ function SeedForm({ seriesId, event, onClose, onSeeded }: Omit<SeedModalProps, '
   const [order, setOrder] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [force, setForce] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,13 +44,15 @@ function SeedForm({ seriesId, event, onClose, onSeeded }: Omit<SeedModalProps, '
 
   const byId = new Map((preview?.qualifiers ?? []).map((q) => [q.entrant_id, q]));
   const reordered = preview ? seedOverride(preview.qualifiers, order) !== undefined : false;
+  // A custom seed order is an explicit choice and skips the stage check; otherwise an unfinished source needs confirming.
+  const blocked = !!preview && preview.blockers.length > 0 && !reordered && !force;
 
   const submit = async () => {
     if (!preview) return;
     setSaving(true);
     const res = await runWithToast(
       `series-seed-${event.id}`, 'Seeding playoffs...', 'Playoffs seeded',
-      () => scheduleApi.seedEvent(seriesId, event.id, seedOverride(preview.qualifiers, order)),
+      () => scheduleApi.seedEvent(seriesId, event.id, seedOverride(preview.qualifiers, order), force),
     );
     setSaving(false);
     if (res) { onClose(); onSeeded(); }
@@ -65,6 +68,10 @@ function SeedForm({ seriesId, event, onClose, onSeeded }: Omit<SeedModalProps, '
       {preview && preview.warnings.length > 0 && (
         <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />} title="Check before seeding">
           <Stack gap={2}>{preview.warnings.map((w) => <Text key={w} size="sm">{w}</Text>)}</Stack>
+          {preview.blockers.length > 0 && !reordered && (
+            <Checkbox mt="xs" size="xs" checked={force} onChange={(e) => setForce(e.currentTarget.checked)}
+              label="Seed anyway (the standings may still change)" />
+          )}
         </Alert>
       )}
       {preview && preview.qualifiers.length === 0 && <Text size="sm" c="dimmed" ta="center">Nobody qualifies yet.</Text>}
@@ -90,7 +97,7 @@ function SeedForm({ seriesId, event, onClose, onSeeded }: Omit<SeedModalProps, '
       <Divider />
       <Group justify="flex-end">
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button onClick={() => { void submit(); }} loading={saving} disabled={!preview || preview.qualifiers.length < 2}>
+        <Button onClick={() => { void submit(); }} loading={saving} disabled={!preview || preview.qualifiers.length < 2 || blocked}>
           Seed playoffs
         </Button>
       </Group>

@@ -84,12 +84,12 @@ describe('createSeriesChecked / editSeries', () => {
     const g = await games();
     const id = await createSeriesChecked(pg(), {
       name: 'Season 1', entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Normal', game_id: g.ow.id, game_ids: [g.ow.id, g.mr.id, g.ow.id],
-      game_mode_id: g.owNormal.id, scoring_config: { mode: 'head_to_head', win_points: 3 }, match_defaults: { rounds: 3, rules: 'competitive' },
+      game_mode_id: g.owNormal.id, scoring_config: { mode: 'head_to_head', win_points: 3 }, match_defaults: { rounds_per_match: 3, rules: 'competitive' },
       discord_config: { weekly_schedule: false, schedule_lead_hours: 24 },
     });
     expect(await getSeriesById(pg(), id)).toMatchObject({
       status: 'created', entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Normal', game_ids: [g.ow.id, g.mr.id], game_mode_id: g.owNormal.id,
-      scoring_config: { mode: 'head_to_head', win_points: 3 }, match_defaults: { rounds: 3, rules: 'competitive' }, discord_config: { weekly_schedule: false, schedule_lead_hours: 24 },
+      scoring_config: { mode: 'head_to_head', win_points: 3 }, match_defaults: { rounds_per_match: 3, rules: 'competitive' }, discord_config: { weekly_schedule: false, schedule_lead_hours: 24 },
       previous_series_id: null,
     });
     const legacy = await createSeriesChecked(pg(), { name: 'Old style' });

@@ -24,7 +24,7 @@ import { logFeedEvent } from '../feed-helpers';
 import { getGame, getMode, getModeScoringType, listModes, type GameModeRow } from '../games';
 import { logger } from '../logger';
 import {
-  VoiceChannelService, addParticipantsBulk, casMatchStatus, createMatchFromRequest, createMatchTeams, createNamedMatchTeams, resolveModeFromMaps,
+  addParticipantsBulk, casMatchStatus, createMatchFromRequest, createMatchTeams, createNamedMatchTeams, resolveModeFromMaps,
   validateMatchRequest, type MatchRequestBody,
 } from '../matches';
 import { AfterCommit, bestEffort } from '../matches/effects';
@@ -219,8 +219,8 @@ async function tagIndividualTeams(tx: Executor, matchId: string, entrants: reado
 /**
  * Create a match for the series with its entrants' rosters preset (status `assign`, so signups are skipped): one named
  * `match_teams` row per entrant for Normal and team-endurance Position matches, one row per participant (tagged with
- * their entrant) for FFA / individual Position. Queues the standard announcement; voice channels are set up after the
- * caller commits (`after`). Runs inside the caller's transaction.
+ * their entrant) for FFA / individual Position. Queues the standard announcement; voice channels are created later, shortly before
+ * the match starts. Runs inside the caller's transaction.
  */
 export async function createSeriesMatchEventTx(
   tx: Executor, seriesId: string, input: CreateSeriesMatchInput, after: AfterCommit, opts: CreateEventOptions = {},
@@ -259,7 +259,7 @@ export async function createSeriesMatchEventTx(
     startDate: tpl.start_date,
     livestreamLink: tpl.livestream_link ?? defaults.livestream_link ?? series.livestream_link ?? undefined,
     rules: tpl.rules ?? defaults.rules,
-    rounds: tpl.rounds ?? defaults.rounds,
+    rounds: maps && maps.length > 0 ? maps.length : undefined, // one game per map
     maps,
     eventImageUrl: tpl.event_image_url ?? defaults.event_image_url ?? series.event_image_url ?? undefined,
     playerNotifications: tpl.player_notifications ?? defaults.player_notifications ?? series.player_notifications,
@@ -300,13 +300,6 @@ export async function createSeriesMatchEventTx(
     eventType: 'match_created', priority: 3, title: 'Match Created', description: `"${body.name}" was added to ${series.name}`,
     matchId, metadata: { gameName: created.match.game_name, seriesId },
   }));
-  after.add(async () => {
-    try {
-      await VoiceChannelService.setupMatchVoiceChannels(matchId);
-    } catch (error) {
-      logger.error(`Failed to create voice channels for series match ${matchId}:`, error); // never fails the request
-    }
-  });
   logger.debug(`Series ${seriesId}: created match ${matchId} (${entrants.length} entrants, ${scoring})`);
   return { event_id: eventId, match_id: matchId };
 }

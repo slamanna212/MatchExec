@@ -75,7 +75,7 @@ export async function generateTournamentMatchesInTx(
     }));
   }
 
-  await saveGeneratedMatches(tx, generated, infos, { addAllTeams: cumulative }, after);
+  await saveGeneratedMatches(tx, generated, infos, { addAllTeams: cumulative });
 
   if (options.announce !== false) {
     for (const match of generated) {

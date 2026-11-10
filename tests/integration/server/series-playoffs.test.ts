@@ -35,7 +35,22 @@ describe('GET /:id/events/:eventId/seed-preview', () => {
         { entrant_id: l.id.C, name: 'C', seed: 3, rank: 3, division: null },
       ],
       warnings: [],
+      blockers: [],
     });
+  });
+
+  it('seeding is refused (409) while the source is unfinished, and goes through with force: true or a manual order', async () => {
+    const l = await league();
+    await insertStage(l.seriesId, { name: 'Regular Season', status: 'active' });
+    const eventId = await plannedPlayoff(l.seriesId, bracketRule({ top: 3 }));
+    const blocked = await api(l.seriesId, `/events/${eventId}/seed`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.data.error).toMatch(/Regular Season.*force: true/);
+    expect((await api(l.seriesId, `/events/${eventId}/seed`, 'POST', { force: 'yes' })).status).toBe(400);
+    expect((await api(l.seriesId, `/events/${eventId}/seed`, 'POST', { force: true })).status).toBe(201);
+
+    const other = await plannedPlayoff(l.seriesId, bracketRule({ top: 3 }));
+    expect((await api(l.seriesId, `/events/${other}/seed`, 'POST', { entrant_ids: [l.id.C, l.id.D] })).status).toBe(201);
   });
 
   it('answers 404 for an unknown series or event and 409 once the event is live', async () => {

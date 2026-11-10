@@ -101,7 +101,7 @@ describe('round robin config', () => {
       stage_id: null, entrant_ids: null, double: true, divisions: 'within_and_cross', start_date: '2026-07-01', match_days: [3, 5],
       time_slots: ['18:00', '20:00'], timezone: 'Europe/Paris', concurrent_matches: 1, max_per_entrant_per_week: 1,
       skip_dates: ['2026-12-25'], points_multiplier: 1,
-      match: { game_id: 'ow2', maps: ['m1'], rounds: 3, rules: 'competitive', name_template: '{home} vs {away}' },
+      match: { game_id: 'ow2', maps: ['m1'], rules: 'competitive', name_template: '{home} vs {away}' }, // no rounds: one game per map
     });
     expect(defaultRoundRobinForm().timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
@@ -157,6 +157,8 @@ describe('playoff placeholder rule', () => {
 describe('misc', () => {
   it('match template payload omits empty values', () => {
     expect(matchTemplatePayload({ game_id: null, maps: [], rounds: null, rules: null })).toEqual({});
+    // a match plays one game per map: rounds is never sent, even when the form state holds a value (tournaments use it)
+    expect(matchTemplatePayload({ game_id: null, maps: ['a', 'b'], rounds: 5, rules: null })).toEqual({ maps: ['a', 'b'] });
   });
   it('match entrant bounds follow the scoring type', () => {
     expect(matchEntrantBounds('Normal')).toEqual({ min: 2, max: 16 });

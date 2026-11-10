@@ -108,11 +108,9 @@ export function validateMatchDefaults(value: unknown): string | null {
   if (value.maps !== undefined && (!Array.isArray(value.maps) || !value.maps.every((m) => typeof m === 'string'))) {
     return 'match_defaults.maps must be an array of strings';
   }
-  for (const key of ['rounds', 'rounds_per_match']) {
-    const v = value[key];
-    if (v !== undefined && (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 99)) {
-      return `match_defaults.${key} must be an integer between 1 and 99`;
-    }
+  if (value.rounds !== undefined) return 'match_defaults.rounds is not accepted: a match plays one game per map, so set the default maps instead';
+  if (value.rounds_per_match !== undefined && (typeof value.rounds_per_match !== 'number' || !Number.isInteger(value.rounds_per_match) || value.rounds_per_match < 1 || value.rounds_per_match > 99)) {
+    return 'match_defaults.rounds_per_match must be an integer between 1 and 99';
   }
   if (value.rules !== undefined && value.rules !== 'casual' && value.rules !== 'competitive') {
     return 'match_defaults.rules must be "casual" or "competitive"';

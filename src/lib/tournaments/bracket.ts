@@ -12,10 +12,8 @@ import { matchParticipants, matchTeams, matches, tournamentMatches, tournamentRo
 import type { Announcement } from '../../../lib/db/schema/types';
 import { getModeById, listMapsForModes, listModesByTeamSize, listNonWorkshopModes } from '../games';
 import {
-  VoiceChannelService, addParticipantsBulk, createMatchTeams, createNamedMatchTeams, createTournamentMatch, initializeMatchGames, newMatchId,
+  addParticipantsBulk, createMatchTeams, createNamedMatchTeams, createTournamentMatch, initializeMatchGames, newMatchId,
 } from '../matches';
-import type { AfterCommit } from '../matches/effects';
-import { logger } from '../logger';
 import { UNSCHEDULED_START } from '../../../shared/schedule';
 import {
   filterTournamentMaps, matchTitle, pairTeams, plannedMatchName, selectMapsForMatch, type GameMapLite, type GameModeLite,
@@ -356,15 +354,14 @@ export interface SaveGeneratedOptions {
 }
 
 /**
- * Save generated matches, their bracket rows, teams / participants and game rows. Runs in the caller's transaction;
- * voice channel creation (which waits on the bot) is queued on `after` and runs once the caller has committed.
+ * Save generated matches, their bracket rows, teams / participants and game rows. Runs in the caller's transaction.
+ * Voice channels are not created here: they are created shortly before the match starts (scheduler) or when it is started.
  */
 export async function saveGeneratedMatches(
   ex: Executor,
   generated: GeneratedMatch[],
   tournamentMatchInfos: TournamentMatchInfo[],
   options: SaveGeneratedOptions,
-  after: AfterCommit,
 ): Promise<void> {
   for (const m of generated) {
     await createTournamentMatch(ex, {
@@ -394,17 +391,6 @@ export async function saveGeneratedMatches(
   }
   if (options.addAllTeams) {
     for (const m of generated) await addAllTeamsToMatch(ex, m.tournament_id, m.id);
-    return; // cumulative matches hold every participant: no per-match voice channels
-  }
-
-  for (const m of generated) {
-    after.add(async () => {
-      try {
-        await VoiceChannelService.setupMatchVoiceChannels(m.id);
-      } catch (error) {
-        logger.error(`Failed to create voice channels for tournament match ${m.id}:`, error); // never fails the request
-      }
-    });
   }
 }
 

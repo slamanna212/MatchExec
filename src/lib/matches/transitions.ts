@@ -13,12 +13,12 @@ import { cleanMapId } from '../utils/map-utils';
 import { AfterCommit, bestEffort } from './effects';
 import { areAllGamesCompleted, getOngoingGame, initializeMatchGames, lookupMapName } from './games';
 import { MapCodeService } from './map-codes';
-import { casMatchStatus, getMatch, getMatchName, listTournamentMatchIds, type MatchStatus } from './matches';
+import { casMatchStatus, getMatch, getMatchName, getMatchStatus, listTournamentMatchIds, type MatchStatus } from './matches';
 import { queueDiscordDeletion, queueScorecardPrompts, queueWinnerVote } from './notifications';
 import { determineMatchWinner } from './scoreboard';
 import { createMatchTeams, lockMatch } from './teams';
 import { runMatchCompletionSideEffects } from './completion';
-import { deleteMatchVoiceChannels, VoiceChannelService } from './voice-channels';
+import { deleteMatchVoiceChannels, ensureMatchVoiceChannels, VoiceChannelService } from './voice-channels';
 
 /** Allowed match status transitions. 'complete' and 'cancelled' are terminal. */
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
@@ -55,7 +55,7 @@ export async function handleGatherTransition(ex: Executor, matchId: string, afte
   }));
 }
 
-/** Queues the status update and creates the teams. Voice channels are created after commit (see `afterTransitionCommit`). */
+/** Queues the status update and creates the teams. Voice channels are created shortly before the match starts, not here. */
 export async function handleAssignTransition(ex: Executor, matchId: string, after: AfterCommit): Promise<void> {
   await bestEffort(ex, 'Error queuing Discord status update', (sp) => enqueueStatusUpdate(sp, matchId, 'assign'), undefined);
   await bestEffort(ex, 'Error creating match teams', (sp) => createMatchTeams(sp, matchId), undefined);
@@ -151,6 +151,13 @@ export async function handleTournamentAssignTransition(ex: Executor, tournamentI
  */
 export async function transitionMatch(matchId: string, newStatus: MatchStatus, opts: { force?: boolean } = {}): Promise<{ from: MatchStatus }> {
   const after = new AfterCommit();
+  // Voice channels are created right before a match starts. If the match is about to enter battle without them (started by
+  // hand before the scheduler's lead-time window), create them first, outside the transaction: the welcome announcement
+  // queued by the battle transition resolves the channels at queue time. A no-op for an illegal transition (peek only).
+  if (newStatus === 'battle') {
+    const peek = await getMatchStatus(db, matchId);
+    if (peek && (ALLOWED_TRANSITIONS[peek] ?? []).includes('battle')) await ensureMatchVoiceChannels(matchId);
+  }
   const from = await db.transaction(async (tx) => {
     const current = await lockMatch(tx, matchId);
     if (!current) throw new MatchTransitionError('Match not found', 404);
@@ -174,14 +181,7 @@ export async function transitionMatch(matchId: string, newStatus: MatchStatus, o
     return current.status;
   });
 
-  // After commit: the bot round-trip for voice channels (waits for the bot, so it can't hold a transaction) and the feed.
-  if (newStatus === 'assign') {
-    try {
-      await VoiceChannelService.setupMatchVoiceChannels(matchId);
-    } catch (error) {
-      logger.error('Error setting up voice channels:', error);
-    }
-  }
+  // After commit: the activity feed.
   await after.run();
   return { from };
 }

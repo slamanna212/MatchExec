@@ -5,7 +5,7 @@
 import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import {
-  games, matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, series, seriesEntrants, seriesEvents,
+  games, matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, series, seriesEntrantMembers, seriesEntrants, seriesEvents,
   tournamentParticipants, tournaments,
 } from '../../../lib/db/schema';
 import type { SeriesChampionDto, SeriesEventDto, SeriesEventStatus } from '../../../shared/series-types';
@@ -44,7 +44,13 @@ export interface SeriesNextEvent extends SeriesGameInfo {
 export interface SeriesSummary extends SeriesRow {
   event_count: number;
   completed_event_count: number;
+  /**
+   * Players of the series. With entrants: the current roster members of its non-withdrawn entrants. Without entrants
+   * (legacy series): the distinct players who appear in its events.
+   */
   participant_count: number;
+  /** Non-withdrawn entrants (teams for a team series, players for a solo series). 0 for a series without entrants. */
+  entrant_count: number;
   next_event: SeriesNextEvent | null;
   /** Game of the last event in event_order (used by history cards). */
   last_event_game: SeriesGameInfo | null;
@@ -213,7 +219,8 @@ export async function listSeriesSummaries(ex: Executor, options: ListSeriesSumma
     eventsBySeries.set(e.series_id, list);
   }
 
-  const participantCounts = await countSeriesParticipants(ex, ids);
+  const eventPlayers = await countSeriesParticipants(ex, ids);
+  const rosters = await countRosters(ex, ids);
 
   const summaries: SeriesSummary[] = [];
   for (const r of rows) {
@@ -230,7 +237,8 @@ export async function listSeriesSummaries(ex: Executor, options: ListSeriesSumma
       ...row,
       event_count: evs.length,
       completed_event_count: evs.filter((e) => e.target_status === 'complete').length,
-      participant_count: participantCounts.get(r.id) ?? 0,
+      participant_count: rosters.get(r.id)?.players ?? eventPlayers.get(r.id) ?? 0,
+      entrant_count: rosters.get(r.id)?.entrants ?? 0,
       next_event: next ? {
         id: next.id,
         name: next.name,
@@ -253,6 +261,27 @@ export async function listSeriesSummaries(ex: Executor, options: ListSeriesSumma
  * Distinct players per series across all its events: match participants of match events, plus participants of every
  * match in tournament events, plus tournament signups (so a tournament counts before its bracket exists).
  */
+/**
+ * Roster counts for the series that have entrants: non-withdrawn entrants and their current members (left_at is null).
+ * A series with entrant rows is always present in the result (all withdrawn = 0 / 0); series without any are absent.
+ */
+async function countRosters(ex: Executor, seriesIds: string[]): Promise<Map<string, { entrants: number; players: number }>> {
+  if (seriesIds.length === 0) return new Map();
+  const entrantRows = await ex.select({
+    series_id: seriesEntrants.series_id,
+    entrants: sql<number>`count(*) filter (where ${seriesEntrants.status} <> 'withdrawn')::int`,
+  }).from(seriesEntrants).where(inArray(seriesEntrants.series_id, seriesIds)).groupBy(seriesEntrants.series_id);
+  const playerRows = await ex.select({
+    series_id: seriesEntrantMembers.series_id,
+    players: sql<number>`count(distinct ${seriesEntrantMembers.user_id})::int`,
+  }).from(seriesEntrantMembers)
+    .innerJoin(seriesEntrants, eq(seriesEntrants.id, seriesEntrantMembers.entrant_id))
+    .where(and(inArray(seriesEntrantMembers.series_id, seriesIds), sql`${seriesEntrantMembers.left_at} is null`, sql`${seriesEntrants.status} <> 'withdrawn'`))
+    .groupBy(seriesEntrantMembers.series_id);
+  const players = new Map(playerRows.map((r) => [r.series_id, r.players]));
+  return new Map(entrantRows.map((r) => [r.series_id, { entrants: r.entrants, players: players.get(r.series_id) ?? 0 }]));
+}
+
 async function countSeriesParticipants(ex: Executor, seriesIds: string[]): Promise<Map<string, number>> {
   const players = new Map<string, Set<string>>();
   if (seriesIds.length === 0) return new Map();

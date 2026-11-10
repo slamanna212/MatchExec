@@ -45,11 +45,11 @@ function mergeConfig(base: SeriesScoringConfig, override: SeriesScoringConfig | 
 }
 
 function defaultTiebreakers(cfg: SeriesScoringConfig): SeriesTiebreaker[] {
-  if (cfg.tiebreakers && cfg.tiebreakers.length > 0) return cfg.tiebreakers;
-  if (cfg.mode === 'head_to_head') {
-    const league = (cfg.win_points ?? 0) !== 0 || (cfg.loss_points ?? 0) !== 0 || (cfg.tie_points ?? 0) !== 0;
-    return league ? ['points', ...DEFAULT_H2H_TIEBREAKERS] : DEFAULT_H2H_TIEBREAKERS;
-  }
+  // A head_to_head table with league points always ranks on them: a custom list only orders the entrants that are level
+  // on points, unless it places 'points' itself (then its position is respected).
+  const league = cfg.mode === 'head_to_head' && ((cfg.win_points ?? 0) !== 0 || (cfg.loss_points ?? 0) !== 0 || (cfg.tie_points ?? 0) !== 0);
+  if (cfg.tiebreakers && cfg.tiebreakers.length > 0) return league && !cfg.tiebreakers.includes('points') ? ['points', ...cfg.tiebreakers] : cfg.tiebreakers;
+  if (cfg.mode === 'head_to_head') return league ? ['points', ...DEFAULT_H2H_TIEBREAKERS] : DEFAULT_H2H_TIEBREAKERS;
   // legacy configs (no mode) rank on points alone, exactly as before
   return cfg.mode === 'points' ? DEFAULT_POINTS_TIEBREAKERS : ['points'];
 }
@@ -261,16 +261,17 @@ async function computeResponse(ex: Executor, series: SeriesRow, options: Standin
 function miniTable(records: H2hMatch[]): MiniTable {
   return (keys) => {
     const out = new Map<string, { wins: number; games: number }>();
-    const bump = (key: string, win: boolean) => {
+    // A win counts 1, a draw 0.5 (so a drawn pairing is not scored like a loss and ranked below teams that have not played).
+    const bump = (key: string, credit: number) => {
       const have = out.get(key) ?? { wins: 0, games: 0 };
       have.games++;
-      if (win) have.wins++;
+      have.wins += credit;
       out.set(key, have);
     };
     for (const m of records) {
       if (!keys.has(m.a.entrantId) || !keys.has(m.b.entrantId)) continue;
-      bump(m.a.entrantId, m.winner === 'a');
-      bump(m.b.entrantId, m.winner === 'b');
+      bump(m.a.entrantId, m.winner === null ? 0.5 : (m.winner === 'a' ? 1 : 0));
+      bump(m.b.entrantId, m.winner === null ? 0.5 : (m.winner === 'b' ? 1 : 0));
     }
     return out;
   };

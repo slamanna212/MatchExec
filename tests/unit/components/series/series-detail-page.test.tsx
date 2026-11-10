@@ -99,7 +99,7 @@ function stubApi(status: Status, opts: StubOptions = {}) {
     return json({ series: {
       id: 's1', name: 'Season', status, announcements: true, player_notifications: true, entrant_type: 'team', scoring_type: opts.scoringType ?? 'Normal',
       created_at: '2026-01-01 00:00:00', updated_at: '2026-01-01 00:00:00', scoring_config: { mode: 'head_to_head' },
-      event_count: 3, completed_event_count: 1, participant_count: 0,
+      event_count: 3, completed_event_count: 1, participant_count: 0, entrant_count: 0,
       next_event: null, last_event_game: null, series_game: null, champion: opts.champion ?? null,
     } });
   }));

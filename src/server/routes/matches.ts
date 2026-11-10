@@ -13,9 +13,9 @@ import { validateMaxLength, validateNumberRange, validateEnum } from '@/lib/util
 import { logFeedEvent, removeFeedEvents, MATCH_ACTION_EVENTS } from '@/lib/feed-helpers';
 import {
   AssignTeamsError, GameAlreadyScoredError, TeamAssignmentError, setMatchTeamLogo, MatchTransitionError, ResultError, SetupStatusError, assignTeams, createMatchFromRequest,
-  createMatchTeams, deleteMatch, getGameResult, getMapCodes, getMapNotes, getMatch, getMatchDetail, getMatchEditContext,
+  deleteMatch, getGameResult, getMapCodes, getMapNotes, getMatch, getMatchDetail, getMatchEditContext,
   getMatchGameInMatch, getMatchGames, getMatchGamesWithResults, getMatchResult, getMatchScoringType, getMatchTeams, getMatchWithGame,
-  initializeMatchGames, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
+  listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
   matchExists, saveMapNote, saveSetup, setMapCodes, submitGameResult, transitionMatch, updateMatchDetails, validateMatchRequest,
   getOverallMatchScore, resolveWinnerEntity, isKnownStatus, resolveModeFromMaps, type MatchRequestBody,
 } from '@/lib/matches';
@@ -245,21 +245,8 @@ export const matches = new Hono()
     try {
       const matchId = c.req.param('matchId');
       if (!validId(matchId)) return jsonError(c, 'Invalid ID', 400);
-      let teams = await getMatchTeams(db, matchId);
-      // Safety net: a match in assign/battle with no real teams (or a Normal match missing its Reserve row) gets its
-      // teams created lazily (createMatchTeams is idempotent).
-      const hasActive = teams.some((t) => !t.is_reserve);
-      const hasReserve = teams.some((t) => t.is_reserve);
-      if (!hasActive || !hasReserve) {
-        const match = await getMatch(db, matchId);
-        if (match && (match.status === 'assign' || match.status === 'battle')) {
-          const isNormal = (await getMatchScoringType(db, matchId)) === 'Normal';
-          if (!hasActive || isNormal) {
-            await createMatchTeams(db, matchId);
-            teams = await getMatchTeams(db, matchId);
-          }
-        }
-      }
+      // Read-only: teams are created by the assign transition (and by series / tournament match creation), never by a GET.
+      const teams = await getMatchTeams(db, matchId);
       return c.json({ teams });
     } catch (error) {
       logger.error('Error fetching match teams:', error);
@@ -435,16 +422,8 @@ export const matches = new Hono()
   .get('/:matchId/games', async (c) => {
     try {
       const matchId = c.req.param('matchId');
-      let games = await getMatchGames(db, matchId);
-      if (games.length === 0) {
-        // No games yet: try to initialise them automatically (never fails the request).
-        try {
-          await initializeMatchGames(db, matchId);
-          games = await getMatchGames(db, matchId);
-        } catch (initError) {
-          logger.warning(`Could not initialize match games for ${matchId}:`, initError);
-        }
-      }
+      // Read-only: games are created when the match is created / started (initializeMatchGames), never by a GET.
+      const games = await getMatchGames(db, matchId);
       return c.json({ success: true, games });
     } catch (error) {
       logger.error('Error getting match games:', error);

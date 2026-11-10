@@ -7,7 +7,7 @@ import { createGame, createGameMode, createMatch, createMatchParticipant } from 
 import { createSeriesWithEntrants, insertSeries, linkEvent } from '../../utils/pg-series-fixtures';
 import {
   SeriesError, addEntrantMember, copyEntrants, createEntrant, deleteEntrant, entrantHasResults, getEntrant, listActiveRoster, listEntrants,
-  loadPlayerEntrantIndex, removeEntrantMember, resolveEntrantForPlayer, searchPlayers, updateEntrant, updateEntrantMember,
+  getSeriesSummary, loadPlayerEntrantIndex, removeEntrantMember, resolveEntrantForPlayer, searchPlayers, updateEntrant, updateEntrantMember,
 } from '@/lib/series';
 import { matchTeams, seriesEntrantMembers, seriesEntrants } from '../../../lib/db/schema';
 
@@ -267,5 +267,50 @@ describe('searchPlayers', () => {
 describe('errors', () => {
   it('SeriesError carries a status', () => {
     expect(new SeriesError('x', 409).status).toBe(409);
+  });
+});
+
+describe('series player and team counts', () => {
+  it('counts the current roster of non-withdrawn entrants, not the players who appear in events', async () => {
+    const s = await createSeriesWithEntrants(pg(), {
+      entrantType: 'team',
+      entrants: [
+        { name: 'Alpha', members: ['a1', 'a2', 'a3'] },
+        { name: 'Bravo', members: ['b1', 'b2'] },
+        { name: 'Charlie', status: 'pending', members: ['c1'] },
+        { name: 'Gone', status: 'withdrawn', members: ['g1', 'g2', 'g3', 'g4'] },
+      ],
+    });
+    // no events at all, yet every roster player counts
+    expect(await getSeriesSummary(pg(), s.seriesId)).toMatchObject({ participant_count: 6, entrant_count: 3 });
+
+    // a player who left the roster no longer counts
+    const [leaver] = await pg().select().from(seriesEntrantMembers).where(eq(seriesEntrantMembers.user_id, 'u-a3'));
+    await removeEntrantMember(pg(), s.seriesId, leaver.entrant_id, leaver.id);
+    expect(await getSeriesSummary(pg(), s.seriesId)).toMatchObject({ participant_count: 5, entrant_count: 3 });
+
+    // withdrawing a team removes its players from the count
+    const bravo = s.entrants.find((e) => e.name === 'Bravo')!;
+    await pg().update(seriesEntrants).set({ status: 'withdrawn' }).where(eq(seriesEntrants.id, bravo.id)); // the withdraw action itself is covered elsewhere
+    expect(await getSeriesSummary(pg(), s.seriesId)).toMatchObject({ participant_count: 3, entrant_count: 2 });
+  });
+
+  it('a series whose entrants all withdrew shows 0 / 0 instead of falling back to event players', async () => {
+    const s = await createSeriesWithEntrants(pg(), { entrantType: 'solo', entrants: [{ name: 'Solo', status: 'withdrawn', members: ['p'] }] });
+    expect(await getSeriesSummary(pg(), s.seriesId)).toMatchObject({ participant_count: 0, entrant_count: 0 });
+  });
+
+  it('a legacy series without entrants keeps the distinct players across its events', async () => {
+    const s = await insertSeries({ entrant_type: 'solo' });
+    const game = await createGame();
+    const mode = await createGameMode(game.id);
+    const m1 = await createMatch(game.id, mode.id);
+    const m2 = await createMatch(game.id, mode.id);
+    await createMatchParticipant(m1.id, 'd1');
+    await createMatchParticipant(m1.id, 'd2');
+    await createMatchParticipant(m2.id, 'd1'); // same player in two events counts once
+    await linkEvent(s.id, 'match', m1.id);
+    await linkEvent(s.id, 'match', m2.id);
+    expect(await getSeriesSummary(pg(), s.id)).toMatchObject({ participant_count: 2, entrant_count: 0 });
   });
 });

@@ -52,6 +52,7 @@ const DISCORD_NUMBER_FIELDS = [
 function buildDiscordPatch(body: Record<string, any>): DiscordSettingsPatch {
   const patch: Record<string, unknown> = {};
   if (body.voice_channel_cleanup_delay_minutes !== undefined) patch.voice_channel_cleanup_delay_minutes = body.voice_channel_cleanup_delay_minutes;
+  if (body.voice_channel_lead_minutes !== undefined) patch.voice_channel_lead_minutes = body.voice_channel_lead_minutes;
   for (const key of DISCORD_STRING_FIELDS) {
     if (body[key] !== undefined) patch[key] = String(body[key] || '').trim();
   }
@@ -83,6 +84,7 @@ function safeDiscordSettings(settings: DiscordRow) {
     voice_announcements_enabled: settings ? Boolean(settings.voice_announcements_enabled) : false,
     voice_channel_category_id: settings?.voice_channel_category_id || '',
     voice_channel_cleanup_delay_minutes: settings?.voice_channel_cleanup_delay_minutes ?? 10,
+    voice_channel_lead_minutes: settings?.voice_channel_lead_minutes ?? 15,
     winner_vote_enabled: settings?.winner_vote_enabled ?? true,
     signup_dm_enabled: settings?.signup_dm_enabled ?? true,
     commander_dm_enabled: settings?.commander_dm_enabled ?? true,
@@ -115,6 +117,9 @@ const discord = new Hono()
 
       if (body.voice_channel_cleanup_delay_minutes !== undefined && (!Number.isInteger(body.voice_channel_cleanup_delay_minutes) || body.voice_channel_cleanup_delay_minutes < 0 || body.voice_channel_cleanup_delay_minutes > 10080)) {
         return jsonError(c, 'voice_channel_cleanup_delay_minutes must be a whole number between 0 and 10080', 400);
+      }
+      if (body.voice_channel_lead_minutes !== undefined && (!Number.isInteger(body.voice_channel_lead_minutes) || body.voice_channel_lead_minutes < 0 || body.voice_channel_lead_minutes > 1440)) {
+        return jsonError(c, 'voice_channel_lead_minutes must be a whole number between 0 and 1440', 400);
       }
       const patch = buildDiscordPatch(body);
       // The singleton row is created on first save even when nothing else changes.

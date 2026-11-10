@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ALLOWED_TIEBREAKERS, DEFAULT_TIEBREAKERS, POSITION_PRESETS, defaultModeForScoringType, defaultScoringConfig,
-  effectiveTiebreakers, isDefaultScoringConfig, isLegacyScoringConfig, moveItem, suggestNextPlace, switchScoringMode,
+  effectiveTiebreakers, hasLeaguePoints, isDefaultScoringConfig, isLegacyScoringConfig, moveItem, suggestNextPlace, switchScoringMode,
 } from '@/components/series/scoring-config';
 
 describe('default mode', () => {
@@ -64,7 +64,16 @@ describe('tiebreakers', () => {
   it('ranks on league points first by default when win/tie/loss points are set (matches the server)', () => {
     expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 3, tie_points: 1 }, 'head_to_head'))
       .toEqual(['points', ...DEFAULT_TIEBREAKERS.head_to_head]);
-    expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 3, tiebreakers: ['match_wins'] }, 'head_to_head')).toEqual(['match_wins']);
+  });
+
+  it('with league points, a custom list that omits points gets it in front; an explicit position is respected', () => {
+    expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 3, tiebreakers: ['match_wins'] }, 'head_to_head')).toEqual(['points', 'match_wins']);
+    expect(effectiveTiebreakers({ mode: 'head_to_head', loss_points: -1, tiebreakers: ['match_wins', 'points'] }, 'head_to_head')).toEqual(['match_wins', 'points']);
+    // no league points: the custom list is used as is
+    expect(effectiveTiebreakers({ mode: 'head_to_head', win_points: 0, tiebreakers: ['match_wins'] }, 'head_to_head')).toEqual(['match_wins']);
+    expect(hasLeaguePoints({ win_points: 3 }, 'head_to_head')).toBe(true);
+    expect(hasLeaguePoints({ win_points: 3 }, 'points')).toBe(false);
+    expect(hasLeaguePoints({}, 'head_to_head')).toBe(false);
   });
 
   it('every default is allowed', () => {

@@ -50,7 +50,7 @@ const eventRow = async (id: string) => (await pg().select().from(seriesEvents).w
 const announcementsOf = (matchId: string) => pg().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, matchId));
 
 describe('createSeriesMatchEvent: Normal team matches', () => {
-  it('presets one named team per entrant with its roster, status assign, announcement and voice', async () => {
+  it('presets one named team per entrant with its roster, status assign and announcement (voice channels come later)', async () => {
     const s = await normalSeries();
     const [a, b] = s.entrants;
     const created = await createSeriesMatchEvent(pg(), s.seriesId, {
@@ -80,7 +80,7 @@ describe('createSeriesMatchEvent: Normal team matches', () => {
     });
     expect((await eventRow(created.event_id)).event_date?.toISOString()).toBe(START);
     expect((await announcementsOf(match.id)).map((r) => [r.announcement_type, r.status])).toEqual([['standard', 'pending']]);
-    expect(setupVoice).toHaveBeenCalledWith(match.id); // after the commit
+    expect(setupVoice).not.toHaveBeenCalled(); // channels are created shortly before the match starts
 
     const dto = await getSeriesEventDto(pg(), s.seriesId, created.event_id);
     expect(dto?.entrants?.map((e) => e.name)).toEqual(['Alpha', 'Bravo']);
@@ -103,15 +103,15 @@ describe('createSeriesMatchEvent: Normal team matches', () => {
   it('prefills from the series match_defaults and lets the template override them', async () => {
     const s = await normalSeries();
     await pg().update(series).set({
-      match_defaults: { maps: s.mapIds.slice(0, 2), rounds: 2, rules: 'competitive', stats_enabled: true, livestream_link: 'https://tv.example/s', player_notifications: false },
+      match_defaults: { maps: s.mapIds.slice(0, 2), rules: 'competitive', stats_enabled: true, livestream_link: 'https://tv.example/s', player_notifications: false },
     }).where(eq(series.id, s.seriesId));
     const ids = [s.entrants[0].id, s.entrants[1].id];
     const a = await createSeriesMatchEvent(pg(), s.seriesId, { entrant_ids: ids, match: { start_date: START } });
     const [m1] = await pg().select().from(matches).where(eq(matches.id, a.match_id));
-    expect(m1).toMatchObject({ rounds: 2, rules: 'competitive', stats_enabled: true, livestream_link: 'https://tv.example/s', player_notifications: false });
+    expect(m1).toMatchObject({ rounds: 2 /* one game per default map */, rules: 'competitive', stats_enabled: true, livestream_link: 'https://tv.example/s', player_notifications: false });
     expect(m1.maps).toEqual(s.mapIds.slice(0, 2));
 
-    const b = await createSeriesMatchEvent(pg(), s.seriesId, { entrant_ids: ids, match: { start_date: START, name: 'Grand Final', maps: [s.mapIds[4]], rounds: 1, rules: 'casual' } });
+    const b = await createSeriesMatchEvent(pg(), s.seriesId, { entrant_ids: ids, match: { start_date: START, name: 'Grand Final', maps: [s.mapIds[4]], rules: 'casual' } });
     const [m2] = await pg().select().from(matches).where(eq(matches.id, b.match_id));
     expect(m2).toMatchObject({ name: 'Grand Final', rounds: 1, rules: 'casual' });
     expect(m2.maps).toEqual([s.mapIds[4]]);

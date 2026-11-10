@@ -7,6 +7,7 @@ import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createMatch, createMatchParticipant, createTournament } from '../../utils/pg-fixtures';
 import { createSeriesWithEntrants } from '../../utils/pg-series-fixtures';
 import { insertTeams } from '../../utils/pg-tournament-fixtures';
+import { createMatchTeams } from '@/lib/matches';
 import { matchTeams, seriesEntrants, tournamentTeams } from '../../../lib/db/schema';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -59,6 +60,7 @@ describe('tournament team logos', () => {
 describe('match team logos', () => {
   it('sets a match team logo and exposes it on teams and participants', async () => {
     const m = await createMatch(gameId, modeId, { id: 'ml1', status: 'assign' });
+    await createMatchTeams(pg(), m.id);
     const teams = (await appRequest(`/api/matches/${m.id}/teams`)).data as { teams: Array<{ id: string; team_order: number; logo_url: string | null }> };
     const blue = teams.teams.find((t) => t.team_order === 0)!;
     const put = await appRequest(`/api/matches/${m.id}/teams/${blue.id}/logo`, { method: 'PUT', json: { logo_url: '/uploads/event-images/b.png' } });
@@ -72,7 +74,7 @@ describe('match team logos', () => {
 
   it('404s for a team of another match and 400s for a bad URL', async () => {
     const m = await createMatch(gameId, modeId, { id: 'ml2', status: 'assign' });
-    await appRequest(`/api/matches/${m.id}/teams`);
+    await createMatchTeams(pg(), m.id);
     expect((await appRequest(`/api/matches/${m.id}/teams/nope/logo`, { method: 'PUT', json: { logo_url: null } })).status).toBe(404);
     expect((await appRequest(`/api/matches/${m.id}/teams/nope/logo`, { method: 'PUT', json: { logo_url: 'x' } })).status).toBe(400);
   });

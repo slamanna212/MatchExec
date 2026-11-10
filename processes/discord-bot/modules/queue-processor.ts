@@ -968,8 +968,24 @@ export class QueueProcessor {
     }
   }
 
+  /** Why a queued voice announcement is no longer worth playing (null = play it). The match must be in the phase the line belongs to. */
+  private async voiceAnnouncementSkipReason(announcement: QueueRow<'voiceAnnouncement'>): Promise<string | null> {
+    const match = await getMatch(this.queueDb, announcement.match_id);
+    if (!match) return 'match no longer exists';
+    // welcome / nextround are only meaningful while the match is being played; finish is queued once the match is complete
+    const required = announcement.announcement_type === 'finish' ? 'complete' : 'battle';
+    return match.status === required ? null : `match is "${match.status}", not "${required}"`;
+  }
+
   private async processSingleVoiceAnnouncement(announcement: QueueRow<'voiceAnnouncement'>): Promise<void> {
     try {
+      const skipReason = await this.voiceAnnouncementSkipReason(announcement);
+      if (skipReason) {
+        logger.debug(`⏭️ Skipping ${announcement.announcement_type} voice announcement for match ${announcement.match_id}: ${skipReason}`);
+        await this.finish('voiceAnnouncement', announcement.id, { set: { completed_at: new Date(), last_error: `Skipped: ${skipReason}` } });
+        return;
+      }
+
       if (announcement.announcement_type === 'welcome') {
         const settings = await getAnyDiscordSettings();
         const delaySecs = settings?.match_start_delay_seconds ?? DEFAULT_MATCH_START_DELAY_SECONDS;
@@ -1020,8 +1036,9 @@ export class QueueProcessor {
       // Finished rows are kept for an hour, then removed
       await purgeFinished(this.queueDb, 'voiceAnnouncement', 60 * 60_000, 'updated_at');
 
-      // Timed-out claims (worker crashed / hung mid-playback) are reset by resetAbandonedClaims in processAllQueues
-      const voiceAnnouncements = await this.claim('voiceAnnouncement', 5);
+      // Timed-out claims (worker crashed / hung mid-playback) are reset by resetAbandonedClaims in processAllQueues.
+      // One at a time: playback is slow and a claim held while earlier ones play could time out and be reset.
+      const voiceAnnouncements = await this.claim('voiceAnnouncement', 1);
 
       for (const announcement of voiceAnnouncements) {
         await this.processSingleVoiceAnnouncement(announcement);
@@ -1387,7 +1404,8 @@ export class QueueProcessor {
         this.processReminderQueue(),
         this.processPlayerReminderQueue(),
         this.processScoreNotificationQueue(),
-        this.processVoiceAnnouncementQueue(),
+        // Voice playback is NOT part of this tick: it takes seconds to minutes per announcement and would hold up every
+        // other queue. It runs on its own loop (processVoiceAnnouncementQueue, scheduled by the bot).
         this.processMatchWinnerNotificationQueue(),
         this.processDiscordBotRequests(),
         this.processMatchEditQueue(),

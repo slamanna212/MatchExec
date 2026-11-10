@@ -105,6 +105,11 @@ const HistorySeriesCard = memo(({ series, onViewDetails }: { series: SeriesSumma
         <Row label="Events">
           <Text size="sm">{series.completed_event_count} of {series.event_count}</Text>
         </Row>
+        {series.entrant_type === 'team' && series.entrant_count > 0 && (
+          <Row label="Teams">
+            <Text size="sm">{series.entrant_count}</Text>
+          </Row>
+        )}
         <Row label="Players">
           <Text size="sm">{series.participant_count}</Text>
         </Row>

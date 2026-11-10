@@ -122,7 +122,7 @@ function setupPayload(form: SeriesFormData): Record<(typeof SETUP_KEYS)[number],
 /** `match_defaults` from the form. */
 export function buildMatchDefaults(form: SeriesFormData): SeriesMatchDefaults {
   const defaults: SeriesMatchDefaults = {};
-  if (form.match_rounds !== null) { defaults.rounds = form.match_rounds; defaults.rounds_per_match = form.match_rounds; }
+  if (form.match_rounds !== null) defaults.rounds_per_match = form.match_rounds; // tournaments only; matches play one game per map
   if (form.match_rules) defaults.rules = form.match_rules;
   defaults.stats_enabled = form.match_stats_enabled;
   defaults.player_notifications = form.match_player_notifications;
@@ -188,7 +188,7 @@ export function formFromSeries(s: SeriesSummary): SeriesFormData {
     game_ids: s.game_ids ?? [],
     game_id: s.game_id ?? null,
     game_mode_id: s.game_mode_id ?? null,
-    match_rounds: defaults.rounds ?? defaults.rounds_per_match ?? null,
+    match_rounds: defaults.rounds_per_match ?? null,
     match_rules: defaults.rules ?? null,
     match_stats_enabled: defaults.stats_enabled ?? false,
     match_player_notifications: defaults.player_notifications ?? true,

@@ -126,7 +126,7 @@ describe('tournament, series, feed, games, system DTOs', () => {
     const list = (await appRequest('/api/series')).data;
     expect(Object.keys(list)).toEqual(['series']);
     expect(keys(list.series[0])).toEqual(expect.arrayContaining([
-      'id', 'name', 'status', 'announcements', 'player_notifications', 'scoring_config', 'event_count', 'completed_event_count', 'participant_count',
+      'id', 'name', 'status', 'announcements', 'player_notifications', 'scoring_config', 'event_count', 'completed_event_count', 'participant_count', 'entrant_count',
       'next_event', 'champion', 'created_at', 'updated_at', 'start_date', 'end_date',
     ]));
     expectTypes(list.series[0], { iso: ['created_at', 'updated_at'], bool: ['announcements', 'player_notifications'], num: ['event_count', 'completed_event_count', 'participant_count'] });

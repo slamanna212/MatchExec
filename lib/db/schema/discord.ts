@@ -99,6 +99,8 @@ export const discordSettings = pgTable('discord_settings', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
   voice_channel_cleanup_delay_minutes: integer('voice_channel_cleanup_delay_minutes').notNull().default(10),
+  /** Match voice channels are created this many minutes before the match's start time (or when it is started by hand). */
+  voice_channel_lead_minutes: integer('voice_channel_lead_minutes').notNull().default(15),
   match_start_delay_seconds: integer('match_start_delay_seconds').notNull().default(5),
   winner_vote_enabled: boolean('winner_vote_enabled').notNull().default(true),
   signup_dm_enabled: boolean('signup_dm_enabled').notNull().default(true),

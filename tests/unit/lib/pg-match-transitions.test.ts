@@ -108,24 +108,44 @@ describe('handleAssignTransition', () => {
     expect(await pg().select().from(matchTeams).where(and(eq(matchTeams.match_id, m.id), eq(matchTeams.is_reserve, false)))).toHaveLength(2);
   });
 
-  it('leaves voice channel creation to transitionMatch, after commit', async () => {
+  it('does not create voice channels on assign (they are created right before the match starts)', async () => {
     const setup = vi.spyOn(VoiceChannelService, 'setupMatchVoiceChannels').mockResolvedValue(true);
     const m = await createMatch(gameId, modeId, { status: 'gather' });
     await run((a) => handleAssignTransition(db, m.id, a));
-    expect(setup).not.toHaveBeenCalled();
     await transitionMatch(m.id, 'assign');
+    expect(setup).not.toHaveBeenCalled();
+  });
+
+  it('creates voice channels before entering battle when the match has none', async () => {
+    const setup = vi.spyOn(VoiceChannelService, 'setupMatchVoiceChannels').mockResolvedValue(true);
+    const m = await createMatch(gameId, modeId, { status: 'assign' });
+    await transitionMatch(m.id, 'battle');
     expect(setup).toHaveBeenCalledWith(m.id);
+    expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].status).toBe('battle');
   });
 
-  it('a failing voice channel setup does not fail the transition', async () => {
+  it('does not create voice channels again when the match already has some', async () => {
+    const setup = vi.spyOn(VoiceChannelService, 'setupMatchVoiceChannels').mockResolvedValue(true);
+    const m = await createMatch(gameId, modeId, { status: 'assign' });
+    await pg().insert(autoVoiceChannels).values({ id: 'avc-1', match_id: m.id, channel_id: 'chan-1', team_name: 'blue' });
+    await transitionMatch(m.id, 'battle');
+    expect(setup).not.toHaveBeenCalled();
+  });
+
+  it('does not create voice channels for a transition that is not allowed', async () => {
+    const setup = vi.spyOn(VoiceChannelService, 'setupMatchVoiceChannels').mockResolvedValue(true);
+    const m = await createMatch(gameId, modeId, { status: 'created' });
+    await expect(transitionMatch(m.id, 'battle')).rejects.toBeInstanceOf(MatchTransitionError);
+    expect(setup).not.toHaveBeenCalled();
+  });
+
+  it('a failing voice channel setup does not fail the battle transition', async () => {
     vi.spyOn(VoiceChannelService, 'setupMatchVoiceChannels').mockRejectedValue(new Error('Voice setup failed'));
-    const m = await createMatch(gameId, modeId, { status: 'gather' });
-    await expect(transitionMatch(m.id, 'assign')).resolves.toEqual({ from: 'gather' });
-    expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].status).toBe('assign');
+    const m = await createMatch(gameId, modeId, { status: 'assign' });
+    await expect(transitionMatch(m.id, 'battle')).resolves.toEqual({ from: 'assign' });
+    expect((await pg().select().from(matches).where(eq(matches.id, m.id)))[0].status).toBe('battle');
   });
-});
 
-describe('handleBattleTransition', () => {
   it('queues the welcome voice announcement', async () => {
     const queue = vi.spyOn(VoiceChannelService, 'queueVoiceAnnouncement').mockResolvedValue(true);
     const m = await createMatch(gameId, modeId, { status: 'assign' });

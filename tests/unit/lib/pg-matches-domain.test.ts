@@ -18,7 +18,7 @@ import {
   initializeMatchGames, listAvatarRefreshUsers, listDmRecipients, listMatchesDueToStart, listStaleBattleMatches, listUpcomingMatches,
   nextFirstTeam, recordAvatarRefreshed, recordFirstTeam, releaseHeldScoreNotification, removeParticipantByUser, resolveMatchTeam,
   saveMatchResult, setTeamVoiceChannel, submitVoteWinner, TeamAssignmentError, trackVoiceChannels, listVotesForGame, recordVotePrompt,
-  isScorecardRequiredButMissing, findVoteByMessage, listVoteCommanders,
+  isScorecardRequiredButMissing, findVoteByMessage, listVoteCommanders, ensureMatchVoiceChannels, listMatchesNeedingVoiceChannels, matchHasVoiceChannels,
 } from '@/lib/matches';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -212,6 +212,52 @@ describe('voice channels', () => {
     expect(await pg().select().from(autoVoiceChannels)).toHaveLength(0);
     expect((await pg().select().from(discordBotRequests).where(eq(discordBotRequests.type, 'voice_channel_delete'))).map((r) => (r.data as any).channelId).sort()).toEqual([]);
     expect(await deleteMatchVoiceChannels(db, m.id)).toBe(true);
+  });
+
+  it('lists only assign matches inside the lead window that have teams and no channels yet', async () => {
+    const mode = await createGameMode(gameId, { scoring_type: 'Normal' });
+    const now = new Date('2026-06-01T12:00:00Z');
+    const at = (min: number) => new Date(now.getTime() + min * 60_000);
+    const mk = async (id: string, o: Record<string, unknown>, teams = true) => {
+      const m = await createMatch(gameId, mode.id, { id, status: 'assign', start_date: at(10), ...o } as never);
+      if (teams) await createMatchTeams(db, m.id);
+      return m;
+    };
+    await mk('soon', { start_date: at(10) });
+    await mk('overdue', { start_date: at(-5) });
+    await mk('too-far', { start_date: at(60) });
+    await mk('no-teams', {}, false);
+    await mk('wrong-status', { status: 'gather' });
+    const tracked = await mk('tracked', {});
+    await trackVoiceChannels(db, tracked.id, 'vc-b', 'vc-r');
+    const manual = await mk('manual', {});
+    const [t0] = await getMatchTeams(db, manual.id);
+    await setTeamVoiceChannel(db, t0.id, 'by-hand', manual.id);
+
+    expect((await listMatchesNeedingVoiceChannels(db, now, 15)).map((m) => m.id)).toEqual(['overdue', 'soon']);
+    expect((await listMatchesNeedingVoiceChannels(db, now, 90)).map((m) => m.id)).toEqual(['overdue', 'soon', 'too-far']);
+    expect((await listMatchesNeedingVoiceChannels(db, now, 90, 1)).map((m) => m.id)).toEqual(['overdue']);
+    expect(await matchHasVoiceChannels(db, 'tracked')).toBe(true);
+    expect(await matchHasVoiceChannels(db, 'manual')).toBe(true);
+    expect(await matchHasVoiceChannels(db, 'soon')).toBe(false);
+  });
+
+  it('never lists cumulative-points tournament matches', async () => {
+    const mode = await createGameMode(gameId, { scoring_type: 'Position' });
+    const t = await createTournament(gameId, { game_mode_id: mode.id, format: 'cumulative-points' });
+    const m = await createMatch(gameId, mode.id, { id: 'cum', status: 'assign', tournament_id: t.id });
+    await createMatchTeams(db, m.id);
+    expect(await listMatchesNeedingVoiceChannels(db, new Date(Date.now() + 3600_000), 15)).toEqual([]);
+    expect(await ensureMatchVoiceChannels(m.id)).toBe(false);
+  });
+
+  it('ensureMatchVoiceChannels is a no-op when channels exist and never throws', async () => {
+    const mode = await createGameMode(gameId, { scoring_type: 'Normal' });
+    const m = await createMatch(gameId, mode.id, { id: 'ens', status: 'assign' });
+    await createMatchTeams(db, m.id);
+    await trackVoiceChannels(db, m.id, 'vc-b', 'vc-r');
+    expect(await ensureMatchVoiceChannels(m.id)).toBe(true); // no category configured, but nothing to create
+    expect(await ensureMatchVoiceChannels('ghost')).toBe(false);
   });
 
   it('reports bot failures and names FFA lobbies / single-team / 3+ team channels correctly', async () => {

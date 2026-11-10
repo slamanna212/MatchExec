@@ -53,6 +53,27 @@ function rosterWarnings(series: { roster_min: number | null }, entrants: readonl
   return entrants.filter((e) => e.members.length < need).map((e) => `Entrant "${e.name}" has ${e.members.length} player(s) on its roster but needs at least ${need}`);
 }
 
+/** Warnings for fixtures that fall outside the series' start / end dates (both inclusive), compared as UTC calendar days. */
+export function seriesDateWarnings(
+  series: { start_date: Date | null; end_date: Date | null }, fixtures: ReadonlyArray<{ start: string }>,
+): string[] {
+  const days = fixtures.map((f) => new Date(f.start).toISOString().slice(0, 10)).sort();
+  if (days.length === 0) return [];
+  const warnings: string[] = [];
+  const plural = (n: number) => `${n} fixture${n === 1 ? '' : 's'}`;
+  if (series.start_date) {
+    const start = series.start_date.toISOString().slice(0, 10);
+    const early = days.filter((d) => d < start);
+    if (early.length > 0) warnings.push(`${plural(early.length)} start before the series start date (${start}); the earliest is on ${early[0]}`);
+  }
+  if (series.end_date) {
+    const end = series.end_date.toISOString().slice(0, 10);
+    const late = days.filter((d) => d > end);
+    if (late.length > 0) warnings.push(`${plural(late.length)} fall after the series end date (${end}); the last is on ${late[late.length - 1]}. Extend the end date or shorten the schedule`);
+  }
+  return warnings;
+}
+
 // ─── previews ────────────────────────────────────────────────────────────────
 
 async function previewContext(ex: Executor, seriesId: string, stageId: string | null | undefined, configured: readonly string[] | null | undefined) {
@@ -65,14 +86,15 @@ async function previewContext(ex: Executor, seriesId: string, stageId: string | 
 export async function previewRoundRobin(ex: Executor, seriesId: string, config: RoundRobinConfig): Promise<GeneratorPreview> {
   const { series, entrants } = await previewContext(ex, seriesId, config.stage_id, config.entrant_ids);
   const plan = asBadRequest(() => planRoundRobin(toPairingEntrants(entrants), config, config.match?.name_template));
-  return { fixtures: plan.fixtures, byes: plan.byes, warnings: [...rosterWarnings(series, entrants), ...plan.warnings] };
+  const warnings = [...rosterWarnings(series, entrants), ...plan.warnings, ...seriesDateWarnings(series, plan.fixtures)];
+  return { fixtures: plan.fixtures, byes: plan.byes, warnings };
 }
 
 export async function previewRaceCalendar(ex: Executor, seriesId: string, config: RaceCalendarConfig): Promise<GeneratorPreview> {
   const { series, entrants } = await previewContext(ex, seriesId, config.stage_id, config.entrant_ids);
   if (entrants.length < 2) throw new SeriesError('A race calendar needs at least 2 entrants', 400);
   const fixtures = asBadRequest(() => planRaceCalendar(config, entrants.map((e) => e.id)));
-  return { fixtures, byes: [], warnings: rosterWarnings(series, entrants) };
+  return { fixtures, byes: [], warnings: [...rosterWarnings(series, entrants), ...seriesDateWarnings(series, fixtures)] };
 }
 
 // ─── creating a batch's events ───────────────────────────────────────────────

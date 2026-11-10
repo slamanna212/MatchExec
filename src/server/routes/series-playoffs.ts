@@ -9,7 +9,7 @@ import { jsonError } from '../http';
 import { guard } from './series-helpers';
 
 /** The optional JSON body of the seed route: `{}` and an empty body both mean "use the computed qualifiers". Returns an error message for a bad body. */
-function parseSeedBody(text: string): { entrant_ids?: string[] } | string {
+function parseSeedBody(text: string): { entrant_ids?: string[]; force?: boolean } | string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -17,10 +17,11 @@ function parseSeedBody(text: string): { entrant_ids?: string[] } | string {
     return 'Invalid JSON body';
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return 'Invalid JSON body';
-  const ids = (parsed as Record<string, unknown>).entrant_ids;
-  if (ids === undefined || ids === null) return {};
+  const { entrant_ids: ids, force } = parsed as Record<string, unknown>;
+  if (force !== undefined && typeof force !== 'boolean') return 'force must be a boolean';
+  if (ids === undefined || ids === null) return { force };
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || id === '')) return 'entrant_ids must be an array of entrant ids';
-  return { entrant_ids: ids as string[] };
+  return { entrant_ids: ids as string[], force };
 }
 
 export const seriesPlayoffsRoutes = new Hono()

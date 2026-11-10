@@ -190,7 +190,7 @@ export const MAPPINGS: TableMapping[] = [
       announcement_role_id: SAME, mention_everyone: SAME, event_duration_minutes: SAME,
       match_reminder_minutes: SAME, player_reminder_minutes: SAME, announcer_voice: SAME,
       voice_announcements_enabled: SAME, created_at: SAME, updated_at: SAME,
-      voice_channel_cleanup_delay_minutes: SAME, match_start_delay_seconds: SAME, winner_vote_enabled: SAME,
+      voice_channel_cleanup_delay_minutes: SAME, voice_channel_lead_minutes: DEFAULT, match_start_delay_seconds: SAME, winner_vote_enabled: SAME,
       signup_dm_enabled: SAME, commander_dm_enabled: SAME,
     },
   }),

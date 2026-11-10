@@ -8,7 +8,7 @@ import { createGame, createGameMode, createMatch, createTournament } from '../..
 import {
   discordBotRequests, discordDeletionQueue, discordMatchEditQueue, discordMatchMessages, discordSettings, matchGames,
   matchParticipants, matchTeams, matches, scorecardSubmissions, seriesEvents, series, tournamentMatches, tournamentTeams, gameMaps } from '../../../lib/db/schema';
-import { getTournamentRescoreBlocker } from '@/lib/matches';
+import { createMatchTeams, getTournamentRescoreBlocker, initializeMatchGames } from '@/lib/matches';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
 vi.mock('@/lib/feed-helpers', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/feed-helpers')>()), logFeedEvent: vi.fn(), deleteFeedEvents: vi.fn() }));
@@ -137,7 +137,7 @@ describe('participants, teams and setup', () => {
   it('lists participants in signup order with a derived team_assignment', async () => {
     const m = await createMatch(gameId, modeId, { id: 'p', status: 'assign' });
     const ids = await addPlayers(m.id, 3);
-    await appRequest(`/api/matches/${m.id}/teams`); // lazily creates Blue / Red / Reserve
+    await createMatchTeams(pg(), m.id); // Blue / Red / Reserve, as the assign transition does
     const teams = await pg().select().from(matchTeams).where(eq(matchTeams.match_id, m.id)).orderBy(asc(matchTeams.team_order));
     await pg().update(matchParticipants).set({ team_id: teams[0].id }).where(eq(matchParticipants.id, ids[0]));
     await pg().update(matchParticipants).set({ team_id: teams[1].id }).where(eq(matchParticipants.id, ids[1]));
@@ -148,13 +148,17 @@ describe('participants, teams and setup', () => {
     expect((await appRequest('/api/matches/zzz/participants')).status).toBe(404);
   });
 
-  it('creates missing teams lazily only in assign/battle', async () => {
+  it('GET /teams is read-only: it lists the teams that exist and never creates any', async () => {
     const early = await createMatch(gameId, modeId, { status: 'gather' });
     expect((await appRequest(`/api/matches/${early.id}/teams`)).data.teams).toEqual([]);
     const assign = await createMatch(gameId, modeId, { status: 'assign' });
+    expect((await appRequest(`/api/matches/${assign.id}/teams`)).data.teams).toEqual([]);
+    expect(await pg().select().from(matchTeams).where(eq(matchTeams.match_id, assign.id))).toHaveLength(0);
+
+    await createMatchTeams(pg(), assign.id);
     const res = await appRequest(`/api/matches/${assign.id}/teams`);
     expect(res.data.teams.map((t: any) => [t.team_name, t.is_reserve])).toEqual([['Blue', false], ['Red', false], ['Reserve', true]]);
-    expect((await appRequest(`/api/matches/${assign.id}/teams`)).data.teams).toHaveLength(3); // idempotent
+    expect((await appRequest(`/api/matches/${assign.id}/teams`)).data.teams).toHaveLength(3); // repeated reads change nothing
     expect((await appRequest(`/api/matches/${'x'.repeat(101)}/teams`)).status).toBe(400);
   });
 
@@ -162,6 +166,7 @@ describe('participants, teams and setup', () => {
     async function assignable() {
       const m = await createMatch(gameId, modeId, { id: 'a', status: 'assign' });
       const ids = await addPlayers(m.id, 3);
+      await createMatchTeams(pg(), m.id);
       const teams = (await appRequest(`/api/matches/${m.id}/teams`)).data.teams as Array<{ id: string }>;
       return { m, ids, teams };
     }
@@ -259,8 +264,11 @@ describe('maps', () => {
     expect((await appRequest(`/api/matches/${m.id}/map-notes`)).data.notes.m2).toBe('edited');
   });
 
-  it('lazily initialises games on GET /games and survives matches without maps', async () => {
+  it('GET /games is read-only: it lists the games that exist and never creates any', async () => {
     const m = await createMatch(gameId, modeId, { id: 'lazy', maps: ['a', 'b'] });
+    expect((await appRequest(`/api/matches/${m.id}/games`)).data).toEqual({ success: true, games: [] });
+    expect(await pg().select().from(matchGames).where(eq(matchGames.match_id, m.id))).toHaveLength(0);
+    await initializeMatchGames(pg(), m.id); // what creation / the battle transition does
     const res = await appRequest(`/api/matches/${m.id}/games`);
     expect(res.data.games.map((g: any) => [g.round, g.status, g.map_id])).toEqual([[1, 'ongoing', 'a'], [2, 'pending', 'b']]);
     const none = await createMatch(gameId, modeId, { id: 'nomaps' });

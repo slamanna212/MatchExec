@@ -33,6 +33,15 @@ async function eventDtos(seriesId: string, ids: readonly string[]) {
   return (await listSeriesEventDtos(db, seriesId)).filter((e) => wanted.has(e.id));
 }
 
+/**
+ * The config of a generator preview request. Commit bodies are `{ config, fixtures? }`, so a preview takes the same shape;
+ * the raw config as the whole body (the original shape) is still accepted. A config itself never has a `config` key.
+ */
+function previewConfigOf(body: Record<string, unknown>): Record<string, unknown> {
+  const inner = body.config;
+  return inner !== null && typeof inner === 'object' && !Array.isArray(inner) ? (inner as Record<string, unknown>) : body;
+}
+
 export const seriesBuilderRoutes = new Hono()
   // ── create events ─────────────────────────────────────────────────────────
   .post('/:seriesId/events/match', (c) => guard(c, 'Error creating series match', 'Failed to create match', async () => {
@@ -74,9 +83,10 @@ export const seriesBuilderRoutes = new Hono()
     await requireSeries(seriesId);
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
-    const invalid = validateRoundRobinConfig({ ...body });
+    const config = previewConfigOf(body);
+    const invalid = validateRoundRobinConfig({ ...config });
     if (invalid) return jsonError(c, invalid.replace(/^config\./, ''), 400);
-    return c.json(await previewRoundRobin(db, seriesId, body as unknown as RoundRobinConfig));
+    return c.json(await previewRoundRobin(db, seriesId, config as unknown as RoundRobinConfig));
   }))
 
   .post('/:seriesId/generators/round-robin', (c) => guard(c, 'Error creating round robin', 'Failed to create round robin', async () => {
@@ -95,9 +105,10 @@ export const seriesBuilderRoutes = new Hono()
     await requireSeries(seriesId);
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
-    const invalid = validateRaceCalendarConfig({ ...body });
+    const config = previewConfigOf(body);
+    const invalid = validateRaceCalendarConfig({ ...config });
     if (invalid) return jsonError(c, invalid.replace(/^config\./, ''), 400);
-    return c.json(await previewRaceCalendar(db, seriesId, body as unknown as RaceCalendarConfig));
+    return c.json(await previewRaceCalendar(db, seriesId, config as unknown as RaceCalendarConfig));
   }))
 
   .post('/:seriesId/generators/race-calendar', (c) => guard(c, 'Error creating race calendar', 'Failed to create race calendar', async () => {

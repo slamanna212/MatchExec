@@ -158,11 +158,11 @@ export interface MatchTemplateState {
   rules: 'casual' | 'competitive' | null;
 }
 
+/** The match template of a request. `rounds` is not sent: a match plays one game per map (tournaments use `rounds` as rounds_per_match). */
 export function matchTemplatePayload(t: MatchTemplateState): Omit<SeriesMatchTemplate, 'start_date' | 'name'> {
   return {
     ...(t.game_id ? { game_id: t.game_id } : {}),
     ...(t.maps.length > 0 ? { maps: t.maps } : {}),
-    ...(t.rounds !== null ? { rounds: t.rounds } : {}),
     ...(t.rules ? { rules: t.rules } : {}),
   };
 }
@@ -303,7 +303,8 @@ export function buildRaceCalendarConfig(form: RaceCalendarFormState): RaceCalend
   if (form.event_kind === 'match') {
     config.match = base;
   } else {
-    const { game_id, rounds, rules } = base;
+    const { game_id, rules } = base;
+    const rounds = form.template.rounds ?? undefined;
     const tournament: NonNullable<RaceCalendarConfig['tournament']> = { format: form.tournament_format };
     if (game_id) tournament.game_id = game_id;
     if (rounds !== undefined) tournament.rounds_per_match = rounds;

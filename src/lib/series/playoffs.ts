@@ -25,8 +25,10 @@ type SeriesEventRow = typeof seriesEvents.$inferSelect;
 type Qualifier = SeedPreviewResponse['qualifiers'][number];
 
 export interface SeedPlayoffInput {
-  /** Manual seed order (1st = top seed) instead of the computed qualifiers. */
+  /** Manual seed order (1st = top seed) instead of the computed qualifiers. A manual order skips the stage-complete check. */
   entrant_ids?: string[];
+  /** Seed even though the source stage / season is not complete yet (see `SeedPreviewResponse.blockers`). */
+  force?: boolean;
 }
 
 export interface SeededPlayoffResult {
@@ -88,8 +90,8 @@ function interleave(groups: RankedEntrant[][], top: number): RankedEntrant[] {
   return out;
 }
 
-/** Warnings about the source of the standings: an unfinished stage / season, or a rule pointing at a deleted stage. */
-async function sourceWarnings(ex: Executor, seriesId: string, rule: SeriesSeedingRule): Promise<string[]> {
+/** Problems with the source of the standings: an unfinished stage / season (these block seeding), or a rule pointing at a deleted stage (throws). */
+async function sourceBlockers(ex: Executor, seriesId: string, rule: SeriesSeedingRule): Promise<string[]> {
   const stages = await listStages(ex, seriesId);
   if (rule.source === 'stage') {
     const stage = stages.find((s) => s.id === rule.stage_id);
@@ -125,9 +127,11 @@ function pickPerDivision(ranked: RankedEntrant[], top: number): { picked: Ranked
 async function computeQualifiers(ex: Executor, series: SeriesRow, rule: SeriesSeedingRule): Promise<SeedPreviewResponse> {
   const entrants = await listEntrants(ex, series.id);
   if (entrants.length === 0) {
-    return { qualifiers: [], warnings: ['This series has no entrants (legacy series): playoffs cannot be seeded'] };
+    return { qualifiers: [], warnings: ['This series has no entrants (legacy series): playoffs cannot be seeded'], blockers: [] };
   }
-  const warnings = await sourceWarnings(ex, series.id, rule);
+  const blockers = await sourceBlockers(ex, series.id, rule);
+  const warnings = [...blockers];
+  if (series.status !== 'active') warnings.push(`The series is ${series.status}: playoffs can only be seeded while it is active`);
 
   const standings = await getSeriesStandingsResponse(ex, series.id, { scope: rule.source === 'stage' ? (rule.stage_id ?? undefined) : 'season' });
   const active = new Map(entrants.filter((e) => e.status === 'active').map((e) => [e.id, e]));
@@ -143,6 +147,7 @@ async function computeQualifiers(ex: Executor, series: SeriesRow, rule: SeriesSe
   return {
     qualifiers: picked.map((r, i) => ({ entrant_id: r.entrant.id, name: r.entrant.name, seed: i + 1, rank: r.rank, division: r.entrant.division })),
     warnings,
+    blockers,
   };
 }
 
@@ -179,7 +184,8 @@ export async function getSeedPreview(ex: Executor, seriesId: string, eventId: st
  * Seeds a planned playoff event: creates the bracket tournament from `seeding_rule.template` + `format` with the
  * qualifiers (or the manual `entrant_ids` order) as pre-assigned teams, turns the planned row into the live event and
  * queues the `playoff_seeded` post, all in one transaction. Errors: 404, 409 (not planned / series finished), 400
- * (legacy series without entrants, fewer than 2 qualifiers, invalid override).
+ * (legacy series without entrants, fewer than 2 qualifiers, invalid override), 409 also when the series is not active or
+ * the source stage / season is not complete (unless `force` or a manual order is given).
  */
 export async function seedPlayoffEvent(db: Db, seriesId: string, eventId: string, input: SeedPlayoffInput = {}): Promise<SeededPlayoffResult> {
   const after = new AfterCommit();
@@ -189,8 +195,18 @@ export async function seedPlayoffEvent(db: Db, seriesId: string, eventId: string
       .where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId))).for('update');
     const { event, rule } = requirePlanned(row);
     if (ctx.entrants.size === 0) throw new SeriesError('This series has no entrants (legacy series): playoffs cannot be seeded', 400);
+    if (ctx.series.status !== 'active') throw new SeriesError(`Playoffs can only be seeded while the series is active (it is ${ctx.series.status})`, 409);
 
-    const qualifiers = input.entrant_ids ? await overrideQualifiers(tx, seriesId, input.entrant_ids) : (await computeQualifiers(tx, ctx.series, rule)).qualifiers;
+    let qualifiers: Qualifier[];
+    if (input.entrant_ids) {
+      qualifiers = await overrideQualifiers(tx, seriesId, input.entrant_ids); // an explicit order skips the stage check
+    } else {
+      const computed = await computeQualifiers(tx, ctx.series, rule);
+      if (computed.blockers.length > 0 && !input.force) {
+        throw new SeriesError(`Cannot seed yet: ${computed.blockers.join('; ')}. Send force: true to seed anyway.`, 409);
+      }
+      qualifiers = computed.qualifiers;
+    }
     if (qualifiers.length < 2) throw new SeriesError('At least 2 qualifiers are needed to seed a bracket', 400);
     const ids = qualifiers.map((q) => q.entrant_id);
 

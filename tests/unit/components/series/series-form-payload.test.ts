@@ -5,7 +5,7 @@ import type { SeriesSummary } from '@/components/series/series-shared';
 const baseSummary = (over: Partial<SeriesSummary> = {}): SeriesSummary => ({
   id: 's1', name: 'Legacy', status: 'created', announcements: true, player_notifications: true,
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', event_count: 0, completed_event_count: 0,
-  participant_count: 0, next_event: null, last_event_game: null, series_game: null, champion: null, ...over,
+  participant_count: 0, entrant_count: 0, next_event: null, last_event_game: null, series_game: null, champion: null, ...over,
 });
 
 describe('buildSeriesPayload', () => {
@@ -56,7 +56,7 @@ describe('formFromSeries', () => {
   it('reads the new setup fields', () => {
     const form = formFromSeries(baseSummary({
       entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Position', game_ids: ['a', 'b'], game_id: 'a', game_mode_id: 'm',
-      match_defaults: { rounds: 3, rules: 'competitive', stats_enabled: true, player_notifications: false, maps: ['x'] },
+      match_defaults: { rounds_per_match: 3, rules: 'competitive', stats_enabled: true, player_notifications: false, maps: ['x'] },
       discord_config: { weekly_schedule: false, schedule_lead_hours: 12 },
     }));
     expect(form).toMatchObject({
@@ -68,10 +68,10 @@ describe('formFromSeries', () => {
 });
 
 describe('match defaults / discord config', () => {
-  it('only includes rounds, rules and maps when set', () => {
+  it('only includes rounds per tournament match, rules and maps when set (matches play one game per map: no rounds)', () => {
     expect(buildMatchDefaults(EMPTY_SERIES_FORM)).toEqual({ stats_enabled: false, player_notifications: true });
     expect(buildMatchDefaults({ ...EMPTY_SERIES_FORM, match_rounds: 5, match_rules: 'casual', match_maps: ['m1'] })).toEqual({
-      rounds: 5, rounds_per_match: 5, rules: 'casual', stats_enabled: false, player_notifications: true, maps: ['m1'],
+      rounds_per_match: 5, rules: 'casual', stats_enabled: false, player_notifications: true, maps: ['m1'],
     });
   });
 

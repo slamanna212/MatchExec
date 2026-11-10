@@ -1,0 +1,1 @@
+ALTER TABLE "discord_settings" ADD COLUMN "voice_channel_lead_minutes" integer DEFAULT 15 NOT NULL;

@@ -86,6 +86,7 @@ describe('getSeedPreview', () => {
     const tied = await plannedPlayoff(l.seriesId, bracketRule({ source: 'stage', stage_id: stage.id, top: 2 }));
 
     const a = await getSeedPreview(pg(), l.seriesId, tied);
+    expect(a.blockers).toEqual([expect.stringMatching(/Split 1.*not complete/)]); // only the unfinished source blocks seeding
     expect(a.warnings).toHaveLength(2);
     expect(a.warnings[0]).toMatch(/Split 1.*not complete/);
     expect(a.warnings[1]).toMatch(/Tie at the cut-off.*ranked 2/);
@@ -94,7 +95,17 @@ describe('getSeedPreview', () => {
     expect((await getSeedPreview(pg(), l.seriesId, many)).warnings).toContainEqual(expect.stringMatching(/Only 3 entrant\(s\).*8 qualify/));
 
     await pg().update(seriesStages).set({ status: 'complete' }).where(eq(seriesStages.id, stage.id));
-    expect((await getSeedPreview(pg(), l.seriesId, tied)).warnings).toEqual([expect.stringMatching(/Tie at the cut-off/)]);
+    const done = await getSeedPreview(pg(), l.seriesId, tied);
+    expect(done.warnings).toEqual([expect.stringMatching(/Tie at the cut-off/)]);
+    expect(done.blockers).toEqual([]);
+  });
+
+  it('warns when the series is not active', async () => {
+    const l = await createLeague([{ name: 'A' }, { name: 'B' }], { status: 'registration' });
+    const eventId = await plannedPlayoff(l.seriesId, bracketRule({ top: 2 }));
+    const preview = await getSeedPreview(pg(), l.seriesId, eventId);
+    expect(preview.warnings).toContainEqual(expect.stringMatching(/series is registration.*only be seeded while it is active/));
+    expect(preview.blockers).toEqual([]);
   });
 
   it('only considers active entrants', async () => {
@@ -126,7 +137,7 @@ describe('getSeedPreview', () => {
 describe('seedPlayoffEvent', () => {
   it('turns the planned event into a live bracket tournament seeded from the standings', async () => {
     const l = await fourTeamLeague();
-    const stage = await insertStage(l.seriesId);
+    const stage = await insertStage(l.seriesId, { status: 'complete' });
     const eventId = await plannedPlayoff(l.seriesId, bracketRule({ top: 3, template: { name: 'Grand Finals' } }), { stage_id: stage.id, week: 9 });
     const before = (await pg().select().from(seriesEvents).where(eq(seriesEvents.id, eventId)))[0];
 
@@ -147,6 +158,43 @@ describe('seedPlayoffEvent', () => {
     const firstRound = bracket.filter((m) => m.round === 1 && m.team1_id && m.team2_id);
     expect(firstRound).toHaveLength(1);
     expect([firstRound[0].team1_id, firstRound[0].team2_id].sort()).toEqual([teams[1].id, teams[2].id].sort());
+  });
+
+  describe('seed checks', () => {
+    const unfinished = async () => {
+      const l = await fourTeamLeague();
+      await insertStage(l.seriesId, { name: 'Regular Season', status: 'active' }); // counts toward the season, not complete
+      const eventId = await plannedPlayoff(l.seriesId, bracketRule({ top: 3 }));
+      return { l, eventId };
+    };
+
+    it('refuses while the source stage / season is not complete, and creates nothing', async () => {
+      const { l, eventId } = await unfinished();
+      await rejects(seedPlayoffEvent(pg(), l.seriesId, eventId), 409, /Cannot seed yet.*Regular Season.*force: true/);
+      expect((await pg().select().from(seriesEvents).where(eq(seriesEvents.id, eventId)))[0].status).toBe('planned');
+      expect(await pg().select().from(tournaments)).toHaveLength(0);
+    });
+
+    it('seeds anyway with force', async () => {
+      const { l, eventId } = await unfinished();
+      const { event } = await seedPlayoffEvent(pg(), l.seriesId, eventId, { force: true });
+      expect(event).toMatchObject({ status: 'live', entrant_ids: [l.id.A, l.id.B, l.id.C] });
+    });
+
+    it('a manual seed order skips the stage check', async () => {
+      const { l, eventId } = await unfinished();
+      const { event } = await seedPlayoffEvent(pg(), l.seriesId, eventId, { entrant_ids: [l.id.D, l.id.C] });
+      expect(event).toMatchObject({ status: 'live', entrant_ids: [l.id.D, l.id.C] });
+    });
+
+    it.each(['created', 'registration'] as const)('refuses while the series is %s, even with force or a manual order', async (status) => {
+      const l = await createLeague([{ name: 'A' }, { name: 'B' }, { name: 'C' }], { status });
+      await l.rankBy(['A', 'B', 'C']);
+      const eventId = await plannedPlayoff(l.seriesId, bracketRule({ top: 2 }));
+      await rejects(seedPlayoffEvent(pg(), l.seriesId, eventId), 409, /only be seeded while the series is active/);
+      await rejects(seedPlayoffEvent(pg(), l.seriesId, eventId, { force: true }), 409, /only be seeded while the series is active/);
+      await rejects(seedPlayoffEvent(pg(), l.seriesId, eventId, { entrant_ids: [l.id.A, l.id.B] }), 409, /only be seeded while the series is active/);
+    });
   });
 
   it('queues playoff_seeded with the qualifiers, once, and respects series.announcements', async () => {

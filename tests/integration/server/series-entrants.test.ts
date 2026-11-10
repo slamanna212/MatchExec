@@ -27,13 +27,13 @@ describe('series create / edit with the new fields', () => {
     const game = await racing();
     const res = await api('', 'POST', {
       name: 'Endurance', entrant_type: 'team', roster_min: 2, roster_max: 4, scoring_type: 'Position', game_id: game.id, game_ids: [game.id],
-      scoring_config: { mode: 'points', position_points: [25, 18] }, match_defaults: { rounds: 4 }, discord_config: { standings_posts: false },
+      scoring_config: { mode: 'points', position_points: [25, 18] }, match_defaults: { rounds_per_match: 4 }, discord_config: { standings_posts: false },
     });
     expect(res.status, JSON.stringify(res.data)).toBe(201);
     const { data } = await api(`/${res.data.id}`);
     expect(data.series).toMatchObject({
       entrant_type: 'team', roster_min: 2, roster_max: 4, scoring_type: 'Position', game_ids: [game.id], status: 'created',
-      scoring_config: { mode: 'points', position_points: [25, 18] }, match_defaults: { rounds: 4 }, discord_config: { standings_posts: false },
+      scoring_config: { mode: 'points', position_points: [25, 18] }, match_defaults: { rounds_per_match: 4 }, discord_config: { standings_posts: false },
       previous_series_id: null, game_mode_id: null,
     });
   });

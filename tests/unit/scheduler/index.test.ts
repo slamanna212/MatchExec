@@ -7,10 +7,12 @@ vi.mock('../../../lib/maintenance', async (importOriginal) => ({
 }));
 
 import { getPgTestDb, setupPgTestFile } from '../../utils/pg-test-db';
-import { eq, count } from 'drizzle-orm';
+import { and, eq, count } from 'drizzle-orm';
+import { db } from '../../../lib/db';
+import { createMatchTeams } from '../../../src/lib/matches';
 import { setAppSetting } from '../../../src/lib/settings';
 import { updateSchedulerCrons } from '../../../src/lib/settings';
-import { discordHealthAlertQueue, discordMatchStartQueue, healthAlertsSent, matches } from '../../../lib/db/schema';
+import { discordAnnouncementQueue, discordHealthAlertQueue, discordMatchStartQueue, discordVoiceAnnouncementQueue, healthAlertsSent, matchTeams, matches } from '../../../lib/db/schema';
 import { seedBasicTestData, createMatch } from '../../utils/pg-fixtures';
 
 vi.mock('../../../src/lib/logger/server', () => ({
@@ -108,18 +110,20 @@ describe('MatchExecScheduler', () => {
       expect(unchanged.status).toBe('battle');
     });
 
-    it('queues a start notification for each match that transitions to battle', async () => {
+    it('starts a due match like a manual start: match-start post and welcome voice announcement', async () => {
       const pastDate = new Date(Date.now() - 5 * 60 * 1000);
-      const match = await createMatch(game.id, mode.id, {
-        status: 'assign',
-        start_date: pastDate,
-      });
+      const match = await createMatch(game.id, mode.id, { status: 'assign', start_date: pastDate });
+      await createMatchTeams(db, match.id);
+      await getPgTestDb().update(matchTeams).set({ voice_channel_id: 'vc-1' }).where(and(eq(matchTeams.match_id, match.id), eq(matchTeams.team_order, 0)));
 
       await (scheduler as any).checkMatchStartTimes();
 
-      const [notification] = await getPgTestDb().select().from(discordMatchStartQueue).where(eq(discordMatchStartQueue.match_id, match.id));
-      expect(notification).toBeDefined();
-      expect(notification.status).toBe('pending');
+      const posts = await getPgTestDb().select().from(discordAnnouncementQueue)
+        .where(and(eq(discordAnnouncementQueue.match_id, match.id), eq(discordAnnouncementQueue.announcement_type, 'match_start')));
+      expect(posts).toHaveLength(1);
+      const voice = await getPgTestDb().select().from(discordVoiceAnnouncementQueue).where(eq(discordVoiceAnnouncementQueue.match_id, match.id));
+      expect(voice.map((v) => v.announcement_type)).toEqual(['welcome']);
+      expect(await getPgTestDb().select().from(discordMatchStartQueue).where(eq(discordMatchStartQueue.match_id, match.id))).toHaveLength(0);
     });
   });
 

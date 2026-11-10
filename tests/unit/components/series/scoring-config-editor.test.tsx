@@ -113,6 +113,21 @@ describe('ScoringConfigEditor', () => {
       expect(onChange).toHaveBeenLastCalledWith({ mode: 'head_to_head', tiebreakers: ['match_wins'] });
     });
 
+    it('shows league points first and keeps them in the order while win/loss/tie points are set', () => {
+      const onChange = vi.fn();
+      const container = render(<ScoringConfigEditor value={{ mode: 'head_to_head', win_points: 3, tiebreakers: ['match_wins', 'maps_won'] }} onChange={onChange} />);
+      const rows = [...container.querySelectorAll('button[aria-label^="Remove"]')].map((b) => b.getAttribute('aria-label'));
+      expect(rows).toEqual(['Remove League points', 'Remove Match wins', 'Remove Maps won']); // 'points' leads even though the stored list omits it
+      expect((container.querySelector('button[aria-label="Remove League points"]') as HTMLButtonElement).disabled).toBe(true);
+      expect((container.querySelector('button[aria-label="Remove Match wins"]') as HTMLButtonElement).disabled).toBe(false);
+      expect(container.textContent).toContain('ranked by league points first');
+    });
+
+    it('lets league points be removed from the order when no league points are awarded', () => {
+      const container = render(<ScoringConfigEditor value={{ mode: 'head_to_head', tiebreakers: ['points', 'match_wins'] }} onChange={vi.fn()} />);
+      expect((container.querySelector('button[aria-label="Remove League points"]') as HTMLButtonElement).disabled).toBe(false);
+    });
+
     it('does not offer the last remaining tiebreaker for removal', () => {
       const container = render(<ScoringConfigEditor value={{ mode: 'head_to_head', tiebreakers: ['match_wins'] }} onChange={vi.fn()} />);
       expect((container.querySelector('button[aria-label="Remove Match wins"]') as HTMLButtonElement).disabled).toBe(true);

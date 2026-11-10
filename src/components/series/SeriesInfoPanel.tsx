@@ -81,6 +81,7 @@ export function SeriesInfoPanel({
               <Badge variant="light" color={SERIES_STATUS_COLOR[series.status]}>{series.status}</Badge>
             </DetailRow>
             <DetailRow label="Events">{`${series.completed_event_count} of ${series.event_count} complete`}</DetailRow>
+            {series.entrant_type === 'team' && series.entrant_count > 0 && <DetailRow label="Teams">{String(series.entrant_count)}</DetailRow>}
             <DetailRow label="Players">{String(series.participant_count)}</DetailRow>
             {series.scoring_type && (
               <DetailRow label="Format">{describeSeriesFormat(series.entrant_type ?? 'solo', series.scoring_type)}</DetailRow>

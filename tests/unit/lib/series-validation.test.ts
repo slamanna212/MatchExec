@@ -162,7 +162,7 @@ describe('validateScoringConfig (rework keys)', () => {
 describe('validateSeriesBody (rework fields)', () => {
   const ok = { name: 'S' };
   it('accepts the new fields', () => {
-    expect(validateSeriesBody({ ...ok, entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Normal', game_ids: ['a', 'b'], game_mode_id: 'm', match_defaults: { rounds: 3 }, discord_config: { weekly_schedule: true }, previous_series_id: null }, false)).toBeNull();
+    expect(validateSeriesBody({ ...ok, entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Normal', game_ids: ['a', 'b'], game_mode_id: 'm', match_defaults: { rounds_per_match: 3 }, discord_config: { weekly_schedule: true }, previous_series_id: null }, false)).toBeNull();
     expect(validateSeriesBody({ scoring_type: null, match_defaults: null, discord_config: null }, true)).toBeNull();
   });
   it('rejects bad enums, bounds and blobs', () => {
@@ -178,8 +178,9 @@ describe('validateSeriesBody (rework fields)', () => {
 
 describe('validateMatchDefaults / validateDiscordConfig / validateRosterBounds', () => {
   it('match defaults', () => {
-    expect(validateMatchDefaults({ maps: ['a'], rounds: 3, rounds_per_match: 5, rules: 'casual', stats_enabled: true, announcements: [{ type: 'x', time: 5 }], livestream_link: null })).toBeNull();
-    for (const bad of [{ maps: [1] }, { rounds: 0 }, { rounds: 100 }, { rules: 'x' }, { stats_enabled: 'y' }, { announcements: [{ type: 'x' }] }, { livestream_link: 3 }, 'x']) {
+    expect(validateMatchDefaults({ maps: ['a'], rounds_per_match: 5, rules: 'casual', stats_enabled: true, announcements: [{ type: 'x', time: 5 }], livestream_link: null })).toBeNull();
+    expect(validateMatchDefaults({ rounds: 3 })).toMatch(/rounds is not accepted.*one game per map/);
+    for (const bad of [{ maps: [1] }, { rounds_per_match: 0 }, { rounds_per_match: 100 }, { rules: 'x' }, { stats_enabled: 'y' }, { announcements: [{ type: 'x' }] }, { livestream_link: 3 }, 'x']) {
       expect(validateMatchDefaults(bad), JSON.stringify(bad)).not.toBeNull();
     }
   });

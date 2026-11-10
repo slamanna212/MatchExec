@@ -31,7 +31,7 @@ export function defaultTemplateState(series: TemplateSeries): MatchTemplateState
   return {
     game_id: gameId,
     maps: gameId === series.game_id ? [...(d?.maps ?? [])] : [],
-    rounds: d?.rounds ?? d?.rounds_per_match ?? null,
+    rounds: d?.rounds_per_match ?? null, // tournaments only; a match plays one game per map
     rules: d?.rules ?? null,
   };
 }

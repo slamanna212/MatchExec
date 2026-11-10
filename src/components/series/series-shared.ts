@@ -53,6 +53,7 @@ export interface SeriesSummary {
   event_count: number;
   completed_event_count: number;
   participant_count: number;
+  entrant_count: number;
   next_event: SeriesNextEvent | null;
   last_event_game: SeriesGameInfo | null;
   series_game: SeriesGameInfo | null;

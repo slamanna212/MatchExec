@@ -52,6 +52,18 @@ describe('Discord settings', () => {
     expect((await appRequest('/api/settings/discord')).data.voice_channel_cleanup_delay_minutes).toBe(0);
   });
 
+  it('round-trips the voice channel lead time and defaults to fifteen minutes', async () => {
+    expect((await appRequest('/api/settings/discord')).data.voice_channel_lead_minutes).toBe(15);
+    expect((await put('/api/settings/discord', { voice_channel_lead_minutes: 0 })).status).toBe(200);
+    expect((await appRequest('/api/settings/discord')).data.voice_channel_lead_minutes).toBe(0);
+    expect((await put('/api/settings/discord', { voice_channel_lead_minutes: 30 })).status).toBe(200);
+    expect((await appRequest('/api/settings/discord')).data.voice_channel_lead_minutes).toBe(30);
+  });
+
+  it.each([-1, 1441, 1.5, '10', null])('rejects invalid voice channel lead time %s', async (value) => {
+    expect((await put('/api/settings/discord', { voice_channel_lead_minutes: value })).status).toBe(400);
+  });
+
   it.each([-1, 10081, 1.5, '10', null])('rejects invalid cleanup delay %s', async (value) => {
     expect((await put('/api/settings/discord', { voice_channel_cleanup_delay_minutes: value })).status).toBe(400);
   });

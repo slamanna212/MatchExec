@@ -53,6 +53,11 @@ class MatchExecBot {
     async () => { await this.queueProcessor?.processAllQueues(); },
     (error) => logger.error('❌ Error processing queues:', error),
   );
+  // Voice announcements play audio (seconds to minutes each), so they get their own loop and never delay the other queues.
+  private runVoiceQueueTick = nonOverlapping(
+    async () => { await this.queueProcessor?.processVoiceAnnouncementQueue(); },
+    (error) => logger.error('❌ Error processing voice announcement queue:', error),
+  );
 
   constructor() {
     this.client = new Client({
@@ -336,6 +341,9 @@ class MatchExecBot {
     setInterval(async () => {
       await this.processQueues();
     }, 3000);
+    setInterval(async () => {
+      await this.processVoiceQueue();
+    }, 3000);
 
     // Check for empty auto-created voice channels every minute
     this.voiceChannelMonitorInterval = setInterval(async () => {
@@ -354,6 +362,12 @@ class MatchExecBot {
 
     // A tick never starts while the previous one is still running; errors never crash the bot.
     await this.runQueueTick();
+  }
+
+  // Voice announcements run independently of processQueues (see runVoiceQueueTick)
+  private async processVoiceQueue() {
+    if (!this.queueProcessor || !this.isReady) return;
+    await this.runVoiceQueueTick();
   }
 
   private async processVoiceChannelEmptiness() {

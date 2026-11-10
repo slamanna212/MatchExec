@@ -44,6 +44,23 @@ const rrConfig = (over: Record<string, unknown> = {}) => ({
 });
 const eventsOf = (seriesId: string) => pg().select().from(seriesEvents).where(eq(seriesEvents.series_id, seriesId)).orderBy(asc(seriesEvents.event_order));
 
+describe('series matches and read-only GETs', () => {
+  it('a series match keeps exactly its entrant teams (no Reserve) however often its teams and games are read', async () => {
+    const s = await teamSeries();
+    const created = await api(s.seriesId, '/events/match', 'POST', {
+      entrant_ids: [s.entrants[0].id, s.entrants[1].id], match: { start_date: START, maps: s.mapIds.slice(0, 2) },
+    });
+    const matchId: string = created.data.match_id;
+    for (let i = 0; i < 2; i++) {
+      const teams = (await appRequest(`/api/matches/${matchId}/teams`)).data.teams as Array<{ team_name: string; is_reserve: boolean }>;
+      expect(teams.map((t) => [t.team_name, t.is_reserve])).toEqual([['Alpha', false], ['Bravo', false]]);
+      await appRequest(`/api/matches/${matchId}/games`);
+    }
+    expect(await pg().select().from(matchTeams).where(eq(matchTeams.match_id, matchId))).toHaveLength(2);
+    expect(await pg().select().from(matchGames).where(eq(matchGames.match_id, matchId))).toHaveLength(0); // games appear when the match starts
+  });
+});
+
 describe('POST /:id/events/match|tournament|planned', () => {
   it('creates a match event and returns the event DTO with the match id', async () => {
     const s = await teamSeries();
@@ -107,7 +124,9 @@ describe('POST /:id/events/match|tournament|planned', () => {
     expect((await m({ match: { start_date: START }, role: 'bogus' })).status).toBe(400);
     expect((await m({ match: { start_date: START }, points_multiplier: 0 })).status).toBe(400);
     expect((await m({ match: { start_date: START }, week: 0 })).status).toBe(400);
-    expect((await m({ match: { start_date: START, rounds: 99 } })).status).toBe(400);
+    const withRounds = await m({ match: { start_date: START, rounds: 3 } });
+    expect(withRounds.status).toBe(400);
+    expect(withRounds.data.error).toMatch(/rounds is not accepted.*one game per map/);
     expect((await m({ match: { start_date: START }, entrant_ids: ['nope', 'nada'] })).status).toBe(400);
     expect((await api(s.seriesId, '/events/match', 'POST', undefined)).status).toBe(400);
     const t = (json: unknown) => api(s.seriesId, '/events/tournament', 'POST', json);
@@ -243,6 +262,44 @@ describe('round robin generator', () => {
 });
 
 describe('race calendar generator', () => {
+  it('preview accepts the config as the body or wrapped as { config }, like the commit body', async () => {
+    const s = await teamSeries(['A', 'B', 'C', 'D']);
+    const raw = await api(s.seriesId, '/generators/round-robin/preview', 'POST', rrConfig());
+    const wrapped = await api(s.seriesId, '/generators/round-robin/preview', 'POST', { config: rrConfig() });
+    expect(raw.status).toBe(200);
+    expect(wrapped.status).toBe(200);
+    expect(wrapped.data).toEqual(raw.data);
+    // validation applies to the wrapped config too, and the error names the field without the `config.` prefix
+    const bad = await api(s.seriesId, '/generators/round-robin/preview', 'POST', { config: rrConfig({ match_days: [] }) });
+    expect(bad.status).toBe(400);
+    expect(bad.data.error).not.toMatch(/^config\./);
+    expect((await api(s.seriesId, '/generators/round-robin/preview', 'POST', { config: 'x' })).status).toBe(400);
+  });
+
+  it('warns (without blocking) about fixtures outside the series dates', async () => {
+    const s = await teamSeries(['A', 'B', 'C', 'D']);
+    // 4 teams, Tue/Thu 19:00 UTC from Mon 2030-01-07: 2 per day, first match day is Tue 2030-01-08
+    const preview = () => api(s.seriesId, '/generators/round-robin/preview', 'POST', rrConfig());
+    const plain = await preview();
+    expect(plain.data.fixtures).toHaveLength(6);
+    expect(plain.data.warnings.join()).not.toMatch(/series (start|end) date/); // no dates set: nothing to compare
+
+    await pg().update(series).set({ start_date: new Date('2030-01-09T00:00:00Z'), end_date: new Date('2030-01-15T00:00:00Z') }).where(eq(series.id, s.seriesId));
+    const res = await preview();
+    expect(res.status).toBe(200);
+    expect(res.data.fixtures).toHaveLength(6); // a warning, never a block
+    const days = res.data.fixtures.map((f: { start: string }) => f.start.slice(0, 10));
+    const early = days.filter((d: string) => d < '2030-01-09').length;
+    const late = days.filter((d: string) => d > '2030-01-15').length;
+    const text = res.data.warnings.join('\n');
+    expect(text).toContain(`${early} fixture${early === 1 ? '' : 's'} start before the series start date (2030-01-09); the earliest is on ${[...days].sort()[0]}`);
+    expect(text).toContain(`${late} fixture${late === 1 ? '' : 's'} fall after the series end date (2030-01-15); the last is on ${[...days].sort().at(-1)}`);
+
+    // both boundary days are inside the range
+    await pg().update(series).set({ start_date: new Date('2030-01-08T00:00:00Z'), end_date: new Date(`${[...days].sort().at(-1)  }T00:00:00Z`) }).where(eq(series.id, s.seriesId));
+    expect((await preview()).data.warnings.join()).not.toMatch(/series (start|end) date/);
+  });
+
   async function racingSeries() {
     const game = await createGame({ max_signups: 24 });
     const { modeId, mapIds } = await modeWithMaps(game.id, 'Position', null, 3);
@@ -254,6 +311,21 @@ describe('race calendar generator', () => {
     return { ...s, modeId, mapIds };
   }
   const cfg = (over: Record<string, unknown> = {}) => ({ count: 3, start_date: '2030-03-02', interval_days: 7, time: '20:00', timezone: 'Europe/Berlin', event_kind: 'match', ...over });
+
+  it('race calendar previews warn when events run past the series end date', async () => {
+    const s = await racingSeries();
+    await pg().update(series).set({ end_date: new Date('2030-03-10T00:00:00Z') }).where(eq(series.id, s.seriesId));
+    const res = await api(s.seriesId, '/generators/race-calendar/preview', 'POST', cfg()); // Mar 2, 9, 16
+    expect(res.data.warnings.join()).toMatch(/1 fixture fall after the series end date \(2030-03-10\); the last is on 2030-03-16/);
+  });
+
+  it('race calendar preview accepts both body shapes', async () => {
+    const s = await racingSeries();
+    const raw = await api(s.seriesId, '/generators/race-calendar/preview', 'POST', cfg());
+    const wrapped = await api(s.seriesId, '/generators/race-calendar/preview', 'POST', { config: cfg() });
+    expect(wrapped.status).toBe(200);
+    expect(wrapped.data).toEqual(raw.data);
+  });
 
   it('previews and commits race matches with every entrant', async () => {
     const s = await racingSeries();
@@ -310,7 +382,7 @@ describe('POST /:id/entrants/:entrantId/withdraw', () => {
     const s = await teamSeries();
     const [a, b, c, d] = s.entrants;
     const make = async (x: typeof a, y: typeof a) => {
-      const res = await api(s.seriesId, '/events/match', 'POST', { entrant_ids: [x.id, y.id], match: { start_date: START, maps: s.mapIds.slice(0, 2), rounds: 2 } });
+      const res = await api(s.seriesId, '/events/match', 'POST', { entrant_ids: [x.id, y.id], match: { start_date: START, maps: s.mapIds.slice(0, 2) } });
       expect(res.status, JSON.stringify(res.data)).toBe(201);
       return res.data.match_id as string;
     };
@@ -334,7 +406,7 @@ describe('POST /:id/entrants/:entrantId/withdraw', () => {
   it('forfeit completes the match with the opponent winning every map, with placements written', async () => {
     const s = await teamSeries(['Alpha', 'Bravo', 'Charlie']);
     const created = await api(s.seriesId, '/events/match', 'POST', {
-      entrant_ids: [s.entrants[0].id, s.entrants[1].id], match: { start_date: START, maps: s.mapIds.slice(0, 3), rounds: 3 },
+      entrant_ids: [s.entrants[0].id, s.entrants[1].id], match: { start_date: START, maps: s.mapIds.slice(0, 3) },
     });
     const matchId: string = created.data.match_id;
     const res = await api(s.seriesId, `/entrants/${s.entrants[0].id}/withdraw`, 'POST', { unplayed: 'forfeit' });

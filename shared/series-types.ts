@@ -52,9 +52,10 @@ export interface SeriesScoringConfig {
 
 /** `series.match_defaults`: prefills for matches/tournaments the series creates. */
 export interface SeriesMatchDefaults {
+  /** Maps of the matches the series creates: one game per map (the number of games is the number of maps). */
   maps?: string[];
-  rounds?: number;
   rules?: 'casual' | 'competitive';
+  /** Maps played in each tournament match (tournaments pick them from the game's pool). */
   rounds_per_match?: number;
   stats_enabled?: boolean;
   player_notifications?: boolean;
@@ -181,8 +182,7 @@ export interface SeriesMatchTemplate {
   name?: string;                 // default "<A> vs <B>" (2 entrants) or "<series name> - Round <n>"
   description?: string | null;
   game_id?: string | null;       // default series.game_id
-  maps?: string[];               // default match_defaults.maps
-  rounds?: number;
+  maps?: string[];               // default match_defaults.maps; one game per map
   rules?: 'casual' | 'competitive';
   /** ISO datetime. Required for single matches; generators compute it. */
   start_date?: string;
@@ -408,7 +408,10 @@ export interface SeriesChampionDto {
 
 export interface SeedPreviewResponse {
   qualifiers: Array<{ entrant_id: string; name: string; seed: number; rank: number; division: string | null }>;
+  /** Everything worth a look before seeding (includes `blockers`). */
   warnings: string[];
+  /** The part of `warnings` that stops seeding unless it is forced: the source stage / season is not complete yet. */
+  blockers: string[];
 }
 
 /** Payloads of `discord_series_update_queue` rows by kind (the bot re-reads live data; these are hints). */

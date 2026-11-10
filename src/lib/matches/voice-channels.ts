@@ -5,9 +5,9 @@
  * `createMatchVoiceChannels` waits for the bot, so it must NOT be called inside a database transaction: it enqueues the
  * request on the pool, polls until the bot answers, and only then records the channels.
  */
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, exists, lte, sql } from 'drizzle-orm';
 import { db, type Executor } from '../../../lib/db';
-import { matches, tournamentMatches, tournamentTeams } from '../../../lib/db/schema';
+import { autoVoiceChannels, matchTeams, matches, tournamentMatches, tournamentTeams, tournaments } from '../../../lib/db/schema';
 import { logger } from '../logger';
 import { findGlobalVoiceChannelId } from '../discord-channels';
 import { enqueueBotRequest, enqueueVoiceAnnouncement, getBotRequest } from '../discord-queues';
@@ -111,6 +111,52 @@ export async function createMatchVoiceChannels(matchId: string): Promise<VoiceCh
   } catch (error) {
     logger.error('Error creating voice channels:', error);
     return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/** True when the match already has voice channels: auto-created (tracked) or set on a team by hand. */
+export async function matchHasVoiceChannels(ex: Executor, matchId: string): Promise<boolean> {
+  const [tracked] = await ex.select({ id: autoVoiceChannels.id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, matchId)).limit(1);
+  if (tracked) return true;
+  const [onTeam] = await ex.select({ id: matchTeams.id }).from(matchTeams)
+    .where(and(eq(matchTeams.match_id, matchId), eq(matchTeams.is_reserve, false), sql`${matchTeams.voice_channel_id} is not null`)).limit(1);
+  return !!onTeam;
+}
+
+/**
+ * 'assign' matches whose start is within `leadMinutes` (or already past) and that have teams but no voice channels yet.
+ * Cumulative-points tournament matches hold every participant and never get per-match channels.
+ */
+export async function listMatchesNeedingVoiceChannels(ex: Executor, now: Date, leadMinutes: number, limit = 10): Promise<Array<{ id: string; name: string }>> {
+  const horizon = new Date(now.getTime() + leadMinutes * 60_000);
+  const cumulative = ex.select({ id: tournaments.id }).from(tournaments)
+    .where(and(eq(tournaments.id, matches.tournament_id), eq(tournaments.format, 'cumulative-points')));
+  const hasTeam = ex.select({ id: matchTeams.id }).from(matchTeams).where(and(eq(matchTeams.match_id, matches.id), eq(matchTeams.is_reserve, false)));
+  const hasChannel = ex.select({ id: autoVoiceChannels.id }).from(autoVoiceChannels).where(eq(autoVoiceChannels.match_id, matches.id));
+  const hasTeamChannel = ex.select({ id: matchTeams.id }).from(matchTeams)
+    .where(and(eq(matchTeams.match_id, matches.id), eq(matchTeams.is_reserve, false), sql`${matchTeams.voice_channel_id} is not null`));
+  return ex.select({ id: matches.id, name: matches.name }).from(matches)
+    .where(and(
+      eq(matches.status, 'assign'), lte(matches.start_date, horizon),
+      exists(hasTeam), sql`not exists ${hasChannel}`, sql`not exists ${hasTeamChannel}`, sql`not exists ${cumulative}`,
+    ))
+    .orderBy(asc(matches.start_date), asc(matches.id)).limit(limit);
+}
+
+/** Create the match's voice channels unless it already has some. Call OUTSIDE a transaction; never throws. Returns true if channels exist afterwards. */
+export async function ensureMatchVoiceChannels(matchId: string): Promise<boolean> {
+  try {
+    if (await matchHasVoiceChannels(db, matchId)) return true;
+    const [row] = await db.select({ tournament_id: matches.tournament_id }).from(matches).where(eq(matches.id, matchId));
+    if (row?.tournament_id) {
+      const [t] = await db.select({ format: tournaments.format }).from(tournaments).where(eq(tournaments.id, row.tournament_id));
+      if (t?.format === 'cumulative-points') return false;
+    }
+    await VoiceChannelService.setupMatchVoiceChannels(matchId);
+    return await matchHasVoiceChannels(db, matchId);
+  } catch (error) {
+    logger.error(`Error ensuring voice channels for match ${matchId}:`, error);
+    return false;
   }
 }
 

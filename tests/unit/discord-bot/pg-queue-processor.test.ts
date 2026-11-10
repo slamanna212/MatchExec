@@ -194,10 +194,13 @@ describe('other queues', () => {
   });
 
   it('voice: welcome waits for the start delay (released, not failed); other types play', async () => {
+    await db.update(matches).set({ status: 'battle' }).where(eq(matches.id, 'm1'));
+    await db.update(matches).set({ status: 'complete' }).where(eq(matches.id, 'm2'));
     const w = await enqueueVoiceAnnouncement(db, { matchId: 'm1', type: 'welcome', blueChannel: 'b', redChannel: 'r', firstTeam: 'blue' });
-    const f = await enqueueVoiceAnnouncement(db, { matchId: 'm1', type: 'finish', blueChannel: 'b', redChannel: 'r', firstTeam: 'red' });
+    const f = await enqueueVoiceAnnouncement(db, { matchId: 'm2', type: 'finish', blueChannel: 'b', redChannel: 'r', firstTeam: 'red' });
     const { qp, voice } = make();
-    await qp.processVoiceAnnouncementQueue();
+    await qp.processVoiceAnnouncementQueue(); // claims one job per pass: the welcome (released, still delayed)
+    await qp.processVoiceAnnouncementQueue(); // next pass skips the delayed welcome and plays the finish
     expect(voice.playTeamAnnouncements).toHaveBeenCalledTimes(1);
     expect(await one(discordVoiceAnnouncementQueue, f)).toMatchObject({ status: 'completed' });
     expect(await one(discordVoiceAnnouncementQueue, w)).toMatchObject({ status: 'pending', attempts: 0 });
@@ -342,6 +345,47 @@ describe('processAllQueues', () => {
     release();
     await first;
     expect((await one(discordAnnouncementQueue, id)).status).toBe('completed');
+  });
+});
+
+describe('voice playback isolation', () => {
+  it('skips announcements whose match is not in the phase they belong to, and plays the others', async () => {
+    const statusOf = async (id: string, status: 'created' | 'battle' | 'complete' | 'cancelled') => { await db.update(matches).set({ status }).where(eq(matches.id, id)); };
+    const enqueue = (matchId: string, type: 'welcome' | 'nextround' | 'finish') => enqueueVoiceAnnouncement(db, { matchId, type, blueChannel: 'b', redChannel: 'r', firstTeam: 'blue' });
+    await statusOf('m', 'complete'); const welcomeAfterEnd = await enqueue('m', 'welcome');
+    await statusOf('m1', 'cancelled'); const nextroundCancelled = await enqueue('m1', 'nextround');
+    await statusOf('m2', 'battle'); const finishInBattle = await enqueue('m2', 'finish');
+    await statusOf('m9', 'battle'); const nextroundOk = await enqueue('m9', 'nextround');
+    const { qp, voice } = make();
+    for (let i = 0; i < 5; i++) await qp.processVoiceAnnouncementQueue();
+
+    for (const id of [welcomeAfterEnd, nextroundCancelled, finishInBattle]) {
+      expect(await one(discordVoiceAnnouncementQueue, id)).toMatchObject({ status: 'completed', last_error: expect.stringMatching(/^Skipped: /) });
+    }
+    expect(voice.playTeamAnnouncements).toHaveBeenCalledTimes(1);
+    expect(voice.playTeamAnnouncements).toHaveBeenCalledWith('b', 'r', 'nextround', 'blue', 'm9');
+    expect(await one(discordVoiceAnnouncementQueue, nextroundOk)).toMatchObject({ status: 'completed', last_error: null });
+  });
+
+  it('a long voice announcement does not hold up the other queues', async () => {
+    await db.update(matches).set({ status: 'complete' }).where(eq(matches.id, 'm1'));
+    const v = await enqueueVoiceAnnouncement(db, { matchId: 'm1', type: 'finish', blueChannel: 'b', redChannel: 'r', firstTeam: 'blue' });
+    const a = (await enqueueAnnouncement(db, { matchId: 'm1', type: 'standard' }))!;
+    let finishPlayback!: () => void;
+    const { qp, voice, announcement } = make();
+    voice.playTeamAnnouncements.mockImplementation(() => new Promise((r) => { finishPlayback = () => r({ success: true }); }));
+
+    const playing = qp.processVoiceAnnouncementQueue();
+    await vi.waitFor(() => expect(voice.playTeamAnnouncements).toHaveBeenCalledTimes(1));
+
+    await qp.processAllQueues(); // must complete while the audio is still playing
+    expect(announcement.postEventAnnouncement).toHaveBeenCalledTimes(1);
+    expect((await one(discordAnnouncementQueue, a)).status).toBe('completed');
+    expect((await one(discordVoiceAnnouncementQueue, v)).status).toBe('processing');
+
+    finishPlayback();
+    await playing;
+    expect((await one(discordVoiceAnnouncementQueue, v)).status).toBe('completed');
   });
 });
 

@@ -9,18 +9,18 @@ import { UpdateCheckJob } from './jobs/check-for-update';
 import { SERIES_UPDATES_CRON, SeriesUpdatesJob } from './jobs/series-updates';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
-import { getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
+import { getAnyDiscordSettings, getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
 import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON } from '../../shared/scheduler';
 import { getHealthAlertLastSent, markHealthAlertSent } from '../../src/lib/health-alerts';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
-import { db as pgDb, closeDb, type Executor } from '../../lib/db';
+import { db as pgDb, closeDb } from '../../lib/db';
 import {
-  areAllGamesCompleted, casMatchStatus, listMatchesDueToStart, listMatchesForPlayerReminders, listMatchesWithAnnouncements,
+  areAllGamesCompleted, casMatchStatus, ensureMatchVoiceChannels, listMatchesDueToStart, MatchTransitionError, transitionMatch, listMatchesNeedingVoiceChannels, listMatchesForPlayerReminders, listMatchesWithAnnouncements,
   listMatchGameStatuses, listStaleBattleMatches, listUpcomingMatches,
 } from '../../src/lib/matches';
 import { parseAnnouncementsField } from '../../src/lib/reminder-helpers';
 import {
-  enqueueAnnouncement, enqueueHealthAlert, enqueueMatchReminder, enqueueMatchStart, enqueuePlayerReminder,
+  enqueueAnnouncement, enqueueHealthAlert, enqueueMatchReminder, enqueuePlayerReminder,
   hasTimedAnnouncement, matchIdsWithLivePlayerReminder, matchIdsWithLiveReminder, nonOverlapping,
 } from '../../src/lib/discord-queues';
 
@@ -196,19 +196,38 @@ class MatchExecScheduler {
     }
   }
 
+  /**
+   * Create voice channels for 'assign' matches that start within the configured lead time (Discord settings, default 15
+   * minutes). A failed attempt (category full, bot down) is simply retried on the next tick until the match starts.
+   */
+  private async createUpcomingVoiceChannels(now: Date) {
+    const settings = await getAnyDiscordSettings(pgDb);
+    if (!settings?.voice_channel_category_id) return;
+    const due = await listMatchesNeedingVoiceChannels(pgDb, now, settings.voice_channel_lead_minutes ?? 15);
+    for (const match of due) {
+      logger.debug(`🔊 Creating voice channels for upcoming match: ${match.name}`);
+      if (!(await ensureMatchVoiceChannels(match.id))) logger.warning(`Voice channels for match "${match.name}" were not created; will retry`);
+    }
+  }
+
   private async checkMatchStartTimes() {
     // Check for matches that should transition from 'assign' to 'battle' at their scheduled start time
     const now = new Date();
+    await this.createUpcomingVoiceChannels(now);
     const matchesToStart = await listMatchesDueToStart(pgDb, now);
 
     for (const match of matchesToStart) {
       logger.debug(`🏆 Starting battle phase for match: ${match.name}`);
-      // Compare-and-set the status and queue the Discord notification in one transaction
-      await pgDb.transaction(async (tx) => {
-        if (await casMatchStatus(tx, match.id, 'assign', 'battle')) {
-          await this.queueMatchStartNotification(tx, match.id);
+      // Same path as a manual start: voice channels, welcome announcement, match-start post, games, DMs and map code.
+      try {
+        await transitionMatch(match.id, 'battle');
+      } catch (error) {
+        if (error instanceof MatchTransitionError) {
+          logger.debug(`⏭️ Match ${match.name} was not started: ${error.message}`); // e.g. started or cancelled by hand meanwhile
+        } else {
+          logger.error(`❌ Failed to start match ${match.name}:`, error);
         }
-      });
+      }
     }
 
     // Check for matches that should be auto-completed (battle phase lasting too long)
@@ -341,19 +360,6 @@ class MatchExecScheduler {
     }
   }
 
-
-  private async queueMatchStartNotification(ex: Executor, matchId: string): Promise<boolean> {
-    try {
-      // Add to the Discord match start notification queue that the bot will process (same transaction as the status flip)
-      await enqueueMatchStart(ex, matchId);
-
-      logger.debug('🏁 Discord match start notification queued for match:', matchId);
-      return true;
-    } catch (error) {
-      logger.error('❌ Error queuing Discord match start notification:', error);
-      return false;
-    }
-  }
 
   /**
    * Parse announcements field into array
