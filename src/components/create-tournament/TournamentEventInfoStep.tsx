@@ -1,6 +1,8 @@
 import type { JSX } from 'react';
 import { Text, Stack, TextInput, Textarea, Select, NumberInput, Switch, Checkbox, Button, Group, Divider } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
+// Date picker styles load with the components that use them (not in the entry bundle)
+import '@mantine/dates/styles.css';
 import type { TournamentFormData } from '../create-tournament/useTournamentForm';
 import { EventImageUpload } from '../create-match/EventImageUpload';
 

@@ -50,6 +50,13 @@
       "when": 1794234822833,
       "tag": "0006_cheerful_magdalene",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794337767285,
+      "tag": "0007_old_meltdown",
+      "breakpoints": true
     }
   ]
 }

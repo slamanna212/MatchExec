@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { apiNotFound, jsonBodyGuard, noStore, onError } from './http';
 import { authGate } from './middleware/auth';
+import { requestBodyLimit } from './middleware/body-limit';
+import { csrfGuard } from './middleware/csrf';
+import { securityHeaders } from './middleware/security-headers';
 import { degradedGate } from './middleware/degraded';
 import { maintenanceGate } from './middleware/maintenance';
 import { welcomeFlow } from './middleware/welcome';
@@ -26,7 +30,15 @@ export const app = new Hono();
 app.onError(onError);
 app.notFound(apiNotFound);
 
+// gzip/deflate for text responses (JS, CSS, HTML, JSON) when no reverse proxy does it; images are left alone.
+app.use('*', compress());
+app.use('*', securityHeaders);
 app.use('/api/*', noStore);
+
+// Writes from other origins are refused (auth is opt-in, so this is the only thing stopping a malicious page from
+// posting to a LAN install), and request bodies are size-capped while they stream in.
+app.use('/api/*', csrfGuard);
+app.use('/api/*', requestBodyLimit);
 
 // Degraded mode (failed migration in the all-in-one container): only the SPA, health and db-status are served.
 app.use('*', degradedGate);

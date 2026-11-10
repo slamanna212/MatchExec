@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,8 @@ import { isStaticAssetPath } from '../../../src/server/middleware/auth';
 setupPgTestFile({ seed: true });
 
 const html = { accept: 'text/html' };
+const INLINE = "document.documentElement.dataset.x='1';";
+const INLINE_HASH = `'sha256-${createHash('sha256').update(INLINE).digest('base64')}'`;
 let dir: string;
 let savedClientDir: string | undefined;
 const saved: Record<string, string | undefined> = {};
@@ -19,7 +22,8 @@ beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'matchexec-client-'));
   fs.mkdirSync(path.join(dir, 'static'));
   fs.mkdirSync(path.join(dir, 'assets', 'games'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>MatchExec</title><div id="root"></div>');
+  fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><title>MatchExec</title><script>${INLINE}</script><div id="root"></div><script type="module" src="/static/index-abc123.js"></script>`);
+  fs.writeFileSync(path.join(dir, 'static', 'big-abc123.js'), 'console.log("matchexec");\n'.repeat(400));
   fs.writeFileSync(path.join(dir, 'static', 'index-abc123.js'), 'console.log(1)');
   fs.writeFileSync(path.join(dir, 'assets', 'games', 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
   fs.writeFileSync(path.join(dir, 'manifest.json'), '{}');
@@ -64,10 +68,43 @@ describe('static SPA hosting', () => {
     expect(await res.text()).toBe('console.log(1)');
   });
 
-  it('serves unhashed public files with a short cache', async () => {
+  it('serves unhashed public files with a one-day cache that may be served stale while revalidating', async () => {
     const res = await app.request('/assets/games/icon.svg');
     expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=86400, stale-while-revalidate=604800');
+  });
+
+  it('sends a Content-Security-Policy with the inline script hash on the HTML document (index and SPA fallback)', async () => {
+    for (const p of ['/', '/index.html', '/matches/abc']) {
+      const res = await app.request(p, { headers: done });
+      const csp = res.headers.get('content-security-policy');
+      expect(csp, p).toContain(`script-src 'self' ${INLINE_HASH}`);
+      expect(csp, p).toContain("frame-ancestors 'none'");
+      expect(csp, p).toContain("object-src 'none'");
+      expect(csp, p).not.toMatch(/script-src[^;]*unsafe-inline/);
+    }
+    // Not on other files
+    expect((await app.request('/static/index-abc123.js')).headers.get('content-security-policy')).toBeNull();
+  });
+
+  it('sends the baseline security headers on pages and API responses, without HSTS or CORP', async () => {
+    for (const res of [await app.request('/', { headers: done }), await app.request('/api/health')]) {
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+      expect(res.headers.get('strict-transport-security')).toBeNull();
+      expect(res.headers.get('cross-origin-resource-policy')).toBeNull();
+    }
+  });
+
+  it('gzips compressible responses when the client accepts it, and leaves small ones alone', async () => {
+    const big = await app.request('/static/big-abc123.js', { headers: { 'accept-encoding': 'gzip, deflate, br' } });
+    expect(big.headers.get('content-encoding')).toBe('gzip');
+    expect(big.headers.get('vary')).toMatch(/accept-encoding/i);
+    const plain = await app.request('/static/big-abc123.js');
+    expect(plain.headers.get('content-encoding')).toBeNull();
+    const small = await app.request('/static/index-abc123.js', { headers: { 'accept-encoding': 'gzip' } });
+    expect(small.headers.get('content-encoding')).toBeNull();
   });
 
   it('does not fall back to HTML for missing files, /static/, /uploads/ or /api/', async () => {

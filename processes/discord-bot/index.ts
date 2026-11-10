@@ -21,11 +21,14 @@ import { WinnerVoteHandler } from './modules/winner-vote-handler';
 import { StatsReportHandler } from './modules/stats-report-handler';
 import { SeriesUpdateHandler } from './modules/series-update-handler';
 import { VoiceChannelEmptinessMonitor } from './modules/voice-channel-emptiness-monitor';
-import { db as pgDb, closeDb } from '../../lib/db';
+import { db as pgDb, closeDb, setDefaultPoolMax } from '../../lib/db';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
 import { beginJob, isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { nonOverlapping } from '../../src/lib/discord-queues';
 import { listGames } from '../../src/lib/games';
+
+// Small pool unless PG_POOL_MAX says otherwise (interactions + queue, voice and bot-request ticks); see setDefaultPoolMax in lib/db.
+setDefaultPoolMax(5);
 
 class MatchExecBot {
   private client: Client;

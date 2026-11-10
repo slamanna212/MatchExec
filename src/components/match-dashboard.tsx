@@ -29,6 +29,8 @@ import { PageHeader } from './PageHeader';
 import { cleanMapId, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
 import { isUnscheduled, UNSCHEDULED_LABEL } from '@/shared/schedule';
 import { SeriesCardLinks, type SeriesRef } from './series/SeriesCardLinks';
+import { usePolling } from '@/hooks/usePolling';
+import { useRefreshInterval } from '@/lib/ui-settings-client';
 
 interface MatchWithGame extends Omit<Match, 'created_at' | 'updated_at' | 'start_date' | 'end_date'> {
   game_name?: string;
@@ -241,7 +243,7 @@ export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
   const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchWithGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(10); // default 10 seconds
+  const refreshInterval = useRefreshInterval(10);
   const [searchQuery, setSearchQuery] = useState('');
   const [transitioning, setTransitioning] = useState<Set<string>>(new Set());
   const etagRef = useRef<string | null>(null);
@@ -303,33 +305,12 @@ export function MatchDashboard(): JSX.Element { // NOSONAR typescript:S3776
     }
   }, [haveMatchesChanged]);
 
-  // Fetch UI settings on component mount
   useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        logger.error('Error fetching UI settings:', error);
-      }
-    };
-
     fetchMatches();
-    fetchUISettings();
   }, [fetchMatches]);
 
-  // Set up auto-refresh with configurable interval
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchMatches(true); // Silent refresh to prevent loading states
-    }, refreshInterval * 1000);
-
-    // Cleanup interval on unmount or when refreshInterval changes
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, fetchMatches]);
+  // Silent auto-refresh at the configured interval (paused while the tab is hidden)
+  usePolling(() => fetchMatches(true), refreshInterval * 1000);
 
 
 

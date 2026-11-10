@@ -1,8 +1,8 @@
-/** `/api/auth/*`: login, logout, status (opt-in admin password; see middleware/auth.ts). */
+/** `/api/auth/*`: login, logout, logout-all, status (opt-in admin password; see middleware/auth.ts). */
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import {
-  SESSION_COOKIE, createSessionToken, getSessionMaxAgeSeconds, isAuthEnabled, isSecureRequest, verifyPassword, verifySessionToken,
+  SESSION_COOKIE, bumpSessionEpoch, createSessionToken, getSessionMaxAgeSeconds, isAuthEnabled, isSecureRequest, verifyPassword, verifySessionToken,
 } from '../middleware/auth';
 import { checkRateLimit, clientKey } from '../middleware/rate-limit';
 import { jsonError } from '../http';
@@ -30,6 +30,16 @@ export const auth = new Hono()
   })
   .post('/logout', (c) => {
     setCookie(c, SESSION_COOKIE, '', { path: '/', httpOnly: true, sameSite: 'Lax', secure: isSecureRequest(c), maxAge: 0 });
+    return c.json({ success: true });
+  })
+  // Revokes every session (all browsers and devices) and signs the caller back in with a fresh cookie. Not a public path:
+  // it needs a valid session (the auth gate runs first).
+  .post('/logout-all', async (c) => {
+    if (!isAuthEnabled()) return c.json({ success: true, enabled: false });
+    await bumpSessionEpoch();
+    setCookie(c, SESSION_COOKIE, await createSessionToken(), {
+      path: '/', httpOnly: true, sameSite: 'Lax', secure: isSecureRequest(c), maxAge: getSessionMaxAgeSeconds(),
+    });
     return c.json({ success: true });
   })
   .get('/status', async (c) => {

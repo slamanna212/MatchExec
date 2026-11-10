@@ -86,6 +86,17 @@ export const jsonBodyGuard: MiddlewareHandler = async (c, next) => {
   return next();
 };
 
+/**
+ * True when an `If-None-Match` header matches `etag` (RFC 9110 weak comparison). The compression middleware turns strong
+ * ETags into weak ones (`W/"..."`) and browsers send back what they got, so `W/` is ignored on both sides; `*` matches.
+ */
+export function etagMatches(ifNoneMatch: string | undefined | null, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  const strip = (v: string) => v.trim().replace(/^W\//, '');
+  const target = strip(etag);
+  return ifNoneMatch.split(',').some((v) => v.trim() === '*' || strip(v) === target);
+}
+
 /** API responses must never be cached (polling relies on fresh data). Endpoints may override by setting the header themselves. */
 export const noStore: MiddlewareHandler = async (c, next) => {
   await next();

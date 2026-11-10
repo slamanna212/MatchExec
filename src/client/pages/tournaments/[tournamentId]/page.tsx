@@ -20,6 +20,8 @@ import { TournamentContentPanel } from '@/components/tournament-details/Tourname
 import type { CumulativeStanding } from '@/components/tournament/leaderboard-view';
 import { showError, notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
+import { usePolling } from '@/hooks/usePolling';
+import { useRefreshInterval } from '@/lib/ui-settings-client';
 
 interface TournamentWithGame extends Omit<Tournament, 'created_at' | 'updated_at' | 'start_date' | 'start_time'> {
   game_name?: string;
@@ -75,7 +77,7 @@ export default function TournamentPage() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshInterval, setRefreshInterval] = useState(30);
+  const refreshInterval = useRefreshInterval();
 
   const hasBracket = matches.length > 0;
 
@@ -122,22 +124,6 @@ export default function TournamentPage() {
     }
   }, [tournamentId]);
 
-  // Fetch UI settings
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (err) {
-        logger.error('Error fetching UI settings:', err);
-      }
-    };
-
-    fetchUISettings();
-  }, []);
 
   // Initial data fetch
   useEffect(() => {
@@ -179,20 +165,15 @@ export default function TournamentPage() {
     fetchData();
   }, [tournamentId]);
 
-  // Auto-refresh during active phases
-  useEffect(() => {
-    if (!tournament || tournament.status === 'complete' || tournament.status === 'created') return undefined;
-
-    const interval = setInterval(() => {
-      fetchTournament(true);
-      fetchMatches(true);
-      if (tournament.status === 'battle') {
-        fetchStandings();
-      }
-    }, refreshInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [tournament, refreshInterval, fetchTournament, fetchMatches, fetchStandings]);
+  // Auto-refresh during active phases (paused while the tab is hidden)
+  const pollActive = !!tournament && tournament.status !== 'complete' && tournament.status !== 'created';
+  usePolling(() => {
+    fetchTournament(true);
+    fetchMatches(true);
+    if (tournament?.status === 'battle') {
+      fetchStandings();
+    }
+  }, pollActive ? refreshInterval * 1000 : null);
 
   // Handle status transition
   const handleStatusTransition = useCallback(async (newStatus: string) => {

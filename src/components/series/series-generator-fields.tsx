@@ -1,6 +1,8 @@
 import type { JSX } from 'react';
 import { Stack, Group, Select, NumberInput, Switch, SegmentedControl, Chip, Text, TagsInput, TextInput } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+// Date picker styles load with the components that use them (not in the entry bundle)
+import '@mantine/dates/styles.css';
 import type { SeriesEntrantDto, SeriesStageDto, TournamentBracketFormat } from '@/shared/series-types';
 import { EntrantSelect } from './series-entrant-select';
 import { MatchTemplateFields } from './series-event-fields';

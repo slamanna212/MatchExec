@@ -115,6 +115,11 @@ Env vars shared by every MatchExec container. Call with (dict "ctx" . "services"
 - name: LOG_FORMAT
   value: "json"
 {{- end }}
+{{- if and .ctx.Values.ingress.enabled (not (hasKey .ctx.Values.env "TRUST_PROXY")) }}
+{{- /* Behind the chart's Ingress the client address arrives in X-Forwarded-For (login rate limit, CSRF host check). */}}
+- name: TRUST_PROXY
+  value: "true"
+{{- end }}
 {{- range $key, $value := .ctx.Values.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}

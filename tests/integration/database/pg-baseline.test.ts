@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { count, eq, getTableName, sql } from 'drizzle-orm';
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import * as schema from '../../../lib/db/schema';
-import { getDb, resetDb, setDbForTesting, db as lazyDb, resolveDatabaseUrl, resolvePoolMax, type Db } from '../../../lib/db';
+import { getDb, resetDb, setDbForTesting, db as lazyDb, resolveDatabaseUrl, resolvePoolMax, resolvePoolTimeouts, setPoolTimeoutDefaults, type Db } from '../../../lib/db';
 import { applyMigrationsPglite, getExpectedLatestMigration, MIGRATIONS_SCHEMA, MIGRATIONS_TABLE } from '../../../lib/db/migrate';
 import { seedDatabase } from '../../../lib/db/seed';
 import { getSystemStatus, isSystemReady, markSystemReady, setSystemStatus } from '../../../lib/db/system-status';
@@ -126,5 +126,23 @@ describe('lib/db connection config', () => {
     expect(resolvePoolMax({})).toBe(10);
     expect(resolvePoolMax({ PG_POOL_MAX: '3' })).toBe(3);
     expect(resolvePoolMax({ PG_POOL_MAX: 'abc' })).toBe(10);
+    expect(resolvePoolMax({}, 4)).toBe(4);
+    expect(resolvePoolMax({ PG_POOL_MAX: '7' }, 4)).toBe(7);
+  });
+
+  it('resolves pool timeouts: generous defaults, env overrides, 0 allowed, per-process defaults below env', () => {
+    expect(resolvePoolTimeouts({})).toEqual({
+      statementTimeoutMs: 300_000, idleInTransactionTimeoutMs: 600_000, connectionTimeoutMs: 15_000, idleTimeoutMs: 30_000,
+    });
+    expect(resolvePoolTimeouts({ PG_STATEMENT_TIMEOUT_MS: '0', PG_CONNECT_TIMEOUT_MS: '5000', PG_IDLE_TX_TIMEOUT_MS: 'junk' })).toMatchObject({
+      statementTimeoutMs: 0, connectionTimeoutMs: 5000, idleInTransactionTimeoutMs: 600_000,
+    });
+    setPoolTimeoutDefaults({ statementTimeoutMs: 0 });
+    try {
+      expect(resolvePoolTimeouts({}).statementTimeoutMs).toBe(0);
+      expect(resolvePoolTimeouts({ PG_STATEMENT_TIMEOUT_MS: '1000' }).statementTimeoutMs).toBe(1000);
+    } finally {
+      setPoolTimeoutDefaults({ statementTimeoutMs: 300_000 });
+    }
   });
 });

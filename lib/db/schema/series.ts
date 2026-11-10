@@ -37,6 +37,7 @@ export const series = pgTable('series', {
 }, (t) => [
   index('idx_series_status').on(t.status),
   index('idx_series_game_id').on(t.game_id),
+  index('idx_series_previous').on(t.previous_series_id).where(sql`${t.previous_series_id} IS NOT NULL`),
   check('series_status_check', sql`${t.status} IN ('created', 'registration', 'active', 'complete', 'cancelled')`),
   check('series_entrant_type_check', sql`${t.entrant_type} IN ('solo', 'team')`),
   check('series_scoring_type_check', sql`${t.scoring_type} IS NULL OR ${t.scoring_type} IN ('Normal', 'FFA', 'Position')`),
@@ -58,7 +59,6 @@ export const seriesEntrants = pgTable('series_entrants', {
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique('series_entrants_series_id_name_unique').on(t.series_id, t.name),
-  index('idx_series_entrants_series').on(t.series_id),
   check('series_entrants_status_check', sql`${t.status} IN ('pending', 'active', 'withdrawn')`),
 ]);
 
@@ -94,7 +94,6 @@ export const seriesStages = pgTable('series_stages', {
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique('series_stages_series_id_stage_order_unique').on(t.series_id, t.stage_order),
-  index('idx_series_stages_series').on(t.series_id),
   check('series_stages_status_check', sql`${t.status} IN ('upcoming', 'active', 'complete')`),
 ]);
 
@@ -107,6 +106,7 @@ export const seriesEventBatches = pgTable('series_event_batches', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   index('idx_series_event_batches_series').on(t.series_id),
+  index('idx_series_event_batches_stage').on(t.stage_id).where(sql`${t.stage_id} IS NOT NULL`),
   check('series_event_batches_kind_check', sql`${t.kind} IN ('round_robin', 'race_calendar')`),
 ]);
 
@@ -132,7 +132,7 @@ export const seriesEvents = pgTable('series_events', {
   uniqueIndex('idx_series_events_unique_match').on(t.series_id, t.match_id).where(sql`${t.match_id} IS NOT NULL`),
   index('idx_series_events_tournament').on(t.tournament_id),
   index('idx_series_events_match').on(t.match_id),
-  index('idx_series_events_series').on(t.series_id),
+  index('idx_series_events_batch').on(t.batch_id).where(sql`${t.batch_id} IS NOT NULL`),
   unique('series_events_series_id_event_order_unique').on(t.series_id, t.event_order),
   check('series_events_event_type_check', sql`${t.event_type} IN ('match', 'tournament')`),
   index('idx_series_events_stage').on(t.stage_id),

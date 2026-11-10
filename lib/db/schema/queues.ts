@@ -25,8 +25,7 @@ export const discordAnnouncementQueue = pgTable('discord_announcement_queue', {
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_announcement_queue_scheduled').on(t.scheduled_for),
-  index('idx_discord_announcement_queue_status').on(t.status),
+  index('idx_discord_announcement_queue_status_created').on(t.status, t.created_at),
   check('discord_announcement_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -46,7 +45,7 @@ export const discordBotRequests = pgTable('discord_bot_requests', {
   last_error: text('last_error'),
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_bot_requests_status').on(t.status),
+  index('idx_discord_bot_requests_status_created').on(t.status, t.created_at),
   check('discord_bot_requests_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -63,7 +62,7 @@ export const discordDeletionQueue = pgTable('discord_deletion_queue', {
   last_error: text('last_error'),
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_deletion_queue_status').on(t.status),
+  index('idx_discord_deletion_queue_status_created').on(t.status, t.created_at),
   check('discord_deletion_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -84,7 +83,7 @@ export const discordHealthAlertQueue = pgTable('discord_health_alert_queue', {
   external_message_id: text('external_message_id'),
   processed_at: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_health_alert_queue_status').on(t.status),
+  index('idx_discord_health_alert_queue_status_created').on(t.status, t.created_at),
   check('discord_health_alert_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -108,7 +107,7 @@ export const discordSeriesUpdateQueue = pgTable('discord_series_update_queue', {
   external_message_id: text('external_message_id'),
 }, (t) => [
   unique('discord_series_update_queue_dedupe_unique').on(t.series_id, t.kind, t.dedupe_key),
-  index('idx_discord_series_update_queue_status').on(t.status),
+  index('idx_discord_series_update_queue_status_created').on(t.status, t.created_at),
   check('discord_series_update_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -128,8 +127,9 @@ export const discordMapCodeQueue = pgTable('discord_map_code_queue', {
   last_error: text('last_error'),
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_map_code_queue_status').on(t.status),
+  index('idx_discord_map_code_queue_status_created').on(t.status, t.created_at),
   check('discord_map_code_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_map_code_queue_match').on(t.match_id),
 ]);
 
 export const discordMatchEditQueue = pgTable('discord_match_edit_queue', {
@@ -147,6 +147,7 @@ export const discordMatchEditQueue = pgTable('discord_match_edit_queue', {
 }, (t) => [
   index('idx_discord_match_edit_queue_match_id').on(t.match_id),
   check('discord_match_edit_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_match_edit_queue_status_created').on(t.status, t.created_at),
 ]);
 
 export const discordMatchReminderQueue = pgTable('discord_match_reminder_queue', {
@@ -165,9 +166,9 @@ export const discordMatchReminderQueue = pgTable('discord_match_reminder_queue',
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_match_reminder_queue_scheduled').on(t.scheduled_for),
-  index('idx_discord_match_reminder_queue_status').on(t.status),
+  index('idx_discord_match_reminder_queue_status_created').on(t.status, t.created_at),
   check('discord_match_reminder_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_match_reminder_queue_match').on(t.match_id),
 ]);
 
 export const discordMatchStartQueue = pgTable('discord_match_start_queue', {
@@ -184,8 +185,9 @@ export const discordMatchStartQueue = pgTable('discord_match_start_queue', {
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_match_start_queue_status').on(t.status),
+  index('idx_discord_match_start_queue_status_created').on(t.status, t.created_at),
   check('discord_match_start_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_match_start_queue_match').on(t.match_id),
 ]);
 
 export const discordMatchWinnerQueue = pgTable('discord_match_winner_queue', {
@@ -212,7 +214,7 @@ export const discordMatchWinnerQueue = pgTable('discord_match_winner_queue', {
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_match_winner_queue_status').on(t.status),
+  index('idx_discord_match_winner_queue_status_created').on(t.status, t.created_at),
   check('discord_match_winner_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -235,9 +237,9 @@ export const discordPlayerReminderQueue = pgTable('discord_player_reminder_queue
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_player_reminder_queue_scheduled').on(t.scheduled_for),
-  index('idx_discord_player_reminder_queue_status').on(t.status),
+  index('idx_discord_player_reminder_queue_status_created').on(t.status, t.created_at),
   check('discord_player_reminder_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_player_reminder_queue_match').on(t.match_id),
 ]);
 
 export const discordReminderQueue = pgTable('discord_reminder_queue', {
@@ -260,8 +262,7 @@ export const discordReminderQueue = pgTable('discord_reminder_queue', {
   external_message_id: text('external_message_id'),
 }, (t) => [
   uniqueIndex('idx_discord_reminder_queue_unique_match_reminder').on(t.match_id, t.reminder_type).where(sql`${t.status} NOT IN ('failed')`),
-  index('idx_discord_reminder_queue_scheduled').on(t.scheduled_for),
-  index('idx_discord_reminder_queue_status').on(t.status),
+  index('idx_discord_reminder_queue_status_created').on(t.status, t.created_at),
   check('discord_reminder_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -287,8 +288,9 @@ export const discordScoreNotificationQueue = pgTable('discord_score_notification
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   external_message_id: text('external_message_id'),
 }, (t) => [
-  index('idx_discord_score_notification_queue_status').on(t.status),
+  index('idx_discord_score_notification_queue_status_created').on(t.status, t.created_at),
   check('discord_score_notification_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_score_notification_queue_match').on(t.match_id),
 ]);
 
 export const discordScorecardPromptQueue = pgTable('discord_scorecard_prompt_queue', {
@@ -308,8 +310,10 @@ export const discordScorecardPromptQueue = pgTable('discord_scorecard_prompt_que
   external_message_id: text('external_message_id'),
   processed_at: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_scorecard_prompt_queue_status').on(t.status),
+  index('idx_discord_scorecard_prompt_queue_status_created').on(t.status, t.created_at),
   check('discord_scorecard_prompt_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'sent', 'failed')`),
+  index('idx_discord_scorecard_prompt_queue_match').on(t.match_id),
+  index('idx_discord_scorecard_prompt_queue_match_game').on(t.match_game_id),
 ]);
 
 export const discordStatsReportQueue = pgTable('discord_stats_report_queue', {
@@ -327,6 +331,7 @@ export const discordStatsReportQueue = pgTable('discord_stats_report_queue', {
 }, (t) => [
   unique('discord_stats_report_queue_match_id_unique').on(t.match_id),
   check('discord_stats_report_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_stats_report_queue_status_created').on(t.status, t.created_at),
 ]);
 
 export const discordStatusUpdateQueue = pgTable('discord_status_update_queue', {
@@ -344,7 +349,7 @@ export const discordStatusUpdateQueue = pgTable('discord_status_update_queue', {
   claimed_by: text('claimed_by'),
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_discord_status_update_queue_status').on(t.status),
+  index('idx_discord_status_update_queue_status_created').on(t.status, t.created_at),
   check('discord_status_update_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
 ]);
 
@@ -370,6 +375,8 @@ export const discordVoiceAnnouncementQueue = pgTable('discord_voice_announcement
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
   check('discord_voice_announcement_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_discord_voice_announcement_queue_status_created').on(t.status, t.created_at),
+  index('idx_discord_voice_announcement_queue_match').on(t.match_id),
 ]);
 
 export const discordWinnerVoteQueue = pgTable('discord_winner_vote_queue', {
@@ -391,6 +398,8 @@ export const discordWinnerVoteQueue = pgTable('discord_winner_vote_queue', {
 }, (t) => [
   index('idx_winner_vote_queue_status').on(t.status, t.created_at),
   check('discord_winner_vote_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'sent', 'failed')`),
+  index('idx_winner_vote_queue_match').on(t.match_id),
+  index('idx_winner_vote_queue_match_game').on(t.match_game_id),
 ]);
 
 export const statsImageQueue = pgTable('stats_image_queue', {
@@ -407,8 +416,9 @@ export const statsImageQueue = pgTable('stats_image_queue', {
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   processed_at: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_stats_image_queue_status').on(t.status),
+  index('idx_stats_image_queue_status_created').on(t.status, t.created_at),
   check('stats_image_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_stats_image_queue_match').on(t.match_id),
 ]);
 
 export const statsProcessingQueue = pgTable('stats_processing_queue', {
@@ -427,6 +437,9 @@ export const statsProcessingQueue = pgTable('stats_processing_queue', {
   next_attempt_at: timestamp('next_attempt_at', { withTimezone: true, mode: 'date' }),
   processed_at: timestamp('processed_at', { withTimezone: true, mode: 'date' }),
 }, (t) => [
-  index('idx_stats_processing_queue_status').on(t.status),
+  index('idx_stats_processing_queue_status_created').on(t.status, t.created_at),
   check('stats_processing_queue_status_check', sql`${t.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  index('idx_stats_processing_queue_match').on(t.match_id),
+  index('idx_stats_processing_queue_match_game').on(t.match_game_id),
+  index('idx_stats_processing_queue_submission').on(t.submission_id),
 ]);

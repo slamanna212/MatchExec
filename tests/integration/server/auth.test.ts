@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupPgTestFile } from '../../utils/pg-test-db';
 import { app } from '../../../src/server/app';
 import {
-  SESSION_COOKIE, INTERNAL_TOKEN_HEADER, createSessionToken, getInternalToken, isPublicPath, verifySessionToken,
+  SESSION_COOKIE, INTERNAL_TOKEN_HEADER, bumpSessionEpoch, createSessionToken, getInternalToken, getSessionEpoch, isPublicPath,
+  resetSessionEpochCache, sha256Hex, verifySessionToken,
 } from '../../../src/server/middleware/auth';
 
 setupPgTestFile();
@@ -54,10 +55,18 @@ describe('auth enabled', () => {
     },
   );
 
+  it('exempts the welcome flow for reads only', () => {
+    expect(isPublicPath('/api/welcome-flow', 'HEAD')).toBe(true);
+    expect(isPublicPath('/api/welcome-flow', 'PUT')).toBe(false);
+    expect(isPublicPath('/api/welcome-flow/screen', 'PUT')).toBe(false);
+    expect(isPublicPath('/api/health', 'POST')).toBe(true);
+  });
+
   it('does not exempt look-alike paths', () => {
     expect(isPublicPath('/api/healthz')).toBe(false);
     expect(isPublicPath('/api/matches')).toBe(false);
     expect(isPublicPath('/loginx')).toBe(false);
+    expect(isPublicPath('/api/auth/logout-all', 'POST')).toBe(false);
   });
 
   it('/api/health is reachable without a session (gate does not 401 it)', async () => {
@@ -86,6 +95,38 @@ describe('auth enabled', () => {
     }
     process.env.AUTH_SECRET = 'different';
     expect(await verifySessionToken(token)).toBe(false);
+  });
+
+  describe('session revocation', () => {
+    beforeEach(() => resetSessionEpochCache());
+
+    it('bumping the session epoch invalidates every token issued before it', async () => {
+      const before = await createSessionToken();
+      expect(await verifySessionToken(before)).toBe(true);
+      expect(await bumpSessionEpoch()).toBe(1);
+      expect(await verifySessionToken(before)).toBe(false);
+      const after = await createSessionToken();
+      expect(await verifySessionToken(after)).toBe(true);
+      expect(await bumpSessionEpoch()).toBe(2);
+      expect(await verifySessionToken(after)).toBe(false);
+      expect(await getSessionEpoch()).toBe(2);
+    });
+
+    it('epoch 0 keeps the original token format (sessions survive the upgrade)', async () => {
+      const iat = String(Date.now());
+      const exp = String(Date.now() + 60_000);
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(await sha256Hex('hunter2')), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const sig = Buffer.from(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${iat}.${exp}`))).toString('hex');
+      expect(await verifySessionToken(`${iat}.${exp}.${sig}`)).toBe(true);
+    });
+
+    it('with AUTH_SECRET set, changing ADMIN_PASSWORD invalidates existing tokens', async () => {
+      process.env.AUTH_SECRET = 'fixed-secret';
+      const token = await createSessionToken();
+      expect(await verifySessionToken(token)).toBe(true);
+      process.env.ADMIN_PASSWORD = 'new-password';
+      expect(await verifySessionToken(token)).toBe(false);
+    });
   });
 
   it('accepts the derived internal token and INTERNAL_API_TOKEN override', async () => {

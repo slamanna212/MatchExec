@@ -66,6 +66,21 @@ describe('POST /api/upload/event-image', () => {
     expect(res.data.success).toBe(true);
   });
 
+  it('takes the stored extension from the image type, never from the uploaded file name', async () => {
+    const html = await uploadImage({ bytes: PNG_BYTES, type: 'image/png', name: 'page.html' });
+    expect(html.data.filename).toMatch(/_page\.png$/);
+    const jpeg = await uploadImage({ bytes: JPEG_BYTES, type: 'image/jpeg', name: 'noext' });
+    expect(jpeg.data.filename).toMatch(/_noext\.jpg$/);
+  });
+
+  it('rejects an oversized request body with 413 while it streams in', async () => {
+    const res = await appRequest('/api/upload/event-image', {
+      method: 'POST', body: new Uint8Array(8 * 1024 * 1024), headers: { 'content-type': 'application/octet-stream' },
+    });
+    expect(res.status).toBe(413);
+    expect(res.data.error).toMatch(/request body too large/i);
+  });
+
   it('sanitizes path-traversal file names', async () => {
     const res = await uploadImage({ bytes: PNG_BYTES, type: 'image/png', name: '../../etc/passwd.png' });
     expect(res.status).toBe(200);

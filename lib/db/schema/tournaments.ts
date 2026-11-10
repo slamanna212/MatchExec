@@ -20,9 +20,11 @@ export const tournamentMatches = pgTable('tournament_matches', {
 }, (t) => [
   index('idx_tournament_matches_team2_id').on(t.team2_id),
   index('idx_tournament_matches_team1_id').on(t.team1_id),
-  index('idx_tournament_matches_bracket_type').on(t.bracket_type),
-  index('idx_tournament_matches_round').on(t.round),
-  index('idx_tournament_matches_tournament_id').on(t.tournament_id),
+  // Bracket queries always filter tournament + bracket + round; the prefix also serves the tournament FK.
+  index('idx_tournament_matches_bracket').on(t.tournament_id, t.bracket_type, t.round),
+  // FK set null when a parent match is deleted.
+  index('idx_tournament_matches_parent1').on(t.parent_match1_id).where(sql`${t.parent_match1_id} IS NOT NULL`),
+  index('idx_tournament_matches_parent2').on(t.parent_match2_id).where(sql`${t.parent_match2_id} IS NOT NULL`),
   check('tournament_matches_bracket_type_check', sql`${t.bracket_type} IN ('winners', 'losers', 'final')`),
 ]);
 
@@ -38,7 +40,6 @@ export const tournamentParticipants = pgTable('tournament_participants', {
 }, (t) => [
   index('idx_tournament_participants_team_assignment').on(t.team_assignment),
   index('idx_tournament_participants_user_id').on(t.user_id),
-  index('idx_tournament_participants_tournament_id').on(t.tournament_id),
   unique('tournament_participants_tournament_id_user_id_unique').on(t.tournament_id, t.user_id),
 ]);
 
@@ -51,6 +52,7 @@ export const tournamentRoundByes = pgTable('tournament_round_byes', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   unique('tournament_round_byes_tournament_id_round_bracket_type_team_id_unique').on(t.tournament_id, t.round, t.bracket_type, t.team_id),
+  index('idx_tournament_round_byes_team').on(t.team_id),
 ]);
 
 export const tournamentTeamMembers = pgTable('tournament_team_members', {
@@ -63,7 +65,6 @@ export const tournamentTeamMembers = pgTable('tournament_team_members', {
   is_captain: boolean('is_captain').notNull().default(false),
 }, (t) => [
   index('idx_tournament_team_members_user_id').on(t.user_id),
-  index('idx_tournament_team_members_team_id').on(t.team_id),
   unique('tournament_team_members_team_id_user_id_unique').on(t.team_id, t.user_id),
 ]);
 
@@ -106,8 +107,6 @@ export const tournaments = pgTable('tournaments', {
   livestream_link: text('livestream_link'),
   position_scoring_override: jsonb('position_scoring_override').$type<PositionScoringConfig>(),
 }, (t) => [
-  index('idx_tournaments_game_mode_id').on(t.game_mode_id),
-  index('idx_tournaments_start_time').on(t.start_time),
   index('idx_tournaments_status').on(t.status),
   index('idx_tournaments_game_id').on(t.game_id),
   check('tournaments_format_check', sql`${t.format} IN ('single-elimination', 'double-elimination', 'cumulative-points')`),

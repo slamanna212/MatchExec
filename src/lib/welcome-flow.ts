@@ -31,6 +31,11 @@ export async function getWelcomeFlowState(): Promise<WelcomeFlowState> {
   return { isFirstRun: !completed, completed, dbReady: true, metadata };
 }
 
+/** True once the welcome flow has been completed (reads the setting directly, independent of system readiness). */
+export async function isWelcomeFlowCompleted(): Promise<boolean> {
+  return (await getAppSettingRow('welcome_flow_completed'))?.setting_value === 'true';
+}
+
 /** Marks the welcome flow finished. Returns false when the `welcome_flow_completed` row does not exist. */
 export async function completeWelcomeFlow(setupType: SetupType): Promise<boolean> {
   const metadata: WelcomeMetadata = {

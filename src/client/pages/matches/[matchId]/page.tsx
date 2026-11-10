@@ -11,6 +11,8 @@ import { useMapCodes } from '@/components/match-details/useMapCodes';
 import { showError, notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { cleanMapId, indexMapsWithModeVariants } from '@/lib/utils/map-utils';
+import { usePolling } from '@/hooks/usePolling';
+import { useRefreshInterval } from '@/lib/ui-settings-client';
 
 const formatMapName = (mapId: string) => {
   // Convert map ID to proper display name
@@ -56,7 +58,7 @@ export default function MatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [remindersLoading, setRemindersLoading] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(10);
+  const refreshInterval = useRefreshInterval(10);
 
   // Map data states
   const [mapDetails, setMapDetails] = useState<{[key: string]: {name: string, imageUrl?: string, modeName?: string, location?: string, note?: string}}>({});
@@ -181,22 +183,6 @@ export default function MatchPage() {
     }
   }, []);
 
-  // Fetch UI settings
-  useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        logger.error('Error fetching UI settings:', error);
-      }
-    };
-
-    fetchUISettings();
-  }, []);
 
   // Initial data fetch
   useEffect(() => {
@@ -253,23 +239,16 @@ export default function MatchPage() {
     }
   }, [matchId]);
 
-  // Auto-refresh participants, reminders, and match games
-  useEffect(() => {
-    if (!match || match.status === 'complete') return undefined;
-
-    const interval = setInterval(() => {
-      fetchMatch(true);
-      fetchParticipants(match.id, true);
-      fetchReminders(match.id, true);
-      if (match.status === 'battle') {
-        refetchMatchGames();
-      }
-    }, refreshInterval * 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [match, refreshInterval, fetchMatch, fetchParticipants, fetchReminders, refetchMatchGames]);
+  // Auto-refresh participants, reminders, and match games (paused while the tab is hidden)
+  usePolling(() => {
+    if (!match) return;
+    fetchMatch(true);
+    fetchParticipants(match.id, true);
+    fetchReminders(match.id, true);
+    if (match.status === 'battle') {
+      refetchMatchGames();
+    }
+  }, match && match.status !== 'complete' ? refreshInterval * 1000 : null);
 
   // Handle status transition
   const handleStatusTransition = useCallback(async (newStatus: string, force = false) => {

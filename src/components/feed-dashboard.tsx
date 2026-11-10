@@ -23,6 +23,8 @@ import {
   Box,
 } from '@mantine/core';
 import { DatePicker } from '@mantine/dates';
+// Date picker styles load with the components that use them (not in the entry bundle)
+import '@mantine/dates/styles.css';
 import {
   IconSwords,
   IconTrophy,
@@ -49,6 +51,7 @@ import type { FeedEvent, FeedResponse } from '@/shared/types';
 import classes from './gradient-segmented-control.module.css';
 import { PageHeader } from './PageHeader';
 import { PageLayout } from './PageLayout';
+import { usePolling } from '@/hooks/usePolling';
 
 // ─── Priority config ──────────────────────────────────────────────────────────
 
@@ -403,10 +406,7 @@ export function FeedDashboard(): JSX.Element {
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
-  useEffect(() => {
-    const id = setInterval(() => fetchEvents(true), 15_000);
-    return () => clearInterval(id);
-  }, [fetchEvents]);
+  usePolling(() => fetchEvents(true), 15_000);
 
   useEffect(() => {
     fetch('/api/version')

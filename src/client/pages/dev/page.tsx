@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { notificationHelper, showSuccess, showError, showWarning, showInfo } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
+import { usePolling } from '@/hooks/usePolling';
 
 export default function DevPage() {
   const navigate = useNavigate();
@@ -52,9 +53,8 @@ export default function DevPage() {
 
   useEffect(() => {
     fetchSystemStatus();
-    const interval = setInterval(fetchSystemStatus, 30000);
-    return () => clearInterval(interval);
   }, []);
+  usePolling(fetchSystemStatus, 30_000);
 
   const [voiceTestLoading, setVoiceTestLoading] = useState(false);
   const [voiceTestMessage, setVoiceTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);

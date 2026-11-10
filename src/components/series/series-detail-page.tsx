@@ -17,6 +17,8 @@ import { useSeriesStages } from './series-schedule-api';
 import { SeriesStandingsPanel } from './series-standings-panel';
 import { isEventFinished } from './series-shared';
 import type { SeriesSummary, SeriesEventView } from './series-shared';
+import { usePolling } from '@/hooks/usePolling';
+import { useRefreshInterval } from '@/lib/ui-settings-client';
 
 export type SeriesTab = 'overview' | 'schedule' | 'standings' | 'entrants';
 const TABS: SeriesTab[] = ['overview', 'schedule', 'standings', 'entrants'];
@@ -75,7 +77,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   const [dataVersion, setDataVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshInterval, setRefreshInterval] = useState(30);
+  const refreshInterval = useRefreshInterval();
 
   const changeTab = useCallback((next: string) => {
     setSearchParams((prev) => {
@@ -110,25 +112,9 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const res = await fetch('/api/settings/ui');
-        if (res.ok) setRefreshInterval((await res.json()).auto_refresh_interval_seconds || 30);
-      } catch (err) {
-        logger.error('Error fetching UI settings:', err);
-      }
-    };
-    void loadSettings();
-  }, []);
-
-  // Auto-refresh while the series is running so event progress and standings stay live.
+  // Auto-refresh while the series is running so event progress and standings stay live (paused while the tab is hidden).
   const isActive = series?.status === 'active';
-  useEffect(() => {
-    if (!isActive) return undefined;
-    const id = setInterval(() => { void fetchData(); }, refreshInterval * 1000);
-    return () => clearInterval(id);
-  }, [isActive, refreshInterval, fetchData]);
+  usePolling(() => fetchData(), isActive ? refreshInterval * 1000 : null);
 
   const transition = useCallback(async (status: string) => {
     const msgs = TRANSITION_MESSAGES[status];

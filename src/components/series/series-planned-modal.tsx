@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Modal, Stack, Group, Button, TextInput, Select, NumberInput, Switch, Divider, Text, SegmentedControl } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
+// Date picker styles load with the components that use them (not in the entry bundle)
+import '@mantine/dates/styles.css';
 import classes from '@/components/gradient-segmented-control.module.css';
 import type { SeriesEventRole, SeriesSeedingRule, TournamentBracketFormat } from '@/shared/series-types';
 import { formatsForScoringType, localDateTimeToIso } from './series-create-event-modals';

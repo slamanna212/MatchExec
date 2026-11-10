@@ -7,6 +7,7 @@ import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { invalidateUiSettings } from '@/lib/ui-settings-client';
 
 interface UISettings {
   auto_refresh_interval_seconds: number;
@@ -53,6 +54,7 @@ export default function UISettingsPage() {
       });
 
       if (response.ok) {
+        invalidateUiSettings();
         notificationHelper.success({
           title: 'Settings Saved',
           message: 'UI settings saved successfully!'

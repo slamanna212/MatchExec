@@ -12,12 +12,12 @@ import { validateEnum, validateMaxLength, validateNumberRange, validatePositionS
 import {
   TournamentError, assignTeamMembers, createTeam, createTournament, deleteTeam, deleteTournament, generateTournamentMatches, getBracketStandings,
   getCumulativeStandings, getLeaderboardBreakdown, getTournament, getTournamentDetail, getTournamentEventImage, getTournamentWithGame,
-  getProgressHint, hasActiveMatches, listBracketMatches, listParticipants, listTeamsWithMembers, listTournamentMatchesIds, listTournaments, lockTournament,
+  getProgressHint, getTournamentListFingerprint, hasActiveMatches, listBracketMatches, listParticipants, listTeamsWithMembers, listTournamentMatchesIds, listTournaments, lockTournament,
   progressTournament, setTeamLogo, transitionTournament, updateTournamentDetails, type BracketAssignment, type CreateTournamentInput, type TeamAssignmentInput,
   type UpdateTournamentInput,
 } from '@/lib/tournaments';
 import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
-import { jsonError } from '../http';
+import { etagMatches, jsonError } from '../http';
 
 const RULESET_VALUES = ['casual', 'competitive'] as const;
 const FORMATS = ['single-elimination', 'double-elimination', 'cumulative-points'] as const;
@@ -120,14 +120,21 @@ export const tournaments = new Hono()
     const limitParam = c.req.query('limit');
     const limit = limitParam ? Number.parseInt(limitParam, 10) : null;
     const offset = Number.parseInt(c.req.query('offset') ?? '0', 10) || 0;
-    const rows = await listTournaments(db, { status: c.req.query('status'), limit: Number.isNaN(limit) ? null : limit, offset });
+    const opts = { status: c.req.query('status'), limit: Number.isNaN(limit) ? null : limit, offset };
 
-    // ETag for efficient polling; series membership doesn't touch tournaments.updated_at, so fold it in.
+    if (opts.limit === null) {
+      // Polling path: a cheap fingerprint query decides 304 before the list query runs.
+      const etag = `"${await getTournamentListFingerprint(db, opts)}"`;
+      if (etagMatches(c.req.header('if-none-match'), etag)) return new Response(null, { status: 304, headers: { ETag: etag } });
+      const rows = await listTournaments(db, opts);
+      c.header('ETag', etag);
+      return c.json(rows);
+    }
+
+    const rows = await listTournaments(db, opts);
     const maxUpdatedAt = rows.reduce((max, t) => Math.max(max, t.updated_at.getTime()), 0);
     const seriesLinks = rows.reduce((sum, t) => sum + t.series.length, 0);
-    const etag = `"${rows.length}:${maxUpdatedAt}:${seriesLinks}"`;
-    if (limit === null && c.req.header('if-none-match') === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
-    c.header('ETag', etag);
+    c.header('ETag', `"${rows.length}:${maxUpdatedAt}:${seriesLinks}"`);
     return c.json(rows);
   }))
   .post('/', (c) => guard(c, 'Error creating tournament', 'Failed to create tournament', async () => {

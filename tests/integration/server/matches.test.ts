@@ -72,11 +72,40 @@ describe('GET /api/matches', () => {
       max_participants: 8, map_codes_supported: false,
     });
     const etag = res.headers.get('etag')!;
-    expect(etag).toBeTruthy();
+    expect(etag).toMatch(/^"[\x21\x23-\x7e]+"$/); // valid entity-tag characters (no spaces)
     expect((await appRequest('/api/matches', { headers: { 'if-none-match': etag } })).status).toBe(304);
+    // compress() turns the ETag weak; the browser sends back W/"..." and that must still match
+    expect((await appRequest('/api/matches', { headers: { 'if-none-match': `W/${etag}` } })).status).toBe(304);
     await addPlayers('m1x', 0);
     await pg().insert(matchParticipants).values({ id: 'late', match_id: 'm1', user_id: 'late', username: 'Late' });
-    expect((await appRequest('/api/matches', { headers: { 'if-none-match': etag } })).status).toBe(200);
+    const afterSignup = await appRequest('/api/matches', { headers: { 'if-none-match': etag } });
+    expect(afterSignup.status).toBe(200);
+    expect(afterSignup.headers.get('etag')).not.toBe(etag);
+  });
+
+  it('ETag moves when a match is updated or a series link is removed, and ignores matches out of scope', async () => {
+    await createMatch(gameId, modeId, { id: 'live' });
+    await createMatch(gameId, modeId, { id: 'done', status: 'complete' });
+    const etag = (await appRequest('/api/matches')).headers.get('etag')!;
+
+    // a finished match is not on the dashboard: changing it keeps the 304
+    await pg().update(matches).set({ name: 'renamed', updated_at: new Date(Date.now() + 60_000) }).where(eq(matches.id, 'done'));
+    expect((await appRequest('/api/matches', { headers: { 'if-none-match': etag } })).status).toBe(304);
+
+    await pg().update(matches).set({ name: 'renamed', updated_at: new Date(Date.now() + 60_000) }).where(eq(matches.id, 'live'));
+    const updated = await appRequest('/api/matches', { headers: { 'if-none-match': etag } });
+    expect(updated.status).toBe(200);
+
+    const [s] = await pg().insert(series).values({ id: 's2', name: 'S2' }).returning();
+    await pg().insert(seriesEvents).values({ id: 'se2', series_id: s.id, event_type: 'match', match_id: 'live', event_order: 1 });
+    expect((await appRequest('/api/matches', { headers: { 'if-none-match': updated.headers.get('etag')! } })).status).toBe(200);
+  });
+
+  it('treats a non-numeric limit as unpaged instead of failing', async () => {
+    await createMatch(gameId, modeId, { id: 'm-limit' });
+    const res = await appRequest('/api/matches?limit=abc');
+    expect(res.status).toBe(200);
+    expect(res.data).toHaveLength(1);
   });
 });
 

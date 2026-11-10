@@ -1,5 +1,5 @@
 // Initially generated from the SQLite baseline (Stage 0.5); now maintained by hand.
-import { pgTable, text, integer, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 export const appSettings = pgTable('app_settings', {
   setting_key: text('setting_key').primaryKey(),
@@ -8,9 +8,7 @@ export const appSettings = pgTable('app_settings', {
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
-}, (t) => [
-  index('idx_app_settings_data_type').on(t.data_type),
-]);
+});
 
 export const schedulerSettings = pgTable('scheduler_settings', {
   id: integer('id').primaryKey().generatedByDefaultAsIdentity(),

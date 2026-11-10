@@ -10,7 +10,6 @@ export const announcementRoleSettings = pgTable('announcement_role_settings', {
   role_id: text('role_id').notNull(),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
-  index('idx_announcement_role_settings_game_id').on(t.game_id),
   unique('announcement_role_settings_game_id_role_id_unique').on(t.game_id, t.role_id),
 ]);
 
@@ -122,6 +121,8 @@ export const discordWinnerVoteMessages = pgTable('discord_winner_vote_messages',
 }, (t) => [
   index('idx_winner_vote_messages_msg').on(t.discord_message_id),
   index('idx_winner_vote_messages_game').on(t.match_game_id),
+  index('idx_winner_vote_messages_match').on(t.match_id),
+  index('idx_winner_vote_messages_participant').on(t.participant_id).where(sql`${t.participant_id} IS NOT NULL`),
   check('discord_winner_vote_messages_team_side_check', sql`${t.team_side} IN ('blue', 'red')`),
   check('discord_winner_vote_messages_voted_for_check', sql`${t.voted_for} IN ('blue', 'red')`),
 ]);

@@ -1,8 +1,8 @@
 /** The `matches` table: reads for the API / bot / scheduler, creation, editing, deletion and the status compare-and-set. */
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql, type SQL } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import {
-  gameMaps, gameModes, games, matchParticipants, matches, tournamentMatches, tournaments,
+  gameMaps, gameModes, games, matchParticipants, matches, seriesEvents, tournamentMatches, tournaments,
 } from '../../../lib/db/schema';
 import type { PositionScoringConfig } from '../../../lib/db/schema/types';
 import type { Announcement } from '../../../lib/db/schema/types';
@@ -123,7 +123,8 @@ export type MatchListRow = Omit<MatchRow, 'maps'> & {
   series: Array<{ id: string; name: string }>;
 };
 
-export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): Promise<MatchListRow[]> {
+/** The WHERE of `listMatches` (status scope + optional tournament exclusion); shared with the fingerprint below. */
+function listMatchesWhere(opts: ListMatchesOptions): SQL | undefined {
   const statuses = opts.statuses ?? [];
   const tournamentFilter = opts.excludeTournament ? isNull(matches.tournament_id) : undefined;
   let statusFilter;
@@ -132,6 +133,32 @@ export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): 
   else if (statuses[0] === 'cancelled') statusFilter = eq(matches.status, 'cancelled');
   else if (statuses[0] === 'finished') statusFilter = inArray(matches.status, ['complete', 'cancelled']);
   else statusFilter = notInArray(matches.status, ['complete', 'cancelled']);
+  return and(statusFilter, tournamentFilter);
+}
+
+/**
+ * Cheap change marker for an unpaged `listMatches` result, used as the list ETag so a poll that finds nothing new is
+ * answered with 304 without running the list query. It moves when a match in scope is added, removed or updated
+ * (`updated_at`), when a signup is added or removed (signups do not touch `matches.updated_at`), and when a series link to
+ * one of the matches or their tournaments is added or removed. One statement, served by the partial list indexes.
+ */
+export async function getMatchListFingerprint(ex: Executor, opts: ListMatchesOptions = {}): Promise<string> {
+  const where = listMatchesWhere(opts);
+  const inScope = ex.select({ id: matches.id }).from(matches).where(where);
+  const tournamentsInScope = ex.select({ id: matches.tournament_id }).from(matches).where(and(where, isNotNull(matches.tournament_id)));
+  const [row] = await ex
+    .select({
+      n: sql<number>`count(*)`.mapWith(Number),
+      latest: sql<string | null>`(extract(epoch from max(${matches.updated_at})) * 1000000)::bigint::text`,
+      participants: sql<number>`(SELECT count(*) FROM ${matchParticipants} WHERE ${matchParticipants.match_id} IN ${inScope})`.mapWith(Number),
+      seriesLinks: sql<number>`(SELECT count(*) FROM ${seriesEvents} WHERE ${seriesEvents.match_id} IN ${inScope} OR ${seriesEvents.tournament_id} IN ${tournamentsInScope})`.mapWith(Number),
+    })
+    .from(matches)
+    .where(where);
+  return `${row.n}:${row.latest ?? ''}:${row.participants}:${row.seriesLinks}`;
+}
+
+export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): Promise<MatchListRow[]> {
 
   const participantCount = sql<number>`(SELECT count(*) FROM ${matchParticipants} WHERE ${matchParticipants.match_id} = ${matches.id})`.mapWith(Number);
   const mapName = sql<string | null>`(SELECT ${gameMaps.name} FROM ${gameMaps} WHERE ${gameMaps.id} = ${matches.map_id} AND ${gameMaps.game_id} = ${matches.game_id} LIMIT 1)`;
@@ -153,7 +180,7 @@ export async function listMatches(ex: Executor, opts: ListMatchesOptions = {}): 
     .leftJoin(games, eq(matches.game_id, games.id))
     .leftJoin(tournamentMatches, eq(matches.id, tournamentMatches.match_id))
     .leftJoin(tournaments, eq(tournamentMatches.tournament_id, tournaments.id))
-    .where(and(statusFilter, tournamentFilter))
+    .where(listMatchesWhere(opts))
     .orderBy(desc(matches.updated_at), asc(matches.id))
     .$dynamic();
   if (opts.limit !== null && opts.limit !== undefined) query = query.limit(opts.limit).offset(opts.offset ?? 0);

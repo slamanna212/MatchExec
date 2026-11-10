@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { db } from '../../../lib/db';
 import {
   STANDINGS_AFFECTING_FIELDS, addSeriesEvent, createSeriesChecked, deleteSeries, editSeries, getSeriesById, getSeriesEventDto,
-  getSeriesStandingsResponse, getSeriesSummary, findSeriesForMatch, findSeriesForTournament, listSeriesEventDtos, listSeriesSummaries,
+  getSeriesStandingsResponse, withStandingsCache, getSeriesSummary, findSeriesForMatch, findSeriesForTournament, listSeriesEventDtos, listSeriesSummaries,
   removeSeriesEvent, transitionSeries, updateSeriesEvent, validateEventOrder, validatePlacementFields, validatePointsMultiplier,
   validateSeriesBody, validateSeriesDates, SERIES_STATUSES,
   type AddSeriesEventInput, type CreateSeriesInput, type SeriesStatus, type UpdateSeriesEventInput, type UpdateSeriesInput,
@@ -118,7 +118,11 @@ export const seriesRoutes = new Hono()
     const view = c.req.query('view') ?? 'entrant';
     if (view !== 'entrant' && view !== 'individual') return jsonError(c, 'view must be "entrant" or "individual"', 400);
     // scope: 'season' (default) or a stage id of this series (404 otherwise, from the domain)
-    const standings = await getSeriesStandingsResponse(db, c.req.param('seriesId'), { scope: c.req.query('scope') || 'season', view });
+    // Memoised per (series, scope, view) while nothing the standings read has changed (see standings-cache.ts): the page
+    // re-polls every few seconds while a series runs.
+    const seriesId = c.req.param('seriesId');
+    const scope = c.req.query('scope') || 'season';
+    const standings = await withStandingsCache(db, seriesId, `${scope}|${view}`, () => getSeriesStandingsResponse(db, seriesId, { scope, view }));
     if (!standings) return jsonError(c, 'Series not found', 404);
     return c.json(standings);
   }))

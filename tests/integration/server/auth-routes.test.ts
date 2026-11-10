@@ -26,6 +26,11 @@ const login = (password: unknown, headers: Record<string, string> = {}) =>
 const tokenFrom = (setCookie: string) => setCookie.split(`${SESSION_COOKIE}=`)[1].split(';')[0];
 
 describe('auth routes', () => {
+  it('logout-all is a no-op when auth is disabled', async () => {
+    const res = await appRequest('/api/auth/logout-all', { method: 'POST' });
+    expect(res.data).toEqual({ success: true, enabled: false });
+  });
+
   it('login is a no-op when auth is disabled', async () => {
     const res = await login('anything');
     expect(res.status).toBe(200);
@@ -65,11 +70,34 @@ describe('auth routes', () => {
       expect(res.headers.get('set-cookie')).toContain('Secure');
     });
 
-    it('rate limits repeated attempts per client', async () => {
-      for (let i = 0; i < 10; i++) expect((await login('bad', { 'x-forwarded-for': '1.1.1.1' })).status).toBe(401);
-      const limited = await login('bad', { 'x-forwarded-for': '1.1.1.1' });
-      expect(limited.status).toBe(429);
-      expect((await login('bad', { 'x-forwarded-for': '2.2.2.2' })).status).toBe(401);
+    it('rate limits repeated attempts per client (behind a trusted proxy)', async () => {
+      process.env.TRUST_PROXY = 'true';
+      try {
+        for (let i = 0; i < 10; i++) expect((await login('bad', { 'x-forwarded-for': '1.1.1.1' })).status).toBe(401);
+        const limited = await login('bad', { 'x-forwarded-for': '1.1.1.1' });
+        expect(limited.status).toBe(429);
+        expect((await login('bad', { 'x-forwarded-for': '2.2.2.2' })).status).toBe(401);
+      } finally {
+        delete process.env.TRUST_PROXY;
+      }
+    });
+
+    it('a spoofed x-forwarded-for does not get around the limit without TRUST_PROXY', async () => {
+      for (let i = 0; i < 10; i++) expect((await login('bad', { 'x-forwarded-for': `9.9.9.${i}` })).status).toBe(401);
+      expect((await login('bad', { 'x-forwarded-for': '9.9.9.99' })).status).toBe(429);
+    });
+
+    it('logout-all needs a session, revokes every other session and re-issues one for the caller', async () => {
+      expect((await appRequest('/api/auth/logout-all', { method: 'POST' })).status).toBe(401);
+      const a = tokenFrom((await login('hunter2')).headers.get('set-cookie')!);
+      const b = tokenFrom((await login('hunter2')).headers.get('set-cookie')!);
+      const res = await appRequest('/api/auth/logout-all', { method: 'POST', headers: { cookie: `${SESSION_COOKIE}=${a}` } });
+      expect(res.status).toBe(200);
+      expect(res.data).toEqual({ success: true });
+      const fresh = tokenFrom(res.headers.get('set-cookie')!);
+      expect(await verifySessionToken(a)).toBe(false);
+      expect(await verifySessionToken(b)).toBe(false);
+      expect(await verifySessionToken(fresh)).toBe(true);
     });
 
     it('status reports enabled/authenticated', async () => {

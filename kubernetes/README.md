@@ -143,6 +143,10 @@ env:
 | `ingress.hosts` | `[]` | Host rules |
 | `ingress.tls` | `[]` | TLS configuration |
 
+With `ingress.enabled: true` the chart sets `TRUST_PROXY=true`, so the web pods read the client address from the ingress
+controller's `X-Forwarded-For` (login rate limiting) and accept its `X-Forwarded-Host` (cross-site request check). Override
+it with `env.TRUST_PROXY` (for example `"2"` when a load balancer sits in front of the ingress controller, or `"false"`).
+
 Example with cert-manager:
 ```yaml
 ingress:

@@ -3,7 +3,9 @@
  *
  *  - `/dev` and `/dev/*` redirect to `/` in production (the dev page is a development tool)
  *  - `dist/client` is served as static files; Vite's hashed bundle lives under `/static/` and is cached for a year
- *    (immutable), everything else from `public/` gets a short cache, `index.html` is never cached
+ *    (immutable), everything else from `public/` (game art, icons; it only changes with a new image) is cached for a day
+ *    and may be served stale for a week while it revalidates, `index.html` is never cached
+ *  - the HTML document carries the Content-Security-Policy (see middleware/security-headers.ts)
  *  - any other GET/HEAD navigation (not `/api`, not `/uploads`, no file extension or `Accept: text/html`) falls back to `index.html`
  *    so client-side routes and deep links work
  */
@@ -14,9 +16,10 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { Context, MiddlewareHandler } from 'hono';
 import { apiNotFound } from './http';
 import { STATIC_ASSET_PREFIX } from './middleware/auth';
+import { contentSecurityPolicyFor } from './middleware/security-headers';
 
 const HASHED_CACHE = 'public, max-age=31536000, immutable';
-const PUBLIC_FILE_CACHE = 'public, max-age=3600';
+const PUBLIC_FILE_CACHE = 'public, max-age=86400, stale-while-revalidate=604800';
 const HTML_CACHE = 'no-cache';
 
 /** Where `vite build` put the client (override with CLIENT_DIR). */
@@ -58,7 +61,13 @@ export const serveClientFiles: MiddlewareHandler = async (c, next) => {
   if (!existsSync(root)) return next();
   const res = await fileHandler(root)(c, next);
   const filePath = foundPaths.get(c);
-  if (res && filePath) res.headers.set('Cache-Control', cacheControlFor(root, filePath));
+  if (res && filePath) {
+    res.headers.set('Cache-Control', cacheControlFor(root, filePath));
+    if (filePath.endsWith(`${path.sep}index.html`)) {
+      const html = await readIndexHtml();
+      if (html !== null) res.headers.set('Content-Security-Policy', contentSecurityPolicyFor(html));
+    }
+  }
   return res;
 };
 
@@ -86,5 +95,6 @@ export async function spaFallback(c: Context): Promise<Response> {
   const html = await readIndexHtml();
   if (html === null) return c.text('Client not built (run `pnpm build:client`)', 404);
   c.header('Cache-Control', HTML_CACHE);
+  c.header('Content-Security-Policy', contentSecurityPolicyFor(html));
   return c.html(html);
 }

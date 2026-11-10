@@ -41,6 +41,17 @@ describe('GET /api/welcome-flow', () => {
       delete process.env.ADMIN_PASSWORD;
     }
   });
+
+  it('writes need a session when auth is enabled', async () => {
+    process.env.ADMIN_PASSWORD = 'pw';
+    try {
+      expect((await put({ setupType: 'pro_mode' })).status).toBe(401);
+      expect((await appRequest('/api/welcome-flow/screen', { method: 'PUT', json: { screen: 2 } })).status).toBe(401);
+      expect((await getAppSettingRow('welcome_flow_completed'))?.setting_value).toBe('false');
+    } finally {
+      delete process.env.ADMIN_PASSWORD;
+    }
+  });
 });
 
 describe('PUT /api/welcome-flow', () => {
@@ -64,9 +75,10 @@ describe('PUT /api/welcome-flow', () => {
     expect(new Date(get.data.metadata.completion_date).toString()).not.toBe('Invalid Date');
   });
 
-  it('get_started stores all three screens and is idempotent', async () => {
+  it('get_started stores all three screens; a repeated request succeeds without rewriting the stored setup', async () => {
     expect((await put({ setupType: 'get_started' })).status).toBe(200);
     expect((await put({ setupType: 'get_started' })).status).toBe(200);
+    expect((await put({ setupType: 'pro_mode' })).status).toBe(200);
     expect((await getAppSettingRow('welcome_flow_completed'))?.metadata).toMatchObject({ screens_completed: [1, 2, 3], setup_type: 'get_started' });
   });
 
@@ -95,9 +107,17 @@ describe('PUT /api/welcome-flow/screen', () => {
     await getPgTestDb().delete(appSettings).where(eq(appSettings.setting_key, 'welcome_flow_current_screen'));
   });
 
-  it('returns 500 when screen is missing', async () => {
-    const res = await appRequest('/api/welcome-flow/screen', { method: 'PUT', json: {} });
-    expect(res.status).toBe(500);
-    expect(res.data).toEqual({ error: 'Failed to update screen' });
+  it.each([{}, { screen: 0 }, { screen: 4 }, { screen: 1.5 }, { screen: 'abc' }, { screen: { toString: 1 } }])('rejects %j with 400', async (body) => {
+    const res = await appRequest('/api/welcome-flow/screen', { method: 'PUT', json: body });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/screen must be an integer from 1 to 3/);
+  });
+
+  it('is a no-op once the welcome flow is complete', async () => {
+    await getPgTestDb().insert(appSettings).values({ setting_key: 'welcome_flow_current_screen', setting_value: '1' });
+    await put({ setupType: 'pro_mode' });
+    expect((await appRequest('/api/welcome-flow/screen', { method: 'PUT', json: { screen: 3 } })).data).toEqual({ success: true });
+    expect((await getAppSettingRow('welcome_flow_current_screen'))?.setting_value).toBe('1');
+    await getPgTestDb().delete(appSettings).where(eq(appSettings.setting_key, 'welcome_flow_current_screen'));
   });
 });

@@ -18,7 +18,6 @@ export const matchGamePlacements = pgTable('match_game_placements', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   index('idx_placements_entity').on(t.entity_type, t.entity_id),
-  index('idx_placements_match_game').on(t.match_game_id),
   unique('match_game_placements_match_game_id_entity_type_entity_id_unique').on(t.match_game_id, t.entity_type, t.entity_id),
   check('match_game_placements_entity_type_check', sql`${t.entity_type} IN ('team', 'participant')`),
 ]);
@@ -36,7 +35,6 @@ export const matchGames = pgTable('match_games', {
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
   discord_notified: boolean('discord_notified').notNull().default(false),
 }, (t) => [
-  index('idx_match_games_match_id').on(t.match_id),
   unique('match_games_match_id_round_unique').on(t.match_id, t.round),
   check('match_games_status_check', sql`${t.status} IN ('pending', 'ongoing', 'completed')`),
 ]);
@@ -59,7 +57,6 @@ export const matchParticipants = pgTable('match_participants', {
 }, (t) => [
   index('idx_match_participants_team_id').on(t.team_id),
   index('idx_match_participants_user_id').on(t.user_id),
-  index('idx_match_participants_match_id').on(t.match_id),
   unique('match_participants_match_id_user_id_unique').on(t.match_id, t.user_id),
 ]);
 
@@ -75,7 +72,7 @@ export const matchPlayerStats = pgTable('match_player_stats', {
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
   stats_dm_sent: boolean('stats_dm_sent').notNull().default(false),
 }, (t) => [
-  index('idx_match_player_stats_match').on(t.match_id),
+  index('idx_match_player_stats_participant').on(t.participant_id),
   unique('match_player_stats_match_id_participant_id_unique').on(t.match_id, t.participant_id),
 ]);
 
@@ -92,7 +89,6 @@ export const matchTeams = pgTable('match_teams', {
   /** Set when the series pre-assigned this team to one of its entrants. */
   series_entrant_id: text('series_entrant_id').references(() => seriesEntrants.id, { onDelete: 'set null' }),
 }, (t) => [
-  index('idx_match_teams_match').on(t.match_id),
   index('idx_match_teams_series_entrant').on(t.series_entrant_id),
   unique('match_teams_match_id_team_order_unique').on(t.match_id, t.team_order),
 ]);
@@ -103,9 +99,7 @@ export const matchVoiceAlternation = pgTable('match_voice_alternation', {
   last_first_team: text('last_first_team'),
   last_updated_at: timestamp('last_updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
-}, (t) => [
-  index('idx_match_voice_alternation_last_team').on(t.last_first_team),
-]);
+});
 
 export const matches = pgTable('matches', {
   id: text('id').primaryKey(),
@@ -147,17 +141,16 @@ export const matches = pgTable('matches', {
   team_count: integer('team_count').notNull().default(2),
   position_scoring_override: jsonb('position_scoring_override').$type<PositionScoringConfig>(),
 }, (t) => [
-  index('idx_matches_status_updated').on(t.status, t.updated_at.desc()),
-  index('idx_matches_map_id').on(t.map_id),
-  index('idx_matches_winner_team').on(t.winner_team),
-  index('idx_matches_tournament_bracket_type').on(t.tournament_bracket_type),
-  index('idx_matches_tournament_round').on(t.tournament_round),
+  // Dashboard (in play) and history (finished) lists, newest first. Partial, so each list only walks its own rows; the
+  // dashboard polls the active one every few seconds (listMatches / getMatchListFingerprint).
+  index('idx_matches_active_updated').on(t.updated_at.desc().nullsFirst()).where(sql`${t.status} NOT IN ('complete', 'cancelled')`),
+  index('idx_matches_finished_updated').on(t.updated_at.desc().nullsFirst()).where(sql`${t.status} IN ('complete', 'cancelled')`),
+  // Scheduler windows (status + start_date) and single-status lookups.
+  index('idx_matches_status_start_date').on(t.status, t.start_date),
+  // Foreign keys (cascade / set null on delete) and tournament lookups.
   index('idx_matches_blue_team_id').on(t.blue_team_id),
   index('idx_matches_red_team_id').on(t.red_team_id),
-  index('idx_matches_bracket_type').on(t.bracket_type),
   index('idx_matches_tournament_id').on(t.tournament_id),
-  index('idx_matches_start_time').on(t.start_time),
-  index('idx_matches_status').on(t.status),
   index('idx_matches_game_id').on(t.game_id),
   check('matches_status_check', sql`${t.status} IN ('created', 'gather', 'assign', 'battle', 'complete', 'cancelled')`),
   check('matches_bracket_type_check', sql`${t.bracket_type} IN ('winners', 'losers', 'final')`),

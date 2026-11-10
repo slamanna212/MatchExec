@@ -1,11 +1,14 @@
 import { logger } from '../../src/lib/logger/server';
 import { setAppSetting } from '../../src/lib/settings';
-import { db as pgDb } from '../../lib/db';
+import { db as pgDb, setDefaultPoolMax } from '../../lib/db';
 import { waitForSystemReady } from '../../lib/db/system-status';
 import { isPaused, startWorkerControl, type WorkerControl } from '../../lib/maintenance';
 import { claimJobs, makeWorkerId, nonOverlapping, releaseJob, resetAbandonedClaims } from '../../src/lib/discord-queues';
 import { AIExtractor } from './modules/ai-extractor';
 import { StatImageGenerator } from './modules/stat-image-generator';
+
+// Small pool unless PG_POOL_MAX says otherwise (one extraction / image job at a time); see setDefaultPoolMax in lib/db.
+setDefaultPoolMax(3);
 
 class StatsProcessor {
   private isRunning = false;

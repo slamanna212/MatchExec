@@ -14,6 +14,9 @@ export const scorecardDmMessages = pgTable('scorecard_dm_messages', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   index('idx_scorecard_dm_messages_discord').on(t.discord_user_id, t.discord_message_id),
+  index('idx_scorecard_dm_messages_match').on(t.match_id),
+  index('idx_scorecard_dm_messages_match_game').on(t.match_game_id),
+  index('idx_scorecard_dm_messages_participant').on(t.participant_id).where(sql`${t.participant_id} IS NOT NULL`),
   check('scorecard_dm_messages_team_side_check', sql`${t.team_side} IN ('blue', 'red')`),
 ]);
 
@@ -37,6 +40,7 @@ export const scorecardPlayerStats = pgTable('scorecard_player_stats', {
   index('idx_scorecard_player_stats_participant').on(t.participant_id),
   index('idx_scorecard_player_stats_match').on(t.match_id),
   index('idx_scorecard_player_stats_submission').on(t.submission_id),
+  index('idx_scorecard_player_stats_match_game').on(t.match_game_id),
   check('scorecard_player_stats_team_side_check', sql`${t.team_side} IN ('blue', 'red')`),
   check('scorecard_player_stats_assignment_status_check', sql`${t.assignment_status} IN ('unassigned', 'assigned', 'confirmed')`),
 ]);
@@ -62,6 +66,7 @@ export const scorecardSubmissions = pgTable('scorecard_submissions', {
 }, (t) => [
   index('idx_scorecard_submissions_match_game').on(t.match_game_id),
   index('idx_scorecard_submissions_match').on(t.match_id),
+  index('idx_scorecard_submissions_submitted_by').on(t.submitted_by_participant_id).where(sql`${t.submitted_by_participant_id} IS NOT NULL`),
   check('scorecard_submissions_team_side_check', sql`${t.team_side} IN ('blue', 'red')`),
   check('scorecard_submissions_ai_extraction_status_check', sql`${t.ai_extraction_status} IN ('pending', 'processing', 'completed', 'failed', 'retrying')`),
   check('scorecard_submissions_review_status_check', sql`${t.review_status} IN ('pending', 'approved', 'rejected', 'auto_approved')`),

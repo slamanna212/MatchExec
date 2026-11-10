@@ -87,6 +87,7 @@ describe('GET /api/feed', () => {
     const same = await appRequest('/api/feed', { headers: { 'if-none-match': etag! } });
     expect(same.status).toBe(304);
     expect(same.headers.get('etag')).toBe(etag);
+    expect((await appRequest('/api/feed', { headers: { 'if-none-match': `W/${etag}` } })).status).toBe(304);
 
     await insertEvent('ev2', { created_at: new Date(Date.now() + 1000) });
     const changed = await appRequest('/api/feed', { headers: { 'if-none-match': etag! } });

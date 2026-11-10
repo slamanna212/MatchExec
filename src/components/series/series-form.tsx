@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import { Stack, TextInput, Textarea, Group, Switch, Text } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+// Date picker styles load with the components that use them (not in the entry bundle)
+import '@mantine/dates/styles.css';
 import { EventImageUpload } from '@/components/create-match/EventImageUpload';
 import { showError } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';

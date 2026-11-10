@@ -2,6 +2,7 @@
 export * from './series';
 export * from './events';
 export * from './standings';
+export * from './standings-cache';
 export * from './summary';
 export * from './refs';
 export * from './validation';

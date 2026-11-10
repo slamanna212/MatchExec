@@ -39,9 +39,59 @@ export function resolveDatabaseUrl(env: Record<string, string | undefined> = pro
   throw new Error('DATABASE_URL is not set (and NODE_ENV is not "development")');
 }
 
-export function resolvePoolMax(env: Record<string, string | undefined> = process.env): number {
+/** Pool size when PG_POOL_MAX is unset. The web server keeps 10; workers lower it with `setDefaultPoolMax` (see below). */
+let defaultPoolMax = 10;
+
+/**
+ * Default pool size for this process, used when PG_POOL_MAX is not set. Call before the first query. The background
+ * workers need only a few connections each (web 10 + bot 5 + scheduler 4 + stats 3 = 22), which leaves room under the
+ * embedded server's PG_MAX_CONNECTIONS=50 for pg_dump, restores and the migrator.
+ */
+export function setDefaultPoolMax(n: number): void {
+  if (Number.isFinite(n) && n > 0) defaultPoolMax = Math.floor(n);
+}
+
+export function resolvePoolMax(env: Record<string, string | undefined> = process.env, fallback = defaultPoolMax): number {
   const n = Number.parseInt(env.PG_POOL_MAX ?? '', 10);
-  return Number.isFinite(n) && n > 0 ? n : 10;
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function msFromEnv(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export interface PoolTimeouts {
+  /** Server-side cap per statement (`statement_timeout`); 0 = none. PG_STATEMENT_TIMEOUT_MS, default 5 min. */
+  statementTimeoutMs: number;
+  /** Kill a session left idle inside a transaction (`idle_in_transaction_session_timeout`). PG_IDLE_TX_TIMEOUT_MS, default 10 min. */
+  idleInTransactionTimeoutMs: number;
+  /** Give up waiting for a free pool connection (or a new one) after this long instead of hanging. PG_CONNECT_TIMEOUT_MS, default 15 s. */
+  connectionTimeoutMs: number;
+  /** Close pooled connections idle this long. PG_IDLE_TIMEOUT_MS, default 30 s. */
+  idleTimeoutMs: number;
+}
+
+let timeoutOverrides: Partial<PoolTimeouts> = {};
+
+/** Per-process overrides of the timeout defaults (the migrator disables the statement timeout: it waits on a lock). Call before the first query. */
+export function setPoolTimeoutDefaults(overrides: Partial<PoolTimeouts>): void {
+  timeoutOverrides = { ...timeoutOverrides, ...overrides };
+}
+
+/**
+ * Generous ceilings that only stop runaway work: a query stuck on a lock, a transaction a crashed handler never closed, or
+ * a request that would otherwise wait forever on an exhausted pool. Env vars win over per-process defaults.
+ */
+export function resolvePoolTimeouts(env: Record<string, string | undefined> = process.env): PoolTimeouts {
+  const d: PoolTimeouts = { statementTimeoutMs: 300_000, idleInTransactionTimeoutMs: 600_000, connectionTimeoutMs: 15_000, idleTimeoutMs: 30_000, ...timeoutOverrides };
+  return {
+    statementTimeoutMs: msFromEnv(env.PG_STATEMENT_TIMEOUT_MS, d.statementTimeoutMs),
+    idleInTransactionTimeoutMs: msFromEnv(env.PG_IDLE_TX_TIMEOUT_MS, d.idleInTransactionTimeoutMs),
+    connectionTimeoutMs: msFromEnv(env.PG_CONNECT_TIMEOUT_MS, d.connectionTimeoutMs),
+    idleTimeoutMs: msFromEnv(env.PG_IDLE_TIMEOUT_MS, d.idleTimeoutMs),
+  };
 }
 
 let poolInstance: Pool | null = null;
@@ -49,7 +99,18 @@ let dbInstance: Db | null = null;
 let testDb: Db | null = null;
 
 export function getPool(): Pool {
-  poolInstance ??= new Pool({ connectionString: resolveDatabaseUrl(), max: resolvePoolMax() });
+  if (!poolInstance) {
+    const t = resolvePoolTimeouts();
+    poolInstance = new Pool({
+      connectionString: resolveDatabaseUrl(),
+      max: resolvePoolMax(),
+      connectionTimeoutMillis: t.connectionTimeoutMs,
+      idleTimeoutMillis: t.idleTimeoutMs,
+      // 0 leaves the server default (no limit)
+      ...(t.statementTimeoutMs > 0 ? { statement_timeout: t.statementTimeoutMs } : {}),
+      ...(t.idleInTransactionTimeoutMs > 0 ? { idle_in_transaction_session_timeout: t.idleInTransactionTimeoutMs } : {}),
+    });
+  }
   return poolInstance;
 }
 

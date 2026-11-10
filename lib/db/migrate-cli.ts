@@ -4,7 +4,7 @@
  * module never starts a migration, whichever way it is loaded or bundled.
  */
 import { installLegacyImportHook } from '../import-sqlite/hook';
-import { closeDb, resolveDatabaseUrl } from './index';
+import { closeDb, resolveDatabaseUrl, setDefaultPoolMax, setPoolTimeoutDefaults } from './index';
 import { runMigrations } from './migrate';
 import { getSystemStatus, setSystemStatus } from './system-status';
 
@@ -26,6 +26,10 @@ export async function recordMigrationFailure(err: unknown): Promise<void> {
 
 async function main(): Promise<void> {
   resolveDatabaseUrl(); // fail fast with a clear message
+  // The migrator blocks on the migration advisory lock and runs the one-transaction SQLite import: no statement or
+  // idle-in-transaction ceiling here.
+  setPoolTimeoutDefaults({ statementTimeoutMs: 0, idleInTransactionTimeoutMs: 0 });
+  setDefaultPoolMax(5);
   installLegacyImportHook(); // plan 5.1: import a legacy SQLite database when one is found (MATCHEXEC_IMPORT_ALLOW_LOSSY etc. from env)
   try {
     await runMigrations();

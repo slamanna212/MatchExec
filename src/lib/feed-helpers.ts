@@ -92,8 +92,7 @@ export interface FeedPage {
   total: number;
 }
 
-/** A page of the feed, newest first. Action items pointing at a deleted match are hidden. */
-export async function listFeed(ex: Executor, query: FeedQuery): Promise<FeedPage> {
+function feedWhere(query: Omit<FeedQuery, 'limit' | 'offset'>): SQL | undefined {
   const conditions: SQL[] = [
     not(and(eq(activityFeed.event_type, 'match_scoring_required'), isNotNull(activityFeed.match_id), isNull(matches.id))!),
   ];
@@ -102,8 +101,25 @@ export async function listFeed(ex: Executor, query: FeedQuery): Promise<FeedPage
   if (query.tournamentId) conditions.push(eq(activityFeed.tournament_id, query.tournamentId));
   if (query.dateFrom) conditions.push(gte(activityFeed.created_at, query.dateFrom));
   if (query.dateTo) conditions.push(lte(activityFeed.created_at, query.dateTo));
-  const where = and(...conditions);
+  return and(...conditions);
+}
 
+/**
+ * Size and newest timestamp of the (filtered) feed: what the first-page ETag is built from, without loading the page.
+ * `latest` equals `listFeed(...).events[0].created_at` for the first page.
+ */
+export async function getFeedFingerprint(ex: Executor, query: Omit<FeedQuery, 'limit' | 'offset'> = {}): Promise<{ total: number; latest: Date | null }> {
+  const [row] = await ex
+    .select({ total: count(), latest: sql<Date | null>`max(${activityFeed.created_at})`.mapWith(activityFeed.created_at) })
+    .from(activityFeed)
+    .leftJoin(matches, eq(matches.id, activityFeed.match_id))
+    .where(feedWhere(query));
+  return { total: row?.total ?? 0, latest: row?.latest ?? null };
+}
+
+/** A page of the feed, newest first. Action items pointing at a deleted match are hidden. */
+export async function listFeed(ex: Executor, query: FeedQuery): Promise<FeedPage> {
+  const where = feedWhere(query);
   const events = await ex.select({ af: activityFeed }).from(activityFeed)
     .leftJoin(matches, eq(matches.id, activityFeed.match_id))
     .where(where).orderBy(desc(activityFeed.created_at), desc(activityFeed.id)).limit(query.limit).offset(query.offset);

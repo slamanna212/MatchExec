@@ -1,7 +1,7 @@
 /** `tournaments`: reads, list, create, edit, delete, status compare-and-set and the tournament-level row lock. */
 import { and, asc, desc, eq, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
-import { games, matches, tournamentParticipants, tournaments } from '../../../lib/db/schema';
+import { games, matches, seriesEvents, tournamentParticipants, tournaments } from '../../../lib/db/schema';
 import type { AnnouncementConfig, PositionScoringConfig } from '../../../lib/db/schema/types';
 import { genId } from '../matches/ids';
 import { listSeriesRefsForTournaments } from '../series/refs';
@@ -100,12 +100,34 @@ export interface ListTournamentsOptions {
   offset?: number;
 }
 
+function listTournamentsWhere(opts: ListTournamentsOptions) {
+  if (opts.status === 'complete') return eq(tournaments.status, 'complete');
+  if (opts.status === 'cancelled') return eq(tournaments.status, 'cancelled');
+  if (opts.status === 'finished') return inArray(tournaments.status, ['complete', 'cancelled']);
+  return notInArray(tournaments.status, ['complete', 'cancelled']);
+}
+
+/**
+ * Cheap change marker for an unpaged `listTournaments` result (the list ETag): tournaments in scope added/removed/updated,
+ * signups added/removed (they do not touch `tournaments.updated_at`), series links added/removed.
+ */
+export async function getTournamentListFingerprint(ex: Executor, opts: ListTournamentsOptions = {}): Promise<string> {
+  const where = listTournamentsWhere(opts);
+  const inScope = ex.select({ id: tournaments.id }).from(tournaments).where(where);
+  const [row] = await ex
+    .select({
+      n: sql<number>`count(*)`.mapWith(Number),
+      latest: sql<string | null>`(extract(epoch from max(${tournaments.updated_at})) * 1000000)::bigint::text`,
+      participants: sql<number>`(SELECT count(*) FROM ${tournamentParticipants} WHERE ${tournamentParticipants.tournament_id} IN ${inScope})`.mapWith(Number),
+      seriesLinks: sql<number>`(SELECT count(*) FROM ${seriesEvents} WHERE ${seriesEvents.tournament_id} IN ${inScope})`.mapWith(Number),
+    })
+    .from(tournaments)
+    .where(where);
+  return `${row.n}:${row.latest ?? ''}:${row.participants}:${row.seriesLinks}`;
+}
+
 export async function listTournaments(ex: Executor, opts: ListTournamentsOptions = {}): Promise<TournamentListRow[]> {
-  let where;
-  if (opts.status === 'complete') where = eq(tournaments.status, 'complete');
-  else if (opts.status === 'cancelled') where = eq(tournaments.status, 'cancelled');
-  else if (opts.status === 'finished') where = inArray(tournaments.status, ['complete', 'cancelled']);
-  else where = notInArray(tournaments.status, ['complete', 'cancelled']);
+  const where = listTournamentsWhere(opts);
   const query = ex
     .select({ ...withGame, participant_count: participantCount, has_bracket: hasBracket })
     .from(tournaments).leftJoin(games, eq(tournaments.game_id, games.id))

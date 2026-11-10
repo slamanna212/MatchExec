@@ -7,6 +7,7 @@ import { notificationHelper } from '@/lib/notifications';
 import { logger } from '@/lib/logger/client';
 import { PageLayout } from '@/components/PageLayout';
 import { PageHeader } from '@/components/PageHeader';
+import { SessionsCard } from '@/components/settings/sessions-card';
 
 interface ApplicationSettings {
   event_duration_minutes?: number;
@@ -374,6 +375,8 @@ export default function ApplicationSettingsPage() {
               </Stack>
             )}
           </Card>
+
+          <SessionsCard />
 
           <SettingsSaveButton loading={saving} disabled={loading} />
         </Stack>

@@ -72,9 +72,19 @@ describe('GET /api/tournaments', () => {
     const first = await appRequest('/api/tournaments');
     expect(first.data[0].series).toEqual([{ id: 's1', name: 'Spring' }]);
     const etag = first.headers.get('etag')!;
-    expect(etag).toBeTruthy();
+    expect(etag).toMatch(/^"[\x21\x23-\x7e]+"$/); // valid entity-tag characters (no spaces)
     expect((await appRequest('/api/tournaments', { headers: { 'if-none-match': etag } })).status).toBe(304);
     expect((await appRequest('/api/tournaments?limit=5', { headers: { 'if-none-match': etag } })).status).toBe(200);
+    expect((await appRequest('/api/tournaments', { headers: { 'if-none-match': `W/${etag}` } })).status).toBe(304);
+  });
+
+  it('ETag moves when someone signs up (signups do not touch tournaments.updated_at)', async () => {
+    await tp('t1');
+    const etag = (await appRequest('/api/tournaments')).headers.get('etag')!;
+    await pg().insert(tournamentParticipants).values({ id: 'p1', tournament_id: 't1', user_id: 'u1', discord_user_id: 'd1', username: 'U1' });
+    const afterSignup = await appRequest('/api/tournaments', { headers: { 'if-none-match': etag } });
+    expect(afterSignup.status).toBe(200);
+    expect(afterSignup.headers.get('etag')).not.toBe(etag);
   });
 });
 

@@ -9,11 +9,12 @@ import { UpdateCheckJob } from './jobs/check-for-update';
 import { SERIES_UPDATES_CRON, SeriesUpdatesJob } from './jobs/series-updates';
 import { logFeedEvent, purgeFeedEventsOfType, purgeFeedEventsOlderThan } from '../../src/lib/feed-helpers';
 import { deleteOrphanedMatchBlobs } from '../../lib/storage';
+import { purgeQueues } from '../../src/lib/queues/purge';
 import { getAnyDiscordSettings, getAppSetting, getDiscordSettings, getSchedulerSettings, setAppSetting } from '../../src/lib/settings';
 import { DEFAULT_CHANNEL_REFRESH_CRON, DEFAULT_MATCH_CHECK_CRON } from '../../shared/scheduler';
 import { getHealthAlertLastSent, markHealthAlertSent } from '../../src/lib/health-alerts';
 import { requireLeaderLock, type LeaderLock } from '../../lib/db/leader';
-import { db as pgDb, closeDb } from '../../lib/db';
+import { db as pgDb, closeDb, setDefaultPoolMax } from '../../lib/db';
 import {
   areAllGamesCompleted, casMatchStatus, ensureMatchVoiceChannels, listMatchesDueToStart, MatchTransitionError, transitionMatch, listMatchesNeedingVoiceChannels, listMatchesForPlayerReminders, listMatchesWithAnnouncements,
   listMatchGameStatuses, listStaleBattleMatches, listUpcomingMatches,
@@ -23,6 +24,9 @@ import {
   enqueueAnnouncement, enqueueHealthAlert, enqueueMatchReminder, enqueuePlayerReminder,
   hasTimedAnnouncement, matchIdsWithLivePlayerReminder, matchIdsWithLiveReminder, nonOverlapping,
 } from '../../src/lib/discord-queues';
+
+// Small pool unless PG_POOL_MAX says otherwise (cron jobs run one at a time); see setDefaultPoolMax in lib/db.
+setDefaultPoolMax(4);
 
 /**
  * Token sent as x-internal-token when calling the web API with opt-in auth on.
@@ -467,6 +471,20 @@ class MatchExecScheduler {
     await this.cleanupStaleScoringNotifications();
     await this.cleanupFeedEvents();
     await this.cleanupOrphanedUploads();
+    await this.cleanupQueues();
+  }
+
+  /** Finished queue rows past their retention (see src/lib/queues/purge.ts). */
+  private async cleanupQueues() {
+    try {
+      const { total, queues, voiceCleanupSchedules } = await purgeQueues(pgDb);
+      if (total > 0) {
+        const detail = Object.entries(queues).map(([q, n]) => `${q}=${n}`).join(', ');
+        logger.info(`🧹 Queue cleanup: deleted ${total} finished row(s)${detail ? ` (${detail})` : ''}${voiceCleanupSchedules ? `, ${voiceCleanupSchedules} voice cleanup schedule(s)` : ''}`);
+      }
+    } catch (error) {
+      logger.error('❌ Error cleaning up queue tables:', error);
+    }
   }
 
   private async cleanupStaleScoringNotifications() {

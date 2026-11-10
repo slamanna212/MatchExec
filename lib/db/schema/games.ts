@@ -55,6 +55,7 @@ export const gameStatDefinitions = pgTable('game_stat_definitions', {
   chart_type: text('chart_type').notNull().default("bar"),
 }, (t) => [
   primaryKey({ columns: [t.id, t.game_id] }),
+  index('idx_game_stat_definitions_game_id').on(t.game_id),
 ]);
 
 export const games = pgTable('games', {
@@ -77,9 +78,7 @@ export const games = pgTable('games', {
   updated_at: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow().$onUpdate(() => new Date()),
   scoring_config: jsonb('scoring_config').$type<PositionScoringConfig>(),
   ai_screenshot_notes: text('ai_screenshot_notes'),
-}, (t) => [
-  index('idx_games_name').on(t.name),
-]);
+});
 
 export const voiceDataVersions = pgTable('voice_data_versions', {
   voice_type: text('voice_type').primaryKey(),

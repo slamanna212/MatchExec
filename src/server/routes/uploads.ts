@@ -9,8 +9,8 @@ import { Hono } from 'hono';
 import { db } from '../../../lib/db';
 import { BlobTooLargeError, UPLOADS_PREFIX, blobEtag, deleteBlob, getBlob, getBlobMeta, isValidBlobPath, putBlob } from '../../../lib/storage';
 import { logger } from '@/lib/logger';
-import { isAllowedImageType, isValidImageBuffer, sanitizeFilename, splitName, uniqueFileStem } from '@/lib/uploads';
-import { jsonError } from '../http';
+import { extensionForMime, isAllowedImageType, isValidImageBuffer, sanitizeFilename, splitName, uniqueFileStem } from '@/lib/uploads';
+import { etagMatches, jsonError } from '../http';
 
 const EVENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const EVENT_IMAGE_PREFIX = `${UPLOADS_PREFIX}events/`;
@@ -28,8 +28,9 @@ export const uploadApi = new Hono()
       const buffer = Buffer.from(await file.arrayBuffer());
       if (!isValidImageBuffer(buffer)) return jsonError(c, 'Invalid image file. File content does not match image format.', 400);
 
-      const { base, ext } = splitName(file.name);
-      const filename = `${uniqueFileStem()}_${sanitizeFilename(base)}${ext}`;
+      // The original base name is kept for readability; the extension always follows the verified image type.
+      const { base } = splitName(file.name);
+      const filename = `${uniqueFileStem()}_${sanitizeFilename(base)}${extensionForMime(file.type)}`;
       const imageUrl = `${EVENT_IMAGE_PREFIX}${filename}`;
       await putBlob(db, { path: imageUrl, kind: 'event-image', contentType: file.type, data: buffer, filename });
 
@@ -78,8 +79,7 @@ export const uploads = new Hono().get('/*', async (c) => {
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
     };
-    const ifNoneMatch = c.req.header('if-none-match');
-    if (ifNoneMatch && ifNoneMatch.split(',').map((v) => v.trim()).includes(etag)) return c.body(null, 304, headers);
+    if (etagMatches(c.req.header('if-none-match'), etag)) return c.body(null, 304, headers);
 
     const blob = await getBlob(path, db);
     if (!blob) return c.text('File not found', 404);

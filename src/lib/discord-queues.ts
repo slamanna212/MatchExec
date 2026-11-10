@@ -9,3 +9,4 @@
 export * from './queues/registry';
 export * from './queues/worker';
 export * from './queues/enqueue';
+export * from './queues/purge';

@@ -5,7 +5,10 @@
  */
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
+import { eq, sql } from 'drizzle-orm';
 import { sanitizeNext } from '@/lib/auth-shared';
+import { db } from '../../../lib/db';
+import { appSettings } from '../../../lib/db/schema';
 
 export const SESSION_COOKIE = 'matchexec_session';
 export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
@@ -18,8 +21,10 @@ export const PUBLIC_PATHS = [
   '/api/auth/status',
   '/api/health',
   '/api/db-status',
-  '/api/welcome-flow',
 ];
+
+/** Paths readable without a session (GET/HEAD only): the welcome flow state. Writing it needs a session like everything else. */
+export const PUBLIC_READ_PATHS = ['/api/welcome-flow'];
 
 const encoder = new TextEncoder();
 
@@ -65,10 +70,63 @@ export async function verifyPassword(candidate: string): Promise<boolean> {
   return timingSafeEqualStr(a, b);
 }
 
+// ─── Session revocation ───────────────────────────────────────────────────────
+//
+// Every token is signed together with the current session epoch (`app_settings.auth_session_epoch`). "Log out everywhere"
+// bumps the epoch, so every token issued before stops verifying. Epoch 0 (never bumped) signs exactly like the original
+// `<iat>.<exp>` format, so existing sessions survive the upgrade. When AUTH_SECRET is set (so the signing key does not change
+// with the password), a fingerprint of ADMIN_PASSWORD is signed too: changing the password logs every session out.
+
+export const SESSION_EPOCH_KEY = 'auth_session_epoch';
+const EPOCH_CACHE_MS = 5_000;
+let epochCache: { value: number; at: number } | null = null;
+
+/** Current session epoch (cached for a few seconds; the last known value, else 0, when the database is unreachable). */
+export async function getSessionEpoch(now = Date.now()): Promise<number> {
+  if (epochCache && now - epochCache.at < EPOCH_CACHE_MS) return epochCache.value;
+  try {
+    const [row] = await db.select({ v: appSettings.setting_value }).from(appSettings).where(eq(appSettings.setting_key, SESSION_EPOCH_KEY)).limit(1);
+    const n = Number.parseInt(row?.v ?? '0', 10);
+    epochCache = { value: Number.isFinite(n) && n > 0 ? n : 0, at: now };
+  } catch {
+    epochCache = { value: epochCache?.value ?? 0, at: now };
+  }
+  return epochCache.value;
+}
+
+/** Invalidate every session issued so far. Returns the new epoch. */
+export async function bumpSessionEpoch(): Promise<number> {
+  const [row] = await db
+    .insert(appSettings)
+    .values({ setting_key: SESSION_EPOCH_KEY, setting_value: '1', data_type: 'number' })
+    .onConflictDoUpdate({
+      target: appSettings.setting_key,
+      set: { setting_value: sql`((coalesce(nullif(${appSettings.setting_value}, ''), '0'))::int + 1)::text`, updated_at: new Date() },
+    })
+    .returning({ v: appSettings.setting_value });
+  const value = Number.parseInt(row.v, 10);
+  epochCache = { value, at: Date.now() };
+  return value;
+}
+
+/** Tests: forget the cached epoch. */
+export function resetSessionEpochCache(): void {
+  epochCache = null;
+}
+
+async function signedPayload(iat: string, exp: string, epoch: number): Promise<string> {
+  let payload = `${iat}.${exp}`;
+  if (epoch > 0) payload = `e${epoch}:${payload}`;
+  if (process.env.AUTH_SECRET) payload = `p${(await sha256Hex(process.env.ADMIN_PASSWORD ?? '')).slice(0, 16)}:${payload}`;
+  return payload;
+}
+
 /** Create a signed session token: `<issuedAtMs>.<expiresAtMs>.<signature>`. */
 export async function createSessionToken(now = Date.now(), maxAgeSeconds = getSessionMaxAgeSeconds()): Promise<string> {
-  const payload = `${now}.${now + maxAgeSeconds * 1000}`;
-  return `${payload}.${await hmacHex(await getSecret(), payload)}`;
+  const iat = String(now);
+  const exp = String(now + maxAgeSeconds * 1000);
+  const sig = await hmacHex(await getSecret(), await signedPayload(iat, exp, await getSessionEpoch()));
+  return `${iat}.${exp}.${sig}`;
 }
 
 export async function verifySessionToken(token: string | undefined | null, now = Date.now()): Promise<boolean> {
@@ -77,7 +135,7 @@ export async function verifySessionToken(token: string | undefined | null, now =
   if (parts.length !== 3) return false;
   const [iat, exp, sig] = parts;
   if (!/^\d+$/.test(iat) || !/^\d+$/.test(exp)) return false;
-  const expected = await hmacHex(await getSecret(), `${iat}.${exp}`);
+  const expected = await hmacHex(await getSecret(), await signedPayload(iat, exp, await getSessionEpoch()));
   if (!timingSafeEqualStr(sig, expected)) return false;
   return Number(exp) > now && Number(iat) <= now + 60_000;
 }
@@ -87,8 +145,12 @@ export async function getInternalToken(): Promise<string> {
   return process.env.INTERNAL_API_TOKEN || (await sha256Hex(`${await getSecret()}:internal`));
 }
 
-export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+const matchesPath = (pathname: string, p: string): boolean => pathname === p || pathname.startsWith(`${p}/`);
+
+/** Reachable without a session. `PUBLIC_READ_PATHS` only for GET/HEAD (the method defaults to GET). */
+export function isPublicPath(pathname: string, method = 'GET'): boolean {
+  if (PUBLIC_PATHS.some((p) => matchesPath(pathname, p))) return true;
+  return (method === 'GET' || method === 'HEAD') && PUBLIC_READ_PATHS.some((p) => matchesPath(pathname, p));
 }
 
 /**
@@ -117,7 +179,7 @@ export async function isRequestAuthenticated(c: Context): Promise<boolean> {
 export const authGate: MiddlewareHandler = async (c, next) => {
   if (!isAuthEnabled()) return next();
   const { pathname, search } = new URL(c.req.url);
-  if (isPublicPath(pathname) || isStaticAssetPath(pathname)) return next();
+  if (isPublicPath(pathname, c.req.method) || isStaticAssetPath(pathname)) return next();
   if (await isRequestAuthenticated(c)) return next();
   if (pathname.startsWith('/api/')) return c.json({ error: 'Unauthorized' }, 401);
   const url = new URL('/login', c.req.url);

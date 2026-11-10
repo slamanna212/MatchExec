@@ -17,7 +17,7 @@ export const activityFeed = pgTable('activity_feed', {
 }, (t) => [
   index('idx_activity_feed_tournament_id').on(t.tournament_id),
   index('idx_activity_feed_match_id').on(t.match_id),
-  index('idx_activity_feed_priority').on(t.priority),
+  index('idx_activity_feed_event_type').on(t.event_type, t.created_at),
   index('idx_activity_feed_created_at').on(t.created_at.desc()),
 ]);
 
@@ -26,7 +26,6 @@ export const healthAlertsSent = pgTable('health_alerts_sent', {
   alert_type: text('alert_type').notNull(),
   last_sent_at: timestamp('last_sent_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
-  index('idx_health_alerts_sent_alert_type').on(t.alert_type),
   unique('health_alerts_sent_alert_type_unique').on(t.alert_type),
 ]);
 

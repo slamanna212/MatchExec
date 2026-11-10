@@ -24,5 +24,4 @@ export const blobs = pgTable('blobs', {
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   index('idx_blobs_owner').on(t.owner_type, t.owner_id),
-  index('idx_blobs_kind').on(t.kind),
 ]);

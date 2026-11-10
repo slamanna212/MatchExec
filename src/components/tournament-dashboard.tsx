@@ -28,6 +28,8 @@ import { notificationHelper } from '@/lib/notifications';
 import { parseDbTimestamp } from '@/lib/utils/dates';
 import { PageLayout } from './PageLayout';
 import { PageHeader } from './PageHeader';
+import { usePolling } from '@/hooks/usePolling';
+import { useRefreshInterval } from '@/lib/ui-settings-client';
 
 const FORMAT_LABELS: Record<string, string> = {
   'single-elimination': 'Single Elim',
@@ -189,7 +191,7 @@ export function TournamentDashboard(): JSX.Element {
   const [tournaments, setTournaments] = useState<TournamentWithGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [refreshInterval, setRefreshInterval] = useState(30); // default 30 seconds
+  const refreshInterval = useRefreshInterval();
   const etagRef = useRef<string | null>(null);
 
   const fetchTournaments = useCallback(async (silent = false) => {
@@ -235,32 +237,12 @@ export function TournamentDashboard(): JSX.Element {
     }
   }, []);
 
-  // Fetch UI settings and tournaments on component mount
   useEffect(() => {
-    const fetchUISettings = async () => {
-      try {
-        const response = await fetch('/api/settings/ui');
-        if (response.ok) {
-          const uiSettings = await response.json();
-          setRefreshInterval(uiSettings.auto_refresh_interval_seconds || 30);
-        }
-      } catch (error) {
-        logger.error('Error fetching UI settings:', error);
-      }
-    };
-
     fetchTournaments();
-    fetchUISettings();
   }, [fetchTournaments]);
 
-  // Set up auto-refresh with configurable interval
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchTournaments(true); // Silent refresh
-    }, refreshInterval * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [refreshInterval, fetchTournaments]);
+  // Silent auto-refresh at the configured interval (paused while the tab is hidden)
+  usePolling(() => fetchTournaments(true), refreshInterval * 1000);
 
   const handleCreateTournament = () => {
     navigate('/tournaments/create?step=1');

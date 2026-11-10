@@ -5,7 +5,6 @@ import { ModalsProvider } from '@mantine/modals'
 import { Notifications } from '@mantine/notifications'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
-import '@mantine/dates/styles.css'
 import './globals.css'
 
 // Shared input styles — avoids repeating the same two strings across every input component

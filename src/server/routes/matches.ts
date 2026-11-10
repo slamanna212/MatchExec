@@ -15,14 +15,14 @@ import {
   AssignTeamsError, GameAlreadyScoredError, TeamAssignmentError, setMatchTeamLogo, MatchTransitionError, ResultError, SetupStatusError, assignTeams, createMatchFromRequest,
   deleteMatch, getGameResult, getMapCodes, getMapNotes, getMatch, getMatchDetail, getMatchEditContext,
   getMatchGameInMatch, getMatchGames, getMatchGamesWithResults, getMatchResult, getMatchScoringType, getMatchTeams, getMatchWithGame,
-  listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
+  getMatchListFingerprint, listMatches, listParticipantDtos, listParticipantIds, listSetupParticipants,
   matchExists, saveMapNote, saveSetup, setMapCodes, submitGameResult, transitionMatch, updateMatchDetails, validateMatchRequest,
   getOverallMatchScore, resolveWinnerEntity, isKnownStatus, resolveModeFromMaps, type MatchRequestBody,
 } from '@/lib/matches';
 import { getModeScoringType } from '@/lib/games';
 import { getSuggestedPositions } from '@/lib/stats';
 import { deleteBlob, deleteBlobsFor } from '../../../lib/storage';
-import { jsonError } from '../http';
+import { etagMatches, jsonError } from '../http';
 
 const RULES_VALUES = ['casual', 'competitive'] as const;
 
@@ -46,17 +46,26 @@ export const matches = new Hono()
       // status may be repeated (?status=a&status=b) or comma-separated (?status=a,b)
       const statuses = (c.req.queries('status') ?? []).flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean);
       const limitParam = c.req.query('limit');
-      const limit = limitParam ? Number.parseInt(limitParam, 10) : null;
+      const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : null;
+      const limit = parsedLimit === null || Number.isNaN(parsedLimit) ? null : parsedLimit;
       const offset = Number.parseInt(c.req.query('offset') ?? '0', 10) || 0;
-      const rows = await listMatches(db, { statuses, excludeTournament: c.req.query('exclude_tournament') === 'true', limit, offset });
+      const opts = { statuses, excludeTournament: c.req.query('exclude_tournament') === 'true', limit, offset };
 
-      // ETag from count + latest updated_at + total participants (+ series links) for efficient polling.
+      if (limit === null) {
+        // Polling path: a cheap fingerprint query decides 304 before the list query runs.
+        const etag = `"${await getMatchListFingerprint(db, opts)}"`;
+        if (etagMatches(c.req.header('if-none-match'), etag)) return new Response(null, { status: 304, headers: { ETag: etag } });
+        const rows = await listMatches(db, opts);
+        c.header('ETag', etag);
+        return c.json(rows);
+      }
+
+      const rows = await listMatches(db, opts);
+      // Paged (history) requests are never answered with 304; the ETag only lets the client notice a changed first page.
       const maxUpdatedAt = rows.reduce((max, m) => Math.max(max, m.updated_at.getTime()), 0);
       const totalParticipants = rows.reduce((sum, m) => sum + (m.participant_count || 0), 0);
       const seriesLinks = rows.reduce((sum, m) => sum + m.series.length, 0);
-      const etag = `"${rows.length}:${maxUpdatedAt}:${totalParticipants}:${seriesLinks}"`;
-      if (limit === null && c.req.header('if-none-match') === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
-      c.header('ETag', etag);
+      c.header('ETag', `"${rows.length}:${maxUpdatedAt}:${totalParticipants}:${seriesLinks}"`);
       return c.json(rows);
     } catch (error) {
       logger.error('Error fetching matches:', error);
