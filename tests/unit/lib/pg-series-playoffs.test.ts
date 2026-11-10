@@ -300,9 +300,28 @@ describe('completeStage', () => {
     const last = await completeStage(pg(), l.seriesId, s3.id);
     expect(last.seedable_event_ids).toEqual([season]);
 
-    // a seeded (live) event is no longer listed
+    // a seeded (live) event is no longer listed; the season playoffs stay seedable while every season stage is complete
     await seedPlayoffEvent(pg(), l.seriesId, fromS1);
-    expect((await completeStage(pg(), l.seriesId, s1.id)).seedable_event_ids).toEqual([]);
+    expect((await completeStage(pg(), l.seriesId, s1.id)).seedable_event_ids).toEqual([season]);
+  });
+
+  it('lists season playoffs once the season stages are complete, even when a non-season playoff stage follows', async () => {
+    const l = await fourTeamLeague();
+    const regular = await insertStage(l.seriesId, { status: 'active' });
+    const playoffStage = await insertStage(l.seriesId, { counts_toward_season: false });
+    const season = await plannedPlayoff(l.seriesId, bracketRule(), { stage_id: playoffStage.id });
+
+    const done = await completeStage(pg(), l.seriesId, regular.id);
+    expect(done.seedable_event_ids).toEqual([season]);
+    expect((await pg().select().from(seriesStages).where(eq(seriesStages.id, playoffStage.id)))[0].status).toBe('active');
+  });
+
+  it('does not list season playoffs while a later season stage is still open', async () => {
+    const l = await fourTeamLeague();
+    const first = await insertStage(l.seriesId, { status: 'active' });
+    await insertStage(l.seriesId);
+    await plannedPlayoff(l.seriesId);
+    expect((await completeStage(pg(), l.seriesId, first.id)).seedable_event_ids).toEqual([]);
   });
 
   it('completes an upcoming stage, leaves an already active next stage alone and rejects unknown stages / finished series', async () => {

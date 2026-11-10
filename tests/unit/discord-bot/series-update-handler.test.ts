@@ -276,14 +276,21 @@ describe('weekly_schedule', () => {
     expect(embed.description).not.toContain('Cancelled one');
   });
 
-  it('groups events without a week by ISO week of the start', async () => {
+  it('groups events without a week by ISO calendar week of the start and says so in the title', async () => {
     await channel('D-SERIES', 'send_series_updates');
     const s = await insertSeries({ status: 'active', name: 'S' });
     const m = await createMatch(gameId, modeId, { name: 'No week', start_date: T1, start_time: T1 });
     await linkEvent(s.id, 'match', m.id, { week: null });
     const { client, sent } = makeClient();
-    await new SeriesUpdateHandler(client as never, null).post(job(s.id, 'weekly_schedule', { week: 11 }));
+    const handler = new SeriesUpdateHandler(client as never, null);
+    await handler.post(job(s.id, 'weekly_schedule', { week: 11, calendar_year: 2026 }));
+    expect(embedOf(sent[0]).title).toBe('📅 S - Calendar week 11');
     expect(embedOf(sent[0]).description).toContain('No week');
+
+    // season week 11 is a different week: the calendar-week event is not part of it
+    await handler.post(job(s.id, 'weekly_schedule', { week: 11 }));
+    expect(embedOf(sent[1]).title).toBe('📅 S - Week 11');
+    expect(embedOf(sent[1]).description).not.toContain('No week');
   });
 
   it('says so when nothing is scheduled, and refuses a post without a week', async () => {
@@ -341,6 +348,22 @@ describe('standings', () => {
     await new SeriesUpdateHandler(client as never, null).post(job(s.id, 'standings'));
     expect(embedOf(sent[0]).description).not.toContain('View full standings');
     expect(embedOf(sent[0]).title).toBe('📊 League - Standings');
+  });
+
+  it('names calendar weeks and flags a partial table with the weeks still to be played', async () => {
+    await channel('D-SERIES', 'send_series_updates');
+    const s = await insertSeries({ status: 'active', name: 'League' });
+    standings.mockResolvedValue({ mode: 'points', rows: rows(2) });
+    const { client, sent } = makeClient();
+    const handler = new SeriesUpdateHandler(client as never, null);
+    await handler.post(job(s.id, 'standings', { week: 46, calendar_year: 2026 }));
+    expect(embedOf(sent[0]).title).toBe('📊 League - Standings after calendar week 46');
+    expect(embedOf(sent[0]).fields ?? []).toEqual([]);
+
+    await handler.post(job(s.id, 'standings', { week: 3, pending_weeks: ['Week 2'] }));
+    const embed = embedOf(sent[1]);
+    expect(embed.title).toBe('📊 League - Standings after week 3');
+    expect(embed.fields).toEqual([expect.objectContaining({ name: '⏳ Still to be played', value: expect.stringContaining('Week 2 still has unplayed matches') })]);
   });
 
   it('formats head to head tables with the record and map difference', () => {

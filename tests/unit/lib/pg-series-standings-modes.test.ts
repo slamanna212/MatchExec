@@ -349,6 +349,20 @@ describe('points mode', () => {
     await positionMatch(w, s.seriesId, [{ player: 'stranger' }, { player: 'ann' }, { player: 'bob' }]);
     const rows = await getSeriesStandings(pg(), s.seriesId);
     expect(rows.map((r) => [r.name, r.total_points])).toEqual([['Ann', 18], ['Bob', 15]]);
+    // the stranger won the race: Ann finished 2nd and did not win it
+    expect(byName(rows, 'Ann')).toMatchObject({ event_wins: 0 });
+  });
+
+  it('keeps a non-roster player\'s finishing place: entrants behind them are not moved up for position_points', async () => {
+    const s = await createSeriesWithEntrants(pg(), {
+      entrantType: 'solo', scoringType: 'Position',
+      scoringConfig: { mode: 'points', position_points: [10, 6, 3], position_event_use_event_spread: false },
+      entrants: [{ name: 'Ann', members: ['ann'] }, { name: 'Bob', members: ['bob'] }],
+    });
+    await positionMatch(w, s.seriesId, [{ player: 'stranger' }, { player: 'ann' }, { player: 'bob' }]);
+    const rows = await getSeriesStandings(pg(), s.seriesId);
+    expect(rows.map((r) => [r.name, r.total_points])).toEqual([['Ann', 6], ['Bob', 3]]);
+    expect(byName(rows, 'Ann')).toMatchObject({ event_wins: 0 });
   });
 
   it('scores Normal matches with win/loss points, including a forfeit that has team placements but no players', async () => {
@@ -402,6 +416,27 @@ describe('points mode', () => {
     // ann 13, bob 16, cy 9
     const rows = await getSeriesStandings(pg(), s.seriesId);
     expect(rows.map((r) => [r.name, r.total_points])).toEqual([['Bob', 30], ['Ann', 20], ['Cy', 10]]);
+  });
+
+  it('a cumulative-points tournament keeps a non-roster player in the final order without awarding them anything', async () => {
+    const s = await createSeriesWithEntrants(pg(), {
+      entrantType: 'solo', scoringType: 'Position', scoringConfig: { mode: 'points', tournament_position_points: [30, 20, 10] },
+      entrants: [{ name: 'Ann', members: ['ann'] }, { name: 'Bob', members: ['bob'] }],
+    });
+    const [A, B] = s.entrants.map((e) => e.id);
+    const { createTournament } = await import('../../utils/pg-fixtures');
+    const t = await createTournament(w.gameId, { format: 'cumulative-points', status: 'complete', game_mode_id: w.positionMode });
+    const m = await createMatch(w.gameId, w.positionMode, { status: 'complete', tournament_id: t.id });
+    const ids = [
+      await addPlayer(m.id, 'stranger', await addTeam(m.id, 'stranger', 0)),
+      await addPlayer(m.id, 'ann', await addTeam(m.id, 'ann', 1, A)),
+      await addPlayer(m.id, 'bob', await addTeam(m.id, 'bob', 2, B)),
+    ];
+    await addGame(m.id, 1, ids.map((id, i) => ({ type: 'participant' as const, id, pos: i + 1, pts: [10, 6, 3][i] })));
+    await linkEvent(s.seriesId, 'tournament', t.id);
+    const rows = await getSeriesStandings(pg(), s.seriesId);
+    expect(rows.map((r) => [r.name, r.total_points])).toEqual([['Ann', 20], ['Bob', 10]]);
+    expect(byName(rows, 'Ann')).toMatchObject({ event_wins: 0 });
   });
 });
 

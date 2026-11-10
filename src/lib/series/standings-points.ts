@@ -4,11 +4,12 @@
  * Every function returns "contributions": what one competitor (an entrant, or a player in a series without entrants)
  * earned from one event. Series without entrants (legacy) treat each player as an implicit entrant and reproduce the
  * original per-player algorithm exactly; series with entrants resolve participants to entrants (match team row ->
- * tournament team -> roster lookup) and ignore players who are not on any roster.
+ * tournament team -> roster lookup). Players who are not on any roster earn nothing, but in ranked (FFA / Position)
+ * events they keep their finishing place, so the entrants behind them are not moved up.
  */
 import type { SeriesScoringConfig } from '../../../shared/series-types';
 import type { MatchInfo, ParticipantRow, PlacementRow, StandingsData, TeamRow } from './standings-data';
-import { competitionRanks, resolveBracketPlacings, tieAwareRanks } from './standings-rank';
+import { competitionRanks, resolveBracketPlacings } from './standings-rank';
 
 export interface PlayerRef {
   key: string;
@@ -187,8 +188,14 @@ function scoreRankedMatch(
 
   const unitKeys = [...units.keys()];
   const totals = useSpread ? unitSpread : unitScore;
-  const ranks = competitionRanks(unitKeys.map((k) => totals.get(k) ?? 0));
-  const rankBase = [...unitKeys.map((k) => totals.get(k) ?? 0), ...strangers.map(([, v]) => v)];
+  // Players who are not on any roster earn nothing, but they did race: they keep their place in the finishing order, so
+  // an entrant who finished behind one of them is not promoted (and does not take the win).
+  const outsiders = participants
+    .filter((p) => unitOf.get(p.id) === null && score.has(p.id))
+    .map((p) => (useSpread ? spread.get(p.id) ?? 0 : score.get(p.id) ?? 0));
+  const unitTotals = unitKeys.map((k) => totals.get(k) ?? 0);
+  const ranks = competitionRanks([...unitTotals, ...outsiders]).slice(0, unitKeys.length);
+  const rankBase = [...unitTotals, ...outsiders, ...strangers.map(([, v]) => v)];
   const best = rankBase.length === 0 ? -Infinity : Math.max(...rankBase);
   const leaderCount = rankBase.filter((v) => v === best).length;
   const soleLeader = leaderCount === 1 && best > 0;
@@ -294,15 +301,23 @@ export function scoreTournament(ctx: StandingsContext, tournamentId: string, cfg
 
   if (tournament.format === 'cumulative-points') {
     const totals = new Map<string, { unit: Unit; username: string; total: number; players: PlayerRef[] }>();
+    // Players on no roster earn no series points, but keep their place in the tournament's final order.
+    const outsiderTotals = new Map<string, number>();
     for (const matchId of matchIds) {
       const teamById = new Map((data.teamsByMatch.get(matchId) ?? []).map((t) => [t.id, t]));
       const earned = new Map<string, number>();
+      const placed = new Set<string>();
       for (const pl of matchPlacements(data, matchId)) {
-        if (pl.entity_type === 'participant') earned.set(pl.entity_id, (earned.get(pl.entity_id) ?? 0) + (pl.points_awarded ?? 0));
+        if (pl.entity_type !== 'participant') continue;
+        placed.add(pl.entity_id);
+        earned.set(pl.entity_id, (earned.get(pl.entity_id) ?? 0) + (pl.points_awarded ?? 0));
       }
       for (const p of data.participantsByMatch.get(matchId) ?? []) {
         const unit = unitFor(ctx, p, p.team_id ? teamById.get(p.team_id) : undefined);
-        if (!unit) continue;
+        if (!unit) {
+          if (placed.has(p.id)) outsiderTotals.set(playerKey(p), (outsiderTotals.get(playerKey(p)) ?? 0) + (earned.get(p.id) ?? 0));
+          continue;
+        }
         const entry = totals.get(unit.key) ?? { unit, username: p.username, total: 0, players: [] };
         if (p.username > entry.username) entry.username = p.username; // legacy: max(username)
         entry.total += earned.get(p.id) ?? 0;
@@ -311,11 +326,16 @@ export function scoreTournament(ctx: StandingsContext, tournamentId: string, cfg
       }
     }
     const rows = [...totals.values()].sort((a, b) => b.total - a.total || a.username.localeCompare(b.username));
-    const ranks = tieAwareRanks(rows.map((r) => r.total));
-    return rows.map((r, i) => ({
-      key: r.unit.key, entrantId: r.unit.entrantId, name: ctx.hasEntrants ? r.unit.name : r.username, players: r.players,
-      points: (positionPoints[ranks[i]] ?? 0) * mult, position: ranks[i] + 1, isWin: ranks[i] === 0,
-    }));
+    const outsiders = [...outsiderTotals.values()];
+    // 0-based competition rank among everybody who raced (outsiders included); ties share the higher placing
+    const rankOf = (total: number) => rows.filter((o) => o.total > total).length + outsiders.filter((o) => o > total).length;
+    return rows.map((r) => {
+      const rank = rankOf(r.total);
+      return {
+        key: r.unit.key, entrantId: r.unit.entrantId, name: ctx.hasEntrants ? r.unit.name : r.username, players: r.players,
+        points: (positionPoints[rank] ?? 0) * mult, position: rank + 1, isWin: rank === 0,
+      };
+    });
   }
 
   const bracket = matchIds.map((id) => data.matches.get(id)).filter((m): m is MatchInfo => !!m).map((m) => ({

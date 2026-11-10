@@ -6,8 +6,8 @@ import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { createMatch, seedBasicTestData } from '../../utils/pg-fixtures';
 import { insertSeries, insertStage, linkEvent } from '../../utils/pg-series-fixtures';
 import {
-  DEFAULT_SCHEDULE_LEAD_HOURS, dueSeriesPosts, enqueueDueSeriesUpdates, eventWeek, isoWeekNumber, summariseWeeks,
-  type DueCheckEvent,
+  DEFAULT_SCHEDULE_LEAD_HOURS, dueSeriesPosts, enqueueDueSeriesUpdates, eventWeek, isoWeek, isoWeekNumber, sameWeek, summariseWeeks,
+  weekDedupeKey, weekLabel, type DueCheckEvent,
 } from '@/lib/series';
 import { discordSeriesUpdateQueue, matches } from '../../../lib/db/schema';
 
@@ -31,11 +31,30 @@ describe('week helpers', () => {
     expect(isoWeekNumber(new Date('2021-01-03T00:00:00Z'))).toBe(53);
   });
 
-  it('uses the explicit week, else the ISO week of the start, else nothing', () => {
-    expect(eventWeek({ week: 4, start: new Date('2026-03-10T00:00:00Z') })).toBe(4);
-    expect(eventWeek({ week: 0, start: null })).toBe(0);
-    expect(eventWeek({ week: null, start: new Date('2026-03-10T00:00:00Z') })).toBe(11);
+  it('returns the ISO week-numbering year, which differs from the calendar year around New Year', () => {
+    expect(isoWeek(new Date('2025-12-29T00:00:00Z'))).toEqual({ year: 2026, week: 1 });
+    expect(isoWeek(new Date('2021-01-03T00:00:00Z'))).toEqual({ year: 2020, week: 53 });
+  });
+
+  it('uses the explicit season week, else the ISO calendar week of the start, else nothing', () => {
+    expect(eventWeek({ week: 4, start: new Date('2026-03-10T00:00:00Z') })).toEqual({ week: 4 });
+    expect(eventWeek({ week: 0, start: null })).toEqual({ week: 0 });
+    expect(eventWeek({ week: null, start: new Date('2026-03-10T00:00:00Z') })).toEqual({ week: 11, calendarYear: 2026 });
     expect(eventWeek({ week: null, start: null })).toBeNull();
+  });
+
+  it('labels and keys season and calendar weeks apart', () => {
+    expect(weekLabel({ week: 3 })).toBe('Week 3');
+    expect(weekLabel({ week: 46, calendarYear: 2026 })).toBe('Calendar week 46');
+    expect(weekDedupeKey({ week: 3 })).toBe('week:3');
+    expect(weekDedupeKey({ week: 46, calendarYear: 2026 })).toBe('cweek:2026-W46');
+    expect(sameWeek({ week: 11 }, { week: 11, calendarYear: 2026 })).toBe(false);
+    expect(sameWeek({ week: 11, calendarYear: 2026 }, { week: 11, calendarYear: 2026 })).toBe(true);
+  });
+
+  it('never merges a season week with the calendar week of the same number; season weeks sort first', () => {
+    const weeks = summariseWeeks([ev(11, 5), ev(null, 5), ev(2, 10)], NOW); // NOW is in ISO week 11
+    expect(weeks.map((w) => weekDedupeKey(w))).toEqual(['week:2', 'week:11', 'cweek:2026-W11']);
   });
 
   it('summarises live events per week; planned ones never count', () => {
@@ -81,9 +100,9 @@ describe('dueSeriesPosts: weekly schedule', () => {
     expect(dueSeriesPosts([ev(1, 5)], { weekly_schedule: true }, NOW)).toHaveLength(1);
   });
 
-  it('groups events without a week by the ISO week of their start', () => {
+  it('groups events without a week by the ISO calendar week of their start, with a calendar-week dedupe key', () => {
     const due = dueSeriesPosts([ev(null, 5)], null, NOW);
-    expect(due).toEqual([{ kind: 'weekly_schedule', week: 11, dedupeKey: 'week:11' }]);
+    expect(due).toEqual([{ kind: 'weekly_schedule', week: 11, calendarYear: 2026, dedupeKey: 'cweek:2026-W11' }]);
   });
 });
 
@@ -105,6 +124,15 @@ describe('dueSeriesPosts: standings', () => {
 
   it('is switched off by standings_posts = false', () => {
     expect(dueSeriesPosts([ev(1, -10, 'complete')], { standings_posts: false }, NOW)).toEqual([]);
+  });
+
+  it('posts a partial table while an earlier week has a postponed match, then the full one once it is played', () => {
+    const events = [ev(1, -300, 'complete'), ev(2, -200, 'complete'), ev(2, 30, 'created'), ev(3, -100, 'complete')];
+    expect(dueSeriesPosts(events, { weekly_schedule: false }, NOW)).toEqual([
+      { kind: 'standings', week: 3, dedupeKey: 'week:3:partial', pendingWeeks: ['Week 2'] },
+    ]);
+    events[2] = ev(2, 30, 'complete');
+    expect(dueSeriesPosts(events, { weekly_schedule: false }, NOW)).toEqual([{ kind: 'standings', week: 3, dedupeKey: 'week:3' }]);
   });
 
   it('can be due together with the next weekly schedule', () => {
@@ -183,7 +211,23 @@ describe('enqueueDueSeriesUpdates', () => {
       seeding_rule: { source: 'season', top: 4, format: 'single-elimination', template: { name: 'Finals' } },
     });
     await enqueueDueSeriesUpdates(pg(), NOW);
-    expect(await queue()).toMatchObject([{ kind: 'weekly_schedule', dedupe_key: `week:${isoWeekNumber(at(10))}` }]);
+    expect(await queue()).toMatchObject([{
+      kind: 'weekly_schedule', dedupe_key: `cweek:2026-W${isoWeekNumber(at(10))}`, payload: { week: isoWeekNumber(at(10)), calendar_year: 2026 },
+    }]);
+  });
+
+  it('queues a partial standings post with the pending weeks, then the full one once the postponed match is played', async () => {
+    const s = await insertSeries({ status: 'active', discord_config: { weekly_schedule: false } });
+    await addMatch(s.id, 1, -300, 'complete');
+    const postponed = await createMatch(gameId, modeId, { start_date: at(50), start_time: at(50), status: 'gather' as never });
+    await linkEvent(s.id, 'match', postponed.id, { week: 2 });
+    await addMatch(s.id, 3, -100, 'complete');
+    await enqueueDueSeriesUpdates(pg(), NOW);
+    expect(await queue()).toMatchObject([{ kind: 'standings', dedupe_key: 'week:3:partial', payload: { week: 3, pending_weeks: ['Week 2'] } }]);
+
+    await pg().update(matches).set({ status: 'complete' });
+    await enqueueDueSeriesUpdates(pg(), at(60));
+    expect((await queue()).map((r) => r.dedupe_key)).toEqual(['week:3', 'week:3:partial']);
   });
 
   it('handles several active series in one run', async () => {

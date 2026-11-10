@@ -246,8 +246,8 @@ export async function seedPlayoffEvent(db: Db, seriesId: string, eventId: string
 
 /**
  * Completes a stage (from `active` or `upcoming`), activates the next stage by order when it is still `upcoming` and
- * lists the planned playoff events that can be seeded now: rules sourced from this stage, plus season rules when this
- * was the last stage.
+ * lists the planned playoff events that can be seeded now: rules sourced from this stage, plus season rules once every
+ * stage that counts toward the season is complete.
  */
 export async function completeStage(db: Db, seriesId: string, stageId: string): Promise<CompleteStageResult> {
   return db.transaction(async (tx) => {
@@ -257,13 +257,15 @@ export async function completeStage(db: Db, seriesId: string, stageId: string): 
     const next = stages.find((s) => s.stage_order > stage.stage_order);
     if (next?.status === 'upcoming') await setStageStatus(tx, seriesId, next.id, 'active');
 
-    const wasLast = !next;
+    // The season is decided once no stage that counts toward it is still open (the same rule `sourceBlockers` seeds by);
+    // a later stage outside the season (the playoffs themselves) does not hold it up.
+    const seasonDecided = stages.every((s) => !s.counts_toward_season || s.status === 'complete');
     const planned = await tx.select().from(seriesEvents).where(and(eq(seriesEvents.series_id, seriesId), eq(seriesEvents.status, 'planned')));
     const seedable = planned
       .filter((e) => {
         const rule = e.seeding_rule;
         if (!rule) return false;
-        return rule.source === 'stage' ? rule.stage_id === stageId : wasLast;
+        return rule.source === 'stage' ? rule.stage_id === stageId : seasonDecided;
       })
       .sort((a, b) => a.event_order - b.event_order)
       .map((e) => e.id);

@@ -417,6 +417,10 @@ export interface SeedPreviewResponse {
 /** Payloads of `discord_series_update_queue` rows by kind (the bot re-reads live data; these are hints). */
 export interface SeriesUpdatePayload {
   week?: number;
+  /** `weekly_schedule` / `standings`: set when `week` is an ISO calendar week (events without a season week), not a season week. */
+  calendar_year?: number;
+  /** `standings`: earlier weeks that still have unplayed events when this table was posted (e.g. ["Week 2"]). */
+  pending_weeks?: string[];
   stage_id?: string | null;
   event_id?: string;
   tournament_id?: string;

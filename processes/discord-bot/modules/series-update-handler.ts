@@ -9,8 +9,8 @@ import { logger } from '../../../src/lib/logger/server';
 import { getGameDisplay } from '../../../src/lib/games';
 import { getTournament, listTeamsByName } from '../../../src/lib/tournaments';
 import {
-  eventWeek, getSeriesById, getSeriesChampion, getSeriesStandingsResponse, listEntrants, listSeriesEventDtos, listStages,
-  type SeriesRow,
+  eventWeek, getSeriesById, getSeriesChampion, getSeriesStandingsResponse, listEntrants, listSeriesEventDtos, listStages, sameWeek,
+  weekLabel, type SeriesRow, type WeekRef,
 } from '../../../src/lib/series';
 import { capTitle, Utils } from './utils';
 import { imageExtension, loadImage } from '../utils/image-source';
@@ -31,6 +31,12 @@ export const SERIES_LEAVE_PREFIX = 'series_leave:';
 const STANDINGS_TOP = 10;
 const NAME_WIDTH = 18;
 const DESCRIPTION_LIMIT = 4000;
+
+/** The week a schedule / standings payload is about (season week, or calendar week when `calendar_year` is set). */
+function payloadWeek(payload: SeriesUpdatePayload): WeekRef | null {
+  if (payload.week === undefined) return null;
+  return payload.calendar_year === undefined ? { week: payload.week } : { week: payload.week, calendarYear: payload.calendar_year };
+}
 
 /** The queue row fields the handler needs. */
 export interface SeriesUpdateJob {
@@ -286,15 +292,15 @@ export class SeriesUpdateHandler {
   }
 
   private async fillWeeklySchedule(embed: EmbedBuilder, series: SeriesRow, payload: SeriesUpdatePayload): Promise<void> {
-    const week = payload.week;
-    if (week === undefined) throw new Error('A weekly_schedule post needs a week');
+    const week = payloadWeek(payload);
+    if (!week) throw new Error('A weekly_schedule post needs a week');
     const [events, stages] = await Promise.all([listSeriesEventDtos(this.ex, series.id), listStages(this.ex, series.id)]);
     const stageName = new Map(stages.map((s) => [s.id, s.name]));
 
     const inWeek = events
       .filter((e) => e.status === 'live' && e.target_status !== 'cancelled')
       .map((e) => ({ e, start: e.start_date ? new Date(e.start_date) : null }))
-      .filter(({ e, start }) => eventWeek({ week: e.week, start }) === week)
+      .filter(({ e, start }) => sameWeek(eventWeek({ week: e.week, start }), week))
       .sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity) || a.e.event_order - b.e.event_order);
 
     const lines = inWeek.map(({ e, start }) => {
@@ -304,7 +310,7 @@ export class SeriesUpdateHandler {
       return `${when} - **${title}**${stage ? ` (${stage})` : ''}`;
     });
 
-    embed.setTitle(capTitle(`📅 ${series.name} - Week ${week}`));
+    embed.setTitle(capTitle(`📅 ${series.name} - ${weekLabel(week)}`));
     embed.setDescription(this.capDescription(lines, 'No events scheduled for this week.'));
   }
 
@@ -325,8 +331,16 @@ export class SeriesUpdateHandler {
     const table = await loadStandingsTable(this.ex, series.id);
     const suffix = table.rows.length > STANDINGS_TOP ? `\n...and ${table.rows.length - STANDINGS_TOP} more` : '';
     const link = webLink(series.id);
-    embed.setTitle(capTitle(`📊 ${series.name} - Standings${payload.week === undefined ? '' : ` after week ${payload.week}`}`));
+    const week = payloadWeek(payload);
+    embed.setTitle(capTitle(`📊 ${series.name} - Standings${week ? ` after ${weekLabel(week).toLowerCase()}` : ''}`));
     embed.setDescription(`${formatStandingsTable(table)}${suffix}${link ? `\n[View full standings](${link})` : ''}`);
+    if (payload.pending_weeks && payload.pending_weeks.length > 0) {
+      embed.addFields({
+        name: '⏳ Still to be played',
+        value: truncate(`${payload.pending_weeks.join(', ')} still ${payload.pending_weeks.length === 1 ? 'has' : 'have'} unplayed matches, so these standings may change.`, 1024),
+        inline: false,
+      });
+    }
   }
 
   private async playoffTournamentId(payload: SeriesUpdatePayload): Promise<string | undefined> {
