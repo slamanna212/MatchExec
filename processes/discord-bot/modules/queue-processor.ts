@@ -79,6 +79,9 @@ function voiceTeamOrder(name: string): number {
 }
 
 const creatingMatches = new Map<string, Promise<void>>();
+
+/** The match winner post waits this long after it was queued so the last map winner embed goes out first. */
+const WINNER_NOTIFICATION_DELAY_MS = 15_000;
 async function handleVoiceChannelCreate(processor: QueueProcessor, request: BotRequest): Promise<void> {
   const key = String((request.data as { matchId?: string })?.matchId);
   const previous = creatingMatches.get(key) ?? Promise.resolve();
@@ -1165,9 +1168,14 @@ export class QueueProcessor {
               totalMaps: notification.total_maps ?? 0
             };
 
-            // Wait 15 seconds to ensure last map winner embed goes out first
-            logger.debug(`⏱️ Waiting 15 seconds before sending match winner notification for ${matchName}`);
-            await new Promise(resolve => setTimeout(resolve, 15000));
+            // Give the last map winner embed a head start. This must not sleep: the queue tick is shared, so a sleep here
+            // held up every other queue (voice channel creation included). Hand the claim back until the delay has passed.
+            const remainingMs = WINNER_NOTIFICATION_DELAY_MS - (Date.now() - notification.created_at.getTime());
+            if (remainingMs > 0) {
+              logger.debug(`⏱️ Delaying match winner notification for ${matchName} by ${Math.ceil(remainingMs / 1000)}s`);
+              await this.release('matchWinner', notification.id, remainingMs);
+              continue;
+            }
 
             // Post the match winner notification
             result = await this.announcementHandler.postMatchWinnerNotification(winnerData);
@@ -1407,7 +1415,8 @@ export class QueueProcessor {
         // Voice playback is NOT part of this tick: it takes seconds to minutes per announcement and would hold up every
         // other queue. It runs on its own loop (processVoiceAnnouncementQueue, scheduled by the bot).
         this.processMatchWinnerNotificationQueue(),
-        this.processDiscordBotRequests(),
+        // Bot requests (voice channel creation, member search) run on their own loop (processDiscordBotRequests,
+        // scheduled by the bot): a match start waits on them, so no other queue may hold them up.
         this.processMatchEditQueue(),
         this.processHealthAlertQueue(),
         this.processSeriesUpdateQueue(),

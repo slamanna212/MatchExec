@@ -53,6 +53,12 @@ class MatchExecBot {
     async () => { await this.queueProcessor?.processAllQueues(); },
     (error) => logger.error('❌ Error processing queues:', error),
   );
+  // Bot requests (voice channel creation, member search) are waited on by API calls such as starting a match, so they
+  // get their own loop too and never queue behind slower work in the main tick.
+  private runBotRequestTick = nonOverlapping(
+    async () => { await this.queueProcessor?.processDiscordBotRequests(); },
+    (error) => logger.error('❌ Error processing bot requests:', error),
+  );
   // Voice announcements play audio (seconds to minutes each), so they get their own loop and never delay the other queues.
   private runVoiceQueueTick = nonOverlapping(
     async () => { await this.queueProcessor?.processVoiceAnnouncementQueue(); },
@@ -344,6 +350,9 @@ class MatchExecBot {
     setInterval(async () => {
       await this.processVoiceQueue();
     }, 3000);
+    setInterval(async () => {
+      await this.processBotRequests();
+    }, 1000);
 
     // Check for empty auto-created voice channels every minute
     this.voiceChannelMonitorInterval = setInterval(async () => {
@@ -362,6 +371,12 @@ class MatchExecBot {
 
     // A tick never starts while the previous one is still running; errors never crash the bot.
     await this.runQueueTick();
+  }
+
+  // Bot requests run independently of processQueues (see runBotRequestTick)
+  private async processBotRequests() {
+    if (!this.queueProcessor || !this.isReady) return;
+    await this.runBotRequestTick();
   }
 
   // Voice announcements run independently of processQueues (see runVoiceQueueTick)
