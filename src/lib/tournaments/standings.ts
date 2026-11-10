@@ -2,7 +2,7 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import type { Executor } from '../../../lib/db';
 import { matchGamePlacements, matchGames, matchParticipants, matches, tournamentMatches, tournamentTeams } from '../../../lib/db/schema';
-import { determineMatchWinner } from '../matches';
+import { determineMatchWinner, getOverallMatchScore } from '../matches';
 
 export interface CumulativeStandingRow {
   rank: number;
@@ -140,6 +140,9 @@ export interface BracketMatchDto {
   team1?: { id: string; name: string };
   team2?: { id: string; name: string };
   winner?: string;
+  /** Maps won by each side so far (set once the match is in battle or complete). */
+  team1_score?: number;
+  team2_score?: number;
   status: 'pending' | 'ongoing' | 'complete';
   rawStatus: string;
   match_order: number;
@@ -167,6 +170,8 @@ export async function listBracketMatches(ex: Executor, tournamentId: string): Pr
   for (const row of rows) {
     let winner = row.winner_team;
     if (!winner && row.status === 'complete') winner = await determineMatchWinner(ex, row.id);
+    const started = row.status === 'battle' || row.status === 'complete';
+    const score = started ? await getOverallMatchScore(ex, row.id) : null;
     out.push({
       id: row.id,
       round: row.tournament_round as number,
@@ -174,6 +179,8 @@ export async function listBracketMatches(ex: Executor, tournamentId: string): Pr
       team1: row.team1_id ? { id: row.team1_id, name: row.team1_name || 'Team 1' } : undefined,
       team2: row.team2_id ? { id: row.team2_id, name: row.team2_name || 'Team 2' } : undefined,
       winner: winner || undefined,
+      team1_score: score?.team1Wins,
+      team2_score: score?.team2Wins,
       status: bracketStatusOf(row.status),
       rawStatus: row.status,
       match_order: row.match_order as number,

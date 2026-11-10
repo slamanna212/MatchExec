@@ -182,6 +182,23 @@ describe('TeamMapScoring', () => {
     expect(container.textContent).toContain('Confirm: Team 3 wins Map');
   });
 
+  it('confirming a selected winner submits the result straight away, with no second confirmation modal', async () => {
+    const onResultSubmit = vi.fn().mockResolvedValue(undefined);
+    mockHookData.matchGames = [makeGame()];
+    mockHookData.teams = [
+      makeTeam({ id: 't-1', team_name: 'Team 1', team_order: 0 }),
+      makeTeam({ id: 't-2', team_name: 'Team 2', team_order: 1 }),
+    ];
+    const container = renderWithMantine(<TeamMapScoring {...defaultProps} onResultSubmit={onResultSubmit} />);
+    const click = (el: Element | undefined) => act(async () => { el!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await click(Array.from(container.querySelectorAll('button[type="button"]')).find(b => b.textContent?.includes('Team 2')));
+    expect(onResultSubmit).not.toHaveBeenCalled();
+    await click(Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Confirm: Team 2 wins Map')));
+    expect(onResultSubmit).toHaveBeenCalledTimes(1);
+    expect(onResultSubmit).toHaveBeenCalledWith(expect.objectContaining({ winnerTeamId: 't-2', winner: 'team2' }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it('is a function component', () => {
     expect(typeof TeamMapScoring).toBe('function');
   });

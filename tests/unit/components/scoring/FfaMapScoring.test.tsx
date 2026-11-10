@@ -130,6 +130,20 @@ describe('FfaMapScoring', () => {
     expect(container.textContent).toContain('Confirm: Alice wins Map');
   });
 
+  it('confirming a selected participant submits the result straight away, with no second confirmation modal', async () => {
+    const onResultSubmit = vi.fn().mockResolvedValue(undefined);
+    mockHookData.matchGames = [makeGame()];
+    mockHookData.participants = [{ id: 'p1', username: 'Alice' }, { id: 'p2', username: 'Bob' }];
+    const container = renderWithMantine(<FfaMapScoring {...defaultProps} onResultSubmit={onResultSubmit} />);
+    const click = (el: Element | undefined) => act(async () => { el!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await click(Array.from(container.querySelectorAll('button[type="button"]')).find(b => b.textContent?.includes('Bob')));
+    expect(onResultSubmit).not.toHaveBeenCalled();
+    await click(Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Confirm: Bob wins Map')));
+    expect(onResultSubmit).toHaveBeenCalledTimes(1);
+    expect(onResultSubmit).toHaveBeenCalledWith(expect.objectContaining({ participantWinnerId: 'p2' }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it('is a function component', () => {
     expect(typeof FfaMapScoring).toBe('function');
   });

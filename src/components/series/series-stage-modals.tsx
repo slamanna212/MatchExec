@@ -11,20 +11,24 @@ interface StageFormModalProps {
   onClose: () => void;
   /** null = adding a stage. */
   stage: SeriesStageDto | null;
+  /** Prefilled name when adding a stage (e.g. "Stage 2"). */
+  defaultName?: string;
   onSubmit: (values: { name: string; counts_toward_season: boolean }) => Promise<void> | void;
 }
 
 /** Add a stage or rename one. */
-export function StageFormModal({ opened, onClose, stage, onSubmit }: StageFormModalProps): JSX.Element {
+export function StageFormModal({ opened, onClose, stage, defaultName = '', onSubmit }: StageFormModalProps): JSX.Element {
   const [name, setName] = useState('');
   const [counts, setCounts] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (opened) {
-      setName(stage?.name ?? '');
+      setName(stage?.name ?? defaultName);
       setCounts(stage?.counts_toward_season ?? true);
     }
+  // defaultName is read only when the modal opens: a stage added in the background must not overwrite what is being typed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, stage]);
 
   const valid = name.trim().length > 0 && name.trim().length <= 100;
@@ -44,7 +48,7 @@ export function StageFormModal({ opened, onClose, stage, onSubmit }: StageFormMo
         <Stack gap="md">
           <TextInput
             label="Name"
-            placeholder="Stage 1"
+            placeholder="Stage name"
             data-autofocus
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}

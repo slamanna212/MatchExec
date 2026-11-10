@@ -85,6 +85,7 @@ vi.mock('../../../processes/discord-bot/modules/queue-processor', () => ({
   QueueProcessor: vi.fn().mockImplementation(() => ({
     processAllQueues: vi.fn().mockResolvedValue(undefined),
     processVoiceAnnouncementQueue: vi.fn().mockResolvedValue(undefined),
+    processDiscordBotRequests: vi.fn().mockResolvedValue(undefined),
     updateSettings: vi.fn(),
     updateVoiceHandler: vi.fn(),
     setScorecardHandler: vi.fn(),

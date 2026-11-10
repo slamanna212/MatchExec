@@ -5,7 +5,7 @@ import { asc, eq } from 'drizzle-orm';
 import { setupPgTestFile, getPgTestDb } from '../../utils/pg-test-db';
 import { appRequest } from '../../utils/app-request';
 import { createGame, createGameMode, createTournament } from '../../utils/pg-fixtures';
-import { bracketGame, completeMatch, generateBracket, insertParticipants, insertTeams, progressBracket, tournamentTransition } from '../../utils/pg-tournament-fixtures';
+import { bracketGame, completeMatch, generateBracket, insertParticipants, insertTeams, progressBracket, startMatch, tournamentTransition } from '../../utils/pg-tournament-fixtures';
 import {
   discordMatchWinnerQueue, gameMaps, matchGamePlacements, matchGames, matchParticipants, matchTeams, matches, tournamentMatches,
   tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments,
@@ -51,6 +51,9 @@ describe('full lifecycle', () => {
     ]);
     const battle = await tournamentTransition(t.id, 'battle');
     expect(battle.data.status).toBe('battle');
+    // Starting the tournament does not start its matches; each one is started by hand.
+    expect((await pg().select().from(matches).where(eq(matches.id, match.id)))[0].status).toBe('assign');
+    expect((await startMatch(match.id)).status).toBe(200);
     expect((await pg().select().from(matches).where(eq(matches.id, match.id)))[0].status).toBe('battle');
 
     await completeMatch(match.id, team1.id);
@@ -71,14 +74,16 @@ describe('full lifecycle', () => {
     expect((await generateBracket(t.id)).status).toBe(400);
   });
 
-  it('the battle transition starts every round-1 match: status, start announcement and map games', async () => {
+  it('the battle transition leaves round-1 matches in assign; each one is started by hand', async () => {
     const t = await tp('t1', { status: 'assign' });
     await insertTeams(t.id, 4, 1);
     await generateBracket(t.id);
     expect((await tournamentTransition(t.id, 'battle')).status).toBe(200);
     const rows = await pg().select().from(matches).where(eq(matches.tournament_id, t.id));
     expect(rows).toHaveLength(2);
-    expect(rows.every((m) => m.status === 'battle')).toBe(true);
+    expect(rows.every((m) => m.status === 'assign')).toBe(true);
+    for (const m of rows) expect((await startMatch(m.id)).status).toBe(200);
+    expect((await pg().select().from(matches).where(eq(matches.tournament_id, t.id))).every((m) => m.status === 'battle')).toBe(true);
     const games = await pg().select().from(matchGames);
     expect(games).toHaveLength(2); // one map per match (rounds_per_match = 1)
     expect(games.every((g) => g.status === 'ongoing')).toBe(true);
@@ -326,6 +331,8 @@ describe('tournament match teams and cumulative-points', () => {
     expect(await pg().select().from(matchTeams).where(eq(matchTeams.match_id, match.id))).toHaveLength(3);
 
     expect((await tournamentTransition(t.id, 'battle')).status).toBe(200);
+    expect((await pg().select().from(matches).where(eq(matches.id, match.id)))[0].status).toBe('assign');
+    expect((await startMatch(match.id)).status).toBe(200);
     expect((await pg().select().from(matches).where(eq(matches.id, match.id)))[0].status).toBe('battle');
     const games = await pg().select().from(matchGames).where(eq(matchGames.match_id, match.id)).orderBy(asc(matchGames.round));
     expect(games).toHaveLength(2);

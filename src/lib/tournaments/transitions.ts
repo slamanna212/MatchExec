@@ -5,14 +5,14 @@
  */
 import { and, asc, eq, notInArray } from 'drizzle-orm';
 import type { Db, Executor } from '../../../lib/db';
-import { matches, tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
+import { matches, tournamentParticipants, tournamentTeamMembers, tournamentTeams } from '../../../lib/db/schema';
 import { TOURNAMENT_FLOW_STEPS } from '@/shared/types';
 import { getMode, listModes } from '../games';
 import { logFeedEvent } from '../feed-helpers';
 import { logger } from '../logger';
 import { enqueueAnnouncement, enqueueDeletion, enqueueStatusUpdate } from '../discord-queues';
 import { listAllMessages } from '../discord-messages';
-import { casMatchStatus, handleCancelledTransition, handleTournamentAssignTransition, initializeMatchGames } from '../matches';
+import { casMatchStatus, handleCancelledTransition, handleTournamentAssignTransition } from '../matches';
 import { AfterCommit, bestEffort } from '../matches/effects';
 import { genId } from '../matches/ids';
 import { countTeamMemberUsers, countTeamMembers, countTeams } from './teams';
@@ -110,33 +110,9 @@ export async function handleAssignTransition(ex: Executor, tournamentId: string,
   }));
 }
 
-/** Start every round-1 match that is waiting in 'assign': flip to battle, announce the start and create its game rows. */
-export async function startFirstRoundMatches(ex: Executor, tournamentId: string): Promise<number> {
-  const first = await ex.select({ id: matches.id, name: matches.name }).from(matches)
-    .innerJoin(tournamentMatches, eq(tournamentMatches.match_id, matches.id))
-    .where(and(eq(tournamentMatches.tournament_id, tournamentId), eq(tournamentMatches.round, 1), eq(matches.status, 'assign')))
-    .orderBy(asc(tournamentMatches.match_order), asc(matches.id));
-
-  let started = 0;
-  for (const match of first) {
-    const ok = await bestEffort(ex, `Error starting match ${match.id}`, async (sp) => {
-      if (!(await casMatchStatus(sp, match.id, 'assign', 'battle'))) return false;
-      await enqueueAnnouncement(sp, { matchId: match.id, type: 'match_start' });
-      await initializeMatchGames(sp, match.id);
-      return true;
-    }, false);
-    if (ok) {
-      started++;
-      logger.debug(`Started match with notifications: ${match.name}`);
-    }
-  }
-  if (started > 0) logger.debug(`Started ${started} first round matches`);
-  return started;
-}
-
 export async function handleBattleTransition(ex: Executor, tournamentId: string, after: AfterCommit): Promise<void> {
-  logger.debug(`Tournament ${tournamentId} started - transitioning first round matches to battle`);
-  await startFirstRoundMatches(ex, tournamentId);
+  // Starting the tournament does not start any match: every match, round 1 included, is started by hand.
+  logger.debug(`Tournament ${tournamentId} started`);
   const name = (await getTournamentName(ex, tournamentId)) ?? tournamentId;
   after.add(() => logFeedEvent({
     eventType: 'tournament_started', priority: 2, title: 'Tournament Started', description: `"${name}" battles are underway`, tournamentId,

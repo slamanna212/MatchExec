@@ -8,7 +8,7 @@ import { createGame, createGameMode, createMatch, createTournament } from '../..
 import { bracketGame, insertParticipants, insertTeams, tournamentTransition } from '../../utils/pg-tournament-fixtures';
 import {
   discordAnnouncementQueue, discordDeletionQueue, discordMatchMessages, discordStatusUpdateQueue, matchGamePlacements, matchGames, matchParticipants,
-  matches, series, seriesEvents, tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments,
+  matches, matchTeams, series, seriesEvents, tournamentMatches, tournamentParticipants, tournamentTeamMembers, tournamentTeams, tournaments,
 } from '../../../lib/db/schema';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), debug: vi.fn(), reload: vi.fn() } }));
@@ -440,6 +440,36 @@ describe('GET /api/tournaments/:id/matches', () => {
       ['m-pending', 'pending', 'assign', undefined], ['m-live', 'ongoing', 'battle', undefined], ['m-done', 'complete', 'complete', b],
     ]);
     expect(data.matches[0]).toMatchObject({ round: 1, bracket_type: 'winners', team1: { id: a, name: 'Alpha' }, team2: { id: b, name: 'Bravo' }, match_order: 1 });
+  });
+});
+
+describe('GET /api/tournaments/:id/matches scores', () => {
+  it('returns the map score of matches in battle or complete, and none for a match that has not started', async () => {
+    const ctx = await bracketGame();
+    await tp('t1', { game_mode_id: ctx.modeId });
+    const [a, b] = await insertTeams('t1', 2);
+    const mk = async (id: string, status: 'assign' | 'battle' | 'complete', order: number) => {
+      await createMatch(ctx.gameId, ctx.modeId, { id, tournament_id: 't1', status, tournament_round: 1, tournament_bracket_type: 'winners', team1_name: 'Alpha', team2_name: 'Bravo' });
+      await pg().insert(tournamentMatches).values({ match_id: id, tournament_id: 't1', round: 1, bracket_type: 'winners', team1_id: a, team2_id: b, match_order: order });
+      const teams = [`${id}_t0`, `${id}_t1`];
+      for (const [i, tid] of teams.entries()) await pg().insert(matchTeams).values({ id: tid, match_id: id, team_name: i === 0 ? 'Alpha' : 'Bravo', team_order: i });
+      return teams;
+    };
+    const score = async (id: string, teams: string[], winners: number[]) => {
+      for (const [round, w] of winners.entries()) {
+        const gid = `${id}_g${round}`;
+        await pg().insert(matchGames).values({ id: gid, match_id: id, round: round + 1, status: 'completed' });
+        for (const [i, tid] of teams.entries()) await pg().insert(matchGamePlacements).values({ id: `${gid}_p${i}`, match_game_id: gid, entity_type: 'team', entity_id: tid, is_winner: i === w });
+      }
+    };
+    await mk('m-pending', 'assign', 1);
+    await score('m-live', await mk('m-live', 'battle', 2), [0]);
+    await score('m-done', await mk('m-done', 'complete', 3), [1, 0, 1]);
+    const { data } = await appRequest('/api/tournaments/t1/matches');
+    const byId = Object.fromEntries(data.matches.map((m: any) => [m.id, m]));
+    expect(byId['m-pending'].team1_score).toBeUndefined();
+    expect([byId['m-live'].team1_score, byId['m-live'].team2_score]).toEqual([1, 0]);
+    expect([byId['m-done'].team1_score, byId['m-done'].team2_score]).toEqual([1, 2]);
   });
 });
 

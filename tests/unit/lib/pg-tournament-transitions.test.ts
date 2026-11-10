@@ -13,7 +13,7 @@ import { db } from '../../../lib/db';
 import { logFeedEvent } from '@/lib/feed-helpers';
 import {
   ALLOWED_TRANSITIONS, TournamentError, autoCreateSoloTeams, handleAssignTransition, handleBattleTransition, handleEndTransition,
-  handleGatherTransition, isKnownStatus, startFirstRoundMatches, transitionTournament, validateStatusTransition,
+  handleGatherTransition, isKnownStatus, transitionTournament, validateStatusTransition,
 } from '@/lib/tournaments';
 import { AfterCommit } from '@/lib/matches/effects';
 
@@ -142,43 +142,32 @@ describe('handleAssignTransition', () => {
   });
 });
 
-describe('handleBattleTransition / startFirstRoundMatches', () => {
+describe('handleBattleTransition', () => {
   async function linkMatch(tournamentId: string, id: string, round: number, status: 'assign' | 'complete' = 'assign') {
     await createMatch(gameId, modeId, { id, status, tournament_id: tournamentId, maps: ['map-x'] });
     await pg().insert(tournamentMatches).values({ match_id: id, tournament_id: tournamentId, round, bracket_type: 'winners', match_order: 1 });
   }
 
-  it('starts round-1 matches: battle status, a match_start announcement and game rows', async () => {
+  it('does not start any match: round-1 matches stay in assign with no announcement and no game rows', async () => {
     const t = await tp('t1');
     await linkMatch(t.id, 'r1', 1);
+    await linkMatch(t.id, 'r2', 2);
     await run((tx, a) => handleBattleTransition(tx, t.id, a));
-    expect((await pg().select().from(matches).where(eq(matches.id, 'r1')))[0].status).toBe('battle');
-    const ann = await pg().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, 'r1'));
-    expect(ann.map((a) => a.announcement_type)).toEqual(['match_start']);
-    expect(await pg().select().from(matchGames).where(eq(matchGames.match_id, 'r1'))).toHaveLength(1);
+    expect((await pg().select().from(matches).where(eq(matches.id, 'r1')))[0].status).toBe('assign');
+    expect((await pg().select().from(matches).where(eq(matches.id, 'r2')))[0].status).toBe('assign');
+    expect(await pg().select().from(discordAnnouncementQueue).where(eq(discordAnnouncementQueue.match_id, 'r1'))).toHaveLength(0);
+    expect(await pg().select().from(matchGames).where(eq(matchGames.match_id, 'r1'))).toHaveLength(0);
+  });
+
+  it('logs the tournament_started feed event', async () => {
+    const t = await tp('t1');
+    await run((tx, a) => handleBattleTransition(tx, t.id, a));
     expect(logFeedEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'tournament_started' }));
   });
 
-  it('leaves matches of later rounds and matches not waiting in assign alone', async () => {
-    const t = await tp('t1');
-    await linkMatch(t.id, 'r2', 2);
-    await linkMatch(t.id, 'done', 1, 'complete');
-    expect(await startFirstRoundMatches(db, t.id)).toBe(0);
-    expect((await pg().select().from(matches).where(eq(matches.id, 'r2')))[0].status).toBe('assign');
-    expect((await pg().select().from(matches).where(eq(matches.id, 'done')))[0].status).toBe('complete');
-  });
-
-  it('does not throw when there are no first-round matches', async () => {
+  it('does not throw when there are no matches', async () => {
     const t = await tp('t1');
     await expect(run((tx, a) => handleBattleTransition(tx, t.id, a))).resolves.toBeUndefined();
-  });
-
-  it('is idempotent: a match already started is not started twice', async () => {
-    const t = await tp('t1');
-    await linkMatch(t.id, 'r1', 1);
-    expect(await startFirstRoundMatches(db, t.id)).toBe(1);
-    expect(await startFirstRoundMatches(db, t.id)).toBe(0);
-    expect(await pg().select().from(discordAnnouncementQueue)).toHaveLength(1);
   });
 });
 

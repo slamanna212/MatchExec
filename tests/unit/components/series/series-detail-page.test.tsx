@@ -77,6 +77,7 @@ interface StubOptions {
   patch?: { ok: boolean; body: unknown };
   entrants?: unknown[];
   scoringType?: 'Normal' | 'FFA' | 'Position';
+  nextEvent?: unknown;
 }
 
 function stubApi(status: Status, opts: StubOptions = {}) {
@@ -100,7 +101,7 @@ function stubApi(status: Status, opts: StubOptions = {}) {
       id: 's1', name: 'Season', status, announcements: true, player_notifications: true, entrant_type: 'team', scoring_type: opts.scoringType ?? 'Normal',
       created_at: '2026-01-01 00:00:00', updated_at: '2026-01-01 00:00:00', scoring_config: { mode: 'head_to_head' },
       event_count: 3, completed_event_count: 1, participant_count: 0, entrant_count: 0,
-      next_event: null, last_event_game: null, series_game: null, champion: opts.champion ?? null,
+      next_event: opts.nextEvent ?? null, last_event_game: null, series_game: null, champion: opts.champion ?? null,
     } });
   }));
   return calls;
@@ -194,6 +195,14 @@ describe('overview', () => {
     const banner = c.querySelector('[data-testid="champion-banner"]')!;
     expect(banner.textContent).toContain('Alpha');
     expect(banner.textContent).toContain('Won the season playoffs');
+  });
+
+  it('shows the game name under the series title, without a "Next:" prefix', async () => {
+    stubApi('active', { nextEvent: { id: 'e2', name: 'Finals', type: 'tournament', event_order: 2, start_date: null, game_id: 'g1', game_name: 'Overwatch', game_icon: null, game_color: null, game_cover: null } });
+    const c = await renderPage();
+    const text = c.textContent ?? '';
+    expect(text).toContain('Overwatch');
+    expect(text).not.toContain('Next:');
   });
 
   it('has no banner without a champion and lists the unfinished events', async () => {
@@ -443,6 +452,31 @@ describe('add event menu', () => {
     expect(document.body.textContent).toContain(marker);
   });
 
+  it('the playoff placeholder takes the role that matches its source: season playoffs when qualifiers come from the season', async () => {
+    const calls = stubApi('active', { entrants: ENTRANTS });
+    await renderPage('/series/s1?tab=schedule');
+    await act(async () => { buttonByText('Add event')!.click(); });
+    await act(async () => { menuItem('Playoff placeholder').click(); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { document.querySelector<HTMLElement>('label[for$="-season"]')!.click(); });
+    await act(async () => { buttonByText('Add playoffs')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const post = calls.find((c) => c.method === 'POST' && c.url === '/api/series/s1/events/planned');
+    expect(post?.body).toMatchObject({ role: 'season_playoff', seeding_rule: { source: 'season' } });
+  });
+
+  it('the playoff placeholder is a stage playoff while its qualifiers come from a stage', async () => {
+    const calls = stubApi('active', { entrants: ENTRANTS });
+    await renderPage('/series/s1?tab=schedule');
+    await act(async () => { buttonByText('Add event')!.click(); });
+    await act(async () => { menuItem('Playoff placeholder').click(); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { buttonByText('Add playoffs')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const post = calls.find((c) => c.method === 'POST' && c.url === '/api/series/s1/events/planned');
+    expect(post?.body).toMatchObject({ role: 'stage_playoff', seeding_rule: { source: 'stage' } });
+  });
+
   it('offers a race calendar instead of a round robin for racing series', async () => {
     stubApi('active', { entrants: ENTRANTS, scoringType: 'Position' });
     await renderPage('/series/s1?tab=schedule');
@@ -454,15 +488,29 @@ describe('add event menu', () => {
     expect(document.body.textContent).toContain('Days between events');
   });
 
-  it('creates a stage through the Add stage dialog', async () => {
+  it('prefills the next stage name in the Add stage dialog, so it can be added without typing', async () => {
     const calls = stubApi('active');
     await renderPage('/series/s1?tab=schedule');
     await act(async () => { buttonByText('Add stage')!.click(); });
-    const input = document.querySelector<HTMLInputElement>('input[placeholder="Stage 1"]')!;
-    await typeInto(input, 'Stage 3');
-    await act(async () => { document.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="Stage name"]')!;
+    expect(input.value).toBe('Stage 3'); // two stages exist
+    const submit = document.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(submit.disabled).toBe(false);
+    await act(async () => { submit.click(); });
     await act(async () => { await Promise.resolve(); });
     const post = calls.find((c) => c.method === 'POST' && c.url === '/api/series/s1/stages');
     expect(post?.body).toEqual({ name: 'Stage 3', counts_toward_season: true });
+  });
+
+  it('creates a stage with a typed name through the Add stage dialog', async () => {
+    const calls = stubApi('active');
+    await renderPage('/series/s1?tab=schedule');
+    await act(async () => { buttonByText('Add stage')!.click(); });
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="Stage name"]')!;
+    await typeInto(input, 'Group stage');
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const post = calls.find((c) => c.method === 'POST' && c.url === '/api/series/s1/stages');
+    expect(post?.body).toEqual({ name: 'Group stage', counts_toward_season: true });
   });
 });

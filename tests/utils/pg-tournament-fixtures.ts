@@ -74,6 +74,10 @@ export const tournamentTransition = (tournamentId: string, newStatus: string) =>
 export const generateBracket = (tournamentId: string, json: unknown = {}) =>
   appRequest(`/api/tournaments/${tournamentId}/generate-matches`, { method: 'POST', json });
 
+/** Start a match by hand (the match transition endpoint, as the "Start Match" button does). */
+export const startMatch = (matchId: string) =>
+  appRequest(`/api/matches/${matchId}/transition`, { method: 'POST', json: { newStatus: 'battle' } });
+
 export const progressBracket = (tournamentId: string) => appRequest(`/api/tournaments/${tournamentId}/progress`, { method: 'POST', json: {} });
 
 /** Create a tournament through the API, open signups and add `nTeams` teams of `perTeam` assigned players; end in 'assign'. */

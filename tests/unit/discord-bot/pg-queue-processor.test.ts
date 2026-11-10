@@ -193,6 +193,31 @@ describe('other queues', () => {
     expect((await one(discordMatchWinnerQueue, t)).status).toBe('completed');
   });
 
+  it('match winner: a notification younger than 15s is released for later instead of sleeping in the shared tick', async () => {
+    const id = await enqueueMatchWinner(db, { matchId: 'm1', matchName: 'Match One', gameId: 'g', winner: 'team1', winningTeamName: 'Blue', winningPlayers: [], team1Score: 2, team2Score: 0, totalMaps: 2 });
+    const { qp, announcement } = make();
+    const started = Date.now();
+    await qp.processMatchWinnerNotificationQueue();
+    // no sleep: the tick returns at once, and nothing was posted yet
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(announcement.postMatchWinnerNotification).not.toHaveBeenCalled();
+    const row = await one(discordMatchWinnerQueue, id);
+    expect(row).toMatchObject({ status: 'pending', attempts: 0, claimed_by: null });
+    // handed back with a delay of at most the remaining 15s
+    const wait = row.next_attempt_at.getTime() - Date.now();
+    expect(wait).toBeGreaterThan(5_000);
+    expect(wait).toBeLessThanOrEqual(15_000);
+  });
+
+  it('match winner: once 15s have passed since it was queued, it is posted', async () => {
+    const id = await enqueueMatchWinner(db, { matchId: 'm1', matchName: 'Match One', gameId: 'g', winner: 'team1', winningTeamName: 'Blue', winningPlayers: [], team1Score: 2, team2Score: 0, totalMaps: 2 });
+    await db.update(discordMatchWinnerQueue).set({ created_at: new Date(Date.now() - 20_000) }).where(eq(discordMatchWinnerQueue.id, id));
+    const { qp, announcement } = make();
+    await qp.processMatchWinnerNotificationQueue();
+    expect(announcement.postMatchWinnerNotification).toHaveBeenCalledTimes(1);
+    expect(await one(discordMatchWinnerQueue, id)).toMatchObject({ status: 'completed', external_message_id: 'win-1' });
+  });
+
   it('voice: welcome waits for the start delay (released, not failed); other types play', async () => {
     await db.update(matches).set({ status: 'battle' }).where(eq(matches.id, 'm1'));
     await db.update(matches).set({ status: 'complete' }).where(eq(matches.id, 'm2'));
@@ -236,6 +261,16 @@ describe('bot requests', () => {
     await make().qp.processDiscordBotRequests();
     expect(search).toHaveBeenCalledWith({ query: 'ze', limit: 5 });
     expect(await one(discordBotRequests, id)).toMatchObject({ status: 'completed', result: { success: true, members: [{ id: '1', username: 'Zed', avatar_url: 'http://a/1.png' }] } });
+  });
+
+  it('the shared queue tick leaves bot requests to their own loop, so nothing in the tick can delay them', async () => {
+    const id = await enqueueBotRequest(db, 'voice_channel_create', { matchId: 'm1', categoryId: 'cat', channelNames: ['A'] });
+    client.guilds.fetch.mockResolvedValue({ channels: { create: vi.fn().mockResolvedValue({ id: 'c1', delete: vi.fn() }) } });
+    const { qp } = make();
+    await qp.processAllQueues();
+    expect(await one(discordBotRequests, id)).toMatchObject({ status: 'pending' });
+    await qp.processDiscordBotRequests();
+    expect(await one(discordBotRequests, id)).toMatchObject({ status: 'completed' });
   });
 
   it('voice channel create stores a jsonb result the web side can read', async () => {

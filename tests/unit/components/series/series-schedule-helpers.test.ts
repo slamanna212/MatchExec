@@ -138,6 +138,20 @@ describe('overview helpers', () => {
     expect(recentResults(events).map((e) => e.id)).toEqual(['done']);
   });
 
+  it('puts a finished event without a date (a seeded playoff bracket) after the dated events before it', () => {
+    const done = { target_status: 'complete' };
+    const events = [
+      ev('w1', 1, { ...done, start_date: '2026-01-01T00:00:00Z' }),
+      ev('w2', 2, { ...done, start_date: '2026-01-08T00:00:00Z' }),
+      ev('w3', 3, { ...done, start_date: '2026-01-15T00:00:00Z' }),
+      ev('final', 4, { ...done, start_date: null }),
+    ];
+    expect(recentResults(events).map((e) => e.id)).toEqual(['final', 'w3', 'w2']);
+    // an undated event early in the schedule is not pushed ahead of later dated ones
+    const early = [ev('undated', 1, { ...done, start_date: null }), ev('later', 2, { ...done, start_date: '2026-01-08T00:00:00Z' })];
+    expect(recentResults(early).map((e) => e.id)).toEqual(['later', 'undated']);
+  });
+
   it('counts the unplayed events of a batch', () => {
     const events = [ev('a', 1, { batch_id: 'b1' }), ev('b', 2, { batch_id: 'b1', target_status: 'complete' }), ev('c', 3, { batch_id: 'b2' })];
     expect(unplayedInBatch(events, 'b1')).toBe(1);

@@ -46,8 +46,7 @@ export function SeriesInfoPanel({
   const end = formatShortDate(series.end_date);
 
   let subtitle: string;
-  if (series.next_event?.game_name) subtitle = `Next: ${series.next_event.game_name}`;
-  else if (identity?.game_name) subtitle = identity.game_name;
+  if (identity?.game_name) subtitle = identity.game_name;
   else subtitle = series.event_count === 0 ? 'No events yet' : 'All events finished';
 
   return (

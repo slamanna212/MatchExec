@@ -28,6 +28,8 @@ interface BracketMatch {
     name: string;
   };
   winner?: string;
+  team1_score?: number;
+  team2_score?: number;
   status: 'pending' | 'ongoing' | 'complete';
 }
 
@@ -166,6 +168,24 @@ export function TournamentBracket({
     return bracketAssignments.length >= requiredSlots;
   };
 
+  const renderTeamRow = (match: BracketMatch, slot: 1 | 2) => {
+    const team = slot === 1 ? match.team1 : match.team2;
+    const score = slot === 1 ? match.team1_score : match.team2_score;
+    const isWinner = !!match.winner && match.winner === team?.id;
+    return (
+      <Group justify="center" gap="xs" wrap="nowrap">
+        <Text size="sm" fw={isWinner ? 700 : 400} c={isWinner ? 'green' : undefined} lineClamp={1} ta="center">
+          {team?.name || 'TBD'}
+        </Text>
+        {score !== undefined && match.status !== 'pending' && (
+          <Text size="sm" fw={700} c={isWinner ? 'green' : 'dimmed'} data-testid={`bracket-score-${slot}`}>
+            {score}
+          </Text>
+        )}
+      </Group>
+    );
+  };
+
   const renderMatchCard = (match: BracketMatch) => (
     <Card
       key={match.id}
@@ -194,27 +214,11 @@ export function TournamentBracket({
         </Group>
 
         <Stack gap="xs" style={{ flex: 1 }}>
-          <Text
-            size="sm"
-            fw={match.winner === match.team1?.id ? 700 : 400}
-            c={match.winner === match.team1?.id ? 'green' : undefined}
-            lineClamp={1}
-            ta="center"
-          >
-            {match.team1?.name || 'TBD'}
-          </Text>
+          {renderTeamRow(match, 1)}
 
           <Text size="xs" c="dimmed" fw={500} ta="center">vs</Text>
 
-          <Text
-            size="sm"
-            fw={match.winner === match.team2?.id ? 700 : 400}
-            c={match.winner === match.team2?.id ? 'green' : undefined}
-            lineClamp={1}
-            ta="center"
-          >
-            {match.team2?.name || 'TBD'}
-          </Text>
+          {renderTeamRow(match, 2)}
         </Stack>
       </Stack>
     </Card>

@@ -227,7 +227,7 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
         onSaved={refresh}
       />
       <SeedPlayoffsModal seriesId={series.id} event={seeding} onClose={() => setSeeding(null)} onSeeded={refresh} />
-      <StageFormModal opened={stageForm.open} onClose={() => setStageForm({ open: false, stage: null })} stage={stageForm.stage} onSubmit={submitStage} />
+      <StageFormModal opened={stageForm.open} onClose={() => setStageForm({ open: false, stage: null })} stage={stageForm.stage} defaultName={`Stage ${stages.length + 1}`} onSubmit={submitStage} />
       <StageScoringModal
         stage={scoringStage}
         seriesScoring={series.scoring_config}

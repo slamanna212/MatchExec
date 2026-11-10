@@ -45,6 +45,8 @@ interface BracketMatch {
   team1?: { id: string; name: string };
   team2?: { id: string; name: string };
   winner?: string;
+  team1_score?: number;
+  team2_score?: number;
   status: 'pending' | 'ongoing' | 'complete';
   rawStatus: string;
   match_order: number;

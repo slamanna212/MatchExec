@@ -121,11 +121,21 @@ export function upcomingEvents(events: readonly SeriesEventView[], limit = 5): S
     .slice(0, limit);
 }
 
-/** Finished live events, most recent first. */
+/**
+ * Finished live events, most recent first. By start date; an event without a date (a seeded playoff bracket, for
+ * example) takes the latest date of the events before it in the schedule, so it counts as the most recent of them.
+ */
 export function recentResults(events: readonly SeriesEventView[], limit = 3): SeriesEventView[] {
+  const effective = new Map<string, number>();
+  let latest = 0;
+  for (const e of [...events].sort(byEventOrder)) {
+    const own = e.start_date ? Date.parse(e.start_date) : NaN;
+    if (!Number.isNaN(own)) latest = Math.max(latest, own);
+    effective.set(e.id, Number.isNaN(own) ? latest : own);
+  }
   return events
     .filter((e) => e.status === 'live' && e.target_status === 'complete')
-    .sort((a, b) => (b.start_date ? Date.parse(b.start_date) : 0) - (a.start_date ? Date.parse(a.start_date) : 0) || byEventOrder(b, a))
+    .sort((a, b) => (effective.get(b.id) ?? 0) - (effective.get(a.id) ?? 0) || byEventOrder(b, a))
     .slice(0, limit);
 }
 

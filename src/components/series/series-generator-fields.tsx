@@ -103,7 +103,7 @@ export function RoundRobinFields({ form, set, series, catalog, stages, active }:
           onChange={(v) => set('match_days', v.map(Number))}
         >
           <Group gap={6}>
-            {DAY_ORDER.map((d) => <Chip key={d} value={String(d)} size="xs">{DAY_LABELS[d]}</Chip>)}
+            {DAY_ORDER.map((d) => <Chip key={d} value={String(d)} size="xs" variant="outline">{DAY_LABELS[d]}</Chip>)}
           </Group>
         </Chip.Group>
       </div>

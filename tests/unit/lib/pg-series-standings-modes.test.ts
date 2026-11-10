@@ -444,6 +444,39 @@ describe('scope', () => {
     expect(stage1.rows.map((r) => r.rank)).toEqual([1, 1]);
   });
 
+  it('a stage outside the season counts its playoff events even though they do not count toward the season; exhibitions never count', async () => {
+    const { s, play } = await league();
+    const reg = await insertStage(s.seriesId, { name: 'Regular', stage_order: 1 });
+    const po = await insertStage(s.seriesId, { name: 'Playoffs', stage_order: 2, counts_toward_season: false });
+    await play('a', { stage_id: reg.id });
+    await play('b', { stage_id: po.id, role: 'stage_playoff', counts_for_standings: false });
+    await play('b', { stage_id: po.id, role: 'stage_playoff', counts_for_standings: false });
+    await play('a', { stage_id: po.id, role: 'exhibition', counts_for_standings: false });
+
+    const playoffs = (await getSeriesStandingsResponse(pg(), s.seriesId, { scope: po.id }))!;
+    expect(playoffs.events).toHaveLength(2);
+    expect(playoffs.rows.map((r) => [r.name, r.total_points])).toEqual([['Bravo', 6], ['Alpha', 0]]);
+    // the season table is unchanged by them
+    const season = (await getSeriesStandingsResponse(pg(), s.seriesId))!;
+    expect(season.rows.map((r) => [r.name, r.total_points])).toEqual([['Alpha', 3], ['Bravo', 0]]);
+  });
+
+  it('a stage outside the season lists only the entrants that played in it; a season stage still lists everyone', async () => {
+    const s = await createSeriesWithEntrants(pg(), {
+      entrantType: 'team', scoringType: 'Normal', scoringConfig: { mode: 'points', match_win_points: 3, match_loss_points: 0 },
+      entrants: [{ name: 'Alpha', members: ['a1'] }, { name: 'Bravo', members: ['b1'] }, { name: 'Cy', members: ['c1'] }],
+    });
+    const [A, B] = s.entrants.map((e) => e.id);
+    const reg = await insertStage(s.seriesId, { name: 'Regular', stage_order: 1 });
+    const po = await insertStage(s.seriesId, { name: 'Playoffs', stage_order: 2, counts_toward_season: false });
+    await normalMatch(w, s.seriesId, { entrant: A, name: 'Alpha' }, { entrant: B, name: 'Bravo' }, ['a'], { stage_id: po.id, role: 'stage_playoff', counts_for_standings: false });
+
+    const playoffs = (await getSeriesStandingsResponse(pg(), s.seriesId, { scope: po.id }))!;
+    expect(playoffs.rows.map((r) => r.name)).toEqual(['Alpha', 'Bravo']); // Cy did not qualify
+    const regular = (await getSeriesStandingsResponse(pg(), s.seriesId, { scope: reg.id }))!;
+    expect(regular.rows.map((r) => r.name).sort()).toEqual(['Alpha', 'Bravo', 'Cy']);
+  });
+
   it('applies a stage scoring_config over the series config key by key', async () => {
     const { s, play } = await league();
     const st = await insertStage(s.seriesId, { scoring_config: { match_win_points: 5 } });

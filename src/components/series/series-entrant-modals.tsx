@@ -125,7 +125,8 @@ export function PlayerPicker({ value, onChange, excludeKeys, label = 'Player', a
         searchValue={search}
         onSearchChange={setSearch}
         filter={({ options: all }) => all}
-        nothingFoundMessage={searching ? 'Searching...' : search.trim() ? 'No player found' : 'Type to search'}
+        // No message while the box is empty: the dropdown then stays closed instead of covering the manual-entry link below.
+        nothingFoundMessage={searching ? 'Searching...' : search.trim() ? 'No player found' : undefined}
         rightSection={undefined}
         data-autofocus={autoFocus ? true : undefined}
         renderOption={({ option }) => {

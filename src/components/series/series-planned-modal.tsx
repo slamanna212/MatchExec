@@ -31,7 +31,10 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
     ruleset: series.match_defaults?.rules ?? null,
     start_time: null,
   }));
-  const [placement, setPlacement] = useState(() => withRole(defaultPlacement(null, 'stage_playoff'), 'stage_playoff'));
+  const [placement, setPlacement] = useState(() => {
+    const role: SeriesEventRole = stages.length > 0 ? 'stage_playoff' : 'season_playoff';
+    return withRole(defaultPlacement(null, role), role);
+  });
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof PlannedFormState>(key: K, value: PlannedFormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   const gameIds = useMemo(() => allowedGameIds(series, catalog), [series, catalog]);
@@ -74,7 +77,13 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
               radius="xl"
               classNames={classes}
               value={form.source}
-              onChange={(v) => set('source', v as PlannedFormState['source'])}
+              onChange={(v) => {
+                const source = v as PlannedFormState['source'];
+                set('source', source);
+                // The role follows the source (see onPlacement): playoffs that read the whole season decide the champion.
+                const role: SeriesEventRole = source === 'season' ? 'season_playoff' : 'stage_playoff';
+                setPlacement((p) => (p.role === role ? p : withRole(p, role)));
+              }}
               data={[{ value: 'stage', label: 'A stage', disabled: stages.length === 0 }, { value: 'season', label: 'The season' }]}
             />
           </div>

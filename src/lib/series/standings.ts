@@ -82,9 +82,15 @@ async function buildContext(ex: Executor, series: SeriesRow, events: SeriesEvent
 function eventsInScope(all: SeriesEventRow[], stages: SeriesStageRow[], scope: string): SeriesEventRow[] {
   const stageById = new Map(stages.map((s) => [s.id, s]));
   const inScope = all.filter((e) => {
-    if (e.status !== 'live' || !e.counts_for_standings) return false;
-    if (scope === 'season') return !e.stage_id || stageById.get(e.stage_id)?.counts_toward_season !== false;
-    return e.stage_id === scope;
+    if (e.status !== 'live') return false;
+    if (scope === 'season') {
+      return e.counts_for_standings && (!e.stage_id || stageById.get(e.stage_id)?.counts_toward_season !== false);
+    }
+    if (e.stage_id !== scope) return false;
+    // `counts_for_standings` means "counts toward the season table". A stage that is not part of the season exists to get
+    // its own table (playoffs), so everything played in it feeds that table, exhibitions aside.
+    if (stageById.get(scope)?.counts_toward_season === false) return e.role !== 'exhibition';
+    return e.counts_for_standings;
   });
   const stageOrder = (e: SeriesEventRow) => (e.stage_id ? (stageById.get(e.stage_id)?.stage_order ?? 0) : 0);
   return inScope.sort((a, b) => stageOrder(a) - stageOrder(b) || a.event_order - b.event_order || a.id.localeCompare(b.id));
@@ -160,8 +166,10 @@ async function computeResponse(ex: Executor, series: SeriesRow, options: Standin
   }
 
   const entrantById = new Map<string, SeriesEntrantRow>(entrants.map((e) => [e.id, e]));
-  // entrant view of a series with entrants lists every active entrant, even before its first result
-  if (ctx.hasEntrants && !individual) {
+  // entrant view of a series with entrants lists every active entrant, even before its first result. A stage outside
+  // the season (playoffs) only lists the entrants that played in it: the others did not qualify.
+  const ownTableOnly = stage?.counts_toward_season === false;
+  if (ctx.hasEntrants && !individual && !ownTableOnly) {
     for (const e of entrants) {
       if (e.status === 'active' && !aggs.has(e.id)) aggs.set(e.id, { key: e.id, entrantId: e.id, name: e.name, perEvent: new Map() });
     }

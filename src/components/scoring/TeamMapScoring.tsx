@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { JSX } from 'react';
 import { useHotkeys } from '@mantine/hooks';
-import { Text, Badge, Alert, Loader, Group, Stack, Button, Modal, Tooltip, Divider } from '@mantine/core';
+import { Text, Badge, Alert, Loader, Group, Stack, Button, Tooltip, Divider } from '@mantine/core';
 import { IconMap, IconCheck, IconSwords, IconTrophy } from '@tabler/icons-react';
 import { ScorecardUpload } from './ScorecardUpload';
 import type { MatchResult } from '@/shared/types';
@@ -236,7 +236,6 @@ export function TeamMapScoring({
   const [hasStatDefs, setHasStatDefs] = useState(false);
 
   const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [scorecardUploaded, setScorecardUploaded] = useState(false);
 
   useEffect(() => {
@@ -303,7 +302,6 @@ export function TeamMapScoring({
     }
     setPendingTeamId(null);
     setScorecardUploaded(false);
-    setConfirmModalOpen(false);
   };
 
   const handleTeamWin = (teamId: string) => {
@@ -322,8 +320,6 @@ export function TeamMapScoring({
   if (fetchError || error) return <ErrorState error={fetchError || error || ''} />;
   if (matchGames.length === 0) return <EmptyState />;
 
-  const pendingTeamName = teams.find(t => t.id === pendingTeamId)?.team_name ?? 'Selected team';
-
   return (
     <div className={styles.container}>
       {selectedGame ? (
@@ -339,7 +335,7 @@ export function TeamMapScoring({
           scorecardUploaded={scorecardUploaded}
           onScorecardUploaded={() => setScorecardUploaded(true)}
           matchId={matchId}
-          onConfirm={() => setConfirmModalOpen(true)}
+          onConfirm={() => { void handleConfirmResult(); }}
           onDraw={handleDraw}
         />
       ) : (
@@ -347,34 +343,6 @@ export function TeamMapScoring({
           Map not found.
         </Alert>
       )}
-
-      <Modal
-        opened={confirmModalOpen}
-        onClose={() => setConfirmModalOpen(false)}
-        title="Confirm Map Result"
-        size="sm"
-        centered
-      >
-        <Stack gap="lg">
-          <Text>
-            Confirm <Text span fw={700}>{pendingTeamName}</Text> wins{' '}
-            <Text span fw={700}>Map {selectedGame?.round}</Text>? This cannot be undone.
-          </Text>
-          <Group justify="flex-end" gap="sm">
-            <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              color="green"
-              leftSection={<IconCheck size={16} />}
-              loading={submitting}
-              onClick={handleConfirmResult}
-            >
-              Confirm Result
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </div>
   );
 }
