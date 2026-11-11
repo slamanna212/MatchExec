@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { logger } from '@/lib/logger/client';
-import type { SeriesEntrantDto, SeriesStageDto, SeriesStandingsResponse } from '@/shared/series-types';
+import type { SeriesBatchDto, SeriesEntrantDto, SeriesStageDto, SeriesStandingsResponse } from '@/shared/series-types';
 import { entrantsApi } from './series-entrants-api';
 import { scheduleApi } from './series-schedule-api';
 import type { SeriesEventView, SeriesSummary } from './series-shared';
@@ -101,6 +101,7 @@ export function buildSetupChecklist(
   series: Pick<SeriesSummary, 'id' | 'announcements' | 'discord_config' | 'entrant_type'>,
   events: readonly SeriesEventView[],
   data: OverviewData,
+  batches: readonly SeriesBatchDto[] = [],
 ): ChecklistItem[] {
   const editHref = `/series/${series.id}/edit`;
   const items: ChecklistItem[] = [
@@ -111,16 +112,25 @@ export function buildSetupChecklist(
     },
   ];
 
-  const planned = events.filter((e) => e.status === 'planned').length;
-  items.push(events.length > 0
+  const playoffs = events.filter((e) => e.status === 'planned' && !e.match_template).length;
+  const placeholders = events.filter((e) => e.status === 'planned' && e.match_template).length;
+  const live = events.filter((e) => e.status === 'live').length;
+  const plannedSchedules = batches.filter((b) => b.status === 'planned').length;
+  const parts = [
+    live > 0 && `${plural(live, 'event')} scheduled`,
+    plannedSchedules > 0 && `${plural(plannedSchedules, 'schedule')} generated at registration close`,
+    placeholders > 0 && plural(placeholders, 'match placeholder'),
+    playoffs > 0 && plural(playoffs, 'playoff placeholder'),
+  ].filter(Boolean);
+  items.push(parts.length > 0
     ? {
       key: 'events', label: 'Schedule', state: 'done',
-      description: `${plural(events.length - planned, 'event')} scheduled${planned > 0 ? `, ${plural(planned, 'playoff placeholder')}` : ''}.`,
+      description: `${parts.join(', ')}.`,
       action: { label: 'Open schedule', tab: 'schedule' },
     }
     : {
       key: 'events', label: 'Schedule', state: 'todo',
-      description: 'Add matches, tournaments or generate a schedule, so players know what they are signing up for.',
+      description: 'Plan the season (a round robin, matches, playoffs), so players know what they are signing up for. It is generated when registration closes.',
       action: { label: 'Build schedule', tab: 'schedule' },
     });
 

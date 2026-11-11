@@ -76,6 +76,13 @@ export function zonedToIso(date: string, time: string, tz: string): string | nul
   return Number.isNaN(out.getTime()) ? null : out.toISOString();
 }
 
+/** ISO instant -> the local date-time picker value ('YYYY-MM-DD HH:mm:ss'), null for none. */
+export function isoToPickerValue(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const { date, time } = isoToZoned(iso, browserTimeZone());
+  return `${date} ${time}:00`;
+}
+
 // ─── editable preview rows ───────────────────────────────────────────────────
 
 export interface EditableFixture extends GeneratedFixture {
@@ -210,9 +217,10 @@ export function defaultRoundRobinForm(overrides: Partial<RoundRobinFormState> = 
 
 const sortedUnique = <T extends string | number>(list: readonly T[]): T[] => [...new Set(list)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-export function validateRoundRobinForm(form: RoundRobinFormState, activeEntrantCount: number): string | null {
+/** `planned`: a placeholder generated later with every approved entrant, so there is no entrant count to check yet. */
+export function validateRoundRobinForm(form: RoundRobinFormState, activeEntrantCount: number, planned = false): string | null {
   const count = form.all_entrants ? activeEntrantCount : form.entrant_ids.length;
-  if (count < 2) return 'Pick at least two entrants';
+  if (!planned && count < 2) return 'Pick at least two entrants';
   if (!form.start_date || !DATE_RE.test(form.start_date)) return 'Pick the first possible match day';
   if (form.match_days.length === 0) return 'Pick at least one match day';
   if (form.time_slots.length === 0) return 'Add at least one time slot';
@@ -237,6 +245,28 @@ export function buildRoundRobinConfig(form: RoundRobinFormState): RoundRobinConf
     points_multiplier: form.points_multiplier,
     match: { ...matchTemplatePayload(form.template), name_template: form.name_template.trim() || '{home} vs {away}' },
   };
+}
+
+/** Form state of a stored round robin config (editing a planned schedule). */
+export function roundRobinFormFromConfig(config: RoundRobinConfig): RoundRobinFormState {
+  const { name_template: nameTemplate, ...match } = config.match ?? {};
+  return defaultRoundRobinForm({
+    stage_id: config.stage_id ?? null,
+    all_entrants: !config.entrant_ids,
+    entrant_ids: config.entrant_ids ?? [],
+    double: config.double,
+    divisions: config.divisions,
+    start_date: config.start_date || null,
+    match_days: [...config.match_days],
+    time_slots: [...config.time_slots],
+    timezone: config.timezone ?? browserTimeZone(),
+    concurrent_matches: config.concurrent_matches ?? 1,
+    max_per_entrant_per_week: config.max_per_entrant_per_week ?? 1,
+    skip_dates: [...(config.skip_dates ?? [])],
+    points_multiplier: config.points_multiplier ?? 1,
+    name_template: nameTemplate ?? '{home} vs {away}',
+    template: { game_id: match.game_id ?? null, maps: [...(match.maps ?? [])], rounds: null, rules: match.rules ?? null },
+  });
 }
 
 // ─── race calendar ───────────────────────────────────────────────────────────
@@ -276,9 +306,9 @@ export function defaultRaceCalendarForm(overrides: Partial<RaceCalendarFormState
   };
 }
 
-export function validateRaceCalendarForm(form: RaceCalendarFormState, activeEntrantCount: number): string | null {
+export function validateRaceCalendarForm(form: RaceCalendarFormState, activeEntrantCount: number, planned = false): string | null {
   const count = form.all_entrants ? activeEntrantCount : form.entrant_ids.length;
-  if (count < 1) return 'Pick at least one entrant';
+  if (!planned && count < 1) return 'Pick at least one entrant';
   if (!Number.isInteger(form.count) || form.count < 1 || form.count > 100) return 'Number of events must be between 1 and 100';
   if (!form.start_date || !DATE_RE.test(form.start_date)) return 'Pick the date of the first event';
   if (!Number.isInteger(form.interval_days) || form.interval_days < 1) return 'Days between events must be 1 or more';
@@ -312,6 +342,40 @@ export function buildRaceCalendarConfig(form: RaceCalendarFormState): RaceCalend
     config.tournament = tournament;
   }
   return config;
+}
+
+/** Form state of a stored race calendar config (editing a planned schedule). */
+export function raceCalendarFormFromConfig(config: RaceCalendarConfig): RaceCalendarFormState {
+  const tournament = config.tournament ?? {};
+  return defaultRaceCalendarForm({
+    stage_id: config.stage_id ?? null,
+    all_entrants: !config.entrant_ids,
+    entrant_ids: config.entrant_ids ?? [],
+    count: config.count,
+    start_date: config.start_date || null,
+    interval_days: config.interval_days,
+    time: config.time,
+    timezone: config.timezone ?? browserTimeZone(),
+    name_template: config.name_template ?? 'Round {n}',
+    points_multiplier: config.points_multiplier ?? 1,
+    event_kind: config.event_kind,
+    template: config.event_kind === 'match'
+      ? { game_id: config.match?.game_id ?? null, maps: [...(config.match?.maps ?? [])], rounds: null, rules: config.match?.rules ?? null }
+      : { game_id: tournament.game_id ?? null, maps: [], rounds: tournament.rounds_per_match ?? null, rules: tournament.ruleset ?? null },
+    tournament_format: tournament.format ?? 'cumulative-points',
+  });
+}
+
+/** One line describing a schedule config ("Round robin · Tue 19:00 from 2026-12-01", "8 rounds every 7 days from ..."). */
+export function describeScheduleConfig(kind: 'round_robin' | 'race_calendar', config: RoundRobinConfig | RaceCalendarConfig): string {
+  if (kind === 'round_robin') {
+    const c = config as RoundRobinConfig;
+    const days = [...c.match_days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => DAY_LABELS[d]).join('/');
+    return `${c.double ? 'Double round robin' : 'Round robin'} · ${days} ${c.time_slots.join(', ')} · from ${c.start_date}`;
+  }
+  const c = config as RaceCalendarConfig;
+  const every = c.interval_days === 7 ? 'weekly' : `every ${c.interval_days} days`;
+  return `${c.count} ${c.count === 1 ? 'round' : 'rounds'} ${every} at ${c.time} · from ${c.start_date}`;
 }
 
 // ─── playoff placeholder ─────────────────────────────────────────────────────

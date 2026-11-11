@@ -68,7 +68,7 @@ describe('CreateSeriesPage', () => {
       roots.push(root);
       root.render(
         <MantineProvider>
-          <MemoryRouter initialEntries={['/series/create?step=5']}>
+          <MemoryRouter initialEntries={['/series/create?step=6']}>
             <Where />
             <Routes>
               <Route path="/series/create" element={<CreateSeriesPage />} />
@@ -118,7 +118,7 @@ describe('CreateSeriesPage', () => {
       roots.push(root);
       root.render(
         <MantineProvider>
-          <MemoryRouter initialEntries={['/series/create?step=5']}>
+          <MemoryRouter initialEntries={['/series/create?step=6']}>
             <Routes>
               <Route path="/series/create" element={<CreateSeriesPage />} />
               <Route path="/series/:seriesId" element={<div>series page</div>} />
@@ -140,10 +140,76 @@ describe('CreateSeriesPage', () => {
       scoring_config: { mode: 'head_to_head' },
       discord_config: { registration_posts: true, weekly_schedule: true, standings_posts: true, schedule_lead_hours: 48 },
     });
+    expect(post?.body).not.toHaveProperty('layout'); // nothing planned: no layout sent
     const copy = calls.find((c) => c.url === '/api/series/series-new/entrants/copy');
     expect(copy?.body).toEqual({ from_series_id: 'series-old', include_members: false });
     expect(showWarning).toHaveBeenCalledWith('Skipped: Dup Team', 'Entrants copied with problems');
     expect(container.textContent).toContain('series page');
+  });
+
+  it('orders the steps Details, Setup, Scoring, Schedule, Notifications, Review', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
+    sessionStorage.setItem('seriesFormData', JSON.stringify({ name: 'Order' }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    divs.push(container);
+    act(() => {
+      const root = createRoot(container);
+      roots.push(root);
+      root.render(
+        <MantineProvider>
+          <MemoryRouter initialEntries={['/series/create?step=4']}>
+            <Routes><Route path="/series/create" element={<CreateSeriesPage />} /></Routes>
+          </MemoryRouter>
+        </MantineProvider>,
+      );
+    });
+    const labels = [...container.querySelectorAll('.mantine-Stepper-stepLabel')].map((el) => el.textContent);
+    expect(labels).toEqual(['Details', 'Setup', 'Scoring', 'Schedule', 'Notifications', 'Review']);
+    expect(container.textContent).toContain('Season layout'); // step 4 is the schedule builder
+    expect(container.textContent).toContain('League + playoffs');
+  });
+
+  it('sends the planned season layout with the create request', async () => {
+    const layout = {
+      stages: [{ key: 'st-1', name: 'Regular season', counts_toward_season: true }],
+      items: [{ key: 'm-1', type: 'match', input: { stage_id: 'st-1', match: { name: 'Opener', start_date: '2030-01-01T19:00:00.000Z' } } }],
+    };
+    sessionStorage.setItem('seriesFormData', JSON.stringify({ name: 'Planned', scoring_type: 'Normal', layout }));
+    const calls: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body as string) : undefined });
+      if (url === '/api/series' && init?.method === 'POST') return { ok: true, status: 201, json: async () => ({ id: 'series-new' }) };
+      if (url === '/api/games') return { ok: true, status: 200, json: async () => [] };
+      return { ok: true, status: 200, json: async () => ({}) };
+    }));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    divs.push(container);
+    act(() => {
+      const root = createRoot(container);
+      roots.push(root);
+      root.render(
+        <MantineProvider>
+          <MemoryRouter initialEntries={['/series/create?step=6']}>
+            <Routes>
+              <Route path="/series/create" element={<CreateSeriesPage />} />
+              <Route path="/series/:seriesId" element={<div>series page</div>} />
+            </Routes>
+          </MemoryRouter>
+        </MantineProvider>,
+      );
+    });
+    await flush();
+    expect(container.textContent).toContain('Opener (entrants assigned at registration close)');
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Create Series');
+    await act(async () => { create!.click(); });
+    await flush();
+    const post = calls.find((c) => c.url === '/api/series' && c.method === 'POST');
+    expect(post?.body?.layout).toEqual({
+      stages: [{ key: 'st-1', name: 'Regular season', counts_toward_season: true }],
+      items: [{ type: 'match', stage_id: 'st-1', match: { name: 'Opener', start_date: '2030-01-01T19:00:00.000Z' } }],
+    });
   });
 
   it('still returns to Details when a later step is opened without a name', async () => {

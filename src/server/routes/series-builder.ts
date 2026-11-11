@@ -6,13 +6,16 @@
 import { Hono } from 'hono';
 import { db } from '../../../lib/db';
 import {
-  SeriesError, commitRaceCalendar, commitRoundRobin, createSeriesMatchEvent, createSeriesPlannedEvent, createSeriesTournamentEvent,
-  deleteBatch, getEntrant, getSeriesById, getSeriesEventDto, listSeriesEventDtos, previewRaceCalendar, previewRoundRobin,
-  regenerateBatch, validateCreateMatchBody, validateCreatePlannedBody, validateCreateTournamentBody, validateFixtures,
-  validateRaceCalendarConfig, validateRoundRobinConfig, validateWithdrawBody, withdrawEntrant,
+  SeriesError, closeRegistration, commitRaceCalendar, commitRoundRobin, createPlannedBatch, createPlannedMatch, createSeriesMatchEvent,
+  createSeriesPlannedEvent, createSeriesTournamentEvent, deleteBatch, fillPlannedMatch, generatePlannedBatch, getEntrant, getSeriesById,
+  getSeriesEventDto, listBatches, listSeriesEventDtos, previewPlannedBatch, previewRaceCalendar, previewRoundRobin, regenerateBatch,
+  updatePlannedBatch, updatePlannedMatch, validateCloseRegistrationBody, validateCreateMatchBody, validateCreatePlannedBody,
+  validateCreatePlannedMatchBody, validateCreateTournamentBody, validateEntrantIds, validateFixtures, validateGeneratePlannedBody,
+  validatePlannedBatchBody, validateRaceCalendarConfig, validateRoundRobinConfig, validateWithdrawBody, withdrawEntrant,
 } from '@/lib/series';
 import type {
-  CreateSeriesMatchInput, CreateSeriesPlannedEventInput, CreateSeriesTournamentInput, GeneratedFixture, RaceCalendarConfig, RoundRobinConfig,
+  CloseRegistrationInput, CreatePlannedBatchInput, CreateSeriesMatchInput, CreateSeriesPlannedEventInput, CreateSeriesPlannedMatchInput,
+  CreateSeriesTournamentInput, GeneratePlannedBatchInput, GeneratedFixture, RaceCalendarConfig, RoundRobinConfig,
 } from '../../../shared/series-types';
 import { jsonError } from '../http';
 import { guard, readJsonObject } from './series-helpers';
@@ -75,6 +78,111 @@ export const seriesBuilderRoutes = new Hono()
     if (invalid) return jsonError(c, invalid, 400);
     const id = await createSeriesPlannedEvent(db, seriesId, body as unknown as CreateSeriesPlannedEventInput);
     return c.json({ event: await eventDto(seriesId, id) }, 201);
+  }))
+
+  .post('/:seriesId/events/planned-match', (c) => guard(c, 'Error creating match placeholder', 'Failed to create match placeholder', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    const invalid = validateCreatePlannedMatchBody(body);
+    if (invalid) return jsonError(c, invalid, 400);
+    const id = await createPlannedMatch(db, seriesId, body as unknown as CreateSeriesPlannedMatchInput);
+    return c.json({ event: await eventDto(seriesId, id) }, 201);
+  }))
+
+  .patch('/:seriesId/events/:eventId/template', (c) => guard(c, 'Error updating match placeholder', 'Failed to update match placeholder', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    const invalid = validateCreatePlannedMatchBody({ match: body.match });
+    if (invalid) return jsonError(c, invalid, 400);
+    const eventId = c.req.param('eventId');
+    await updatePlannedMatch(db, seriesId, eventId, body.match as CreateSeriesPlannedMatchInput['match']);
+    return c.json({ event: await eventDto(seriesId, eventId) });
+  }))
+
+  .post('/:seriesId/events/:eventId/fill', (c) => guard(c, 'Error filling match placeholder', 'Failed to create the match', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    if (!Array.isArray(body.entrant_ids)) return jsonError(c, 'entrant_ids is required', 400);
+    const invalid = validateEntrantIds(body.entrant_ids);
+    if (invalid) return jsonError(c, invalid, 400);
+    const eventId = c.req.param('eventId');
+    const created = await fillPlannedMatch(db, seriesId, eventId, body.entrant_ids as string[]);
+    return c.json({ event: await eventDto(seriesId, eventId), match_id: created.match_id }, 201);
+  }))
+
+  .post('/:seriesId/close-registration', (c) => guard(c, 'Error closing series registration', 'Failed to close registration', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    const invalid = validateCloseRegistrationBody(body);
+    if (invalid) return jsonError(c, invalid, 400);
+    const result = await closeRegistration(db, seriesId, body as CloseRegistrationInput);
+    return c.json({ ...result, series: await getSeriesById(db, seriesId) });
+  }))
+
+  // ── planned batches (round robins / race calendars generated later) ───────
+  .get('/:seriesId/batches', (c) => guard(c, 'Error listing series batches', 'Failed to list schedules', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    return c.json({ batches: await listBatches(db, seriesId) });
+  }))
+
+  .post('/:seriesId/batches', (c) => guard(c, 'Error creating planned schedule', 'Failed to create planned schedule', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    const invalid = validatePlannedBatchBody(body);
+    if (invalid) return jsonError(c, invalid, 400);
+    const id = await createPlannedBatch(db, seriesId, body as unknown as CreatePlannedBatchInput);
+    return c.json({ batch: (await listBatches(db, seriesId)).find((b) => b.id === id) }, 201);
+  }))
+
+  .patch('/:seriesId/batches/:batchId', (c) => guard(c, 'Error updating planned schedule', 'Failed to update planned schedule', async () => {
+    const seriesId = c.req.param('seriesId');
+    const batchId = c.req.param('batchId');
+    await requireSeries(seriesId);
+    const body = await readJsonObject(c);
+    if (!body) return jsonError(c, 'Invalid JSON body', 400);
+    if (body.stage_id !== undefined && body.stage_id !== null && typeof body.stage_id !== 'string') return jsonError(c, 'stage_id must be a string or null', 400);
+    const batch = (await listBatches(db, seriesId)).find((b) => b.id === batchId);
+    if (!batch) return jsonError(c, 'Batch not found in this series', 404);
+    if (body.config !== undefined) {
+      const invalid = validatePlannedBatchBody({ kind: batch.kind, config: body.config });
+      if (invalid) return jsonError(c, invalid, 400);
+    }
+    await updatePlannedBatch(db, seriesId, batchId, {
+      ...(body.config !== undefined ? { config: body.config as RoundRobinConfig | RaceCalendarConfig } : {}),
+      ...(body.stage_id !== undefined ? { stage_id: body.stage_id as string | null } : {}),
+    });
+    return c.json({ batch: (await listBatches(db, seriesId)).find((b) => b.id === batchId) });
+  }))
+
+  .post('/:seriesId/batches/:batchId/preview', (c) => guard(c, 'Error previewing planned schedule', 'Failed to preview the schedule', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = (await readJsonObject(c)) ?? {};
+    const invalid = validateGeneratePlannedBody(body);
+    if (invalid) return jsonError(c, invalid, 400);
+    return c.json(await previewPlannedBatch(db, seriesId, c.req.param('batchId'), body as GeneratePlannedBatchInput));
+  }))
+
+  .post('/:seriesId/batches/:batchId/generate', (c) => guard(c, 'Error generating planned schedule', 'Failed to generate the schedule', async () => {
+    const seriesId = c.req.param('seriesId');
+    await requireSeries(seriesId);
+    const body = (await readJsonObject(c)) ?? {};
+    const invalid = validateGeneratePlannedBody(body);
+    if (invalid) return jsonError(c, invalid, 400);
+    const { division_overrides: _ignored, ...input } = body as GeneratePlannedBatchInput;
+    const created = await generatePlannedBatch(db, seriesId, c.req.param('batchId'), input);
+    return c.json({ batch_id: created.batch_id, events: await eventDtos(seriesId, created.event_ids) }, 201);
   }))
 
   // ── generators ────────────────────────────────────────────────────────────

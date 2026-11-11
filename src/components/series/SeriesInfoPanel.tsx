@@ -14,6 +14,8 @@ interface SeriesInfoPanelProps {
   /** created -> registration. Optional so older callers keep working (the button is then hidden). */
   onOpenRegistration?: () => void;
   onAddEvent: () => void;
+  /** Placeholders exist: starting the season builds the schedule (the button says so). */
+  hasPlannedWork?: boolean;
   onEdit: () => void;
   onComplete: () => void;
   onCancel: () => void;
@@ -33,7 +35,7 @@ function EnabledBadge({ on }: { on: boolean }): JSX.Element {
 }
 
 export function SeriesInfoPanel({
-  series, onActivate, onOpenRegistration, onAddEvent, onEdit, onComplete, onCancel,
+  series, onActivate, onOpenRegistration, onAddEvent, hasPlannedWork, onEdit, onComplete, onCancel,
 }: SeriesInfoPanelProps): JSX.Element {
   const finished = series.status === 'complete' || series.status === 'cancelled';
   // Finished series have no next event, so identify them by their last event instead.
@@ -116,10 +118,17 @@ export function SeriesInfoPanel({
           <Card withBorder radius="md" padding="lg" shadow="sm">
             <Stack gap="xs">
               {series.status === 'created' && onOpenRegistration && (
-                <Button fullWidth variant="light" color="yellow" onClick={onOpenRegistration}>Open registration</Button>
+                <Button fullWidth variant="filled" color="yellow" onClick={onOpenRegistration}>Open registration</Button>
               )}
-              {(series.status === 'created' || series.status === 'registration') && (
-                <Button fullWidth variant="filled" color="violet" onClick={onActivate}>Start season</Button>
+              {series.status === 'registration' && (
+                <Button fullWidth variant="filled" color="violet" onClick={onActivate}>
+                  {hasPlannedWork ? 'Close registration & build schedule' : 'Close registration & start'}
+                </Button>
+              )}
+              {series.status === 'created' && (
+                <Button fullWidth variant={onOpenRegistration ? 'light' : 'filled'} color="violet" onClick={onActivate}>
+                  {hasPlannedWork ? 'Start season now (no registration)' : 'Start season'}
+                </Button>
               )}
               {series.status === 'active' && (
                 <Button fullWidth variant="filled" color="violet" onClick={onAddEvent}>Add Event</Button>

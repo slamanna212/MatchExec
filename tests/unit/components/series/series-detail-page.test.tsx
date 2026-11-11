@@ -81,6 +81,7 @@ interface StubOptions {
   channels?: unknown[];
   standingsRows?: unknown[];
   series?: Record<string, unknown>;
+  batches?: unknown[];
 }
 
 function stubApi(status: Status, opts: StubOptions = {}) {
@@ -99,6 +100,7 @@ function stubApi(status: Status, opts: StubOptions = {}) {
     }
     if (url === '/api/channels') return json(opts.channels ?? []);
     if (url.endsWith('/events')) return json({ events: opts.events ?? EVENTS });
+    if (url.endsWith('/batches')) return json({ batches: opts.batches ?? [] });
     if (url.endsWith('/stages')) return json({ stages: opts.stages ?? STAGES });
     if (url.includes('/entrants')) return json({ entrants: opts.entrants ?? [] });
     if (/^\/api\/games\/[^/]+\/modes$/.test(url)) return json([{ id: 'm1', name: 'Control', scoring_type: opts.scoringType ?? 'Normal', team_size: 5 }]);
@@ -512,12 +514,15 @@ const ENTRANTS = ['a', 'b', 'c'].map((id, i) => ({
 }));
 
 describe('add event menu', () => {
-  it('disables the builder entries without entrants', async () => {
+  it('disables the create-now entries without entrants, but not the placeholders', async () => {
     stubApi('active');
     await renderPage('/series/s1?tab=schedule');
     await act(async () => { buttonByText('Add event')!.click(); });
     expect(menuItem('Single match').getAttribute('data-disabled')).not.toBeNull();
-    expect(document.body.textContent).toContain('Add and approve entrants to create events');
+    expect(document.body.textContent).toContain('Create now (needs approved entrants)');
+    for (const item of ['Round robin (generated later)', 'Match placeholder', 'Playoff placeholder']) {
+      expect(menuItem(item).getAttribute('data-disabled')).toBeNull();
+    }
   });
 
   it.each([
@@ -595,5 +600,40 @@ describe('add event menu', () => {
     await act(async () => { await Promise.resolve(); });
     const post = calls.find((c) => c.method === 'POST' && c.url === '/api/series/s1/stages');
     expect(post?.body).toEqual({ name: 'Group stage', counts_toward_season: true });
+  });
+});
+
+const PLANNED_BATCH = {
+  id: 'b1', series_id: 's1', stage_id: null, kind: 'round_robin', status: 'planned', position: 1, created_at: '', event_count: 0,
+  config: { double: false, divisions: 'none', start_date: '2030-01-01', match_days: [2], time_slots: ['19:00'], timezone: 'UTC', match: {} },
+};
+
+describe('season layout placeholders', () => {
+  it('shows a planned schedule in the Schedule tab', async () => {
+    stubApi('registration', { events: [], stages: [], batches: [PLANNED_BATCH] });
+    await renderPage('/series/s1?tab=schedule');
+    const row = document.querySelector('[data-testid="planned-batch-row"]');
+    expect(row?.textContent).toContain('Round robin');
+    expect(row?.textContent).toContain('Generated at registration close');
+    expect(row?.textContent).toContain('Tue 19:00');
+    expect(document.body.textContent).toContain('Schedule (1)');
+  });
+
+  it('closing registration with placeholders opens the build dialog instead of transitioning', async () => {
+    const calls = stubApi('registration', { events: [], stages: [], batches: [PLANNED_BATCH], entrants: ENTRANTS });
+    await renderPage('/series/s1');
+    expect(document.querySelector('[data-testid="close-registration-card"]')?.textContent).toContain('generate the planned schedule');
+    await act(async () => { buttonByText('Close registration & build schedule')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(document.body.textContent).toContain('Close registration and build the schedule');
+    expect(calls.some((c) => c.url.endsWith('/transition'))).toBe(false);
+  });
+
+  it('closing registration without placeholders just starts the season', async () => {
+    const calls = stubApi('registration', { events: [], stages: [], batches: [] });
+    await renderPage('/series/s1');
+    await act(async () => { buttonByText('Close registration & start')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(calls.find((c) => c.url.endsWith('/transition'))?.body).toEqual({ status: 'active' });
   });
 });

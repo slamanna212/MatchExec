@@ -1,7 +1,9 @@
 import type { JSX } from 'react';
 import { Stack, Group, Text, Card, Badge, Progress, SimpleGrid, Alert, Button } from '@mantine/core';
-import { IconBan, IconUserExclamation } from '@tabler/icons-react';
-import type { SeriesStageDto } from '@/shared/series-types';
+import { IconBan, IconUserExclamation, IconCalendarTime } from '@tabler/icons-react';
+import type { SeriesBatchDto, SeriesStageDto } from '@/shared/series-types';
+import { PlayoffPictureSection } from './series-overview-layout';
+import { plannedWork } from './series-schedule-helpers';
 import { useOverviewData } from './series-overview-data';
 import type { OverviewData } from './series-overview-data';
 import { ChampionBanner, ResultsList, StandingsSnapshot, StatTile, UpNextList } from './series-overview-parts';
@@ -13,6 +15,9 @@ import type { SeriesEventView, SeriesSummary } from './series-shared';
 interface SeriesOverviewPanelProps {
   series: SeriesSummary;
   events: SeriesEventView[];
+  batches?: SeriesBatchDto[];
+  /** Opens the close-registration dialog (or starts the season when nothing is planned). */
+  onStartSeason?: () => void;
   /** Bumped by the page after every reload, so the overview's extras stay in step with the series. */
   refreshToken: number;
   onOpenTab: OpenTab;
@@ -22,8 +27,10 @@ interface SeriesOverviewPanelProps {
 interface ViewProps {
   series: SeriesSummary;
   events: SeriesEventView[];
+  batches: SeriesBatchDto[];
   data: OverviewData;
   onOpenTab: OpenTab;
+  refreshToken: number;
 }
 
 function stageProgress(stage: SeriesStageDto, events: readonly SeriesEventView[]): { done: number; total: number } {
@@ -63,10 +70,20 @@ function SeasonProgressCard({ series, events, stages }: { series: SeriesSummary;
 }
 
 /** Season running: progress, what is next, the latest results and the top of the table. */
-function ActiveOverview({ series, events, data, onOpenTab }: ViewProps): JSX.Element {
+function ActiveOverview({ series, events, batches, data, onOpenTab, refreshToken }: ViewProps): JSX.Element {
   const pending = data.entrants?.filter((e) => e.status === 'pending').length ?? 0;
+  const work = plannedWork(events, batches);
+  const leftover = work.batches.length + work.matches.length;
   return (
     <Stack gap="lg">
+      {leftover > 0 && (
+        <Alert color="violet" variant="light" icon={<IconCalendarTime size={16} />}>
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">{leftover} {leftover === 1 ? 'placeholder is' : 'placeholders are'} not filled in yet (generate or assign {leftover === 1 ? 'it' : 'them'} in the Schedule).</Text>
+            <Button size="compact-xs" variant="light" color="violet" onClick={() => onOpenTab('schedule')}>Schedule</Button>
+          </Group>
+        </Alert>
+      )}
       {pending > 0 && (
         <Alert color="yellow" variant="light" icon={<IconUserExclamation size={16} />}>
           <Group justify="space-between" wrap="nowrap">
@@ -79,6 +96,7 @@ function ActiveOverview({ series, events, data, onOpenTab }: ViewProps): JSX.Ele
       <UpNextList series={series} events={events} limit={3} onOpenTab={onOpenTab} />
       <ResultsList events={events} limit={3} />
       <StandingsSnapshot standings={data.standings} limit={5} onOpenTab={onOpenTab} />
+      <PlayoffPictureSection series={series} events={events} refreshToken={refreshToken} onOpenTab={onOpenTab} />
     </Stack>
   );
 }
@@ -121,12 +139,12 @@ function CancelledOverview({ series, events, data }: ViewProps): JSX.Element {
 }
 
 /** Overview tab: a different view per series status (setup, registration, season, recap). */
-export function SeriesOverviewPanel({ series, events, refreshToken, onOpenTab, onChanged }: SeriesOverviewPanelProps): JSX.Element {
+export function SeriesOverviewPanel({ series, events, batches = [], refreshToken, onOpenTab, onChanged, onStartSeason }: SeriesOverviewPanelProps): JSX.Element {
   const data = useOverviewData(series, refreshToken);
-  const props = { series, events, data, onOpenTab };
+  const props = { series, events, batches, data, onOpenTab, refreshToken };
   switch (series.status) {
     case 'created': return <DraftOverview {...props} onChanged={onChanged} />;
-    case 'registration': return <RegistrationOverview {...props} onChanged={onChanged} />;
+    case 'registration': return <RegistrationOverview {...props} onChanged={onChanged} onStartSeason={onStartSeason} />;
     case 'complete': return <CompleteOverview {...props} />;
     case 'cancelled': return <CancelledOverview {...props} />;
     default: return <ActiveOverview {...props} />;

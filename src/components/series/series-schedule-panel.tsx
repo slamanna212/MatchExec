@@ -4,8 +4,12 @@ import { Stack, Group, Text, Card, Button, Alert, Loader, Center } from '@mantin
 import { modals } from '@mantine/modals';
 import { IconPlus, IconLock, IconListDetails, IconAlertCircle } from '@tabler/icons-react';
 import { EmptyState } from '@/components/EmptyState';
-import type { SeriesScoringConfig, SeriesStageDto } from '@/shared/series-types';
+import type { SeriesBatchDto, SeriesScoringConfig, SeriesStageDto } from '@/shared/series-types';
 import { useSeriesEntrants } from './series-entrants-api';
+import { schedulableEntrants } from './series-fixtures';
+import {
+  FillMatchModal, GenerateBatchModal, PlannedMatchModal, PlannedScheduleModal, ProjectedBracketModal, plannedMatchInputOf,
+} from './series-placeholder-modals';
 import { SeriesAddEventMenu } from './series-add-event-menu';
 import { EditSeriesEventModal } from './series-event-modals';
 import { SeedPlayoffsModal } from './series-seed-modal';
@@ -19,6 +23,8 @@ import type { SeriesEventView, SeriesSummary } from './series-shared';
 interface SeriesSchedulePanelProps {
   series: SeriesSummary;
   events: SeriesEventView[];
+  /** The series' schedules (planned ones render as placeholders). */
+  batches?: SeriesBatchDto[];
   /** Called after any change so the page reloads the series, events and standings. */
   onChanged: () => void;
 }
@@ -34,7 +40,7 @@ const confirm = (title: string, body: string, label: string, onConfirm: () => vo
 };
 
 /** Schedule tab: stages as sections with their events, the Add event menu, stage management, batch actions and playoff seeding. */
-export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedulePanelProps): JSX.Element {
+export function SeriesSchedulePanel({ series, events, batches = [], onChanged }: SeriesSchedulePanelProps): JSX.Element {
   const level = editLevel(series.status);
   const { stages, loading: stagesLoading, error: stagesError, reload: reloadStages } = useSeriesStages(series.id);
   const { entrants } = useSeriesEntrants(series.id);
@@ -43,8 +49,14 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
   const [seeding, setSeeding] = useState<SeriesEventView | null>(null);
   const [stageForm, setStageForm] = useState<{ open: boolean; stage: SeriesStageDto | null }>({ open: false, stage: null });
   const [scoringStage, setScoringStage] = useState<SeriesStageDto | null>(null);
+  const [filling, setFilling] = useState<SeriesEventView | null>(null);
+  const [editingMatch, setEditingMatch] = useState<SeriesEventView | null>(null);
+  const [bracketOf, setBracketOf] = useState<SeriesEventView | null>(null);
+  const [editingBatch, setEditingBatch] = useState<SeriesBatchDto | null>(null);
+  const [generating, setGenerating] = useState<SeriesBatchDto | null>(null);
 
-  const sections = useMemo(() => buildSchedule(stages, events), [stages, events]);
+  const sections = useMemo(() => buildSchedule(stages, events, batches), [stages, events, batches]);
+  const canFill = schedulableEntrants(entrants).length >= 2;
   const seedableIds = useMemo(() => {
     const ids = new Set(completedSeedable);
     for (const e of events) if (isSeedable(e, stages)) ids.add(e.id);
@@ -136,6 +148,20 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
       void act(`series-stage-counts-${stage.id}`, 'Updating stage...', 'Stage updated',
         () => scheduleApi.updateStage(series.id, stage.id, { counts_toward_season: !stage.counts_toward_season }));
     },
+    fillMatch: setFilling,
+    editPlannedMatch: setEditingMatch,
+    showBracket: setBracketOf,
+    editPlannedBatch: setEditingBatch,
+    generateBatch: setGenerating,
+    movePlannedBatch: (batch, stageId) => {
+      void act(`series-move-batch-${batch.id}`, 'Moving schedule...', 'Schedule moved', () => scheduleApi.updatePlannedBatch(series.id, batch.id, { stage_id: stageId }));
+    },
+    deletePlannedBatch: (batch) => confirm(
+      'Remove planned schedule',
+      `Remove this planned ${batch.kind === 'round_robin' ? 'round robin' : 'race calendar'}? Nothing was generated from it yet.`,
+      'Remove',
+      () => { void act(`series-remove-batch-${batch.id}`, 'Removing...', 'Planned schedule removed', () => scheduleApi.removeBatch(series.id, batch.id)); },
+    ),
     deleteStage: (stage) => confirm(
       'Delete stage',
       `Delete "${stage.name}"? Its events are kept and move to Unstaged.`,
@@ -152,9 +178,11 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
     SCHEDULE_HANDLER_KEYS.map((key) => [key, (...args: unknown[]) => (handlerRef.current[key] as (...a: unknown[]) => void)(...args)]),
   ) as unknown as ScheduleHandlers, []);
   const nextEventId = series.next_event?.id ?? null;
+  const gameName = series.series_game?.game_name ?? null;
+  const gameColor = series.series_game?.game_color ?? null;
   const actions = useMemo<ScheduleActions>(
-    () => ({ ...handlers, level, stages, seedableIds, nextEventId }),
-    [handlers, level, stages, seedableIds, nextEventId],
+    () => ({ ...handlers, level, stages, seedableIds, nextEventId, canFill, gameName, gameColor }),
+    [handlers, level, stages, seedableIds, nextEventId, canFill, gameName, gameColor],
   );
 
   const submitStage = async (values: { name: string; counts_toward_season: boolean }) => {
@@ -173,7 +201,7 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
     if (done) setScoringStage(null);
   };
 
-  const hasContent = stages.length > 0 || events.length > 0;
+  const hasContent = stages.length > 0 || events.length > 0 || batches.some((b) => b.status === 'planned');
   const editable = level !== 'none';
 
   return (
@@ -208,7 +236,7 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
           <EmptyState
             icon={IconListDetails}
             title="No events yet"
-            description="Add matches, tournaments or a whole generated schedule to this series"
+            description="Plan the season with placeholders (generated when registration closes), or create matches and tournaments right away"
           />
         </Card>
       ) : (
@@ -227,6 +255,35 @@ export function SeriesSchedulePanel({ series, events, onChanged }: SeriesSchedul
         onSaved={refresh}
       />
       <SeedPlayoffsModal seriesId={series.id} event={seeding} onClose={() => setSeeding(null)} onSeeded={refresh} />
+      <FillMatchModal series={series} event={filling} entrants={entrants} onClose={() => setFilling(null)} onFilled={refresh} />
+      <ProjectedBracketModal seriesId={series.id} event={bracketOf} onClose={() => setBracketOf(null)} />
+      <PlannedMatchModal
+        opened={editingMatch !== null}
+        series={series}
+        stages={stages}
+        initial={editingMatch ? plannedMatchInputOf(editingMatch) : null}
+        templateOnly
+        onClose={() => setEditingMatch(null)}
+        onSubmit={async (input) => {
+          if (!editingMatch) return false;
+          const id = editingMatch.id;
+          return (await act(`series-edit-placeholder-${id}`, 'Saving...', 'Match placeholder saved', () => scheduleApi.updatePlannedMatch(series.id, id, input.match))) !== null;
+        }}
+      />
+      <PlannedScheduleModal
+        opened={editingBatch !== null}
+        kind={editingBatch?.kind ?? 'round_robin'}
+        series={series}
+        stages={stages}
+        initial={editingBatch?.config ?? null}
+        onClose={() => setEditingBatch(null)}
+        onSubmit={async (config) => {
+          if (!editingBatch) return false;
+          const id = editingBatch.id;
+          return (await act(`series-edit-batch-${id}`, 'Saving...', 'Planned schedule saved', () => scheduleApi.updatePlannedBatch(series.id, id, { config }))) !== null;
+        }}
+      />
+      <GenerateBatchModal series={series} batch={generating} entrants={entrants} onClose={() => setGenerating(null)} onGenerated={refresh} />
       <StageFormModal opened={stageForm.open} onClose={() => setStageForm({ open: false, stage: null })} stage={stageForm.stage} defaultName={`Stage ${stages.length + 1}`} onSubmit={submitStage} />
       <StageScoringModal
         stage={scoringStage}

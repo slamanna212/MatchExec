@@ -4,12 +4,12 @@ import { Modal, Stack, Group, Button, TextInput, Select, NumberInput, Switch, Di
 import { DateTimePicker } from '@mantine/dates';
 // Date picker styles load with the components that use them (not in the entry bundle)
 import '@mantine/dates/styles.css';
-import type { SeriesEventRole, SeriesSeedingRule, TournamentBracketFormat } from '@/shared/series-types';
+import type { CreateSeriesPlannedEventInput, SeriesEventRole, SeriesSeedingRule, TournamentBracketFormat } from '@/shared/series-types';
 import { formatsForScoringType, localDateTimeToIso } from './series-create-event-modals';
 import type { CreateEventModalProps } from './series-create-event-modals';
 import { PlacementFields } from './series-event-fields';
 import { isValidMultiplier } from './series-multiplier-input';
-import { buildSeedingRule, validatePlannedForm } from './series-fixtures';
+import { buildSeedingRule, isoToPickerValue, validatePlannedForm } from './series-fixtures';
 import type { PlannedFormState } from './series-fixtures';
 import { runWithToast, scheduleApi } from './series-schedule-api';
 import { allowedGameIds, defaultPlacement, placementPayload, withRole } from './series-template';
@@ -17,22 +17,40 @@ import { useGameCatalog } from './series-setup-fields';
 
 const PLAYOFF_ROLES: SeriesEventRole[] = ['stage_playoff', 'season_playoff'];
 
-function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omit<CreateEventModalProps, 'opened' | 'entrants'>): JSX.Element {
+export interface PlannedEventFormProps extends Omit<CreateEventModalProps, 'opened' | 'entrants' | 'onCreated'> {
+  onCreated?: () => void;
+  /** Collect the placeholder instead of creating it through the API (the create flow); resolve true to close. */
+  onSubmitInput?: (input: CreateSeriesPlannedEventInput) => Promise<boolean> | boolean;
+  /** Editing a collected placeholder. */
+  initial?: CreateSeriesPlannedEventInput | null;
+}
+
+function PlannedForm({ series, stages, defaultStageId, onClose, onCreated, onSubmitInput, initial }: PlannedEventFormProps): JSX.Element {
   const { catalog } = useGameCatalog();
   const formats = formatsForScoringType(series.scoring_type);
-  const [form, setForm] = useState<PlannedFormState>(() => ({
-    name: 'Playoffs',
-    source: stages.length > 0 ? 'stage' : 'season',
-    stage_id: defaultStageId ?? stages[stages.length - 1]?.id ?? null,
-    top: 4,
-    per_division: false,
-    format: formats[0],
-    game_id: series.game_id ?? null,
-    rounds_per_match: series.match_defaults?.rounds_per_match ?? null,
-    ruleset: series.match_defaults?.rules ?? null,
-    start_time: null,
-  }));
+  const [form, setForm] = useState<PlannedFormState>(() => {
+    const rule = initial?.seeding_rule;
+    return {
+      name: rule?.template.name ?? 'Playoffs',
+      source: rule?.source ?? (stages.length > 0 ? 'stage' : 'season'),
+      stage_id: rule?.stage_id ?? defaultStageId ?? stages[stages.length - 1]?.id ?? null,
+      top: rule?.top ?? 4,
+      per_division: rule?.per_division ?? false,
+      format: rule?.format ?? formats[0],
+      game_id: rule?.template.game_id ?? series.game_id ?? null,
+      rounds_per_match: rule?.template.rounds_per_match ?? series.match_defaults?.rounds_per_match ?? null,
+      ruleset: rule?.template.ruleset ?? series.match_defaults?.rules ?? null,
+      start_time: isoToPickerValue(rule?.template.start_time),
+    };
+  });
+  const [autoSeed, setAutoSeed] = useState(initial?.seeding_rule.auto_seed !== false);
   const [placement, setPlacement] = useState(() => {
+    if (initial) {
+      return {
+        stage_id: initial.stage_id ?? null, role: initial.role, week: initial.week ?? null,
+        points_multiplier: initial.points_multiplier ?? 1, counts_for_standings: initial.counts_for_standings ?? false,
+      };
+    }
     const role: SeriesEventRole = stages.length > 0 ? 'stage_playoff' : 'season_playoff';
     return withRole(defaultPlacement(null, role), role);
   });
@@ -52,14 +70,19 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
 
   const submit = async () => {
     if (problem) return;
-    const rule: SeriesSeedingRule = buildSeedingRule({ ...form, start_time: localDateTimeToIso(form.start_time) });
+    const rule: SeriesSeedingRule = { ...buildSeedingRule({ ...form, start_time: localDateTimeToIso(form.start_time) }), auto_seed: autoSeed };
+    const input: CreateSeriesPlannedEventInput = { ...placementPayload(placement), role: placement.role, seeding_rule: rule };
+    if (onSubmitInput) {
+      if (await onSubmitInput(input)) onClose();
+      return;
+    }
     setSaving(true);
     const created = await runWithToast(
       `series-create-planned-${series.id}`, 'Adding playoffs...', 'Playoff placeholder added',
-      () => scheduleApi.createPlanned(series.id, { ...placementPayload(placement), role: placement.role, seeding_rule: rule }),
+      () => scheduleApi.createPlanned(series.id, input),
     );
     setSaving(false);
-    if (created) { onClose(); onCreated(); }
+    if (created) { onClose(); onCreated?.(); }
   };
 
   return (
@@ -143,6 +166,12 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
             clearable
           />
         </Group>
+        <Switch
+          label="Seed automatically"
+          description="Create the bracket as soon as the qualifiers are decided (a tie at the cut-off still waits for you)"
+          checked={autoSeed}
+          onChange={(e) => setAutoSeed(e.currentTarget.checked)}
+        />
         <DateTimePicker
           label="First round starts"
           placeholder="Pick date and time (optional)"
@@ -156,18 +185,18 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
         <Divider />
         <Group justify="flex-end">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button type="submit" loading={saving} disabled={problem !== null}>Add playoffs</Button>
+          <Button type="submit" loading={saving} disabled={problem !== null}>{initial ? 'Save playoffs' : 'Add playoffs'}</Button>
         </Group>
       </Stack>
     </form>
   );
 }
 
-export function PlannedEventModal(props: Omit<CreateEventModalProps, 'entrants'>): JSX.Element {
+export function PlannedEventModal(props: PlannedEventFormProps & { opened: boolean }): JSX.Element {
   const { opened, ...rest } = props;
   return (
     <Modal opened={opened} onClose={props.onClose} title="Playoff placeholder" size="lg">
-      <PlannedForm {...rest} />
+      {opened && <PlannedForm {...rest} />}
     </Modal>
   );
 }

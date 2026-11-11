@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { logger } from '@/lib/logger/client';
 import type {
-  AttachSeriesEventInput, CreateSeriesMatchInput, CreateSeriesPlannedEventInput, CreateSeriesTournamentInput,
-  GeneratorCommitInput, GeneratorPreview, RaceCalendarConfig, RoundRobinConfig, SeedPreviewResponse, SeriesEventDto,
+  AttachSeriesEventInput, CloseRegistrationInput, CloseRegistrationResult, CreatePlannedBatchInput, CreateSeriesMatchInput,
+  CreateSeriesPlannedEventInput, CreateSeriesPlannedMatchInput, CreateSeriesTournamentInput, GeneratePlannedBatchInput, GeneratorCommitInput,
+  GeneratorPreview, ProjectedBracketResponse, RaceCalendarConfig, RoundRobinConfig, SeedPreviewResponse, SeriesBatchDto, SeriesEventDto,
   SeriesScoringConfig, SeriesStageDto, SeriesStageStatus, SeriesStandingsResponse,
 } from '@/shared/series-types';
 import { notificationHelper } from '@/lib/notifications';
@@ -96,6 +97,37 @@ export const scheduleApi = {
       `${base(seriesId)}/events/${enc(eventId)}/seed`, jsonInit('POST', { ...(entrantIds ? { entrant_ids: entrantIds } : {}), ...(force ? { force: true } : {}) }), 'Failed to seed the playoffs',
     ),
 
+  // ── season layout: planned schedules, match placeholders, closing registration ──
+  listBatches: async (seriesId: string): Promise<SeriesBatchDto[]> =>
+    (await request<{ batches: SeriesBatchDto[] }>(`${base(seriesId)}/batches`, undefined, 'Failed to load schedules')).batches ?? [],
+
+  createPlannedBatch: (seriesId: string, input: CreatePlannedBatchInput) =>
+    request<{ batch: SeriesBatchDto }>(`${base(seriesId)}/batches`, jsonInit('POST', input), 'Failed to add the planned schedule'),
+
+  updatePlannedBatch: (seriesId: string, batchId: string, body: { config?: RoundRobinConfig | RaceCalendarConfig; stage_id?: string | null }) =>
+    request<{ batch: SeriesBatchDto }>(`${base(seriesId)}/batches/${enc(batchId)}`, jsonInit('PATCH', body), 'Failed to update the planned schedule'),
+
+  previewPlannedBatch: (seriesId: string, batchId: string, body: GeneratePlannedBatchInput = {}) =>
+    request<GeneratorPreview>(`${base(seriesId)}/batches/${enc(batchId)}/preview`, jsonInit('POST', body), 'Failed to preview the schedule'),
+
+  generatePlannedBatch: (seriesId: string, batchId: string, body: GeneratePlannedBatchInput = {}) =>
+    request<GeneratorCommitResponse>(`${base(seriesId)}/batches/${enc(batchId)}/generate`, jsonInit('POST', body), 'Failed to generate the schedule'),
+
+  createPlannedMatch: (seriesId: string, input: CreateSeriesPlannedMatchInput) =>
+    request<{ event: SeriesEventView }>(`${base(seriesId)}/events/planned-match`, jsonInit('POST', input), 'Failed to add the match placeholder'),
+
+  updatePlannedMatch: (seriesId: string, eventId: string, match: CreateSeriesPlannedMatchInput['match']) =>
+    request<{ event: SeriesEventView }>(`${base(seriesId)}/events/${enc(eventId)}/template`, jsonInit('PATCH', { match }), 'Failed to update the match placeholder'),
+
+  fillPlannedMatch: (seriesId: string, eventId: string, entrantIds: string[]) =>
+    request<{ event: SeriesEventView; match_id: string }>(`${base(seriesId)}/events/${enc(eventId)}/fill`, jsonInit('POST', { entrant_ids: entrantIds }), 'Failed to create the match'),
+
+  closeRegistration: (seriesId: string, input: CloseRegistrationInput) =>
+    request<CloseRegistrationResult>(`${base(seriesId)}/close-registration`, jsonInit('POST', input), 'Failed to close registration'),
+
+  projectedBracket: (seriesId: string, eventId: string) =>
+    request<ProjectedBracketResponse>(`${base(seriesId)}/events/${enc(eventId)}/projected-bracket`, undefined, 'Failed to load the playoff picture'),
+
   standings: (seriesId: string, scope: string, view: 'entrant' | 'individual') =>
     request<SeriesStandingsResponse>(
       `${base(seriesId)}/standings?scope=${enc(scope)}&view=${view}`, undefined, 'Failed to load standings',
@@ -129,6 +161,20 @@ export function useSeriesStages(seriesId: string): {
   useEffect(() => { void reload(); }, [reload]);
 
   return { stages, loading, error, reload };
+}
+
+/** Planned and generated schedules (batches) of a series. */
+export function useSeriesBatches(seriesId: string, refreshToken = 0): { batches: SeriesBatchDto[]; reload: () => Promise<void> } {
+  const [batches, setBatches] = useState<SeriesBatchDto[]>([]);
+  const reload = useCallback(async () => {
+    try {
+      setBatches(await scheduleApi.listBatches(seriesId));
+    } catch (err) {
+      logger.error('Error loading series schedules:', err);
+    }
+  }, [seriesId]);
+  useEffect(() => { void reload(); }, [reload, refreshToken]);
+  return { batches, reload };
 }
 
 export const errorMessage = (err: unknown, fallback: string): string => (err instanceof Error ? err.message : fallback);

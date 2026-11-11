@@ -12,7 +12,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db, Executor } from '../../../lib/db';
 import {
-  matchParticipants, matchTeams, seriesEvents, tournamentParticipants, tournamentTeamMembers, tournamentTeams,
+  matchParticipants, matchTeams, seriesEventBatches, seriesEvents, tournamentParticipants, tournamentTeamMembers, tournamentTeams,
 } from '../../../lib/db/schema';
 import type { AnnouncementConfig } from '../../../lib/db/schema/types';
 import type {
@@ -126,10 +126,17 @@ async function assertCountableInH2h(
   }
 }
 
-async function nextEventOrder(tx: Executor, seriesId: string): Promise<number> {
-  const [row] = await tx.select({ max_order: sql<number | null>`max(${seriesEvents.event_order})`.mapWith((v) => (v === null ? null : Number(v))) })
+/**
+ * The next free `event_order`: after every event and every slot a planned batch holds (its fixtures are inserted there
+ * when it is generated). Callers hold the series row lock.
+ */
+export async function nextEventOrder(tx: Executor, seriesId: string): Promise<number> {
+  const toNumber = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+  const [events] = await tx.select({ max_order: sql<number | null>`max(${seriesEvents.event_order})`.mapWith(toNumber) })
     .from(seriesEvents).where(eq(seriesEvents.series_id, seriesId));
-  return (row?.max_order ?? 0) + 1;
+  const [batches] = await tx.select({ max_order: sql<number | null>`max(${seriesEventBatches.position})`.mapWith(toNumber) })
+    .from(seriesEventBatches).where(eq(seriesEventBatches.series_id, seriesId));
+  return Math.max(events?.max_order ?? 0, batches?.max_order ?? 0) + 1;
 }
 
 function countsForStandings(input: SeriesEventPlacementInput, role: SeriesEventRole): boolean {
@@ -162,10 +169,10 @@ async function writeEventRow(tx: Executor, ctx: BuilderContext, input: EventRowI
     const [planned] = await tx.select().from(seriesEvents)
       .where(and(eq(seriesEvents.id, opts.fillEventId), eq(seriesEvents.series_id, seriesId))).for('update');
     if (!planned) throw new SeriesError('Event not found in this series', 404);
-    if (planned.status !== 'planned') throw new SeriesError('Only a planned event can be seeded', 409);
+    if (planned.status !== 'planned') throw new SeriesError('This event is no longer a placeholder (it was already filled)', 409);
     await tx.update(seriesEvents).set({
       status: 'live', event_type: input.eventType, match_id: input.matchId ?? null, tournament_id: input.tournamentId ?? null,
-      entrant_ids: input.entrantIds, event_date: input.eventDate ?? planned.event_date,
+      entrant_ids: input.entrantIds, event_date: input.eventDate ?? planned.event_date, match_template: null,
     }).where(eq(seriesEvents.id, planned.id));
     return planned.id;
   }

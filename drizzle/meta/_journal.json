@@ -57,6 +57,13 @@
       "when": 1794337767285,
       "tag": "0007_old_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794363296138,
+      "tag": "0008_clear_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

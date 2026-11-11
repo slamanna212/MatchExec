@@ -5,7 +5,7 @@ import { games } from './games';
 import { matches } from './matches';
 import { tournaments } from './tournaments';
 import type {
-  SeriesDiscordConfig, SeriesMatchDefaults, SeriesScoringConfig, SeriesSeedingRule,
+  SeriesDiscordConfig, SeriesMatchDefaults, SeriesMatchTemplate, SeriesScoringConfig, SeriesSeedingRule,
 } from '../../../shared/series-types';
 
 export const series = pgTable('series', {
@@ -103,11 +103,22 @@ export const seriesEventBatches = pgTable('series_event_batches', {
   stage_id: text('stage_id').references(() => seriesStages.id, { onDelete: 'set null' }),
   kind: text('kind', { enum: ['round_robin', 'race_calendar'] }).notNull(),
   config: jsonb('config').$type<Record<string, unknown>>().notNull(),
+  /**
+   * `planned`: a placeholder holding only the generator config (the fixtures are generated once the entrants are known,
+   * usually when registration closes); `generated`: its events exist.
+   */
+  status: text('status', { enum: ['planned', 'generated'] }).notNull().default('generated'),
+  /**
+   * The event_order slot a planned batch holds in the series order; its fixtures are inserted there when it is generated
+   * (later events shift down). Null once generated.
+   */
+  position: integer('position'),
   created_at: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (t) => [
   index('idx_series_event_batches_series').on(t.series_id),
   index('idx_series_event_batches_stage').on(t.stage_id).where(sql`${t.stage_id} IS NOT NULL`),
   check('series_event_batches_kind_check', sql`${t.kind} IN ('round_robin', 'race_calendar')`),
+  check('series_event_batches_status_check', sql`${t.status} IN ('planned', 'generated')`),
 ]);
 
 export const seriesEvents = pgTable('series_events', {
@@ -127,6 +138,8 @@ export const seriesEvents = pgTable('series_events', {
   status: text('status', { enum: ['planned', 'live'] }).notNull().default("live"),
   entrant_ids: jsonb('entrant_ids').$type<string[]>(),
   seeding_rule: jsonb('seeding_rule').$type<SeriesSeedingRule>(),
+  /** A planned single match: the match it becomes once its entrants are assigned (name, start, game, maps, rules). */
+  match_template: jsonb('match_template').$type<SeriesMatchTemplate>(),
 }, (t) => [
   uniqueIndex('idx_series_events_unique_tournament').on(t.series_id, t.tournament_id).where(sql`${t.tournament_id} IS NOT NULL`),
   uniqueIndex('idx_series_events_unique_match').on(t.series_id, t.match_id).where(sql`${t.match_id} IS NOT NULL`),

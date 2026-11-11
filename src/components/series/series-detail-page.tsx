@@ -14,8 +14,11 @@ import { SeriesOverviewPanel } from './series-overview-panel';
 import { SeriesSchedulePanel } from './series-schedule-panel';
 import { useSeriesStages } from './series-schedule-api';
 import { SeriesStandingsPanel } from './series-standings-panel';
+import { CloseRegistrationModal } from './series-close-modal';
+import { plannedWork } from './series-schedule-helpers';
 import { isEventFinished } from './series-shared';
 import type { SeriesSummary, SeriesEventView } from './series-shared';
+import type { SeriesBatchDto } from '@/shared/series-types';
 import { usePolling } from '@/hooks/usePolling';
 import { useRefreshInterval } from '@/lib/ui-settings-client';
 
@@ -73,6 +76,8 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
   const tab = parseSeriesTab(searchParams.get('tab'));
   const [series, setSeries] = useState<SeriesSummary | null>(null);
   const [events, setEvents] = useState<SeriesEventView[]>([]);
+  const [batches, setBatches] = useState<SeriesBatchDto[]>([]);
+  const [closing, setClosing] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +94,10 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
 
   const fetchData = useCallback(async () => {
     try {
-      const [seriesRes, eventsRes] = await Promise.all([
+      const [seriesRes, eventsRes, batchesRes] = await Promise.all([
         fetch(`/api/series/${seriesId}`),
         fetch(`/api/series/${seriesId}/events`),
+        fetch(`/api/series/${seriesId}/batches`),
       ]);
       if (!seriesRes.ok) {
         setError(seriesRes.status === 404 ? 'Series not found' : 'Failed to load series');
@@ -100,6 +106,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
       setError(null);
       setSeries((await seriesRes.json()).series);
       if (eventsRes.ok) setEvents((await eventsRes.json()).events ?? []);
+      if (batchesRes.ok) setBatches((await batchesRes.json()).batches ?? []);
       setDataVersion((v) => v + 1);
     } catch (err) {
       logger.error('Error loading series:', err);
@@ -173,6 +180,14 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
     });
   };
 
+  const work = plannedWork(events, batches);
+  const hasPlannedWork = work.batches.length > 0 || work.matches.length > 0;
+  // With placeholders to fill, starting the season goes through the close dialog (divisions, assignments, generation).
+  const startSeason = () => {
+    if (hasPlannedWork) setClosing(true);
+    else void transition('active');
+  };
+
   if (loading && !series) return <DetailSkeleton />;
 
   if (error || !series) {
@@ -211,7 +226,8 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
         <Grid.Col span={{ base: 12, md: 4 }} pl={{ base: 'md', md: 0 }}>
           <SeriesInfoPanel
             series={series}
-            onActivate={() => { void transition('active'); }}
+            onActivate={startSeason}
+            hasPlannedWork={hasPlannedWork}
             onOpenRegistration={() => { void transition('registration'); }}
             onAddEvent={() => changeTab('schedule')}
             onEdit={() => navigate(`/series/${seriesId}/edit`)}
@@ -234,7 +250,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
                 onChange={changeTab}
                 data={[
                   { label: 'Overview', value: 'overview' },
-                  { label: `Schedule (${events.length})`, value: 'schedule' },
+                  { label: `Schedule (${events.length + work.batches.length})`, value: 'schedule' },
                   { label: 'Standings', value: 'standings' },
                   { label: 'Entrants', value: 'entrants' },
                 ]}
@@ -244,13 +260,15 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
               <SeriesOverviewPanel
                 series={series}
                 events={events}
+                batches={batches}
                 refreshToken={dataVersion}
                 onOpenTab={changeTab}
                 onChanged={() => { void fetchData(); }}
+                onStartSeason={startSeason}
               />
             )}
             {tab === 'schedule' && (
-              <SeriesSchedulePanel series={series} events={events} onChanged={() => { void fetchData(); }} />
+              <SeriesSchedulePanel series={series} events={events} batches={batches} onChanged={() => { void fetchData(); }} />
             )}
             {tab === 'standings' && <StandingsTab series={series} refreshToken={dataVersion} />}
             {tab === 'entrants' && (
@@ -259,6 +277,14 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           </Stack>
         </Grid.Col>
       </Grid>
+      <CloseRegistrationModal
+        opened={closing}
+        series={series}
+        events={events}
+        batches={batches}
+        onClose={() => setClosing(false)}
+        onClosed={() => { void fetchData(); }}
+      />
     </div>
   );
 }

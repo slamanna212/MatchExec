@@ -17,6 +17,8 @@ import { SeriesDiscordFields } from './series-setup-fields';
 import { rosterPayload } from './series-setup';
 import { parseScoringConfig } from './series-shared';
 import type { SeriesSummary } from './series-shared';
+import { EMPTY_LAYOUT } from './series-layout';
+import type { DraftLayout } from './series-layout';
 
 export { SeriesFormCard };
 
@@ -54,6 +56,8 @@ export interface SeriesFormData {
   // create flow: seed entrants from a previous season
   previous_series_id: string | null;
   copy_include_members: boolean;
+  /** Create flow: the season layout (stages and placeholders) created with the series. */
+  layout: DraftLayout;
 }
 
 export const EMPTY_SERIES_FORM: SeriesFormData = {
@@ -84,6 +88,7 @@ export const EMPTY_SERIES_FORM: SeriesFormData = {
   discord_schedule_lead_hours: 48,
   previous_series_id: null,
   copy_include_members: true,
+  layout: EMPTY_LAYOUT,
 };
 
 export type UpdateSeriesForm = <K extends keyof SeriesFormData>(key: K, value: SeriesFormData[K]) => void;
@@ -118,6 +123,23 @@ function setupPayload(form: SeriesFormData): Record<(typeof SETUP_KEYS)[number],
     game_ids: form.game_ids,
     game_mode_id: form.game_mode_id,
     previous_series_id: form.previous_series_id,
+  };
+}
+
+/**
+ * The series being created, shaped like a loaded one (no id yet), for the components the create flow shares with the
+ * series page (the Schedule step's placeholder modals read the game / scoring / match defaults from it).
+ */
+export function draftSeriesFromForm(form: SeriesFormData): SeriesSummary {
+  const now = new Date().toISOString();
+  return {
+    id: 'draft', name: form.name, description: form.description, status: 'created', scoring_config: form.scoring_config,
+    entrant_type: form.entrant_type, roster_min: form.roster_min, roster_max: form.roster_max, scoring_type: form.scoring_type,
+    game_ids: form.game_ids, game_mode_id: form.game_mode_id, match_defaults: buildMatchDefaults(form), discord_config: buildDiscordConfig(form),
+    previous_series_id: form.previous_series_id, start_date: form.start_date, end_date: form.end_date, event_image_url: form.event_image_url,
+    game_id: form.game_id, livestream_link: form.livestream_link || null, announcements: form.announcements, player_notifications: form.player_notifications,
+    created_at: now, updated_at: now, event_count: 0, completed_event_count: 0, participant_count: 0, entrant_count: 0, next_event: null,
+    last_event_game: null, series_game: null, champion: null,
   };
 }
 
@@ -201,6 +223,7 @@ export function formFromSeries(s: SeriesSummary): SeriesFormData {
     discord_schedule_lead_hours: discord.schedule_lead_hours ?? 48,
     previous_series_id: s.previous_series_id ?? null,
     copy_include_members: true,
+    layout: EMPTY_LAYOUT,
   };
 }
 
@@ -224,6 +247,7 @@ export function useSeriesForm(): UseSeriesFormResult {
       const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) {
         const merged: SeriesFormData = { ...EMPTY_SERIES_FORM, ...JSON.parse(saved) };
+        if (!merged.layout || !Array.isArray(merged.layout.stages) || !Array.isArray(merged.layout.items)) merged.layout = EMPTY_LAYOUT;
         // A form saved before standings modes existed: start from the default of its scoring type instead.
         if (isLegacyScoringConfig(merged.scoring_config ?? {})) merged.scoring_config = defaultScoringConfig(merged.scoring_type);
         return merged;

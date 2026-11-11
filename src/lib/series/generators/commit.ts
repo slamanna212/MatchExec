@@ -28,7 +28,7 @@ const PLAYED = ['battle', 'complete'];
 const MAX_FIXTURES = 1000;
 
 /** Run pure generator code; an unsatisfiable config becomes a 400. */
-function asBadRequest<T>(fn: () => T): T {
+export function asBadRequest<T>(fn: () => T): T {
   try {
     return fn();
   } catch (error) {
@@ -37,7 +37,7 @@ function asBadRequest<T>(fn: () => T): T {
   }
 }
 
-const toPairingEntrants = (entrants: readonly ResolvedEntrant[]): PairingEntrant[] => entrants.map((e) => ({ id: e.id, name: e.name, division: e.division }));
+export const toPairingEntrants = (entrants: readonly ResolvedEntrant[]): PairingEntrant[] => entrants.map((e) => ({ id: e.id, name: e.name, division: e.division }));
 
 /** Entrants the generator works with: the configured ones (or all active), must be active entrants of the series. */
 function generatorEntrants(all: BuilderContext['entrants'], configured: readonly string[] | null | undefined): ResolvedEntrant[] {
@@ -48,7 +48,7 @@ async function assertStageOk(ex: Executor, seriesId: string, stageId: string | n
   if (stageId && !(await getStage(ex, seriesId, stageId))) throw new SeriesError('stage_id does not match a stage of this series', 400);
 }
 
-function rosterWarnings(series: { roster_min: number | null }, entrants: readonly ResolvedEntrant[]): string[] {
+export function rosterWarnings(series: { roster_min: number | null }, entrants: readonly ResolvedEntrant[]): string[] {
   const need = Math.max(series.roster_min ?? 0, 1);
   return entrants.filter((e) => e.members.length < need).map((e) => `Entrant "${e.name}" has ${e.members.length} player(s) on its roster but needs at least ${need}`);
 }
@@ -121,13 +121,17 @@ function tournamentInputFor(f: GeneratedFixture, config: RaceCalendarConfig): Cr
   };
 }
 
-async function createBatchEvents(
+/**
+ * Creates a batch's events, one per fixture. `startOrder`: the first `event_order` to use (the next ones follow); the
+ * caller must have made room for them. Default: appended after everything else.
+ */
+export async function createBatchEvents(
   tx: Executor, seriesId: string, kind: SeriesBatchKind, config: RoundRobinConfig | RaceCalendarConfig, fixtures: readonly GeneratedFixture[],
-  batchId: string, ctx: BuilderContext, after: AfterCommit,
+  batchId: string, ctx: BuilderContext, after: AfterCommit, startOrder?: number,
 ): Promise<string[]> {
   const eventIds: string[] = [];
-  const opts: CreateEventOptions = { batchId, context: ctx, announce: false };
-  for (const f of fixtures) {
+  for (const [i, f] of fixtures.entries()) {
+    const opts: CreateEventOptions = { batchId, context: ctx, announce: false, ...(startOrder !== undefined ? { eventOrder: startOrder + i } : {}) };
     if (kind === 'round_robin') {
       const cfg = config as RoundRobinConfig;
       eventIds.push((await createSeriesMatchEventTx(tx, seriesId, matchInputFor(f, cfg.match, cfg), after, opts)).event_id);
@@ -193,13 +197,13 @@ interface BatchEvent {
   week: number | null;
 }
 
-async function getBatch(tx: Executor, seriesId: string, batchId: string) {
+export async function getBatch(tx: Executor, seriesId: string, batchId: string) {
   const [batch] = await tx.select().from(seriesEventBatches).where(and(eq(seriesEventBatches.id, batchId), eq(seriesEventBatches.series_id, seriesId)));
   if (!batch) throw new SeriesError('Batch not found in this series', 404);
   return batch;
 }
 
-async function listBatchEvents(tx: Executor, batchId: string): Promise<BatchEvent[]> {
+export async function listBatchEvents(tx: Executor, batchId: string): Promise<BatchEvent[]> {
   const rows = await tx.select({
     id: seriesEvents.id, match_id: seriesEvents.match_id, tournament_id: seriesEvents.tournament_id, entrant_ids: seriesEvents.entrant_ids,
     event_date: seriesEvents.event_date, week: seriesEvents.week, match_status: matches.status, tournament_status: tournaments.status,
@@ -215,7 +219,7 @@ const isPlayed = (e: BatchEvent): boolean => e.target_status !== null && PLAYED.
 const pairKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 /** Remove the batch's events whose target has not started (their matches / tournaments go with them). */
-async function removeUnstarted(tx: Executor, seriesId: string, events: readonly BatchEvent[]): Promise<number> {
+export async function removeUnstarted(tx: Executor, seriesId: string, events: readonly BatchEvent[]): Promise<number> {
   let removed = 0;
   for (const e of events.filter(isUnstarted)) {
     await removeSeriesEvent(tx, seriesId, e.id);
@@ -278,6 +282,7 @@ export async function regenerateBatch(db: Db, seriesId: string, batchId: string)
   const result = await db.transaction(async (tx) => {
     const ctx = await loadBuilderContext(tx, seriesId);
     const batch = await getBatch(tx, seriesId, batchId);
+    if (batch.status === 'planned') throw new SeriesError('This schedule has not been generated yet: generate it instead', 409);
     const events = await listBatchEvents(tx, batchId);
     const removed = await removeUnstarted(tx, seriesId, events);
     const kept = events.filter((e) => !isUnstarted(e));

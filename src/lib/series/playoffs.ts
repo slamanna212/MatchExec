@@ -7,19 +7,20 @@
  */
 import { and, eq } from 'drizzle-orm';
 import type { Db, Executor } from '../../../lib/db';
-import { seriesEvents } from '../../../lib/db/schema';
+import { series as seriesTable, seriesEventBatches, seriesEvents } from '../../../lib/db/schema';
 import type {
-  CreateSeriesTournamentInput, SeedPreviewResponse, SeriesSeedingRule, SeriesUpdatePayload,
+  CreateSeriesTournamentInput, ProjectedBracketResponse, SeedPreviewResponse, SeriesSeedingRule, SeriesUpdatePayload,
 } from '../../../shared/series-types';
 import { logger } from '../logger';
 import { AfterCommit } from '../matches/effects';
 import { enqueueSeriesUpdate } from '../queues/enqueue';
+import { seedOrder } from '../tournaments/bracket-math';
 import { createSeriesTournamentEventTx, loadBuilderContext } from './builder';
 import { listEntrants, type SeriesEntrantWithMembers } from './entrants';
 import { SeriesError, getSeriesById, type SeriesRow } from './series';
 import { getSeriesStandingsResponse } from './standings';
 import { getStage, listStages, setStageStatus, type SeriesStageRow } from './stages';
-import { getSeriesEventDto, type SeriesEventWire } from './summary';
+import { getSeriesEventDto, isEventFinished, listSeriesEventDetails, type SeriesEventWire } from './summary';
 
 type SeriesEventRow = typeof seriesEvents.$inferSelect;
 type Qualifier = SeedPreviewResponse['qualifiers'][number];
@@ -103,16 +104,16 @@ async function sourceBlockers(ex: Executor, seriesId: string, rule: SeriesSeedin
 }
 
 /** The top `top` overall, with the warnings about the cut-off. */
-function pickOverall(ranked: RankedEntrant[], top: number): { picked: RankedEntrant[]; warnings: string[] } {
+function pickOverall(ranked: RankedEntrant[], top: number): { picked: RankedEntrant[]; warnings: string[]; tied: boolean } {
   const c = cut(ranked, top);
   const warnings: string[] = [];
   if (c.tiedAtCut) warnings.push(`Tie at the cut-off: entrants ranked ${c.taken[top - 1].rank} straddle the last qualifying place (position ${top})`);
   if (c.taken.length < top) warnings.push(`Only ${c.taken.length} entrant(s) are available but ${top} qualify`);
-  return { picked: c.taken, warnings };
+  return { picked: c.taken, warnings, tied: c.tiedAtCut };
 }
 
 /** The top `top` of every division, interleaved by division rank, with the warnings about each division's cut-off. */
-function pickPerDivision(ranked: RankedEntrant[], top: number): { picked: RankedEntrant[]; warnings: string[] } {
+function pickPerDivision(ranked: RankedEntrant[], top: number): { picked: RankedEntrant[]; warnings: string[]; tied: boolean } {
   const groups = groupByDivision(ranked);
   const cuts = groups.map((g) => cut(g, top));
   const warnings: string[] = [];
@@ -121,13 +122,20 @@ function pickPerDivision(ranked: RankedEntrant[], top: number): { picked: Ranked
     if (c.tiedAtCut) warnings.push(`Tie at the cut-off in division "${label}": entrants ranked ${c.taken[top - 1].rank} straddle the last qualifying place`);
     if (c.taken.length < top) warnings.push(`Division "${label}" has only ${c.taken.length} entrant(s) but ${top} qualify per division`);
   }
-  return { picked: interleave(cuts.map((c) => c.taken), top), warnings };
+  return { picked: interleave(cuts.map((c) => c.taken), top), warnings, tied: cuts.some((c) => c.tiedAtCut) };
 }
 
+type QualifierResult = SeedPreviewResponse & { tied: boolean };
+
 async function computeQualifiers(ex: Executor, series: SeriesRow, rule: SeriesSeedingRule): Promise<SeedPreviewResponse> {
+  const { tied: _tied, ...preview } = await computeQualifiersDetailed(ex, series, rule);
+  return preview;
+}
+
+async function computeQualifiersDetailed(ex: Executor, series: SeriesRow, rule: SeriesSeedingRule): Promise<QualifierResult> {
   const entrants = await listEntrants(ex, series.id);
   if (entrants.length === 0) {
-    return { qualifiers: [], warnings: ['This series has no entrants (legacy series): playoffs cannot be seeded'], blockers: [] };
+    return { qualifiers: [], warnings: ['This series has no entrants (legacy series): playoffs cannot be seeded'], blockers: [], tied: false };
   }
   const blockers = await sourceBlockers(ex, series.id, rule);
   const warnings = [...blockers];
@@ -140,7 +148,7 @@ async function computeQualifiers(ex: Executor, series: SeriesRow, rule: SeriesSe
     .map((r) => ({ entrant: active.get(r.entrant_id!)!, rank: r.rank }));
 
   const top = Math.max(1, Math.floor(rule.top));
-  const { picked, warnings: pickWarnings } = rule.per_division ? pickPerDivision(ranked, top) : pickOverall(ranked, top);
+  const { picked, warnings: pickWarnings, tied } = rule.per_division ? pickPerDivision(ranked, top) : pickOverall(ranked, top);
   warnings.push(...pickWarnings);
   if (picked.length < 2) warnings.push('At least 2 qualifiers are needed to seed a bracket');
 
@@ -148,6 +156,7 @@ async function computeQualifiers(ex: Executor, series: SeriesRow, rule: SeriesSe
     qualifiers: picked.map((r, i) => ({ entrant_id: r.entrant.id, name: r.entrant.name, seed: i + 1, rank: r.rank, division: r.entrant.division })),
     warnings,
     blockers,
+    tied,
   };
 }
 
@@ -283,4 +292,135 @@ export async function onSeriesCompleted(tx: Executor, seriesId: string): Promise
   const series = await getSeriesById(tx, seriesId);
   if (!series?.announcements) return;
   await enqueueSeriesUpdate(tx, { seriesId, kind: 'champion', dedupeKey: 'champion' });
+}
+
+// ─── projected bracket ───────────────────────────────────────────────────────
+
+/** First-round pairings of a bracket in bracket order (`seedOrder`); an odd seed out gets a bye (`b` null). */
+export function projectPairings(qualifiers: SeedPreviewResponse['qualifiers']): ProjectedBracketResponse['pairings'] {
+  const order = seedOrder(qualifiers.length);
+  const bySeed = new Map(qualifiers.map((q) => [q.seed, q]));
+  const pairings: ProjectedBracketResponse['pairings'] = [];
+  for (let i = 0; i < order.length; i += 2) {
+    const a = bySeed.get(order[i]);
+    if (!a) continue;
+    pairings.push({ a, b: order[i + 1] === undefined ? null : (bySeed.get(order[i + 1]) ?? null) });
+  }
+  return pairings;
+}
+
+/**
+ * Whether a seeding rule's source is decided: a stage source once the stage is complete; the season once every stage
+ * that counts toward it is complete, or (a series without such stages) once every counting event is played and no
+ * regular placeholder (planned schedule or match) is left.
+ */
+export async function isSeedingSourceDecided(
+  ex: Executor, seriesId: string, rule: SeriesSeedingRule, ownStageId: string | null = null,
+): Promise<boolean> {
+  const stages = await listStages(ex, seriesId);
+  if (rule.source === 'stage') return stages.find((s) => s.id === rule.stage_id)?.status === 'complete';
+  // the playoff's own stage cannot hold it up (it is played after the season it reads)
+  const counted = stages.filter((s) => s.counts_toward_season && s.id !== ownStageId);
+  if (counted.length > 0) return counted.every((s) => s.status === 'complete');
+
+  const [plannedBatch] = await ex.select({ id: seriesEventBatches.id }).from(seriesEventBatches)
+    .where(and(eq(seriesEventBatches.series_id, seriesId), eq(seriesEventBatches.status, 'planned'))).limit(1);
+  if (plannedBatch) return false;
+  const events = await listSeriesEventDetails(ex, seriesId);
+  if (events.some((e) => e.status === 'planned' && e.match_template && e.counts_for_standings)) return false;
+  const counting = events.filter((e) => e.status === 'live' && e.counts_for_standings);
+  return counting.length > 0 && counting.every((e) => isEventFinished(e.target_status));
+}
+
+/**
+ * The playoff of a planned event as it would be seeded from the standings right now: qualifiers, first-round pairings
+ * (brackets) and whether it is still provisional. Works in every series status, so a registration / running season can
+ * show its playoff picture (and, later, a live Discord embed).
+ */
+export async function getProjectedBracket(ex: Executor, seriesId: string, eventId: string): Promise<ProjectedBracketResponse> {
+  const series = await getSeriesById(ex, seriesId);
+  if (!series) throw new SeriesError('Series not found', 404);
+  const [row] = await ex.select().from(seriesEvents).where(and(eq(seriesEvents.id, eventId), eq(seriesEvents.series_id, seriesId)));
+  const { rule } = requirePlanned(row);
+  const preview = await computeQualifiers(ex, series, rule);
+  return {
+    event_id: eventId,
+    format: rule.format,
+    provisional: !(await isSeedingSourceDecided(ex, seriesId, rule, row?.stage_id ?? null)),
+    qualifiers: preview.qualifiers,
+    pairings: rule.format === 'cumulative-points' ? [] : projectPairings(preview.qualifiers),
+    warnings: preview.warnings,
+  };
+}
+
+// ─── automatic progression ───────────────────────────────────────────────────
+
+export interface AdvanceSeriesResult {
+  completed_stages: string[];
+  seeded: string[];
+}
+
+/**
+ * Moves a running season along without an admin: an active stage whose every event is played (and that has no
+ * placeholder left) is completed (the next stage starts), then every playoff placeholder with `auto_seed` (default on)
+ * whose source is decided and whose cut-off is not tied is seeded. Safe to run repeatedly; a series that is not active
+ * is left alone.
+ */
+export async function advanceSeries(db: Db, seriesId: string): Promise<AdvanceSeriesResult> {
+  const result: AdvanceSeriesResult = { completed_stages: [], seeded: [] };
+  const series = await getSeriesById(db, seriesId);
+  if (series?.status !== 'active') return result;
+
+  const plannedBatches = await db.select({ stage_id: seriesEventBatches.stage_id }).from(seriesEventBatches)
+    .where(and(eq(seriesEventBatches.series_id, seriesId), eq(seriesEventBatches.status, 'planned')));
+  const events = await listSeriesEventDetails(db, seriesId);
+  for (const stage of (await listStages(db, seriesId)).filter((s) => s.status === 'active')) {
+    const inStage = events.filter((e) => e.stage_id === stage.id);
+    const live = inStage.filter((e) => e.status === 'live');
+    // A playoff that reads this very stage cannot hold it up (it is seeded from it).
+    const waiting = inStage.some((e) => e.status === 'planned' && !(e.seeding_rule?.source === 'stage' && e.seeding_rule.stage_id === stage.id))
+      || plannedBatches.some((b) => b.stage_id === stage.id);
+    if (live.length === 0 || waiting || !live.every((e) => isEventFinished(e.target_status))) continue;
+    await completeStage(db, seriesId, stage.id);
+    result.completed_stages.push(stage.id);
+    logger.info(`Series ${seriesId}: stage "${stage.name}" completed automatically (every event played)`);
+  }
+
+  const planned = await db.select().from(seriesEvents).where(and(eq(seriesEvents.series_id, seriesId), eq(seriesEvents.status, 'planned')));
+  for (const event of planned.sort((a, b) => a.event_order - b.event_order)) {
+    const rule = event.seeding_rule;
+    if (!rule || rule.auto_seed === false) continue;
+    if (!(await isSeedingSourceDecided(db, seriesId, rule, event.stage_id))) continue;
+    const qualifiers = await computeQualifiersDetailed(db, series, rule);
+    if (qualifiers.tied) {
+      logger.info(`Series ${seriesId}: playoff ${event.id} not seeded automatically (tie at the cut-off; seed it by hand)`);
+      continue;
+    }
+    if (qualifiers.qualifiers.length < 2) continue;
+    try {
+      await seedPlayoffEvent(db, seriesId, event.id, { force: true });
+      result.seeded.push(event.id);
+      logger.info(`Series ${seriesId}: playoff "${rule.template.name}" seeded automatically`);
+    } catch (error) {
+      logger.warning(`Series ${seriesId}: automatic seeding of ${event.id} failed:`, error);
+    }
+  }
+  return result;
+}
+
+/** `advanceSeries` for every active series (the scheduler's series job). One failing series does not stop the others. */
+export async function advanceActiveSeries(db: Db): Promise<{ checked: number; completed_stages: number; seeded: number }> {
+  const rows = await db.select({ id: seriesTable.id }).from(seriesTable).where(eq(seriesTable.status, 'active'));
+  let completed = 0;
+  let seeded = 0;
+  for (const row of rows) {
+    try {
+      const r = await advanceSeries(db, row.id);
+      completed += r.completed_stages.length;
+      seeded += r.seeded.length;
+    } catch (error) {
+      logger.error(`Series ${row.id}: automatic progression failed:`, error);
+    }
+  }
+  return { checked: rows.length, completed_stages: completed, seeded };
 }

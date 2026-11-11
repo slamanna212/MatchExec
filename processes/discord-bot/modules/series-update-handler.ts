@@ -9,8 +9,8 @@ import { logger } from '../../../src/lib/logger/server';
 import { getGameDisplay } from '../../../src/lib/games';
 import { getTournament, listTeamsByName } from '../../../src/lib/tournaments';
 import {
-  eventWeek, getSeriesById, getSeriesChampion, getSeriesStandingsResponse, listEntrants, listSeriesEventDtos, listStages, sameWeek,
-  weekLabel, type SeriesRow, type WeekRef,
+  describeSeasonLayout, eventWeek, getSeriesById, getSeriesChampion, getSeriesStandingsResponse, listBatches, listEntrants, listSeriesEventDtos,
+  listStages, sameWeek, weekLabel, type SeriesRow, type WeekRef,
 } from '../../../src/lib/series';
 import { capTitle, Utils } from './utils';
 import { imageExtension, loadImage } from '../utils/image-source';
@@ -260,6 +260,21 @@ export class SeriesUpdateHandler {
     return names.join(', ');
   }
 
+  /** The planned season (round robins, matches, playoffs) in Discord form; empty when nothing is planned. */
+  private async layoutLines(series: SeriesRow): Promise<string[]> {
+    try {
+      const [batches, events, stages] = await Promise.all([listBatches(this.ex, series.id), listSeriesEventDtos(this.ex, series.id), listStages(this.ex, series.id)]);
+      const stageDtos = stages.map((s) => ({ id: s.id, name: s.name }));
+      return describeSeasonLayout({ batches, events, stages: stageDtos }, {
+        // config dates are YYYY-MM-DD (a calendar day at noon UTC never shifts a day); instants are shown as given
+        date: (value) => `<t:${unix(new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value))}:D>`,
+      });
+    } catch (error) {
+      logger.error(`Series ${series.id}: failed to describe the season layout:`, error);
+      return [];
+    }
+  }
+
   private async fillRegistration(message: SeriesMessage, embed: EmbedBuilder, series: SeriesRow): Promise<void> {
     embed
       .setTitle(capTitle(`📝 Registration open: ${series.name}`))
@@ -274,6 +289,8 @@ export class SeriesUpdateHandler {
     }
     const entrants = await listEntrants(this.ex, series.id, { statuses: ['pending', 'active'] });
     embed.addFields({ name: '📋 Registered so far', value: String(entrants.length), inline: true });
+    const layout = await this.layoutLines(series);
+    if (layout.length > 0) embed.addFields({ name: '🗓️ Season layout', value: truncate(layout.map((l) => `• ${l}`).join('\n'), 1024), inline: false });
     if (series.livestream_link) embed.addFields({ name: '📺 Livestream', value: `[Watch Live](${series.livestream_link})`, inline: false });
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

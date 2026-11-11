@@ -104,7 +104,7 @@ export function SeriesEventRow({ event, isNext, ready, actions }: SeriesEventRow
 
         {planned ? (
           <Badge size="sm" variant="light" color={ready ? 'violet' : 'gray'} style={{ flexShrink: 0 }}>
-            {ready ? 'Ready to seed' : 'Planned'}
+            {event.match_template ? 'Entrants TBD' : ready ? 'Ready to seed' : 'Planned'}
           </Badge>
         ) : (
           <>

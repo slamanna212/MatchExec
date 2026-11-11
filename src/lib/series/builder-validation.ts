@@ -98,7 +98,85 @@ export function validateCreatePlannedBody(body: Record<string, unknown>): string
   if (typeof rule.top !== 'number' || !Number.isInteger(rule.top) || rule.top < 2 || rule.top > 256) return 'seeding_rule.top must be an integer from 2 to 256';
   if (rule.per_division !== undefined && typeof rule.per_division !== 'boolean') return 'seeding_rule.per_division must be a boolean';
   if (!BRACKET_FORMATS.includes(rule.format as string)) return `seeding_rule.format must be one of: ${BRACKET_FORMATS.join(', ')}`;
+  if (rule.auto_seed !== undefined && typeof rule.auto_seed !== 'boolean') return 'seeding_rule.auto_seed must be a boolean';
   return firstError(validatePlacementBody(body), validateTournamentTemplate(rule.template, 'seeding_rule.template', true));
+}
+
+/** POST /:id/events/planned-match (and the match of a PATCH .../template) */
+export function validateCreatePlannedMatchBody(body: Record<string, unknown>): string | null {
+  const m = body.match;
+  if (isObject(m) && (typeof m.name !== 'string' || m.name.trim() === '')) return 'match.name is required for a match placeholder';
+  return firstError(validatePlacementBody(body), validateMatchTemplate(m, 'match', true));
+}
+
+const BATCH_KINDS = ['round_robin', 'race_calendar'];
+
+/** A planned batch: `{ kind, config }`; the config is the generator's, without entrants. */
+export function validatePlannedBatchBody(body: Record<string, unknown>): string | null {
+  if (!BATCH_KINDS.includes(body.kind as string)) return `kind must be one of: ${BATCH_KINDS.join(', ')}`;
+  return body.kind === 'round_robin' ? validateRoundRobinConfig(body.config) : validateRaceCalendarConfig(body.config);
+}
+
+/** Preview / generate body of a planned batch. */
+export function validateGeneratePlannedBody(body: Record<string, unknown>): string | null {
+  if (body.divisions !== undefined && !DIVISION_MODES.includes(body.divisions as string)) return `divisions must be one of: ${DIVISION_MODES.join(', ')}`;
+  return validateDivisionMap(body.division_overrides, 'division_overrides');
+}
+
+function validateDivisionMap(v: unknown, field: string): string | null {
+  if (v === undefined) return null;
+  if (!isObject(v)) return `${field} must map entrant ids to a division name or null`;
+  for (const d of Object.values(v)) {
+    if (d !== null && (typeof d !== 'string' || d.length > 50)) return `${field} values must be a division name (at most 50 characters) or null`;
+  }
+  return null;
+}
+
+const MAX_LAYOUT_ITEMS = 200;
+
+/** The `layout` of POST /api/series (create flow). */
+export function validateLayout(layout: unknown): string | null {
+  if (layout === undefined || layout === null) return null;
+  if (!isObject(layout)) return 'layout must be an object';
+  const { stages, items } = layout;
+  if (!Array.isArray(stages) || stages.length > 20) return 'layout.stages must be an array (at most 20 stages)';
+  for (const [i, st] of stages.entries()) {
+    if (!isObject(st) || typeof st.key !== 'string' || st.key === '') return `layout.stages[${i}].key is required`;
+    if (typeof st.name !== 'string' || st.name.trim() === '' || st.name.length > 100) return `layout.stages[${i}].name is required (at most 100 characters)`;
+    if (st.counts_toward_season !== undefined && typeof st.counts_toward_season !== 'boolean') return `layout.stages[${i}].counts_toward_season must be a boolean`;
+  }
+  if (!Array.isArray(items) || items.length > MAX_LAYOUT_ITEMS) return `layout.items must be an array (at most ${MAX_LAYOUT_ITEMS} items)`;
+  for (const [i, item] of items.entries()) {
+    if (!isObject(item)) return `layout.items[${i}] must be an object`;
+    let err: string | null;
+    if (item.type === 'batch') err = validatePlannedBatchBody(item);
+    else if (item.type === 'match') err = validateCreatePlannedMatchBody(item);
+    else if (item.type === 'playoff') err = validateCreatePlannedBody(item);
+    else err = 'type must be batch, match or playoff';
+    if (err) return `layout.items[${i}]: ${err}`;
+  }
+  return null;
+}
+
+/** POST /:id/close-registration */
+export function validateCloseRegistrationBody(body: Record<string, unknown>): string | null {
+  const divisions = validateDivisionMap(body.divisions, 'divisions');
+  if (divisions) return divisions;
+  if (body.batches !== undefined) {
+    if (!isObject(body.batches)) return 'batches must map batch ids to { divisions }';
+    for (const b of Object.values(body.batches)) {
+      if (!isObject(b)) return 'batches must map batch ids to { divisions }';
+      if (b.divisions !== undefined && !DIVISION_MODES.includes(b.divisions as string)) return `batches.*.divisions must be one of: ${DIVISION_MODES.join(', ')}`;
+    }
+  }
+  if (body.matches !== undefined) {
+    if (!isObject(body.matches)) return 'matches must map event ids to entrant id lists';
+    for (const ids of Object.values(body.matches)) {
+      const err = validateEntrantIds(ids, 'matches.*');
+      if (err) return err;
+    }
+  }
+  return null;
 }
 
 function validateGeneratorSchedule(cfg: Record<string, unknown>): string | null {

@@ -1,18 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Container, Stack, Button, Stepper, Group, Text, Divider, Alert, List } from '@mantine/core';
 import {
   IconTimeline, IconArrowLeft, IconInfoCircle, IconBell, IconCalculator,
-  IconListCheck, IconSettings,
+  IconListCheck, IconSettings, IconCalendarEvent,
 } from '@tabler/icons-react';
 import { PageHeader } from '@/components/PageHeader';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper, showError, showWarning } from '@/lib/notifications';
 import {
-  useSeriesForm, buildSeriesPayload, SeriesDetailsFields, SeriesNotificationsFields,
+  useSeriesForm, buildSeriesPayload, draftSeriesFromForm, SeriesDetailsFields, SeriesNotificationsFields,
   SeriesScoringFields, SeriesFormCard,
 } from './series-form';
+import { SeriesLayoutEditor } from './series-layout-editor';
+import { describeDraftItem, draftSections, isLayoutEmpty, layoutProblems, toLayoutInput } from './series-layout';
 import { SeriesSetupFields, SeriesCopyEntrantsFields, useGameCatalog } from './series-setup-fields';
 import { validateRosterInputs } from './series-setup';
 import type { GameCatalog } from './series-setup';
@@ -22,10 +24,13 @@ import { formatShortDate, formatPoints, describeSeriesFormat } from './series-sh
 const STEPS = [
   { label: 'Details', icon: IconInfoCircle },
   { label: 'Setup', icon: IconSettings },
-  { label: 'Notifications', icon: IconBell },
   { label: 'Scoring', icon: IconCalculator },
+  { label: 'Schedule', icon: IconCalendarEvent },
+  { label: 'Notifications', icon: IconBell },
   { label: 'Review', icon: IconListCheck },
 ] as const;
+
+const SCHEDULE_STEP = 4;
 
 export function CreateSeriesPage(): JSX.Element {
   const navigate = useNavigate();
@@ -40,9 +45,12 @@ export function CreateSeriesPage(): JSX.Element {
   const createdRef = useRef(false);
 
   const rosterError = validateRosterInputs(form.entrant_type, form.roster_min, form.roster_max);
+  const draftSeries = useMemo(() => draftSeriesFromForm(form), [form]);
+  const scheduleProblems = layoutProblems(form.layout, form.scoring_type);
   const canProceed = (s: number) => {
     if (s === 1) return form.name.trim().length > 0;
     if (s === 2) return rosterError === null;
+    if (s === SCHEDULE_STEP) return scheduleProblems.length === 0;
     return true;
   };
 
@@ -78,6 +86,11 @@ export function CreateSeriesPage(): JSX.Element {
       goTo(2);
       return;
     }
+    if (!canProceed(SCHEDULE_STEP)) {
+      showError(scheduleProblems[0] ?? 'Check the schedule');
+      goTo(SCHEDULE_STEP);
+      return;
+    }
     setSubmitting(true);
     const nid = 'series-create';
     notificationHelper.loading({ id: nid, message: 'Creating series...' });
@@ -86,7 +99,10 @@ export function CreateSeriesPage(): JSX.Element {
       const res = await fetch('/api/series', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildSeriesPayload(form)),
+        body: JSON.stringify({
+          ...buildSeriesPayload(form),
+          ...(isLayoutEmpty(form.layout) ? {} : { layout: toLayoutInput(form.layout) }),
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -116,7 +132,10 @@ export function CreateSeriesPage(): JSX.Element {
         }
       }
 
-      notificationHelper.update(nid, { type: 'success', message: 'Series created! Add stages and events next.' });
+      notificationHelper.update(nid, {
+        type: 'success',
+        message: isLayoutEmpty(form.layout) ? 'Series created! Plan the schedule next.' : 'Series created with its schedule. Open registration when you are ready.',
+      });
 
       if (copyWarning) showWarning(copyWarning, 'Entrants copied with problems');
 
@@ -159,12 +178,15 @@ export function CreateSeriesPage(): JSX.Element {
             <SeriesCopyEntrantsFields form={form} update={update} />
           </Stack>
         )}
-        {step === 3 && <SeriesNotificationsFields form={form} update={update} />}
-        {step === 4 && <SeriesScoringFields form={form} update={update} />}
-        {step === 5 && (
+        {step === 3 && <SeriesScoringFields form={form} update={update} />}
+        {step === SCHEDULE_STEP && (
+          <SeriesLayoutEditor layout={form.layout} onChange={(layout) => update('layout', layout)} series={draftSeries} catalog={catalog} />
+        )}
+        {step === 5 && <SeriesNotificationsFields form={form} update={update} />}
+        {step === 6 && (
           <Stack gap="md">
             <ReviewStep form={form} catalog={catalog} />
-            <NextStepsNote />
+            <NextStepsNote planned={!isLayoutEmpty(form.layout)} />
           </Stack>
         )}
 
@@ -187,8 +209,8 @@ export function CreateSeriesPage(): JSX.Element {
   );
 }
 
-/** The create flow only sets up the season shell; events are built on the details page before anything is announced. */
-function NextStepsNote(): JSX.Element {
+/** What happens after the series is created: registration, then closing it builds the schedule from the layout. */
+function NextStepsNote({ planned }: { planned: boolean }): JSX.Element {
   return (
     <Alert variant="light" color="blue" icon={<IconInfoCircle size={18} />} title="What happens next">
       <Stack gap={6}>
@@ -196,9 +218,13 @@ function NextStepsNote(): JSX.Element {
           The series is created as a draft: nothing is posted to Discord and players cannot register yet.
         </Text>
         <List size="sm" type="ordered" spacing={4}>
-          <List.Item>On the series page, add stages (optional) and the events: matches, tournaments or a generated schedule.</List.Item>
-          <List.Item>Add or copy entrants if you are not using Discord registration.</List.Item>
-          <List.Item>When the schedule is ready, <b>Open registration</b> (posts to Discord) or <b>Start season</b>.</List.Item>
+          {!planned && <List.Item>On the series page, plan the schedule: stages, round robins, matches and playoffs.</List.Item>}
+          <List.Item><b>Open registration</b> to post the series to Discord; players sign up and you approve them.</List.Item>
+          <List.Item>
+            <b>Close registration</b> when sign-ups are done: you split divisions, assign the single matches, and the round robins / calendars are
+            generated with the approved entrants. The season starts.
+          </List.Item>
+          <List.Item>Playoffs are seeded from the standings once the regular season is decided.</List.Item>
         </List>
       </Stack>
     </Alert>
@@ -211,6 +237,19 @@ function ReviewRow({ label, children }: { label: string; children: ReactNode }):
       <Text size="sm" fw={500} c="dimmed" style={{ flexShrink: 0 }}>{label}:</Text>
       <Text size="sm" ta="right" style={{ wordBreak: 'break-word' }}>{children}</Text>
     </Group>
+  );
+}
+
+function ScheduleReview({ form }: { form: SeriesFormData }): JSX.Element {
+  if (isLayoutEmpty(form.layout)) return <ReviewRow label="Schedule">Planned later on the series page</ReviewRow>;
+  return (
+    <Stack gap={4}>
+      {draftSections(form.layout).map((section) => (
+        <ReviewRow key={section.stage?.key ?? 'unstaged'} label={section.stage?.name ?? (form.layout.stages.length > 0 ? 'Unstaged' : 'Schedule')}>
+          {section.items.length > 0 ? section.items.map(describeDraftItem).join(' · ') : 'Empty'}
+        </ReviewRow>
+      ))}
+    </Stack>
   );
 }
 
@@ -238,6 +277,8 @@ function ReviewStep({ form, catalog }: { form: SeriesFormData; catalog: GameCata
         <ReviewRow label="Games">{allowedGames.length > 0 ? allowedGames.map(gameName).join(', ') : 'Any'}</ReviewRow>
         <ReviewRow label="Primary game">{form.game_id ? gameName(form.game_id) : '—'}</ReviewRow>
         <ReviewRow label="Copy entrants from">{form.previous_series_id ? 'A previous series' : 'No'}</ReviewRow>
+        <Divider />
+        <ScheduleReview form={form} />
         <Divider />
         <ReviewRow label="Announcements">{form.announcements ? 'Enabled' : 'Disabled'}</ReviewRow>
         <ReviewRow label="Player Notifications">{form.player_notifications ? 'Enabled' : 'Disabled'}</ReviewRow>

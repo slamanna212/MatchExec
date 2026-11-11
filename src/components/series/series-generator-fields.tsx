@@ -16,11 +16,13 @@ export type SetForm<F> = <K extends keyof F>(key: K, value: F[K]) => void;
 interface CommonProps {
   series: SeriesSummary;
   catalog: GameCatalog;
-  stages: SeriesStageDto[];
+  stages: Array<Pick<SeriesStageDto, 'id' | 'name'>>;
   active: SeriesEntrantDto[];
+  /** A placeholder generated later with every approved entrant: no entrant picker (and divisions are decided then). */
+  planned?: boolean;
 }
 
-function StageSelect({ stages, value, onChange }: { stages: SeriesStageDto[]; value: string | null; onChange: (v: string | null) => void }): JSX.Element {
+function StageSelect({ stages, value, onChange }: { stages: Array<Pick<SeriesStageDto, 'id' | 'name'>>; value: string | null; onChange: (v: string | null) => void }): JSX.Element {
   return (
     <Select
       label="Stage"
@@ -51,19 +53,25 @@ function TimeZoneSelect({ value, onChange }: { value: string; onChange: (v: stri
 // Weeks start on Monday in the UI; values follow the API (0 = Sunday).
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-export function RoundRobinFields({ form, set, series, catalog, stages, active }: CommonProps & { form: RoundRobinFormState; set: SetForm<RoundRobinFormState> }): JSX.Element {
-  const hasDivisions = active.some((e) => e.division);
+export function RoundRobinFields({ form, set, series, catalog, stages, active, planned }: CommonProps & { form: RoundRobinFormState; set: SetForm<RoundRobinFormState> }): JSX.Element {
+  const hasDivisions = !planned && active.some((e) => e.division);
   const badSlots = form.time_slots.filter((t) => !TIME_RE.test(t));
   const badDates = form.skip_dates.filter((d) => !DATE_RE.test(d));
   return (
     <Stack gap="md">
       <StageSelect stages={stages} value={form.stage_id} onChange={(v) => set('stage_id', v)} />
-      <EntrantSelect
-        entrants={active}
-        value={form.entrant_ids}
-        onChange={(ids) => set('entrant_ids', ids)}
-        all={{ value: form.all_entrants, onChange: (v) => set('all_entrants', v) }}
-      />
+      {planned ? (
+        <Text size="xs" c="dimmed">
+          Every approved entrant plays. The pairings, and how divisions play each other, are decided when registration closes.
+        </Text>
+      ) : (
+        <EntrantSelect
+          entrants={active}
+          value={form.entrant_ids}
+          onChange={(ids) => set('entrant_ids', ids)}
+          all={{ value: form.all_entrants, onChange: (v) => set('all_entrants', v) }}
+        />
+      )}
       <Group align="flex-start" grow>
         <Switch
           label="Double round robin"
@@ -167,16 +175,20 @@ export function RoundRobinFields({ form, set, series, catalog, stages, active }:
 
 const RACE_FORMATS: TournamentBracketFormat[] = ['cumulative-points', 'single-elimination', 'double-elimination'];
 
-export function RaceCalendarFields({ form, set, series, catalog, stages, active }: CommonProps & { form: RaceCalendarFormState; set: SetForm<RaceCalendarFormState> }): JSX.Element {
+export function RaceCalendarFields({ form, set, series, catalog, stages, active, planned }: CommonProps & { form: RaceCalendarFormState; set: SetForm<RaceCalendarFormState> }): JSX.Element {
   return (
     <Stack gap="md">
       <StageSelect stages={stages} value={form.stage_id} onChange={(v) => set('stage_id', v)} />
-      <EntrantSelect
-        entrants={active}
-        value={form.entrant_ids}
-        onChange={(ids) => set('entrant_ids', ids)}
-        all={{ value: form.all_entrants, onChange: (v) => set('all_entrants', v) }}
-      />
+      {planned ? (
+        <Text size="xs" c="dimmed">Every approved entrant takes part in every event; the field is set when registration closes.</Text>
+      ) : (
+        <EntrantSelect
+          entrants={active}
+          value={form.entrant_ids}
+          onChange={(ids) => set('entrant_ids', ids)}
+          all={{ value: form.all_entrants, onChange: (v) => set('all_entrants', v) }}
+        />
+      )}
       <div>
         <Text size="sm" fw={500} mb={4}>Each event is a</Text>
         <SegmentedControl

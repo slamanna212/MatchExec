@@ -383,6 +383,7 @@ export const MAPPINGS: TableMapping[] = [
       id: SAME, series_id: SAME, event_type: SAME, match_id: SAME, tournament_id: SAME, event_order: SAME,
       event_date: SAME, points_multiplier: SAME, stage_id: DEFAULT, role: DEFAULT, week: DEFAULT,
       counts_for_standings: DEFAULT, batch_id: DEFAULT, status: DEFAULT, entrant_ids: DEFAULT, seeding_rule: DEFAULT,
+      match_template: DEFAULT,
     },
   }),
   defineMapping(schema.statsImageQueue, 'stats_image_queue', {

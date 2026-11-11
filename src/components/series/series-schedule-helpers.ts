@@ -1,4 +1,4 @@
-import type { SeedPreviewResponse, SeriesEventDto, SeriesEventRole, SeriesStageDto, SeriesStatus } from '@/shared/series-types';
+import type { SeedPreviewResponse, SeriesBatchDto, SeriesEventDto, SeriesEventRole, SeriesStageDto, SeriesStatus } from '@/shared/series-types';
 import type { SeriesEventView } from './series-shared';
 import { isEventFinished } from './series-shared';
 
@@ -21,6 +21,8 @@ export interface ScheduleSection {
   /** Same events grouped by week (a single group without week header when no event has a week). */
   weeks: ScheduleWeekGroup[];
   showWeekHeaders: boolean;
+  /** Planned (not yet generated) schedules of the section, in series order. */
+  batches: SeriesBatchDto[];
 }
 
 export const byEventOrder = (a: SeriesEventView, b: SeriesEventView): number => a.event_order - b.event_order || a.id.localeCompare(b.id);
@@ -43,17 +45,42 @@ export function groupEventsByWeek(events: readonly SeriesEventView[]): { groups:
  * Stages in order, each with its events. Events without a (known) stage go to the "Unstaged" section, which is hidden
  * when empty as soon as the series has stages (a series without stages shows it as its only section).
  */
-export function buildSchedule(stages: readonly SeriesStageDto[], events: readonly SeriesEventView[]): ScheduleSection[] {
+export function buildSchedule(
+  stages: readonly SeriesStageDto[], events: readonly SeriesEventView[], batches: readonly SeriesBatchDto[] = [],
+): ScheduleSection[] {
   const orderedStages = [...stages].sort((a, b) => a.stage_order - b.stage_order);
   const known = new Set(orderedStages.map((s) => s.id));
-  const section = (key: string, stage: SeriesStageDto | null, list: SeriesEventView[]): ScheduleSection => {
+  const planned = batches.filter((b) => b.status === 'planned').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const section = (key: string, stage: SeriesStageDto | null, list: SeriesEventView[], own: SeriesBatchDto[]): ScheduleSection => {
     const { groups, showHeaders } = groupEventsByWeek(list);
-    return { key, stage, events: [...list].sort(byEventOrder), weeks: groups, showWeekHeaders: showHeaders };
+    return { key, stage, events: [...list].sort(byEventOrder), weeks: groups, showWeekHeaders: showHeaders, batches: own };
   };
-  const sections = orderedStages.map((st) => section(st.id, st, events.filter((e) => e.stage_id === st.id)));
+  const sections = orderedStages.map((st) => section(
+    st.id, st, events.filter((e) => e.stage_id === st.id), planned.filter((b) => b.stage_id === st.id),
+  ));
   const unstaged = events.filter((e) => !e.stage_id || !known.has(e.stage_id));
-  if (unstaged.length > 0 || orderedStages.length === 0) sections.push(section(UNSTAGED_KEY, null, unstaged));
+  const unstagedBatches = planned.filter((b) => !b.stage_id || !known.has(b.stage_id));
+  if (unstaged.length > 0 || unstagedBatches.length > 0 || orderedStages.length === 0) sections.push(section(UNSTAGED_KEY, null, unstaged, unstagedBatches));
   return sections;
+}
+
+export type ScheduleRowItem = { kind: 'event'; event: SeriesEventView } | { kind: 'batch'; batch: SeriesBatchDto };
+
+/** Events and planned schedules of one group in series order (a planned schedule sits at the slot its fixtures will take). */
+export function mergeRows(events: readonly SeriesEventView[], batches: readonly SeriesBatchDto[]): ScheduleRowItem[] {
+  const rows: Array<ScheduleRowItem & { order: number }> = [
+    ...events.map((event) => ({ kind: 'event' as const, event, order: event.event_order })),
+    ...batches.map((batch) => ({ kind: 'batch' as const, batch, order: batch.position ?? Number.MAX_SAFE_INTEGER })),
+  ];
+  return rows.sort((a, b) => a.order - b.order).map(({ order: _o, ...row }) => row as ScheduleRowItem);
+}
+
+/** Placeholders the close dialog has to deal with: planned schedules and single match placeholders. */
+export function plannedWork(events: readonly SeriesEventView[], batches: readonly SeriesBatchDto[]): { batches: SeriesBatchDto[]; matches: SeriesEventView[] } {
+  return {
+    batches: batches.filter((b) => b.status === 'planned'),
+    matches: events.filter((e) => e.status === 'planned' && !!e.match_template),
+  };
 }
 
 /**

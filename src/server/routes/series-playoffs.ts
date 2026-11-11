@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono';
 import { db } from '../../../lib/db';
-import { completeStage, getSeedPreview, seedPlayoffEvent } from '@/lib/series';
+import { completeStage, getProjectedBracket, getSeedPreview, seedPlayoffEvent } from '@/lib/series';
 import { jsonError } from '../http';
 import { guard } from './series-helpers';
 
@@ -27,6 +27,10 @@ function parseSeedBody(text: string): { entrant_ids?: string[]; force?: boolean 
 export const seriesPlayoffsRoutes = new Hono()
   .get('/:seriesId/events/:eventId/seed-preview', (c) => guard(c, 'Error previewing playoff seeding', 'Failed to preview seeding', async () => {
     return c.json(await getSeedPreview(db, c.req.param('seriesId'), c.req.param('eventId')));
+  }))
+
+  .get('/:seriesId/events/:eventId/projected-bracket', (c) => guard(c, 'Error projecting playoff bracket', 'Failed to load the playoff picture', async () => {
+    return c.json(await getProjectedBracket(db, c.req.param('seriesId'), c.req.param('eventId')));
   }))
 
   .post('/:seriesId/events/:eventId/seed', (c) => guard(c, 'Error seeding playoff event', 'Failed to seed playoff event', async () => {

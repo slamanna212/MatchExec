@@ -16,6 +16,9 @@ export type SeriesStageStatus = 'upcoming' | 'active' | 'complete';
 export type SeriesEventRole = 'regular' | 'stage_playoff' | 'season_playoff' | 'exhibition';
 export type SeriesEventStatus = 'planned' | 'live';
 export type SeriesBatchKind = 'round_robin' | 'race_calendar';
+/** `planned`: only the generator config exists (fixtures come when the entrants are known); `generated`: its events exist. */
+export type SeriesBatchStatus = 'planned' | 'generated';
+export type RoundRobinDivisionMode = 'none' | 'within' | 'within_and_cross';
 export type SeriesStandingsMode = 'head_to_head' | 'points';
 export type SeriesTiebreaker = 'match_wins' | 'win_pct' | 'points' | 'map_diff' | 'maps_won' | 'head_to_head' | 'event_wins' | 'best_finishes';
 export type SeriesUpdateKind = 'registration_open' | 'weekly_schedule' | 'standings' | 'playoff_seeded' | 'champion';
@@ -161,6 +164,11 @@ export interface SeriesSeedingRule {
   per_division?: boolean;
   format: TournamentBracketFormat;
   template: SeriesTournamentTemplate;
+  /**
+   * Seed the playoffs automatically once their source is decided (the stage complete, or every counting event of the
+   * season played) and the cut-off is not tied. Default true; the scheduler checks every few minutes.
+   */
+  auto_seed?: boolean;
 }
 
 export interface SeriesTournamentTemplate {
@@ -211,6 +219,8 @@ export interface SeriesEventDto {
   /** null = all active entrants. */
   entrant_ids: string[] | null;
   seeding_rule: SeriesSeedingRule | null;
+  /** A planned single match (placeholder): what it becomes once entrants are assigned. */
+  match_template?: SeriesMatchTemplate | null;
   // read-model extras (joined from the match / tournament; seeding_rule.template.name for planned events)
   name: string | null;
   target_status: string | null;
@@ -255,6 +265,86 @@ export interface CreateSeriesTournamentInput extends SeriesEventPlacementInput {
 export interface CreateSeriesPlannedEventInput extends SeriesEventPlacementInput {
   role: SeriesEventRole;
   seeding_rule: SeriesSeedingRule;
+}
+
+/** POST /api/series/:id/events/planned-match (single match placeholder; entrants are assigned later, e.g. at registration close) */
+export interface CreateSeriesPlannedMatchInput extends SeriesEventPlacementInput {
+  match: SeriesMatchTemplate & { name: string; start_date: string };
+}
+
+/** GET /api/series/:id/batches item. */
+export interface SeriesBatchDto {
+  id: string;
+  series_id: string;
+  stage_id: string | null;
+  kind: SeriesBatchKind;
+  status: SeriesBatchStatus;
+  config: RoundRobinConfig | RaceCalendarConfig;
+  /** Order slot of a planned batch (its fixtures go there); null once generated. */
+  position: number | null;
+  created_at: string;
+  /** Events the batch holds now. */
+  event_count: number;
+}
+
+/** POST /api/series/:id/batches (a planned round robin / race calendar). `entrant_ids` must be empty: it uses every active entrant. */
+export interface CreatePlannedBatchInput {
+  kind: SeriesBatchKind;
+  config: RoundRobinConfig | RaceCalendarConfig;
+}
+
+/** Overrides when a planned batch is previewed or generated. */
+export interface GeneratePlannedBatchInput {
+  /** Round robin: how the divisions play (decided when the entrants are known). */
+  divisions?: RoundRobinDivisionMode;
+  /** Preview only: entrant -> division as it would be after the close (not saved). */
+  division_overrides?: Record<string, string | null>;
+}
+
+/**
+ * A whole season layout created with the series (create flow). Stages are referenced by their client `key` (stage_id
+ * fields, `seeding_rule.stage_id` and batch `config.stage_id` hold keys); the server maps them to the new stage ids.
+ * Items keep their order, which becomes the series order.
+ */
+export interface SeriesLayoutInput {
+  stages: Array<{ key: string; name: string; counts_toward_season?: boolean; scoring_config?: SeriesScoringConfig | null }>;
+  items: SeriesLayoutItem[];
+}
+
+export type SeriesLayoutItem =
+  | { type: 'batch'; kind: SeriesBatchKind; config: RoundRobinConfig | RaceCalendarConfig }
+  | ({ type: 'match' } & CreateSeriesPlannedMatchInput)
+  | ({ type: 'playoff' } & CreateSeriesPlannedEventInput);
+
+/**
+ * POST /api/series/:id/close-registration: closes registration (or starts a draft season) and builds the schedule in one
+ * transaction: saves the divisions, turns every single match placeholder into a match with its assigned entrants,
+ * generates every planned batch with the active entrants, then the series becomes `active`.
+ */
+export interface CloseRegistrationInput {
+  /** Entrant -> division (null clears it). Entrants left out keep theirs. */
+  divisions?: Record<string, string | null>;
+  /** Planned batch id -> how its round robin treats divisions. */
+  batches?: Record<string, { divisions?: RoundRobinDivisionMode }>;
+  /** Planned single match event id -> its entrants (every placeholder must be assigned). */
+  matches?: Record<string, string[]>;
+}
+
+export interface CloseRegistrationResult {
+  generated: Array<{ batch_id: string; event_count: number }>;
+  filled: string[];
+}
+
+/** GET /api/series/:id/events/:eventId/projected-bracket: the playoff as it would be seeded from the standings right now. */
+export interface ProjectedBracketResponse {
+  event_id: string;
+  format: TournamentBracketFormat;
+  /** True while the source stage / season is not decided (the seeds can still change). */
+  provisional: boolean;
+  qualifiers: SeedPreviewResponse['qualifiers'];
+  /** First round in bracket order (brackets only); `b` null = a bye for `a`. */
+  pairings: Array<{ a: SeedPreviewResponse['qualifiers'][number]; b: SeedPreviewResponse['qualifiers'][number] | null }>;
+  warnings: string[];
 }
 
 /** POST /api/series/:id/events (attach an existing match/tournament; the original flow, now with placement fields) */

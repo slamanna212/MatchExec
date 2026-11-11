@@ -6,7 +6,8 @@ import {
 } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
-import type { SeriesEntrantDto } from '@/shared/series-types';
+import type { SeriesBatchDto, SeriesEntrantDto } from '@/shared/series-types';
+import { CloseRegistrationCard, PlayoffPictureSection, SeasonLayoutCard } from './series-overview-layout';
 import { entrantsApi } from './series-entrants-api';
 import { buildSetupChecklist, summarizeRegistration, usesDiscordRegistration } from './series-overview-data';
 import type { ChecklistItem, ChecklistState, OverviewData } from './series-overview-data';
@@ -18,9 +19,12 @@ import type { SeriesEventView, SeriesSummary } from './series-shared';
 interface SetupViewProps {
   series: SeriesSummary;
   events: SeriesEventView[];
+  batches: SeriesBatchDto[];
   data: OverviewData;
   onOpenTab: OpenTab;
   onChanged: () => void;
+  refreshToken: number;
+  onStartSeason?: () => void;
 }
 
 const STATE_ICON: Record<ChecklistState, { color: string; variant: string; icon: JSX.Element }> = {
@@ -57,9 +61,9 @@ function ChecklistRow({ item, onOpenTab }: { item: ChecklistItem; onOpenTab: Ope
 }
 
 /** Draft series: what is left before it is announced, and a preview of the schedule players will see. */
-export function DraftOverview({ series, events, data, onOpenTab }: SetupViewProps): JSX.Element {
+export function DraftOverview({ series, events, batches, data, onOpenTab }: SetupViewProps): JSX.Element {
   const loaded = data.entrants !== null || data.stages !== null;
-  const items = buildSetupChecklist(series, events, data);
+  const items = buildSetupChecklist(series, events, data, batches);
   const todo = items.filter((i) => i.state === 'todo').length;
   const ready = loaded && todo === 0;
 
@@ -86,7 +90,8 @@ export function DraftOverview({ series, events, data, onOpenTab }: SetupViewProp
         </Stack>
       </Card>
 
-      {events.length > 0 && (
+      <SeasonLayoutCard events={events} batches={batches} stages={data.stages} onOpenTab={onOpenTab} />
+      {events.some((e) => e.status === 'live') && (
         <UpNextList series={series} events={events} limit={5} label="Schedule preview" onOpenTab={onOpenTab} />
       )}
     </Stack>
@@ -117,7 +122,7 @@ function PendingRow({ entrant, series, onApprove }: { entrant: SeriesEntrantDto;
 }
 
 /** Registration open: sign-ups so far, approvals waiting, and the opening events. */
-export function RegistrationOverview({ series, events, data, onOpenTab, onChanged }: SetupViewProps): JSX.Element {
+export function RegistrationOverview({ series, events, batches, data, onOpenTab, onChanged, onStartSeason, refreshToken }: SetupViewProps): JSX.Element {
   const team = series.entrant_type === 'team';
   const who = team ? 'Teams' : 'Players';
   const summary = data.entrants ? summarizeRegistration(data.entrants, series.roster_min, series.entrant_type) : null;
@@ -141,7 +146,7 @@ export function RegistrationOverview({ series, events, data, onOpenTab, onChange
   if (summary) {
     if (summary.approved.length < 2) readiness = { color: 'gray', text: `At least two approved ${who.toLowerCase()} are needed to start the season.` };
     else if (summary.shortRosters > 0) readiness = { color: 'yellow', text: `${summary.shortRosters} approved ${summary.shortRosters === 1 ? 'team is' : 'teams are'} below the minimum roster of ${series.roster_min}.` };
-    else readiness = { color: 'teal', text: 'Enough entrants to start: use Start season in the left panel when registration closes.' };
+    else readiness = { color: 'teal', text: 'Enough entrants to start: close registration when sign-ups are done.' };
   }
 
   return (
@@ -178,7 +183,12 @@ export function RegistrationOverview({ series, events, data, onOpenTab, onChange
         </Card>
       </OverviewSection>
 
-      <UpNextList series={series} events={events} limit={3} label="Opening events" onOpenTab={onOpenTab} />
+      <CloseRegistrationCard series={series} events={events} batches={batches} approved={summary ? summary.approved.length : null} onStartSeason={onStartSeason} />
+      <SeasonLayoutCard events={events} batches={batches} stages={data.stages} onOpenTab={onOpenTab} />
+      {events.some((e) => e.status === 'live') && (
+        <UpNextList series={series} events={events} limit={3} label="Opening events" onOpenTab={onOpenTab} />
+      )}
+      <PlayoffPictureSection series={series} events={events} refreshToken={refreshToken} onOpenTab={onOpenTab} />
     </Stack>
   );
 }

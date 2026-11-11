@@ -72,8 +72,9 @@ function selectEventDetails(ex: Executor) {
   return ex
     .select({
       ...getTableColumns(seriesEvents),
-      mName: matches.name, tName: tournaments.name, plannedName: sql<string | null>`${seriesEvents.seeding_rule}->'template'->>'name'`,
-      plannedStart: sql<string | null>`${seriesEvents.seeding_rule}->'template'->>'start_time'`,
+      mName: matches.name, tName: tournaments.name,
+      plannedName: sql<string | null>`coalesce(${seriesEvents.seeding_rule}->'template'->>'name', ${seriesEvents.match_template}->>'name')`,
+      plannedStart: sql<string | null>`coalesce(${seriesEvents.seeding_rule}->'template'->>'start_time', ${seriesEvents.match_template}->>'start_date')`,
       mStatus: matches.status, tStatus: tournaments.status,
       mImage: matches.event_image_url, tImage: tournaments.event_image_url,
       mStart: matches.start_date, tStart: tournaments.start_date,
@@ -83,8 +84,8 @@ function selectEventDetails(ex: Executor) {
     .leftJoin(matches, and(eq(seriesEvents.event_type, 'match'), eq(matches.id, seriesEvents.match_id)))
     .leftJoin(tournaments, and(eq(seriesEvents.event_type, 'tournament'), eq(tournaments.id, seriesEvents.tournament_id)))
     .leftJoin(series, eq(series.id, seriesEvents.series_id))
-    // a planned playoff has no target yet: fall back to its template's game, then the series' game
-    .leftJoin(games, eq(games.id, sql`coalesce(${matches.game_id}, ${tournaments.game_id}, ${seriesEvents.seeding_rule}->'template'->>'game_id', ${series.game_id})`))
+    // a planned event has no target yet: fall back to its template's game, then the series' game
+    .leftJoin(games, eq(games.id, sql`coalesce(${matches.game_id}, ${tournaments.game_id}, ${seriesEvents.seeding_rule}->'template'->>'game_id', ${seriesEvents.match_template}->>'game_id', ${series.game_id})`))
     .$dynamic();
 }
 
@@ -153,7 +154,7 @@ export function toSeriesEventDto(e: SeriesEventDetail, entrants?: SeriesEventDto
     id: e.id, series_id: e.series_id, stage_id: e.stage_id, event_type: e.event_type, match_id: e.match_id, tournament_id: e.tournament_id,
     event_order: e.event_order, event_date: iso(e.event_date), points_multiplier: e.points_multiplier, role: e.role, week: e.week,
     counts_for_standings: e.counts_for_standings, batch_id: e.batch_id, status: e.status, entrant_ids: e.entrant_ids,
-    seeding_rule: e.seeding_rule, name: e.name, target_status: e.target_status, start_date: iso(e.start_date), game_id: e.game_id,
+    seeding_rule: e.seeding_rule, match_template: e.match_template ?? null, name: e.name, target_status: e.target_status, start_date: iso(e.start_date), game_id: e.game_id,
     game_name: e.game_name, game_icon: e.game_icon, game_color: e.game_color,
     event_image_url: e.event_image_url, game_cover: e.game_cover,
     ...(entrants ? { entrants } : {}),

@@ -2,12 +2,13 @@
 import { Hono } from 'hono';
 import { db } from '../../../lib/db';
 import {
-  STANDINGS_AFFECTING_FIELDS, addSeriesEvent, createSeriesChecked, deleteSeries, editSeries, getSeriesById, getSeriesEventDto,
+  STANDINGS_AFFECTING_FIELDS, addSeriesEvent, createSeriesWithLayout, deleteSeries, editSeries, getSeriesById, getSeriesEventDto,
   getSeriesStandingsResponse, withStandingsCache, getSeriesSummary, findSeriesForMatch, findSeriesForTournament, listSeriesEventDtos, listSeriesSummaries,
   removeSeriesEvent, transitionSeries, updateSeriesEvent, validateEventOrder, validatePlacementFields, validatePointsMultiplier,
-  validateSeriesBody, validateSeriesDates, SERIES_STATUSES,
+  validateLayout, validateSeriesBody, validateSeriesDates, SERIES_STATUSES,
   type AddSeriesEventInput, type CreateSeriesInput, type SeriesStatus, type UpdateSeriesEventInput, type UpdateSeriesInput,
 } from '@/lib/series';
+import type { SeriesLayoutInput } from '../../../shared/series-types';
 import { jsonError } from '../http';
 import { guard, readJsonObject } from './series-helpers';
 import { seriesBuilderRoutes } from './series-builder';
@@ -44,10 +45,12 @@ export const seriesRoutes = new Hono()
   .post('/', (c) => guard(c, 'Error creating series', 'Failed to create series', async () => {
     const body = await readJsonObject(c);
     if (!body) return jsonError(c, 'Invalid JSON body', 400);
-    const validationError = validateSeriesBody(body, false);
+    const validationError = validateSeriesBody(body, false) ?? validateLayout(body.layout);
     if (validationError) return jsonError(c, validationError, 400);
-    // game / scoring-type / roster consistency is checked by the domain (400)
-    const id = await createSeriesChecked(db, { ...body, name: (body.name as string).trim() } as unknown as CreateSeriesInput);
+    // game / scoring-type / roster consistency is checked by the domain (400); the optional layout (stages and
+    // placeholders of the create flow) is created in the same transaction
+    const { layout, ...fields } = body;
+    const id = await createSeriesWithLayout(db, { ...fields, name: (body.name as string).trim() } as unknown as CreateSeriesInput, layout as SeriesLayoutInput | undefined);
     return c.json({ id }, 201);
   }))
 
