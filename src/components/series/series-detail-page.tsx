@@ -220,7 +220,12 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           />
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 8 }} pr={{ base: 'md', md: 0 }}>
-          <Stack gap="md">
+          {/*
+            On mobile the info panel stacks above the tabs. Switching tabs swaps in a panel that first renders short
+            (loading), so the document shrank and the browser clamped the scroll position up: the page jumped. Keeping
+            at least a viewport of height from the selector down means the scroll position never has to move.
+          */}
+          <Stack gap="md" mih={{ base: '100dvh', md: 0 }}>
             <Group justify="center">
               <SegmentedControl
                 size="sm"
