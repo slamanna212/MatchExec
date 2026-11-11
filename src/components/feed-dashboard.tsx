@@ -48,7 +48,6 @@ import {
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
 import type { FeedEvent, FeedResponse } from '@/shared/types';
-import classes from './gradient-segmented-control.module.css';
 import { PageHeader } from './PageHeader';
 import { PageLayout } from './PageLayout';
 import { usePolling } from '@/hooks/usePolling';
@@ -551,11 +550,9 @@ export function FeedDashboard(): JSX.Element {
           {/* Filter */}
           <Group justify="center">
             <SegmentedControl
-              radius="xl"
               size="sm"
               value={filter}
               onChange={setFilter}
-              classNames={classes}
               data={[
                 { value: 'all',         label: 'All'           },
                 { value: 'high',        label: 'High Priority' },

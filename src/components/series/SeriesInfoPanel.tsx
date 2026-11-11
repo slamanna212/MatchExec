@@ -3,7 +3,7 @@ import { Stack, Group, Text, Button, Card, Badge, Image, Divider, Anchor } from 
 import { StageRing } from '@/components/StageRing';
 import { SeriesAvatar } from './series-dashboard';
 import {
-  SERIES_STATUS_COLOR, SERIES_FALLBACK_COLOR, seriesIdentity, seriesHistoryIdentity, seriesProgress,
+  SERIES_FALLBACK_COLOR, seriesIdentity, seriesHistoryIdentity, seriesProgress,
   formatShortDate, formatFullDateTime, formatPoints, parseScoringConfig, describeSeriesFormat,
 } from './series-shared';
 import type { SeriesSummary } from './series-shared';
@@ -76,9 +76,6 @@ export function SeriesInfoPanel({
         {/* Details card */}
         <Card withBorder radius="md" padding="lg" shadow="sm">
           <Stack gap="sm">
-            <DetailRow label="Status">
-              <Badge variant="light" color={SERIES_STATUS_COLOR[series.status]}>{series.status}</Badge>
-            </DetailRow>
             <DetailRow label="Events">{`${series.completed_event_count} of ${series.event_count} complete`}</DetailRow>
             {series.entrant_type === 'team' && series.entrant_count > 0 && <DetailRow label="Teams">{String(series.entrant_count)}</DetailRow>}
             <DetailRow label="Players">{String(series.participant_count)}</DetailRow>

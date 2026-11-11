@@ -4,7 +4,6 @@ import { Modal, Stack, Group, Button, TextInput, Select, NumberInput, Switch, Di
 import { DateTimePicker } from '@mantine/dates';
 // Date picker styles load with the components that use them (not in the entry bundle)
 import '@mantine/dates/styles.css';
-import classes from '@/components/gradient-segmented-control.module.css';
 import type { SeriesEventRole, SeriesSeedingRule, TournamentBracketFormat } from '@/shared/series-types';
 import { formatsForScoringType, localDateTimeToIso } from './series-create-event-modals';
 import type { CreateEventModalProps } from './series-create-event-modals';
@@ -76,8 +75,6 @@ function PlannedForm({ series, stages, defaultStageId, onClose, onCreated }: Omi
             <Text size="sm" fw={500} mb={4}>Qualifiers come from</Text>
             <SegmentedControl
               fullWidth
-              radius="xl"
-              classNames={classes}
               value={form.source}
               onChange={(v) => {
                 const source = v as PlannedFormState['source'];

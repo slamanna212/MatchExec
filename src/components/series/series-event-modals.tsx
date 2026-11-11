@@ -7,7 +7,6 @@ import { IconSearch, IconListNumbers, IconLock } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
 import type { SeriesEventRole, SeriesStageDto } from '@/shared/series-types';
-import classes from '@/components/gradient-segmented-control.module.css';
 import { useEventCandidates, filterCandidates, EventPickerList, EventPickerRow, candidateKey } from './event-picker';
 import { PlacementFields } from './series-event-fields';
 import { MultiplierInput, isValidMultiplier } from './series-multiplier-input';
@@ -96,8 +95,6 @@ export function AddSeriesEventModal({
       <Stack gap="md">
         <SegmentedControl
           fullWidth
-          radius="xl"
-          classNames={classes}
           data={[{ label: 'Match', value: 'match' }, { label: 'Tournament', value: 'tournament' }]}
           value={type}
           onChange={(v) => { setType(v as 'match' | 'tournament'); setSelectedId(null); }}

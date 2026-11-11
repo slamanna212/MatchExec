@@ -80,14 +80,6 @@ export const EVENT_ROLE_COLOR: Record<SeriesEventRole, string> = {
   exhibition: 'teal',
 };
 
-export const SERIES_STATUS_COLOR: Record<SeriesStatus, string> = {
-  created: 'gray',
-  registration: 'yellow',
-  active: 'green',
-  complete: 'blue',
-  cancelled: 'red',
-};
-
 export const SERIES_FALLBACK_COLOR = '#7c3aed';
 
 export const EVENT_TYPE_COLOR: Record<'match' | 'tournament', string> = {

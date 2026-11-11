@@ -56,7 +56,6 @@ describe('CreateSeriesPage', () => {
     sessionStorage.setItem('seriesFormData', JSON.stringify({ name: 'My Series' }));
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/api/series' && init?.method === 'POST') return { ok: true, status: 201, json: async () => ({ id: 'series-new' }) };
-      if (String(url).endsWith('/transition')) return { ok: true, status: 200, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => ({}) };
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -80,11 +79,16 @@ describe('CreateSeriesPage', () => {
       );
     });
 
+    // The review step explains that events are built on the details page, and there is no create-and-activate shortcut.
+    expect(container.textContent).toContain('What happens next');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Activate'))).toBe(false);
+
     const create = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Create Series');
     expect(create).toBeTruthy();
     await act(async () => { create!.click(); });
     await flush();
 
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/transition'))).toBe(false);
     expect(container.querySelector('[data-testid="where"]')?.textContent).toBe('/series/series-new');
     expect(container.textContent).toContain('series page');
     expect(JSON.parse(sessionStorage.getItem('seriesFormData') ?? '{}').name ?? '').toBe('');

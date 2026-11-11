@@ -4,7 +4,6 @@ import { Modal, Stack, Group, Button, TextInput, SegmentedControl, Divider, Text
 import { DateTimePicker } from '@mantine/dates';
 // Date picker styles load with the components that use them (not in the entry bundle)
 import '@mantine/dates/styles.css';
-import classes from '@/components/gradient-segmented-control.module.css';
 import type { SeriesEntrantDto, SeriesStageDto, TournamentBracketFormat } from '@/shared/series-types';
 import { EntrantSelect } from './series-entrant-select';
 import { MatchTemplateFields, PlacementFields } from './series-event-fields';
@@ -185,8 +184,6 @@ function CreateTournamentForm({ onClose, series, stages, entrants, defaultStageI
           <Text size="sm" fw={500} mb={4}>Format</Text>
           <SegmentedControl
             fullWidth
-            radius="xl"
-            classNames={classes}
             value={format}
             onChange={(v) => setFormat(v as TournamentBracketFormat)}
             data={formats.map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}

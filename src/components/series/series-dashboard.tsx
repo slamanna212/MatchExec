@@ -3,7 +3,7 @@ import type { JSX } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
-  Card, Text, Button, Badge, Group, Stack, Grid, TextInput, Skeleton, Avatar, Divider, Image,
+  Card, Text, Button, Group, Stack, Grid, TextInput, Skeleton, Avatar, Divider, Image,
   ThemeIcon, useMantineColorScheme,
 } from '@mantine/core';
 import { IconTimeline, IconSearch } from '@tabler/icons-react';
@@ -14,7 +14,7 @@ import { StageRing } from '@/components/StageRing';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper, showError } from '@/lib/notifications';
 import {
-  SERIES_STATUS_COLOR, SERIES_FALLBACK_COLOR, seriesIdentity, seriesProgress, formatShortDateTime,
+  SERIES_FALLBACK_COLOR, seriesIdentity, seriesProgress, formatShortDateTime,
 } from './series-shared';
 import type { SeriesSummary } from './series-shared';
 
@@ -140,12 +140,7 @@ const SeriesCard = memo(({ series, onViewDetails, onAdvance, isTransitioning }: 
       <Group mb="md" p="lg" pb={0} wrap="nowrap" align="flex-start">
         <SeriesAvatar icon={identity?.game_icon} name={identity?.game_name} />
         <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-          <Group gap={6} wrap="nowrap">
-            <Text fw={600} truncate>{series.name}</Text>
-            <Badge variant="light" size="sm" color={SERIES_STATUS_COLOR[series.status]} style={{ flexShrink: 0 }}>
-              {series.status}
-            </Badge>
-          </Group>
+          <Text fw={600} truncate>{series.name}</Text>
           {identity?.game_name && <Text size="sm" c="dimmed">{identity.game_name}</Text>}
           <Text size="xs" c="violet" fw={500} lineClamp={1}>{upNextLabel(series)}</Text>
         </Stack>

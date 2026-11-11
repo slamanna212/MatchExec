@@ -6,6 +6,7 @@ import { Notifications } from '@mantine/notifications'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import './globals.css'
+import segmentedControlClasses from '@/components/gradient-segmented-control.module.css'
 
 // Shared input styles — avoids repeating the same two strings across every input component
 const INPUT_STYLES = {
@@ -13,6 +14,11 @@ const INPUT_STYLES = {
     backgroundColor: 'light-dark(var(--mantine-color-white), #1e1e2e)',
     borderColor: 'rgba(139, 92, 246, 0.35)',
   },
+} as const;
+
+// Shared dropdown look for every date picker input (DateTimePicker, DatePickerInput)
+const DATE_PICKER_POPOVER = {
+  classNames: { dropdown: 'date-picker-dropdown' },
 } as const;
 
 const theme = createTheme({
@@ -113,6 +119,19 @@ const theme = createTheme({
     NumberInput:   { styles: INPUT_STYLES },
     Textarea:      { styles: INPUT_STYLES },
     Select:        { styles: INPUT_STYLES },
+    MultiSelect:   { styles: INPUT_STYLES },
+    TagsInput:     { styles: INPUT_STYLES },
+    Autocomplete:  { styles: INPUT_STYLES },
+    ColorInput:    { styles: INPUT_STYLES },
+    FileInput:     { styles: INPUT_STYLES },
+
+    // Every tabbed selector on the site: pill shape with the purple active indicator.
+    SegmentedControl: {
+      classNames: segmentedControlClasses,
+      defaultProps: {
+        radius: 'xl',
+      },
+    },
 
     // Stable class names for NavLink — replaces fragile .m_XXXXXXXX selectors in globals.css
     NavLink: {
@@ -134,9 +153,14 @@ const theme = createTheme({
       defaultProps: {
         // Same en-US style the detail pages use (Mantine's default is DD/MM/YYYY HH:mm).
         valueFormat: 'MM/DD/YYYY h:mm A',
-        popoverProps: {
-          classNames: { dropdown: 'date-picker-dropdown' },
-        },
+        popoverProps: DATE_PICKER_POPOVER,
+      },
+    },
+
+    DatePickerInput: {
+      styles: INPUT_STYLES,
+      defaultProps: {
+        popoverProps: DATE_PICKER_POPOVER,
       },
     },
 

@@ -15,7 +15,6 @@ import { ParticipantsList } from './ParticipantsList';
 import { RemindersList } from './RemindersList';
 import { MapResultsSection } from './MapResultsSection';
 import { StatsVisualization } from '@/components/stats/StatsVisualization';
-import classes from '../gradient-segmented-control.module.css';
 
 function MapsTabContent({
   maps,
@@ -286,7 +285,6 @@ export function MatchContentPanel({
         <div style={{ width: '100%', overflowX: 'auto' }}>
           <Group justify="center" mb="sm" w="100%">
             <SegmentedControl
-              radius="xl"
               size="sm"
               data={tabData}
               value={effectiveTab}
@@ -294,7 +292,6 @@ export function MatchContentPanel({
                 localStorage.setItem(`match_tab_${match.id}`, value);
                 setActiveTab(value as TabValue);
               }}
-              classNames={classes}
               style={{ minWidth: 'fit-content' }}
             />
           </Group>

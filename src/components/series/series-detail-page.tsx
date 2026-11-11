@@ -8,7 +8,6 @@ import { modals } from '@mantine/modals';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { logger } from '@/lib/logger/client';
 import { notificationHelper } from '@/lib/notifications';
-import classes from '@/components/gradient-segmented-control.module.css';
 import { SeriesInfoPanel } from './SeriesInfoPanel';
 import { SeriesEntrantsPanel } from './series-entrants-panel';
 import { SeriesOverviewPanel } from './series-overview-panel';
@@ -223,9 +222,7 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
           <Stack gap="md">
             <Group justify="center">
               <SegmentedControl
-                radius="xl"
                 size="sm"
-                classNames={classes}
                 value={tab}
                 style={{ maxWidth: '100%', overflowX: 'auto' }}
                 onChange={changeTab}

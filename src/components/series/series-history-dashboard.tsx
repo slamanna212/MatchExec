@@ -3,7 +3,7 @@ import type { JSX, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import {
-  Card, Text, Badge, Group, Stack, Grid, TextInput, Divider, Button, Center, useMantineColorScheme,
+  Card, Text, Group, Stack, Grid, TextInput, Divider, Button, Center, useMantineColorScheme,
 } from '@mantine/core';
 import { IconClockHour3, IconSearch, IconTrophyFilled } from '@tabler/icons-react';
 import { EmptyState } from '@/components/EmptyState';
@@ -13,7 +13,7 @@ import { StageRing } from '@/components/StageRing';
 import { logger } from '@/lib/logger/client';
 import { SeriesCover, SeriesAvatar, SeriesSkeletonCard } from './series-dashboard';
 import {
-  SERIES_STATUS_COLOR, SERIES_FALLBACK_COLOR, seriesHistoryIdentity, seriesProgress, formatShortDate,
+  SERIES_FALLBACK_COLOR, seriesHistoryIdentity, seriesProgress, formatShortDate,
 } from './series-shared';
 import type { SeriesSummary } from './series-shared';
 
@@ -98,9 +98,6 @@ const HistorySeriesCard = memo(({ series, onViewDetails }: { series: SeriesSumma
               <Text size="sm" fw={500} truncate>{series.champion.name}</Text>
             </Group>
           ) : <Text size="sm">—</Text>}
-        </Row>
-        <Row label="Status">
-          <Badge size="sm" variant="light" color={SERIES_STATUS_COLOR[series.status]}>{series.status}</Badge>
         </Row>
         <Row label="Events">
           <Text size="sm">{series.completed_event_count} of {series.event_count}</Text>

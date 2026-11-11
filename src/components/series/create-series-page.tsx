@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Container, Stack, Button, Stepper, Group, Text, Divider } from '@mantine/core';
+import { Container, Stack, Button, Stepper, Group, Text, Divider, Alert, List } from '@mantine/core';
 import {
   IconTimeline, IconArrowLeft, IconInfoCircle, IconBell, IconCalculator,
   IconListCheck, IconSettings,
@@ -35,7 +35,7 @@ export function CreateSeriesPage(): JSX.Element {
 
   const { form, update, clear } = useSeriesForm();
   const { catalog, loaded: catalogLoaded } = useGameCatalog();
-  const [submitting, setSubmitting] = useState<'create' | 'activate' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   // Set once the series exists: clearing the form then must not bounce the user back to step 1 (see below).
   const createdRef = useRef(false);
 
@@ -67,7 +67,7 @@ export function CreateSeriesPage(): JSX.Element {
 
   const handleBack = () => (step === 1 ? handleCancel() : goTo(step - 1));
 
-  const handleCreate = async (activate: boolean) => {
+  const handleCreate = async () => {
     if (!canProceed(1)) {
       showError('Series name is required');
       goTo(1);
@@ -78,7 +78,7 @@ export function CreateSeriesPage(): JSX.Element {
       goTo(2);
       return;
     }
-    setSubmitting(activate ? 'activate' : 'create');
+    setSubmitting(true);
     const nid = 'series-create';
     notificationHelper.loading({ id: nid, message: 'Creating series...' });
 
@@ -116,24 +116,7 @@ export function CreateSeriesPage(): JSX.Element {
         }
       }
 
-      if (activate) {
-        const tRes = await fetch(`/api/series/${id}/transition`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'active' }),
-        });
-        if (tRes.ok) {
-          notificationHelper.update(nid, { type: 'success', message: 'Series created and activated!' });
-        } else {
-          const err = await tRes.json().catch(() => ({}));
-          notificationHelper.update(nid, {
-            type: 'warning',
-            message: `Series created, but activation failed: ${err.error ?? 'unknown error'}`,
-          });
-        }
-      } else {
-        notificationHelper.update(nid, { type: 'success', message: 'Series created!' });
-      }
+      notificationHelper.update(nid, { type: 'success', message: 'Series created! Add stages and events next.' });
 
       if (copyWarning) showWarning(copyWarning, 'Entrants copied with problems');
 
@@ -144,7 +127,7 @@ export function CreateSeriesPage(): JSX.Element {
       logger.error('Error creating series:', err);
       notificationHelper.update(nid, { type: 'error', message: 'An error occurred while creating the series' });
     } finally {
-      setSubmitting(null);
+      setSubmitting(false);
     }
   };
 
@@ -178,10 +161,15 @@ export function CreateSeriesPage(): JSX.Element {
         )}
         {step === 3 && <SeriesNotificationsFields form={form} update={update} />}
         {step === 4 && <SeriesScoringFields form={form} update={update} />}
-        {step === 5 && <ReviewStep form={form} catalog={catalog} />}
+        {step === 5 && (
+          <Stack gap="md">
+            <ReviewStep form={form} catalog={catalog} />
+            <NextStepsNote />
+          </Stack>
+        )}
 
         <Group justify="space-between">
-          <Button variant="outline" onClick={handleBack} disabled={submitting !== null}>
+          <Button variant="outline" onClick={handleBack} disabled={submitting}>
             {step === 1 ? 'Cancel' : 'Back'}
           </Button>
           {step < STEPS.length ? (
@@ -189,27 +177,31 @@ export function CreateSeriesPage(): JSX.Element {
               Next: {STEPS[step].label}
             </Button>
           ) : (
-            <Group gap="sm">
-              <Button
-                variant="outline"
-                onClick={() => handleCreate(false)}
-                loading={submitting === 'create'}
-                disabled={submitting !== null}
-              >
-                Create Series
-              </Button>
-              <Button
-                onClick={() => handleCreate(true)}
-                loading={submitting === 'activate'}
-                disabled={submitting !== null}
-              >
-                Create &amp; Activate
-              </Button>
-            </Group>
+            <Button onClick={() => { void handleCreate(); }} loading={submitting} disabled={submitting}>
+              Create Series
+            </Button>
           )}
         </Group>
       </Stack>
     </Container>
+  );
+}
+
+/** The create flow only sets up the season shell; events are built on the details page before anything is announced. */
+function NextStepsNote(): JSX.Element {
+  return (
+    <Alert variant="light" color="blue" icon={<IconInfoCircle size={18} />} title="What happens next">
+      <Stack gap={6}>
+        <Text size="sm">
+          The series is created as a draft: nothing is posted to Discord and players cannot register yet.
+        </Text>
+        <List size="sm" type="ordered" spacing={4}>
+          <List.Item>On the series page, add stages (optional) and the events: matches, tournaments or a generated schedule.</List.Item>
+          <List.Item>Add or copy entrants if you are not using Discord registration.</List.Item>
+          <List.Item>When the schedule is ready, <b>Open registration</b> (posts to Discord) or <b>Start season</b>.</List.Item>
+        </List>
+      </Stack>
+    </Alert>
   );
 }
 

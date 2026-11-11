@@ -22,7 +22,6 @@ import { StageRing } from '../StageRing';
 import { EmptyState } from '../EmptyState';
 import { LeaderboardView, type CumulativeStanding } from '../tournament/leaderboard-view';
 import { RankedTable } from '../shared/RankedTable';
-import classes from '../gradient-segmented-control.module.css';
 
 // Use shared type as local alias
 type TournamentWithGame = TournamentWithGameDetails;
@@ -123,7 +122,6 @@ export function TournamentContentPanel({
       <div style={{ width: '100%', overflowX: 'auto' }}>
         <Group justify="center" mb="sm">
           <SegmentedControl
-            radius="xl"
             size="sm"
             data={
               isCumulative
@@ -150,7 +148,6 @@ export function TournamentContentPanel({
               localStorage.setItem(`tournament_tab_${tournament.id}`, value);
               setActiveTab(value as 'teams' | 'bracket' | 'standings' | 'control');
             }}
-            classNames={classes}
             style={{ minWidth: 'fit-content' }}
           />
         </Group>

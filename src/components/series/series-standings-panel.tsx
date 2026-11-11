@@ -5,7 +5,6 @@ import { IconAlertCircle, IconTrophy } from '@tabler/icons-react';
 import { EmptyState } from '@/components/EmptyState';
 import { RankedTable } from '@/components/shared/RankedTable';
 import type { RankedTableColumn } from '@/components/shared/RankedTable';
-import classes from '@/components/gradient-segmented-control.module.css';
 import { logger } from '@/lib/logger/client';
 import type { SeriesStageDto, SeriesStandingRow, SeriesStandingsResponse } from '@/shared/series-types';
 import { errorMessage, scheduleApi } from './series-schedule-api';
@@ -185,8 +184,6 @@ export function SeriesStandingsPanel({ series, stages, refreshToken = 0 }: Serie
       {team && (
         <SegmentedControl
           size="xs"
-          radius="xl"
-          classNames={classes}
           value={view}
           onChange={(v) => setView(v as 'entrant' | 'individual')}
           data={[{ label: 'Entrants', value: 'entrant' }, { label: 'Individual', value: 'individual' }]}
