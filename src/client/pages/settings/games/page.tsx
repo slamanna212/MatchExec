@@ -91,6 +91,17 @@ export default function GamesSettingsPage() {
                     color: 'inherit',
                     background: 'var(--mantine-color-dark-6)',
                     border: `1px solid ${color}40`,
+                    transition: 'all 0.25s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-3px)';
+                    e.currentTarget.style.boxShadow = `0 4px 14px ${color}33`;
+                    e.currentTarget.style.borderColor = `${color}88`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '';
+                    e.currentTarget.style.borderColor = `${color}40`;
                   }}
                 >
                   {game.coverUrl ? (

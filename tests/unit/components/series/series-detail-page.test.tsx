@@ -78,6 +78,9 @@ interface StubOptions {
   entrants?: unknown[];
   scoringType?: 'Normal' | 'FFA' | 'Position';
   nextEvent?: unknown;
+  channels?: unknown[];
+  standingsRows?: unknown[];
+  series?: Record<string, unknown>;
 }
 
 function stubApi(status: Status, opts: StubOptions = {}) {
@@ -90,7 +93,11 @@ function stubApi(status: Status, opts: StubOptions = {}) {
     if (method === 'PATCH') return json(patchResponse.body, patchResponse.ok);
     if (method === 'DELETE') return json({ success: true, deleted_target: true });
     if (method === 'POST' && url.endsWith('/complete')) return json({ stage: STAGES[0], seedable_event_ids: ['p1'] });
-    if (url.includes('/standings')) return json({ series_id: 's1', series_name: 'Season', mode: 'head_to_head', scope: { type: 'season' }, view: 'entrant', events: [], divisions: [], rows: [], standings: [] });
+    if (url.includes('/standings')) {
+      const rows = opts.standingsRows ?? [];
+      return json({ series_id: 's1', series_name: 'Season', mode: 'head_to_head', scope: { type: 'season' }, view: 'entrant', events: [], divisions: [], rows, standings: rows });
+    }
+    if (url === '/api/channels') return json(opts.channels ?? []);
     if (url.endsWith('/events')) return json({ events: opts.events ?? EVENTS });
     if (url.endsWith('/stages')) return json({ stages: opts.stages ?? STAGES });
     if (url.includes('/entrants')) return json({ entrants: opts.entrants ?? [] });
@@ -102,6 +109,7 @@ function stubApi(status: Status, opts: StubOptions = {}) {
       created_at: '2026-01-01 00:00:00', updated_at: '2026-01-01 00:00:00', scoring_config: { mode: 'head_to_head' },
       event_count: 3, completed_event_count: 1, participant_count: 0, entrant_count: 0,
       next_event: opts.nextEvent ?? null, last_event_game: null, series_game: null, champion: opts.champion ?? null,
+      ...opts.series,
     } });
   }));
   return calls;
@@ -210,6 +218,81 @@ describe('overview', () => {
     const c = await renderPage();
     expect(c.querySelector('[data-testid="champion-banner"]')).toBeNull();
     expect(rows().map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Finals')]));
+  });
+
+  const checklistState = (key: string) => document.querySelector(`[data-testid="checklist-${key}"]`)?.getAttribute('data-state');
+
+  it('shows the setup checklist for a draft, with the open steps and no status buttons of its own', async () => {
+    stubApi('created', { events: [] });
+    const c = await renderPage();
+    await act(async () => { await Promise.resolve(); });
+    expect(c.querySelector('[data-testid="setup-checklist"]')!.textContent).toContain('Draft: finish setting up');
+    expect(checklistState('details')).toBe('done');
+    expect(checklistState('events')).toBe('todo');
+    expect(checklistState('discord')).toBe('todo'); // no announcement channel
+    expect(checklistState('entrants')).toBe('optional'); // players can register from Discord
+    // Open registration / Start season stay in the left panel only.
+    expect(Array.from(document.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Open registration')).toHaveLength(1);
+
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-testid="checklist-events"] button')!.click(); });
+    expect(search()).toBe('?tab=schedule');
+  });
+
+  it('says the draft is ready once every required step is done, and previews the schedule', async () => {
+    stubApi('created', {
+      entrants: ENTRANTS,
+      channels: [{ channel_type: 'text', send_announcements: true, send_series_updates: true }],
+    });
+    const c = await renderPage();
+    await act(async () => { await Promise.resolve(); });
+    expect(c.textContent).toContain('Ready to announce');
+    expect(checklistState('events')).toBe('done');
+    expect(checklistState('stages')).toBe('done');
+    expect(checklistState('entrants')).toBe('done');
+    expect(checklistState('discord')).toBe('done');
+    expect(c.textContent).toContain('Schedule preview');
+  });
+
+  it('lists pending registrations with an approve button while registration is open', async () => {
+    const pending = { ...ENTRANTS[0], id: 'p', name: 'Newcomers', status: 'pending', members: [{ id: 'm1', username: 'cap', role: 'captain' }] };
+    const calls = stubApi('registration', { entrants: [ENTRANTS[1], pending], series: { roster_min: 5 } });
+    const c = await renderPage();
+    await act(async () => { await Promise.resolve(); });
+    const row = c.querySelector('[data-testid="pending-entrant"]')!;
+    expect(row.textContent).toContain('Newcomers');
+    expect(row.textContent).toContain('captain cap');
+    expect(row.textContent).toContain('needs 5');
+    expect(c.querySelector('[data-testid="registration-readiness"]')!.textContent).toContain('At least two approved teams');
+
+    await act(async () => { row.querySelector('button')!.click(); });
+    await act(async () => { await Promise.resolve(); });
+    const patch = calls.find((x) => x.method === 'PATCH')!;
+    expect(patch.url).toBe('/api/series/s1/entrants/p');
+    expect(patch.body).toEqual({ status: 'active' });
+  });
+
+  it('shows season progress and the top of the standings while active', async () => {
+    const row = (rank: number, name: string) => ({ rank, key: name, entrant_id: name, name, total_points: 10 - rank, events_played: 1, match_wins: 3 - rank, match_losses: rank, events: [], username: name, user_id: name });
+    stubApi('active', { standingsRows: [row(1, 'Alpha'), row(2, 'Bravo')] });
+    const c = await renderPage();
+    await act(async () => { await Promise.resolve(); });
+    const progress = c.querySelector('[data-testid="season-progress"]')!;
+    expect(progress.textContent).toContain('1 / 3 events played');
+    expect(progress.textContent).toContain('Stage 1');
+    expect(progress.textContent).toContain('Stage 1 of 2');
+    const table = c.querySelector('[data-testid="standings-snapshot"]')!;
+    expect(table.textContent).toContain('Alpha');
+    expect(table.textContent).toContain('2-1');
+  });
+
+  it('shows the final standings and a recap once complete', async () => {
+    const row = { rank: 1, key: 'a', entrant_id: 'a', name: 'Alpha', total_points: 9, events_played: 3, events: [], username: 'Alpha', user_id: 'a' };
+    stubApi('complete', { champion: { entrant_id: 'a', name: 'Alpha', source: 'standings' }, standingsRows: [row] });
+    const c = await renderPage();
+    await act(async () => { await Promise.resolve(); });
+    expect(c.textContent).toContain('Final standings');
+    expect(c.textContent).toContain('Events played');
+    expect(c.textContent).not.toContain('Up next');
   });
 });
 

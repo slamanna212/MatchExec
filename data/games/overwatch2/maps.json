@@ -84,6 +84,13 @@
       "thumbnailUrl": "/public/assets/games/overwatch2/maps/kings-row.jpg"
     },
     {
+      "id": "neon-junction",
+      "name": "Neon Junction",
+      "type": "Hybrid",
+      "location": "Tokyo, Japan",
+      "thumbnailUrl": "/public/assets/games/overwatch2/maps/neon-junction.webp"
+    },
+    {
       "id": "midtown",
       "name": "Midtown",
       "type": "Hybrid",

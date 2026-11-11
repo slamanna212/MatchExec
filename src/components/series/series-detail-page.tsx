@@ -111,9 +111,10 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  // Auto-refresh while the series is running so event progress and standings stay live (paused while the tab is hidden).
-  const isActive = series?.status === 'active';
-  usePolling(() => fetchData(), isActive ? refreshInterval * 1000 : null);
+  // Auto-refresh while the series is running (event progress, standings) or taking registrations (Discord sign-ups),
+  // paused while the tab is hidden.
+  const isLive = series?.status === 'active' || series?.status === 'registration';
+  usePolling(() => fetchData(), isLive ? refreshInterval * 1000 : null);
 
   const transition = useCallback(async (status: string) => {
     const msgs = TRANSITION_MESSAGES[status];
@@ -235,7 +236,13 @@ export function SeriesDetailPage({ seriesId }: { seriesId: string }): JSX.Elemen
               />
             </Group>
             {tab === 'overview' && (
-              <SeriesOverviewPanel series={series} events={events} onOpenSchedule={() => changeTab('schedule')} />
+              <SeriesOverviewPanel
+                series={series}
+                events={events}
+                refreshToken={dataVersion}
+                onOpenTab={changeTab}
+                onChanged={() => { void fetchData(); }}
+              />
             )}
             {tab === 'schedule' && (
               <SeriesSchedulePanel series={series} events={events} onChanged={() => { void fetchData(); }} />
