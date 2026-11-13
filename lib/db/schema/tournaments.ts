@@ -106,6 +106,8 @@ export const tournaments = pgTable('tournaments', {
   player_notifications: boolean('player_notifications').notNull().default(true),
   livestream_link: text('livestream_link'),
   position_scoring_override: jsonb('position_scoring_override').$type<PositionScoringConfig>(),
+  /** Players may create a new team from the Discord signup (only with allow_player_team_selection). */
+  allow_discord_team_creation: boolean('allow_discord_team_creation').notNull().default(false),
 }, (t) => [
   index('idx_tournaments_status').on(t.status),
   index('idx_tournaments_game_id').on(t.game_id),

@@ -119,6 +119,15 @@ describe('POST /api/tournaments', () => {
     expect(data).toMatchObject({ ruleset: 'competitive', max_participants: 32, allow_player_team_selection: true, allow_match_editing: false, stats_enabled: true });
   });
 
+  it('stores Discord team creation only together with player team selection', async () => {
+    const on = await appRequest('/api/tournaments', { method: 'POST', json: body({ allowPlayerTeamSelection: true, allowDiscordTeamCreation: true }) });
+    expect(on.data).toMatchObject({ allow_player_team_selection: true, allow_discord_team_creation: true });
+    const without = await appRequest('/api/tournaments', { method: 'POST', json: body({ allowPlayerTeamSelection: false, allowDiscordTeamCreation: true }) });
+    expect(without.data).toMatchObject({ allow_player_team_selection: false, allow_discord_team_creation: false });
+    const off = await appRequest('/api/tournaments', { method: 'POST', json: body({}) });
+    expect(off.data.allow_discord_team_creation).toBe(false);
+  });
+
   it('rejects missing required fields, an invalid format, bad ranges and an unparseable date', async () => {
     expect((await appRequest('/api/tournaments', { method: 'POST', json: { name: 'Test Tournament' } })).status).toBe(400);
     expect((await appRequest('/api/tournaments', { method: 'POST', json: body({ format: 'invalid-format' }) })).status).toBe(400);

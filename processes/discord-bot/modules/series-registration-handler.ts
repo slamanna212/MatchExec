@@ -6,7 +6,7 @@ import { db as pgDb, type Executor } from '../../../lib/db';
 import { logger } from '../../../src/lib/logger/server';
 import {
   MAX_TEAM_NAME_LENGTH, MAX_TEAM_TAG_LENGTH, SeriesError, getSeriesById, joinSeriesEntrant, leaveSeries, listJoinableEntrants,
-  registerForSeries, type RegistrationPlayer,
+  TEAM_CREATION_DISABLED, registerForSeries, teamCreationAllowed, type RegistrationPlayer,
 } from '../../../src/lib/series';
 import { capTitle } from './utils';
 import { SERIES_JOIN_PREFIX, SERIES_LEAVE_PREFIX, SERIES_REGISTER_PREFIX } from './series-update-handler';
@@ -77,6 +77,11 @@ export class SeriesRegistrationHandler {
     }
 
     if (series.entrant_type === 'team') {
+      // Older posts may still show the Register button after the organizer turned team creation off.
+      if (!teamCreationAllowed(series)) {
+        await this.reply(interaction, `❌ ${TEAM_CREATION_DISABLED}`);
+        return;
+      }
       // A modal must be the first response to the interaction, so the status check above is the only pre-check.
       const modal = new ModalBuilder().setCustomId(`${SERIES_TEAM_MODAL_PREFIX}${seriesId}`).setTitle(capTitle(`Register a team - ${series.name}`, 45));
       modal.addComponents(
@@ -126,7 +131,9 @@ export class SeriesRegistrationHandler {
 
     const joinable = await listJoinableEntrants(this.ex, seriesId);
     if (joinable.length === 0) {
-      await this.reply(interaction, '❌ There is no team with a free spot. Register a new team instead.');
+      await this.reply(interaction, teamCreationAllowed(series)
+        ? '❌ There is no team with a free spot. Register a new team instead.'
+        : '❌ There is no team with a free spot. Ask an organizer to add a team.');
       return;
     }
 

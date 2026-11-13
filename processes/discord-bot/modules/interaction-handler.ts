@@ -15,7 +15,9 @@ import {
   TextInputBuilder,
   TextInputStyle,
   StringSelectMenuBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } from 'discord.js';
 import type { DiscordSettings } from '../../../shared/types';
 import { logger } from '../../../src/lib/logger/server';
@@ -25,7 +27,7 @@ import { getAnnouncementMessage } from '../../../src/lib/discord-messages';
 import { countParticipants, getMatch, getMatchWithGame, getMatchSignupLimit, isSignedUp, listActiveMatchSignups, listActiveMatchSummaries } from '../../../src/lib/matches';
 import {
   getTeamName, getTournamentSignupLimit, getTournamentWithGameDisplay, isSignedUp as isTournamentSignedUp, listActiveTournamentSignups,
-  listActiveTournamentSummaries, listTeamsByName, countParticipants as countTournamentParticipants,
+  listActiveTournamentSummaries, listTeamsByName, countParticipants as countTournamentParticipants, MAX_TOURNAMENT_TEAM_NAME_LENGTH,
 } from '../../../src/lib/tournaments';
 import { capTitle } from './utils';
 
@@ -34,7 +36,7 @@ import { SignupFormLoader } from '../../../lib/signup-forms';
 import { version } from '../../../package.json';
 
 // Import helper functions
-import { parseModalCustomId } from '../utils/id-parsers';
+import { NEW_TEAM_MODAL_PREFIX, parseModalCustomId } from '../utils/id-parsers';
 import {
   collectFormData,
   DuplicateSignupError,
@@ -50,6 +52,30 @@ interface EventData {
   max_signups: number;
   game_id: string;
   allow_player_team_selection?: boolean;
+  allow_discord_team_creation?: boolean;
+}
+
+/** Button of the tournament team picker that opens the "Create a team" modal. */
+const NEW_TEAM_BUTTON_PREFIX = 'tournament_newteam:';
+/** Modal field holding the new team's name (prefixed so it never clashes with a game's signup field id). */
+const NEW_TEAM_NAME_FIELD = 'mx_new_team_name';
+const SELECT_MAX_OPTIONS = 25;
+const MODAL_MAX_ROWS = 5;
+
+type SignupFormDef = NonNullable<Awaited<ReturnType<typeof SignupFormLoader.loadSignupForm>>>;
+
+/** Text input rows for a game's signup fields (at most `max`; a modal holds five rows). */
+function signupFieldRows(signupForm: SignupFormDef, max = MODAL_MAX_ROWS): ActionRowBuilder<TextInputBuilder>[] {
+  return signupForm.fields.slice(0, max).map((field) => {
+    const textInput = new TextInputBuilder()
+      .setCustomId(field.id)
+      .setLabel(field.label)
+      .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+      .setRequired(field.required)
+      .setMaxLength(field.type === 'largetext' ? 1000 : 100);
+    if (field.placeholder) textInput.setPlaceholder(field.placeholder);
+    return new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
+  });
 }
 
 /**
@@ -80,41 +106,52 @@ async function checkEventCapacity(
   const participantCount = await countTournamentParticipants(pgDb, eventId);
   const limit = await getTournamentSignupLimit(pgDb, eventId);
   const eventData: EventData | null = limit
-    ? { game_id: limit.game_id, max_signups: limit.max_participants ?? 999999, allow_player_team_selection: limit.allow_player_team_selection }
+    ? {
+        game_id: limit.game_id, max_signups: limit.max_participants ?? 999999, allow_player_team_selection: limit.allow_player_team_selection,
+        allow_discord_team_creation: limit.allow_player_team_selection && limit.allow_discord_team_creation,
+      }
     : null;
 
   return { isFull: participantCount >= (eventData?.max_signups || 16), eventData };
 }
 
 /**
- * Shows team selection menu for tournaments
+ * Shows the tournament team picker: a select menu of the existing teams and, when the tournament allows it, a
+ * "Create a team" button. Returns false when there is nothing to pick (no teams and no team creation).
  */
 async function showTeamSelectionMenu(
   interaction: ButtonInteraction,
-  eventId: string
+  eventId: string,
+  allowCreate: boolean
 ): Promise<boolean> {
   const teams = await listTeamsByName(pgDb, eventId);
 
-  if (!teams || teams.length === 0) {
+  if (teams.length === 0 && !allowCreate) {
     return false;
   }
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`team_select_${eventId}`)
-    .setPlaceholder('Select a team')
-    .addOptions(teams.map(team => ({
-      label: team.team_name,
-      value: team.id,
-      description: `Join ${team.team_name}`
-    })));
+  const components: Array<ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>> = [];
+  if (teams.length > 0) {
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`team_select_${eventId}`)
+      .setPlaceholder('Select a team')
+      .addOptions(teams.slice(0, SELECT_MAX_OPTIONS).map(team => ({
+        label: capTitle(team.team_name, 100),
+        value: team.id,
+        description: capTitle(`Join ${team.team_name}`, 100)
+      })));
+    components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu));
+  }
+  if (allowCreate) {
+    components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`${NEW_TEAM_BUTTON_PREFIX}${eventId}`).setLabel('➕ Create a team').setStyle(ButtonStyle.Primary),
+    ));
+  }
 
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+  let content = '👥 Please select a team to join:';
+  if (allowCreate) content = teams.length > 0 ? '👥 Select a team to join, or create your own:' : '👥 No teams yet. Create one to sign up:';
 
-  await interaction.reply({
-    content: '👥 Please select a team to join:',
-    components: [row],
-    flags: MessageFlags.Ephemeral
-  });
+  await interaction.reply({ content, components, flags: MessageFlags.Ephemeral });
 
   return true;
 }
@@ -141,27 +178,7 @@ async function showSignupModal(
     .setCustomId(`signup_form_${eventId}`)
     .setTitle('Event Sign Up');
 
-  const rows: ActionRowBuilder<TextInputBuilder>[] = [];
-
-  for (let i = 0; i < Math.min(signupForm.fields.length, 5); i++) {
-    const field = signupForm.fields[i];
-
-    const textInput = new TextInputBuilder()
-      .setCustomId(field.id)
-      .setLabel(field.label)
-      .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-      .setRequired(field.required)
-      .setMaxLength(field.type === 'largetext' ? 1000 : 100);
-
-    if (field.placeholder) {
-      textInput.setPlaceholder(field.placeholder);
-    }
-
-    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
-    rows.push(row);
-  }
-
-  modal.addComponents(...rows);
+  modal.addComponents(...signupFieldRows(signupForm));
   await interaction.showModal(modal);
 
   return true;
@@ -419,6 +436,10 @@ export class InteractionHandler {
 
   async handleButtonInteraction(interaction: ButtonInteraction) {
     if (await this.seriesRegistration.handleButton(interaction)) return;
+    if (interaction.customId.startsWith(NEW_TEAM_BUTTON_PREFIX)) {
+      await this.handleCreateTeamButton(interaction, interaction.customId.slice(NEW_TEAM_BUTTON_PREFIX.length));
+      return;
+    }
     if (!interaction.customId.startsWith('signup_')) return;
 
     const eventId = interaction.customId.replace('signup_', '');
@@ -437,7 +458,7 @@ export class InteractionHandler {
       if (!eventData) { await interaction.reply({ content: '❌ Event not found!', flags: MessageFlags.Ephemeral }); return; }
 
       if (isTournament && eventData.allow_player_team_selection === true) {
-        const teamSelectionShown = await showTeamSelectionMenu(interaction, eventId);
+        const teamSelectionShown = await showTeamSelectionMenu(interaction, eventId, eventData.allow_discord_team_creation === true);
         if (teamSelectionShown) return;
       }
 
@@ -446,6 +467,43 @@ export class InteractionHandler {
     } catch (error) {
       logger.error('❌ Error handling signup button:', error);
       await interaction.reply({ content: '❌ An error occurred. Please try again.', flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  /** "Create a team" from the tournament team picker: a modal with the team name and the game's signup fields. */
+  private async handleCreateTeamButton(interaction: ButtonInteraction, eventId: string) {
+    try {
+      const denial = await this.getPreSignupDenial(eventId, interaction.user.id, true);
+      if (denial) { await interaction.reply({ content: denial, flags: MessageFlags.Ephemeral }); return; }
+
+      const { isFull, eventData } = await checkEventCapacity(eventId, true);
+      if (!eventData) { await interaction.reply({ content: '❌ Event not found!', flags: MessageFlags.Ephemeral }); return; }
+      if (isFull) { await interaction.reply({ content: '❌ This event is full!', flags: MessageFlags.Ephemeral }); return; }
+      if (!eventData.allow_discord_team_creation) {
+        await interaction.reply({ content: '❌ Teams can not be created from Discord for this tournament.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      const signupForm = await SignupFormLoader.loadSignupForm(eventData.game_id);
+      if (!signupForm) {
+        await interaction.reply({ content: '❌ Could not load signup form. Please try again.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`${NEW_TEAM_MODAL_PREFIX}${eventId}`)
+        .setTitle('Create a Team & Sign Up');
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId(NEW_TEAM_NAME_FIELD).setLabel('Team name').setStyle(TextInputStyle.Short)
+            .setRequired(true).setMaxLength(MAX_TOURNAMENT_TEAM_NAME_LENGTH),
+        ),
+        ...signupFieldRows(signupForm, MODAL_MAX_ROWS - 1),
+      );
+      await interaction.showModal(modal);
+    } catch (error) {
+      logger.error('❌ Error handling create team button:', error);
+      await interaction.reply({ content: '❌ An error occurred. Please try again.', flags: MessageFlags.Ephemeral }).catch(() => undefined);
     }
   }
 
@@ -465,8 +523,11 @@ export class InteractionHandler {
     // Retrieve and consume pending team selection (stored when user chose a team from the dropdown)
     const pending = this.pendingTeamSelections.get(interaction.user.id);
     this.pendingTeamSelections.delete(interaction.user.id);
-    if (pending && pending.eventId === parsedId.eventId && !parsedId.selectedTeamId) {
+    if (pending && pending.eventId === parsedId.eventId && !parsedId.selectedTeamId && !parsedId.newTeam) {
       parsedId.selectedTeamId = pending.teamId;
+    }
+    if (parsedId.newTeam) {
+      parsedId.newTeamName = interaction.fields.getTextInputValue(NEW_TEAM_NAME_FIELD).trim();
     }
 
     logger.debug('Parsed signup modal ID:', { eventId: parsedId.eventId, isTournament: parsedId.isTournament, teamId: parsedId.selectedTeamId });
@@ -612,29 +673,7 @@ export class InteractionHandler {
           .setCustomId(`signup_form_${eventId}`)
           .setTitle(capTitle(`Sign Up - ${teamName}`, 45));
 
-        const rows: ActionRowBuilder<TextInputBuilder>[] = [];
-
-        for (let i = 0; i < Math.min(signupForm.fields.length, 5); i++) {
-          const field = signupForm.fields[i];
-
-          const textInput = new TextInputBuilder()
-            .setCustomId(field.id)
-            .setLabel(field.label)
-            .setStyle(field.type === 'largetext' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-            .setRequired(field.required)
-            .setMaxLength(field.type === 'largetext' ? 1000 : 100);
-
-          if (field.placeholder) {
-            textInput.setPlaceholder(field.placeholder);
-          }
-
-          const row = new ActionRowBuilder<TextInputBuilder>()
-            .addComponents(textInput);
-
-          rows.push(row);
-        }
-
-        modal.addComponents(...rows);
+        modal.addComponents(...signupFieldRows(signupForm));
         await interaction.showModal(modal);
       }
     } catch (error) {

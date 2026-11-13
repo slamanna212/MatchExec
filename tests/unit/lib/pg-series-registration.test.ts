@@ -48,6 +48,18 @@ describe('registerForSeries', () => {
     expect(e.members[0]).toMatchObject({ user_id: 'u-alice', role: 'captain' });
   });
 
+  it('refuses a new team when team creation is turned off (409), but solo series are unaffected', async () => {
+    const s = await insertSeries({ entrant_type: 'team', status: 'registration', discord_config: { team_creation: false } });
+    await rejects(registerForSeries(pg(), s.id, alice, { team: { name: 'Rockets' } }), 409, /can not be registered/);
+    expect(await listEntrants(pg(), s.id)).toEqual([]);
+
+    const explicit = await insertSeries({ entrant_type: 'team', status: 'registration', discord_config: { team_creation: true } });
+    await expect(registerForSeries(pg(), explicit.id, alice, { team: { name: 'Rockets' } })).resolves.toMatchObject({ entrant_name: 'Rockets' });
+
+    const soloSeries = await insertSeries({ entrant_type: 'solo', status: 'registration', discord_config: { team_creation: false } });
+    await expect(registerForSeries(pg(), soloSeries.id, bob)).resolves.toMatchObject({ entrant_name: 'Bob' });
+  });
+
   it('validates the team name and tag', async () => {
     const s = await insertSeries({ entrant_type: 'team', status: 'registration' });
     await rejects(registerForSeries(pg(), s.id, alice), 400, /team name is required/);

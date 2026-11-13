@@ -275,6 +275,9 @@ function ReviewStep({ form, catalog }: { form: SeriesFormData; catalog: GameCata
           {form.scoring_type ? `${describeSeriesFormat(form.entrant_type, form.scoring_type)}${rosterText}` : '—'}
         </ReviewRow>
         <ReviewRow label="Games">{allowedGames.length > 0 ? allowedGames.map(gameName).join(', ') : 'Any'}</ReviewRow>
+        {form.entrant_type === 'team' && (
+          <ReviewRow label="Team creation">{form.discord_team_creation ? 'Players can create teams from Discord' : 'Organizers only'}</ReviewRow>
+        )}
         <ReviewRow label="Primary game">{form.game_id ? gameName(form.game_id) : '—'}</ReviewRow>
         <ReviewRow label="Copy entrants from">{form.previous_series_id ? 'A previous series' : 'No'}</ReviewRow>
         <Divider />

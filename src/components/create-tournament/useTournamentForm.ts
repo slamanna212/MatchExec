@@ -30,6 +30,7 @@ export interface TournamentFormData {
   eventImageUrl?: string;
   preCreatedTeams?: string[];
   allowPlayerTeamSelection?: boolean;
+  allowDiscordTeamCreation?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
   announcements?: AnnouncementTime[];
@@ -64,6 +65,7 @@ export function useTournamentForm() {
       ruleset: 'casual',
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
+      allowDiscordTeamCreation: false,
       allowMatchEditing: true,
       statsEnabled: false,
       announcements: [],
@@ -105,6 +107,7 @@ export function useTournamentForm() {
       ruleset: 'casual',
       preCreatedTeams: [],
       allowPlayerTeamSelection: false,
+      allowDiscordTeamCreation: false,
       allowMatchEditing: true,
       statsEnabled: false,
       announcements: [],

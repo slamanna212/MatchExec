@@ -134,7 +134,7 @@ export function validateMatchDefaults(value: unknown): string | null {
 /** `discord_config` shape. Returns an error message or null. */
 export function validateDiscordConfig(value: unknown): string | null {
   if (!isObject(value)) return 'discord_config must be an object';
-  for (const key of ['weekly_schedule', 'standings_posts', 'registration_posts']) {
+  for (const key of ['weekly_schedule', 'standings_posts', 'registration_posts', 'team_creation']) {
     if (value[key] !== undefined && typeof value[key] !== 'boolean') return `discord_config.${key} must be a boolean`;
   }
   const lead = value.schedule_lead_hours;

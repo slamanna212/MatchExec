@@ -39,6 +39,13 @@ export interface JoinableEntrant {
 export const MAX_TEAM_NAME_LENGTH = 45;
 export const MAX_TEAM_TAG_LENGTH = 8;
 
+export const TEAM_CREATION_DISABLED = 'New teams can not be registered from Discord for this series. Use Join team to join an existing team.';
+
+/** Team series: may players register new teams themselves (`discord_config.team_creation`, default true)? */
+export function teamCreationAllowed(s: Pick<SeriesRow, 'discord_config'>): boolean {
+  return s.discord_config?.team_creation !== false;
+}
+
 const cleaned = (v: string | null | undefined): string => (typeof v === 'string' ? v.trim() : '');
 
 /** Locks the series and requires registration to be open (409 otherwise, 404 for an unknown series). */
@@ -86,6 +93,7 @@ export async function registerForSeries(
     let name: string;
     let tag: string | null = null;
     if (series.entrant_type === 'team') {
+      if (!teamCreationAllowed(series)) throw new SeriesError(TEAM_CREATION_DISABLED, 409);
       name = cleaned(options.team?.name);
       if (!name) throw new SeriesError('A team name is required', 400);
       if (name.length > MAX_TEAM_NAME_LENGTH) throw new SeriesError(`A team name has at most ${MAX_TEAM_NAME_LENGTH} characters`, 400);

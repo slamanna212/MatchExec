@@ -124,6 +124,13 @@ export function TournamentReviewStep({
             </Group>
           )}
 
+          {formData.allowPlayerTeamSelection && (
+            <Group>
+              <Text fw={500}>Teams:</Text>
+              <Text>{formData.allowDiscordTeamCreation ? 'Players pick or create a team from Discord' : 'Players pick a team from Discord'}</Text>
+            </Group>
+          )}
+
           {formData.preCreatedTeams && formData.preCreatedTeams.length > 0 && (
             <div>
               <Text fw={500} mb="xs">Pre-Created Teams:</Text>

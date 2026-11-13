@@ -150,6 +150,17 @@ export function SeriesFormatFields({ form, update, catalog, catalogLoaded, locks
         </Group>
       )}
 
+      {form.entrant_type === 'team' && (
+        <Switch
+          label="Allow creating teams from Discord"
+          description={form.discord_team_creation
+            ? 'Players can register a new team from the Discord registration post'
+            : 'Only organizers create teams; players can join an existing team from Discord'}
+          checked={form.discord_team_creation}
+          onChange={(e) => update('discord_team_creation', e.currentTarget.checked)}
+        />
+      )}
+
       <div>
         <Select
           label="Scoring type"
@@ -275,6 +286,7 @@ export function SeriesMatchDefaultsFields({ form, update }: { form: SeriesFormDa
         />
         <Select
           label="Rules"
+          description="Ruleset applied to created matches"
           placeholder="Game default"
           data={[{ value: 'casual', label: 'Casual' }, { value: 'competitive', label: 'Competitive' }]}
           value={form.match_rules}

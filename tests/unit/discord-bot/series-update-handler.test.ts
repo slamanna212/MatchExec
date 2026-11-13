@@ -200,6 +200,22 @@ describe('registration_open', () => {
     ]);
   });
 
+  it('leaves out Register a team when team creation from Discord is turned off', async () => {
+    await channel('D-ANN', 'send_announcements');
+    const s = await insertSeries({ status: 'registration', name: 'Org teams', entrant_type: 'team', discord_config: { team_creation: false } });
+    const { client, sent } = makeClient();
+    await new SeriesUpdateHandler(client as never, null).post(job(s.id, 'registration_open'));
+    expect(componentsOf(sent[0]).map((c) => c.custom_id)).toEqual([`series_join:${s.id}`, `series_leave:${s.id}`]);
+  });
+
+  it('keeps Register for a solo series even when team creation is off', async () => {
+    await channel('D-ANN', 'send_announcements');
+    const s = await insertSeries({ status: 'registration', name: 'Solo', entrant_type: 'solo', discord_config: { team_creation: false } });
+    const { client, sent } = makeClient();
+    await new SeriesUpdateHandler(client as never, null).post(job(s.id, 'registration_open'));
+    expect(componentsOf(sent[0]).map((c) => c.custom_id)).toEqual([`series_reg:${s.id}`]);
+  });
+
   it('mentions the announcement role, like match announcements', async () => {
     await channel('D-ANN', 'send_announcements');
     const s = await insertSeries({ status: 'registration', name: 'S' });

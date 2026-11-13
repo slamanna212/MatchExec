@@ -85,9 +85,21 @@ export function TournamentEventInfoStep({
 
       <Switch
         label="Allow Players to Select Teams"
-        description="When enabled, players can choose their team during signup (only works if teams are pre-created in Step 3)"
+        description="When enabled, players can choose their team during signup (pre-create teams in Step 3, or let players create them below)"
         checked={formData.allowPlayerTeamSelection || false}
-        onChange={(e) => updateFormData('allowPlayerTeamSelection', e.currentTarget.checked)}
+        onChange={(e) => {
+          const on = e.currentTarget.checked;
+          updateFormData('allowPlayerTeamSelection', on);
+          if (!on) updateFormData('allowDiscordTeamCreation', false);
+        }}
+      />
+
+      <Switch
+        label="Allow Creating Teams from Discord"
+        description="When enabled, the Discord signup offers a Create a team option; the player who creates a team becomes its captain. Requires player team selection."
+        checked={(formData.allowPlayerTeamSelection && formData.allowDiscordTeamCreation) || false}
+        disabled={!formData.allowPlayerTeamSelection}
+        onChange={(e) => updateFormData('allowDiscordTeamCreation', e.currentTarget.checked)}
       />
 
       <Switch

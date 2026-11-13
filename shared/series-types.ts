@@ -76,6 +76,8 @@ export interface SeriesDiscordConfig {
   standings_posts?: boolean;   // default true
   schedule_lead_hours?: number; // default 48: post a week's schedule this long before its first match
   registration_posts?: boolean; // default true
+  /** Team series: players may register new teams from the Discord registration post (default true). Off = organizers create the teams and players can only join them. */
+  team_creation?: boolean;
 }
 
 // ─── rows / DTOs ─────────────────────────────────────────────────────────────

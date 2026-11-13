@@ -143,6 +143,22 @@ describe('Register (team) via modal', () => {
     expect(i.showModal.mock.calls[0][0].toJSON().title.length).toBeLessThanOrEqual(45);
   });
 
+  it('does not open the modal when team creation from Discord is turned off (an older post)', async () => {
+    const locked = await insertSeries({ entrant_type: 'team', status: 'registration', discord_config: { team_creation: false } });
+    const i = fake({ customId: `series_reg:${locked.id}` });
+    await handler().handleButton(i as never);
+    expect(i.showModal).not.toHaveBeenCalled();
+    expect(replyText(i)).toContain('New teams can not be registered from Discord');
+  });
+
+  it('rejects a team modal submission when team creation is turned off', async () => {
+    const locked = await insertSeries({ entrant_type: 'team', status: 'registration', discord_config: { team_creation: false } });
+    const i = fake({ customId: `series_regteam:${locked.id}`, fields: { team_name: 'Rockets' } });
+    await handler().handleModalSubmit(i as never);
+    expect(replyText(i)).toContain('New teams can not be registered from Discord');
+    expect(await listEntrants(pg(), locked.id)).toEqual([]);
+  });
+
   it('does not open the modal when registration is closed', async () => {
     await transitionSeries(pg(), team.id, 'active');
     const i = fake({ customId: `series_reg:${team.id}` });
@@ -210,6 +226,11 @@ describe('Join team', () => {
     const none = fake({ customId: `series_join:${team.id}` });
     await handler().handleButton(none as never);
     expect(replyText(none)).toBe('❌ There is no team with a free spot. Register a new team instead.');
+
+    const locked = await insertSeries({ entrant_type: 'team', status: 'registration', discord_config: { team_creation: false } });
+    const lockedJoin = fake({ customId: `series_join:${locked.id}` });
+    await handler().handleButton(lockedJoin as never);
+    expect(replyText(lockedJoin)).toBe('❌ There is no team with a free spot. Ask an organizer to add a team.');
 
     const soloJoin = fake({ customId: `series_join:${solo.id}` });
     await handler().handleButton(soloJoin as never);

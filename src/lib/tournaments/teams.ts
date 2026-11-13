@@ -231,7 +231,14 @@ export interface AddTournamentParticipantInput {
   signupData: Record<string, unknown> | null;
   /** Team the player picked while signing up (only when the tournament allows it). */
   teamId?: string | null;
+  /**
+   * Create this team and sign the player up as its captain (Discord "Create a team"). Requires the tournament's
+   * `allow_discord_team_creation`; a taken name (case-insensitive) is a TournamentError 409. Ignored when `teamId` is set.
+   */
+  newTeamName?: string | null;
 }
+
+export const MAX_TOURNAMENT_TEAM_NAME_LENGTH = 45;
 
 /**
  * Sign a player up (and onto their chosen team). The unique (tournament, user) key makes a double submit a `duplicate`
@@ -241,25 +248,47 @@ export async function addParticipant(
   ex: Executor,
   input: AddTournamentParticipantInput,
   opts: { capacity?: number | null } = {},
-): Promise<{ status: 'added'; id: string } | { status: 'duplicate' | 'full' }> {
+): Promise<{ status: 'added'; id: string; teamId: string | null } | { status: 'duplicate' | 'full' }> {
   return ex.transaction(async (tx) => {
-    await lockTournament(tx, input.tournamentId);
+    const tournament = await lockTournament(tx, input.tournamentId);
     if (await isSignedUp(tx, input.tournamentId, input.userId)) return { status: 'duplicate' as const };
     if (opts.capacity != null && (await countParticipants(tx, input.tournamentId)) >= opts.capacity) return { status: 'full' as const };
+
+    let teamId = input.teamId ?? null;
+    let isCaptain = false;
+    const newTeamName = input.newTeamName?.trim();
+    if (!teamId && newTeamName) {
+      if (!tournament) throw new TournamentError('Tournament not found', 404);
+      if (!tournament.allow_discord_team_creation) throw new TournamentError('Players can not create teams for this tournament', 409);
+      if (newTeamName.length > MAX_TOURNAMENT_TEAM_NAME_LENGTH) {
+        throw new TournamentError(`A team name has at most ${MAX_TOURNAMENT_TEAM_NAME_LENGTH} characters`, 400);
+      }
+      const [clash] = await tx.select({ id: tournamentTeams.id }).from(tournamentTeams)
+        .where(and(eq(tournamentTeams.tournament_id, input.tournamentId), sql`lower(${tournamentTeams.team_name}) = ${newTeamName.toLowerCase()}`));
+      if (clash) throw new TournamentError('A team with this name already exists in this tournament', 409);
+      teamId = genId('team');
+      await tx.insert(tournamentTeams).values({ id: teamId, tournament_id: input.tournamentId, team_name: newTeamName });
+      isCaptain = true;
+    }
 
     const id = genId('participant');
     const inserted = await tx.insert(tournamentParticipants).values({
       id, tournament_id: input.tournamentId, user_id: input.userId, discord_user_id: input.discordUserId ?? input.userId,
-      username: input.username, signup_data: input.signupData, team_assignment: input.teamId ?? null,
+      username: input.username, signup_data: input.signupData, team_assignment: teamId,
     }).onConflictDoNothing().returning({ id: tournamentParticipants.id });
-    if (inserted.length === 0) return { status: 'duplicate' as const };
+    if (inserted.length === 0) {
+      // Don't leave the team created above behind empty.
+      if (isCaptain && teamId) await tx.delete(tournamentTeams).where(eq(tournamentTeams.id, teamId));
+      return { status: 'duplicate' as const };
+    }
 
-    if (input.teamId) {
+    if (teamId) {
       await tx.insert(tournamentTeamMembers).values({
-        id: genId('member'), team_id: input.teamId, user_id: input.userId, discord_user_id: input.discordUserId ?? input.userId, username: input.username,
+        id: genId('member'), team_id: teamId, user_id: input.userId, discord_user_id: input.discordUserId ?? input.userId, username: input.username,
+        is_captain: isCaptain,
       }).onConflictDoNothing();
     }
     await touchTournament(tx, input.tournamentId);
-    return { status: 'added' as const, id };
+    return { status: 'added' as const, id, teamId };
   });
 }

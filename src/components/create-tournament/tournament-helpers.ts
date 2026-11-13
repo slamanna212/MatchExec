@@ -21,6 +21,7 @@ export function buildTournamentPayload(formData: Partial<TournamentFormData>) {
     maxParticipants: formData.maxParticipants,
     eventImageUrl: formData.eventImageUrl || null,
     allowPlayerTeamSelection: formData.allowPlayerTeamSelection || false,
+    allowDiscordTeamCreation: (formData.allowPlayerTeamSelection && formData.allowDiscordTeamCreation) || false,
     allowMatchEditing: formData.allowMatchEditing !== false,
     statsEnabled: formData.statsEnabled || false,
     announcements: formData.announcements && formData.announcements.length > 0 ? formData.announcements : undefined,

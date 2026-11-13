@@ -84,8 +84,11 @@ export async function insertParticipant(
       username: displayUsername,
       signupData,
       teamId: parsedId.selectedTeamId,
+      newTeamName: parsedId.newTeam ? parsedId.newTeamName : null,
     });
     if (result.status !== 'added') throw new DuplicateSignupError();
+    // The confirmation shows the team, including one created by this signup.
+    if (result.teamId) parsedId.selectedTeamId = result.teamId;
     return result.id;
   }
     // Match participant (Postgres). Capacity was checked before the modal; the unique (match, user) key makes a

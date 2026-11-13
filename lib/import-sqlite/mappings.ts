@@ -457,7 +457,7 @@ export const MAPPINGS: TableMapping[] = [
       event_image_url: SAME, signup_config_id: SAME, allow_player_team_selection: SAME, created_at: SAME,
       updated_at: SAME, allow_match_editing: SAME, stats_enabled: SAME, game_mode_id: SAME,
       announcements: value((src) => announcementsFromLegacy(src.announcements)), player_notifications: SAME, livestream_link: SAME,
-      position_scoring_override: SAME,
+      position_scoring_override: SAME, allow_discord_team_creation: DEFAULT,
     },
   }),
   defineMapping(schema.uiSettings, 'ui_settings', {

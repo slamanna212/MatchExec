@@ -64,6 +64,13 @@
       "when": 1794363296138,
       "tag": "0008_clear_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794543845966,
+      "tag": "0009_colorful_stepford_cuckoos",
+      "breakpoints": true
     }
   ]
 }

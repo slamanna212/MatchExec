@@ -71,6 +71,7 @@ export interface Tournament {
   start_date?: string;
   start_time?: string;
   allow_player_team_selection?: boolean;
+  allow_discord_team_creation?: boolean;
   allow_match_editing?: boolean;
   stats_enabled?: boolean;
   announcements?: Array<{ id: string; value: number; unit: 'minutes' | 'hours' | 'days' }> | null;

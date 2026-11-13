@@ -51,18 +51,20 @@ describe('formFromSeries', () => {
     expect(form.scoring_config).toEqual({ match_win_points: 3 });
     expect(form.entrant_type).toBe('solo');
     expect(form.discord_schedule_lead_hours).toBe(48);
+    expect(form.discord_team_creation).toBe(true);
   });
 
   it('reads the new setup fields', () => {
     const form = formFromSeries(baseSummary({
       entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Position', game_ids: ['a', 'b'], game_id: 'a', game_mode_id: 'm',
       match_defaults: { rounds_per_match: 3, rules: 'competitive', stats_enabled: true, player_notifications: false, maps: ['x'] },
-      discord_config: { weekly_schedule: false, schedule_lead_hours: 12 },
+      discord_config: { weekly_schedule: false, schedule_lead_hours: 12, team_creation: false },
     }));
     expect(form).toMatchObject({
       entrant_type: 'team', roster_min: 5, roster_max: 7, scoring_type: 'Position', game_ids: ['a', 'b'], game_id: 'a', game_mode_id: 'm',
       match_rounds: 3, match_rules: 'competitive', match_stats_enabled: true, match_player_notifications: false, match_maps: ['x'],
       discord_weekly_schedule: false, discord_standings_posts: true, discord_schedule_lead_hours: 12,
+      discord_team_creation: false,
     });
   });
 });
@@ -77,7 +79,8 @@ describe('match defaults / discord config', () => {
 
   it('serialises the Discord toggles', () => {
     expect(buildDiscordConfig({ ...EMPTY_SERIES_FORM, discord_weekly_schedule: false })).toEqual({
-      registration_posts: true, weekly_schedule: false, standings_posts: true, schedule_lead_hours: 48,
+      registration_posts: true, weekly_schedule: false, standings_posts: true, schedule_lead_hours: 48, team_creation: true,
     });
+    expect(buildDiscordConfig({ ...EMPTY_SERIES_FORM, discord_team_creation: false }).team_creation).toBe(false);
   });
 });

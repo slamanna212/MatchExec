@@ -185,8 +185,8 @@ describe('validateMatchDefaults / validateDiscordConfig / validateRosterBounds',
     }
   });
   it('discord config', () => {
-    expect(validateDiscordConfig({ weekly_schedule: false, standings_posts: true, registration_posts: true, schedule_lead_hours: 48 })).toBeNull();
-    for (const bad of [{ weekly_schedule: 1 }, { schedule_lead_hours: -1 }, { schedule_lead_hours: 'x' }, { schedule_lead_hours: 9999 }, null]) {
+    expect(validateDiscordConfig({ weekly_schedule: false, standings_posts: true, registration_posts: true, schedule_lead_hours: 48, team_creation: false })).toBeNull();
+    for (const bad of [{ weekly_schedule: 1 }, { team_creation: 'no' }, { schedule_lead_hours: -1 }, { schedule_lead_hours: 'x' }, { schedule_lead_hours: 9999 }, null]) {
       expect(validateDiscordConfig(bad), JSON.stringify(bad)).not.toBeNull();
     }
   });

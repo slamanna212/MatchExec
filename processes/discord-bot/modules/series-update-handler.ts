@@ -10,7 +10,7 @@ import { getGameDisplay } from '../../../src/lib/games';
 import { getTournament, listTeamsByName } from '../../../src/lib/tournaments';
 import {
   describeSeasonLayout, eventWeek, getSeriesById, getSeriesChampion, getSeriesStandingsResponse, listBatches, listEntrants, listSeriesEventDtos,
-  listStages, sameWeek, weekLabel, type SeriesRow, type WeekRef,
+  listStages, sameWeek, teamCreationAllowed, weekLabel, type SeriesRow, type WeekRef,
 } from '../../../src/lib/series';
 import { capTitle, Utils } from './utils';
 import { imageExtension, loadImage } from '../utils/image-source';
@@ -293,11 +293,16 @@ export class SeriesUpdateHandler {
     if (layout.length > 0) embed.addFields({ name: '🗓️ Season layout', value: truncate(layout.map((l) => `• ${l}`).join('\n'), 1024), inline: false });
     if (series.livestream_link) embed.addFields({ name: '📺 Livestream', value: `[Watch Live](${series.livestream_link})`, inline: false });
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`${SERIES_REGISTER_PREFIX}${series.id}`)
-        .setLabel(series.entrant_type === 'team' ? '📝 Register a team' : '📝 Register').setStyle(ButtonStyle.Primary),
-    );
-    if (series.entrant_type === 'team') {
+    const row = new ActionRowBuilder<ButtonBuilder>();
+    const isTeam = series.entrant_type === 'team';
+    // A team series with team creation off has no Register button: organizers create the teams, players join them.
+    if (!isTeam || teamCreationAllowed(series)) {
+      row.addComponents(
+        new ButtonBuilder().setCustomId(`${SERIES_REGISTER_PREFIX}${series.id}`)
+          .setLabel(isTeam ? '📝 Register a team' : '📝 Register').setStyle(ButtonStyle.Primary),
+      );
+    }
+    if (isTeam) {
       row.addComponents(
         new ButtonBuilder().setCustomId(`${SERIES_JOIN_PREFIX}${series.id}`).setLabel('👥 Join team').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`${SERIES_LEAVE_PREFIX}${series.id}`).setLabel('Leave').setStyle(ButtonStyle.Danger),

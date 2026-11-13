@@ -6,7 +6,13 @@ export interface ParsedModalId {
   eventId: string;
   selectedTeamId: string | null;
   isTournament: boolean;
+  /** Tournament "Create a team" modal: the player creates this team (filled in from the modal's team name field). */
+  newTeam?: boolean;
+  newTeamName?: string | null;
 }
+
+/** Modal of the tournament "Create a team" signup: team name + the game's signup fields. */
+export const NEW_TEAM_MODAL_PREFIX = 'signup_form_newteam:';
 
 /**
  * Parse modal custom ID for signup forms
@@ -14,9 +20,14 @@ export interface ParsedModalId {
  * - "signup_form_<matchId>"
  * - "signup_form_team:<tournamentId>:<teamId>"
  * - "signup_form_<tournamentId>" (tournament without team)
+ * - "signup_form_newteam:<tournamentId>" (tournament, player creates a team)
  */
 export function parseModalCustomId(customId: string): ParsedModalId | null {
   try {
+    if (customId.startsWith(NEW_TEAM_MODAL_PREFIX)) {
+      const eventId = customId.slice(NEW_TEAM_MODAL_PREFIX.length);
+      return eventId ? { eventId, selectedTeamId: null, isTournament: true, newTeam: true } : null;
+    }
     const isTeamBased = customId.startsWith('signup_form_team:');
     let eventId = '';
     let selectedTeamId: string | null = null;

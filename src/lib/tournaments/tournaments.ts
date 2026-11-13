@@ -219,9 +219,12 @@ export async function getTournamentSignupEventData(ex: Executor, id: string) {
   return row;
 }
 
-/** Signup capacity and team-selection flag of a tournament (`max_participants` NULL = unlimited). */
+/** Signup capacity and team-selection / team-creation flags of a tournament (`max_participants` NULL = unlimited). */
 export async function getTournamentSignupLimit(ex: Executor, id: string) {
-  const [row] = await ex.select({ game_id: tournaments.game_id, max_participants: tournaments.max_participants, allow_player_team_selection: tournaments.allow_player_team_selection })
+  const [row] = await ex.select({
+    game_id: tournaments.game_id, max_participants: tournaments.max_participants, allow_player_team_selection: tournaments.allow_player_team_selection,
+    allow_discord_team_creation: tournaments.allow_discord_team_creation,
+  })
     .from(tournaments).where(eq(tournaments.id, id));
   return row;
 }
@@ -247,6 +250,8 @@ export interface CreateTournamentInput {
   startTime?: Date | null;
   eventImageUrl?: string | null;
   allowPlayerTeamSelection?: boolean;
+  /** Players may create a team from the Discord signup; only stored when `allowPlayerTeamSelection` is on. */
+  allowDiscordTeamCreation?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
   announcements?: AnnouncementConfig;
@@ -272,6 +277,7 @@ export async function createTournament(ex: Executor, input: CreateTournamentInpu
     start_time: input.startTime ?? null,
     event_image_url: input.eventImageUrl || null,
     allow_player_team_selection: !!input.allowPlayerTeamSelection,
+    allow_discord_team_creation: !!input.allowPlayerTeamSelection && !!input.allowDiscordTeamCreation,
     allow_match_editing: input.allowMatchEditing !== false,
     stats_enabled: !!input.statsEnabled,
     announcements: input.announcements && input.announcements.length > 0 ? input.announcements : null,

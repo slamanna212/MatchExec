@@ -53,6 +53,8 @@ export interface SeriesFormData {
   discord_weekly_schedule: boolean;
   discord_standings_posts: boolean;
   discord_schedule_lead_hours: number;
+  /** Team series: players can register new teams from the Discord registration post. */
+  discord_team_creation: boolean;
   // create flow: seed entrants from a previous season
   previous_series_id: string | null;
   copy_include_members: boolean;
@@ -86,6 +88,7 @@ export const EMPTY_SERIES_FORM: SeriesFormData = {
   discord_weekly_schedule: true,
   discord_standings_posts: true,
   discord_schedule_lead_hours: 48,
+  discord_team_creation: true,
   previous_series_id: null,
   copy_include_members: true,
   layout: EMPTY_LAYOUT,
@@ -160,6 +163,7 @@ export function buildDiscordConfig(form: SeriesFormData): SeriesDiscordConfig {
     weekly_schedule: form.discord_weekly_schedule,
     standings_posts: form.discord_standings_posts,
     schedule_lead_hours: form.discord_schedule_lead_hours,
+    team_creation: form.discord_team_creation,
   };
 }
 
@@ -221,6 +225,7 @@ export function formFromSeries(s: SeriesSummary): SeriesFormData {
     discord_weekly_schedule: discord.weekly_schedule ?? true,
     discord_standings_posts: discord.standings_posts ?? true,
     discord_schedule_lead_hours: discord.schedule_lead_hours ?? 48,
+    discord_team_creation: discord.team_creation ?? true,
     previous_series_id: s.previous_series_id ?? null,
     copy_include_members: true,
     layout: EMPTY_LAYOUT,

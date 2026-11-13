@@ -67,6 +67,7 @@ interface TournamentBody {
   maxParticipants?: number;
   eventImageUrl?: string;
   allowPlayerTeamSelection?: boolean;
+  allowDiscordTeamCreation?: boolean;
   allowMatchEditing?: boolean;
   statsEnabled?: boolean;
   announcements?: CreateTournamentInput['announcements'];
@@ -160,6 +161,7 @@ export const tournaments = new Hono()
       startTime: parseDate(body.startTime, 'startTime'),
       eventImageUrl: body.eventImageUrl,
       allowPlayerTeamSelection: body.allowPlayerTeamSelection,
+      allowDiscordTeamCreation: body.allowDiscordTeamCreation,
       allowMatchEditing: body.allowMatchEditing,
       statsEnabled: body.statsEnabled,
       announcements: body.announcements,

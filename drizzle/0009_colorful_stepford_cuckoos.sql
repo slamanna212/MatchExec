@@ -1,0 +1,1 @@
+ALTER TABLE "tournaments" ADD COLUMN "allow_discord_team_creation" boolean DEFAULT false NOT NULL;

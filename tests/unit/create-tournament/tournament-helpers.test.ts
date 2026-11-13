@@ -56,6 +56,12 @@ describe('buildTournamentPayload', () => {
       expect(payload.eventImageUrl).toBeNull();
     });
 
+    it('sends allowDiscordTeamCreation only when player team selection is on', () => {
+      expect(buildTournamentPayload({ ...BASE_FORM, allowPlayerTeamSelection: true, allowDiscordTeamCreation: true }).allowDiscordTeamCreation).toBe(true);
+      expect(buildTournamentPayload({ ...BASE_FORM, allowPlayerTeamSelection: false, allowDiscordTeamCreation: true }).allowDiscordTeamCreation).toBe(false);
+      expect(buildTournamentPayload(BASE_FORM).allowDiscordTeamCreation).toBe(false);
+    });
+
     it('defaults allowPlayerTeamSelection to false when omitted', () => {
       const { allowPlayerTeamSelection: _, ...rest } = BASE_FORM;
       const payload = buildTournamentPayload({ ...rest });
