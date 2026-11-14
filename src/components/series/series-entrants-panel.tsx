@@ -6,7 +6,7 @@ import {
 import { modals } from '@mantine/modals';
 import {
   IconPlus, IconDots, IconEdit, IconTrash, IconCheck, IconUserPlus, IconUsers, IconCopy, IconLogout, IconStar,
-  IconAlertCircle, IconLock, IconBrandDiscord,
+  IconAlertCircle, IconLock, IconBrandDiscord, IconUpload, IconChevronDown, IconFileSpreadsheet,
 } from '@tabler/icons-react';
 import { EmptyState } from '@/components/EmptyState';
 import { SectionLabel } from '@/components/SectionLabel';
@@ -20,6 +20,7 @@ import {
   rosterState, rosteredPlayerKeys,
 } from './series-entrants-shared';
 import { AddMemberModal, CopyEntrantsModal, EntrantFormModal, WithdrawEntrantModal } from './series-entrant-modals';
+import { ImportEntrantsModal } from './series-entrant-import-modal';
 import { formatShortDate } from './series-shared';
 import type { SeriesSummary } from './series-shared';
 
@@ -34,8 +35,8 @@ const errorMessage = (err: unknown, fallback: string): string => (err instanceof
 
 /**
  * Entrants of a series: teams (with rosters) or solo players, grouped by division. Handles adding / editing, approving
- * pending sign-ups, withdrawing, deleting, roster changes (player search or manual Discord id) and copying entrants from
- * another series. Self-contained: loads its own data from `/api/series/:id/entrants`.
+ * pending sign-ups, withdrawing, deleting, roster changes (player search or manual Discord id), copying entrants from
+ * another series and importing them from a CSV file. Self-contained: loads its own data from `/api/series/:id/entrants`.
  */
 export function SeriesEntrantsPanel({ series, onChanged }: SeriesEntrantsPanelProps): JSX.Element {
   const entrantType = series.entrant_type ?? 'solo';
@@ -53,6 +54,7 @@ export function SeriesEntrantsPanel({ series, onChanged }: SeriesEntrantsPanelPr
   const [addingMemberTo, setAddingMemberTo] = useState<SeriesEntrantDto | null>(null);
   const [withdrawing, setWithdrawing] = useState<SeriesEntrantDto | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const refresh = () => {
     void reload();
@@ -131,9 +133,7 @@ export function SeriesEntrantsPanel({ series, onChanged }: SeriesEntrantsPanelPr
           )}
           {!readOnly && (
             <>
-              <Button size="xs" variant="light" leftSection={<IconCopy size={14} />} onClick={() => setCopyOpen(true)}>
-                Copy from series
-              </Button>
+              <ImportMenu onCopy={() => setCopyOpen(true)} onCsv={() => setImportOpen(true)} />
               <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openAdd}>
                 {solo ? 'Add player' : 'Add team'}
               </Button>
@@ -159,9 +159,14 @@ export function SeriesEntrantsPanel({ series, onChanged }: SeriesEntrantsPanelPr
             icon={IconUsers}
             title={solo ? 'No players yet' : 'No teams yet'}
             description={solo
-              ? 'Add the players competing in this series, or copy them from an earlier season'
-              : 'Add the teams competing in this series, then put players on their rosters'}
-            action={!readOnly ? <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openAdd}>{solo ? 'Add player' : 'Add team'}</Button> : undefined}
+              ? 'Add the players competing in this series, copy them from an earlier season or import a CSV'
+              : 'Add the teams competing in this series and put players on their rosters, or import them from a CSV'}
+            action={!readOnly ? (
+              <Group gap="xs" justify="center">
+                <ImportMenu onCopy={() => setCopyOpen(true)} onCsv={() => setImportOpen(true)} />
+                <Button size="xs" leftSection={<IconPlus size={14} />} onClick={openAdd}>{solo ? 'Add player' : 'Add team'}</Button>
+              </Group>
+            ) : undefined}
           />
         </Card>
       ) : (
@@ -234,7 +239,31 @@ export function SeriesEntrantsPanel({ series, onChanged }: SeriesEntrantsPanelPr
         entrantType={entrantType}
         onCopied={refresh}
       />
+      <ImportEntrantsModal
+        opened={importOpen}
+        onClose={() => setImportOpen(false)}
+        seriesId={series.id}
+        entrantType={entrantType}
+        onImported={refresh}
+      />
     </Stack>
+  );
+}
+
+/** "Import" dropdown: copy entrants from another series, or upload a CSV. */
+function ImportMenu({ onCopy, onCsv }: { onCopy: () => void; onCsv: () => void }): JSX.Element {
+  return (
+    <Menu withinPortal position="bottom-end">
+      <Menu.Target>
+        <Button size="xs" variant="light" leftSection={<IconUpload size={14} />} rightSection={<IconChevronDown size={12} />}>
+          Import
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconCopy size={14} />} onClick={onCopy}>Copy from series</Menu.Item>
+        <Menu.Item leftSection={<IconFileSpreadsheet size={14} />} onClick={onCsv}>Upload CSV</Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   );
 }
 

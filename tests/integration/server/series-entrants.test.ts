@@ -372,3 +372,37 @@ describe('events: placement fields and the SeriesEventDto list', () => {
     expect((await api(`/${s.id}/events`)).status).toBe(200);
   });
 });
+
+describe('POST /api/series/:id/entrants/import[/preview]', () => {
+  const csv = 'team,player,discord_id,role\nOwls,Ava,100000000000000001,captain\nOwls,Ben,100000000000000002,\n';
+
+  it('previews without writing, then imports (201)', async () => {
+    const s = await insertSeries({ entrant_type: 'team' });
+    const prev = await api(`/${s.id}/entrants/import/preview`, 'POST', { csv });
+    expect(prev.status).toBe(200);
+    expect(prev.data.preview).toMatchObject({ ok: true, entrants: [{ name: 'Owls', existing: false }] });
+    expect((await api(`/${s.id}/entrants`)).data.entrants).toEqual([]);
+
+    const res = await api(`/${s.id}/entrants/import`, 'POST', { csv });
+    expect(res.status, JSON.stringify(res.data)).toBe(201);
+    expect(res.data.result).toEqual({ created: 1, updated: 0, members_added: 2, members_skipped: 0 });
+    expect((await api(`/${s.id}/entrants`)).data.entrants[0].members).toHaveLength(2);
+  });
+
+  it('answers 400 with the preview when the file has errors, and validates the body', async () => {
+    const s = await insertSeries({ entrant_type: 'team' });
+    const res = await api(`/${s.id}/entrants/import`, 'POST', { csv: 'team,player,discord_id\nOwls,Ava,123\n' });
+    expect(res.status).toBe(400);
+    expect(res.data.error).toMatch(/^Line 2: /);
+    expect(res.data.preview.ok).toBe(false);
+    expect((await api(`/${s.id}/entrants/import`, 'POST', { csv: '' })).status).toBe(400);
+    expect((await api(`/${s.id}/entrants/import/preview`, 'POST', { nope: 1 })).status).toBe(400);
+  });
+
+  it('answers 404 for an unknown series and 409 for a finished one', async () => {
+    expect((await api('/missing/entrants/import/preview', 'POST', { csv })).status).toBe(404);
+    expect((await api('/missing/entrants/import', 'POST', { csv })).status).toBe(404);
+    const done = await insertSeries({ entrant_type: 'team', status: 'complete' });
+    expect((await api(`/${done.id}/entrants/import`, 'POST', { csv })).status).toBe(409);
+  });
+});

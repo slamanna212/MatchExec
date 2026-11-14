@@ -7,6 +7,7 @@ export * from './summary';
 export * from './refs';
 export * from './validation';
 export * from './entrants';
+export * from './entrant-import';
 export * from './stages';
 export * from './registration';
 export * from './updates';

@@ -138,8 +138,8 @@ export async function loadPlayerEntrantIndex(ex: Executor, seriesId: string): Pr
 
 // ─── write helpers ───────────────────────────────────────────────────────────
 
-/** Locks the series and refuses (409) when it can no longer change. */
-async function lockEditable(tx: Executor, seriesId: string): Promise<SeriesRow> {
+/** Locks the series and refuses (409) when its entrants can no longer change. */
+export async function lockEntrantsEditable(tx: Executor, seriesId: string): Promise<SeriesRow> {
   const row = await lockSeries(tx, seriesId);
   if (!row) throw new SeriesError('Series not found', 404);
   if (row.status === 'complete' || row.status === 'cancelled') {
@@ -206,8 +206,8 @@ function nextJoinedAt(): Date {
   return new Date(lastJoinedAt);
 }
 
-/** Inserts one member into an entrant under the series' roster limit. */
-async function insertMember(tx: Executor, series: SeriesRow, entrantId: string, member: EntrantMemberInput): Promise<SeriesEntrantMemberRow> {
+/** Inserts one member into an entrant under the series' roster limit (one current roster per player, one captain). */
+export async function insertEntrantMember(tx: Executor, series: SeriesRow, entrantId: string, member: EntrantMemberInput): Promise<SeriesEntrantMemberRow> {
   const limit = rosterLimit(series);
   if (limit !== null && (await countCurrent(tx, entrantId)) >= limit) {
     throw new SeriesError(series.entrant_type === 'solo' ? 'A solo entrant has exactly one player' : `This roster is full (at most ${limit} players)`, 409);
@@ -233,7 +233,7 @@ async function insertMember(tx: Executor, series: SeriesRow, entrantId: string, 
  */
 export async function createEntrant(ex: Executor, seriesId: string, input: CreateSeriesEntrantInput): Promise<string> {
   return ex.transaction(async (tx) => {
-    const series = await lockEditable(tx, seriesId);
+    const series = await lockEntrantsEditable(tx, seriesId);
     const members = input.members ?? [];
     const limit = rosterLimit(series);
     if (limit !== null && members.length > limit) {
@@ -249,7 +249,7 @@ export async function createEntrant(ex: Executor, seriesId: string, input: Creat
         division: clean(input.division), seed: input.seed ?? null, status: input.status ?? 'active',
       });
     } catch (err) { mapUnique(err); }
-    for (const m of members) await insertMember(tx, series, id, m);
+    for (const m of members) await insertEntrantMember(tx, series, id, m);
     logger.debug(`Series entrant ${id} created in ${seriesId}`);
     return id;
   });
@@ -273,7 +273,7 @@ export async function updateEntrant(
   ex: Executor, seriesId: string, entrantId: string, updates: UpdateEntrantInput, options: { allowWithdrawn?: boolean } = {},
 ): Promise<SeriesEntrantWithMembers> {
   return ex.transaction(async (tx) => {
-    await lockEditable(tx, seriesId);
+    await lockEntrantsEditable(tx, seriesId);
     const existing = await getEntrantRow(tx, seriesId, entrantId);
     if (!existing) throw new SeriesError('Entrant not found in this series', 404);
     if (updates.status === 'withdrawn' && existing.status !== 'withdrawn' && !options.allowWithdrawn) {
@@ -327,7 +327,7 @@ export async function entrantHasResults(ex: Executor, seriesId: string, entrantI
 /** Deletes an entrant and its roster. 409 when it has completed results (withdraw it instead). */
 export async function deleteEntrant(ex: Executor, seriesId: string, entrantId: string): Promise<void> {
   await ex.transaction(async (tx) => {
-    await lockEditable(tx, seriesId);
+    await lockEntrantsEditable(tx, seriesId);
     if (!(await getEntrantRow(tx, seriesId, entrantId))) throw new SeriesError('Entrant not found in this series', 404);
     if (await entrantHasResults(tx, seriesId, entrantId)) {
       throw new SeriesError('This entrant has completed results; withdraw it instead of deleting it', 409);
@@ -341,11 +341,11 @@ export async function deleteEntrant(ex: Executor, seriesId: string, entrantId: s
 /** Adds a player to an entrant's roster. 409: roster full, withdrawn entrant, player already on a roster. */
 export async function addEntrantMember(ex: Executor, seriesId: string, entrantId: string, input: EntrantMemberInput): Promise<SeriesEntrantMemberRow> {
   return ex.transaction(async (tx) => {
-    const series = await lockEditable(tx, seriesId);
+    const series = await lockEntrantsEditable(tx, seriesId);
     const entrant = await getEntrantRow(tx, seriesId, entrantId);
     if (!entrant) throw new SeriesError('Entrant not found in this series', 404);
     if (entrant.status === 'withdrawn') throw new SeriesError('Cannot add players to a withdrawn entrant', 409);
-    return insertMember(tx, series, entrantId, input);
+    return insertEntrantMember(tx, series, entrantId, input);
   });
 }
 
@@ -361,7 +361,7 @@ export async function updateEntrantMember(
   ex: Executor, seriesId: string, entrantId: string, memberId: string, updates: { role?: SeriesMemberRole; username?: string },
 ): Promise<SeriesEntrantMemberRow> {
   return ex.transaction(async (tx) => {
-    const series = await lockEditable(tx, seriesId);
+    const series = await lockEntrantsEditable(tx, seriesId);
     const member = await getMember(tx, seriesId, entrantId, memberId);
     if (member.left_at) throw new SeriesError('This player has left the roster', 409);
     const set: Partial<typeof seriesEntrantMembers.$inferInsert> = {};
@@ -385,7 +385,7 @@ export async function removeEntrantMember(
   ex: Executor, seriesId: string, entrantId: string, memberId: string, options: { deleteEmptyPending?: boolean } = {},
 ): Promise<{ entrant_deleted: boolean }> {
   return ex.transaction(async (tx) => {
-    await lockEditable(tx, seriesId);
+    await lockEntrantsEditable(tx, seriesId);
     const member = await getMember(tx, seriesId, entrantId, memberId);
     if (member.left_at) throw new SeriesError('This player already left the roster', 409);
     await tx.update(seriesEntrantMembers).set({ left_at: new Date() }).where(eq(seriesEntrantMembers.id, memberId));
@@ -415,7 +415,7 @@ export interface CopyEntrantsResult {
  */
 export async function copyEntrants(ex: Executor, targetSeriesId: string, input: CopySeriesEntrantsInput): Promise<CopyEntrantsResult> {
   return ex.transaction(async (tx) => {
-    const target = await lockEditable(tx, targetSeriesId);
+    const target = await lockEntrantsEditable(tx, targetSeriesId);
     if (input.from_series_id === targetSeriesId) throw new SeriesError('Cannot copy entrants from the series itself', 400);
     if (!(await getSeriesById(tx, input.from_series_id))) throw new SeriesError('Source series not found', 400);
 
@@ -445,7 +445,7 @@ export async function copyEntrants(ex: Executor, targetSeriesId: string, input: 
       for (const m of src.members) {
         try {
           // a savepoint, so a member refused by the roster rules does not abort the whole copy
-          await tx.transaction((sp) => insertMember(sp, target, id, {
+          await tx.transaction((sp) => insertEntrantMember(sp, target, id, {
             user_id: m.user_id, discord_user_id: m.discord_user_id, username: m.username, avatar_url: m.avatar_url, role: target.entrant_type === 'solo' ? 'player' : m.role,
           }));
         } catch (err) {

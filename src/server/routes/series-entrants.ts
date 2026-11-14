@@ -1,13 +1,13 @@
 /**
  * `/api/series/:id/entrants|stages` and `/api/series/players/search`: entrants, rosters, copying from a previous season,
- * stages and the player search used by the roster editor. Thin handlers over `src/lib/series`.
+ * CSV import, stages and the player search used by the roster editor. Thin handlers over `src/lib/series`.
  * Mounted from `series.ts` BEFORE the `/:seriesId` routes.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { db } from '../../../lib/db';
 import {
-  SeriesError, addEntrantMember, copyEntrants, createEntrant, createStage, deleteEntrant, deleteStage, getEntrant, getSeriesById,
-  getStage, listEntrants, listStages, removeEntrantMember, searchPlayers, updateEntrant, updateEntrantMember, updateStage,
+  ENTRANT_IMPORT_MAX_CHARS, SeriesError, addEntrantMember, copyEntrants, createEntrant, createStage, deleteEntrant, deleteStage, getEntrant, getSeriesById,
+  getStage, importEntrants, listEntrants, previewEntrantImport, listStages, removeEntrantMember, searchPlayers, updateEntrant, updateEntrantMember, updateStage,
   validateEntrantBody, validateMemberBody, validateStageBody,
   type UpdateEntrantInput, type UpdateStageInput,
 } from '@/lib/series';
@@ -22,6 +22,15 @@ async function requireSeries(seriesId: string): Promise<void> {
 }
 
 const str = (v: unknown): string | null | undefined => (v === undefined ? undefined : (v as string | null));
+
+/** `{ csv: string }` body of the import routes; returns the CSV text or the error response. */
+async function readCsvBody(c: Context): Promise<string | Response> {
+  const body = await readJsonObject(c);
+  if (!body) return jsonError(c, 'Invalid JSON body', 400);
+  if (typeof body.csv !== 'string' || body.csv.trim() === '') return jsonError(c, 'csv must be a non-empty string', 400);
+  if (body.csv.length > ENTRANT_IMPORT_MAX_CHARS) return jsonError(c, 'The file is too large (at most 1 MB)', 400);
+  return body.csv;
+}
 
 export const seriesEntrantsRoutes = new Hono()
   // ── player search (registered before any /:seriesId route) ────────────────
@@ -67,6 +76,24 @@ export const seriesEntrantsRoutes = new Hono()
     if (body.include_members !== undefined && typeof body.include_members !== 'boolean') return jsonError(c, 'include_members must be a boolean', 400);
     const result = await copyEntrants(db, seriesId, body as unknown as CopySeriesEntrantsInput);
     return c.json({ entrants: result.entrants, skipped: result.skipped }, 201);
+  }))
+
+  // CSV import: body { csv }. Preview is read-only; import applies everything or nothing (400 + preview on errors).
+  .post('/:seriesId/entrants/import/preview', (c) => guard(c, 'Error previewing entrant import', 'Failed to read the CSV', async () => {
+    const csv = await readCsvBody(c);
+    if (typeof csv !== 'string') return csv;
+    return c.json({ preview: await previewEntrantImport(db, c.req.param('seriesId'), csv) });
+  }))
+
+  .post('/:seriesId/entrants/import', (c) => guard(c, 'Error importing entrants', 'Failed to import entrants', async () => {
+    const csv = await readCsvBody(c);
+    if (typeof csv !== 'string') return csv;
+    const outcome = await importEntrants(db, c.req.param('seriesId'), csv);
+    if (!outcome.ok) {
+      const first = outcome.preview.issues.find((i) => i.level === 'error');
+      return c.json({ error: first ? `${first.line ? `Line ${first.line}: ` : ''}${first.message}` : 'The CSV has errors', preview: outcome.preview }, 400);
+    }
+    return c.json({ result: outcome.result, preview: outcome.preview }, 201);
   }))
 
   .post('/:seriesId/entrants', (c) => guard(c, 'Error creating entrant', 'Failed to create entrant', async () => {

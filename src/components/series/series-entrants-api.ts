@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { logger } from '@/lib/logger/client';
 import type {
-  CopySeriesEntrantsInput, CreateSeriesEntrantInput, SeriesEntrantDto, SeriesEntrantMemberDto, SeriesEntrantStatus,
+  CopySeriesEntrantsInput, CreateSeriesEntrantInput, EntrantImportPreview, EntrantImportResult, SeriesEntrantDto, SeriesEntrantMemberDto, SeriesEntrantStatus,
   SeriesMemberRole, WithdrawEntrantInput,
 } from '@/shared/series-types';
 
@@ -79,6 +79,12 @@ export const entrantsApi = {
 
   copy: async (seriesId: string, input: CopySeriesEntrantsInput): Promise<CopyEntrantsResponse> =>
     request<CopyEntrantsResponse>(`${base(seriesId)}/entrants/copy`, jsonInit('POST', input), 'Failed to copy entrants'),
+
+  importPreview: async (seriesId: string, csv: string): Promise<EntrantImportPreview> =>
+    (await request<{ preview: EntrantImportPreview }>(`${base(seriesId)}/entrants/import/preview`, jsonInit('POST', { csv }), 'Failed to read the CSV')).preview,
+
+  import: async (seriesId: string, csv: string): Promise<EntrantImportResult> =>
+    (await request<{ result: EntrantImportResult }>(`${base(seriesId)}/entrants/import`, jsonInit('POST', { csv }), 'Failed to import entrants')).result,
 
   addMember: async (
     seriesId: string, entrantId: string,

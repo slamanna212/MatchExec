@@ -519,3 +519,46 @@ export interface SeriesUpdatePayload {
   /** `playoff_seeded`: qualifiers in seed order (optional; the bot falls back to the tournament's teams). */
   qualifiers?: Array<{ seed: number; name: string; entrant_id?: string | null }>;
 }
+
+/** CSV import of entrants and rosters (`POST /api/series/:id/entrants/import[/preview]`, body `{ csv }`). */
+export interface EntrantImportMemberPreview {
+  /** 1-based line in the file. */
+  line: number;
+  username: string;
+  discord_user_id: string;
+  role: SeriesMemberRole;
+  /** `new`: will be added; `existing`: already on this roster (skipped). */
+  action: 'new' | 'existing';
+}
+
+export interface EntrantImportEntrantPreview {
+  name: string;
+  /** An entrant with this name already exists: its new players are added, its fields are left as they are. */
+  existing: boolean;
+  tag: string | null;
+  division: string | null;
+  seed: number | null;
+  color: string | null;
+  members: EntrantImportMemberPreview[];
+}
+
+export interface EntrantImportIssue {
+  /** 1-based line in the file; null for a file-level problem. */
+  line: number | null;
+  level: 'error' | 'warning';
+  message: string;
+}
+
+export interface EntrantImportPreview {
+  entrants: EntrantImportEntrantPreview[];
+  issues: EntrantImportIssue[];
+  /** No errors: the import can be applied. */
+  ok: boolean;
+}
+
+export interface EntrantImportResult {
+  created: number;
+  updated: number;
+  members_added: number;
+  members_skipped: number;
+}
